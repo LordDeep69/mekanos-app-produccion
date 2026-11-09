@@ -17,6 +17,8 @@ import {
   Gauge,
   Info,
   Layers,
+  LayoutGrid,
+  List,
   Loader2,
   Lock,
   Plus,
@@ -662,6 +664,35 @@ export function TabArquetiposEquipo() {
     );
   }, [editArqForm.codigo_tipo, codigosTiposExistentes, editingArq]);
 
+  // Estados de Búsqueda, Filtro y Estrategia Escalable de Arquetipos
+  const [arqSearch, setArqSearch] = useState('');
+  const [arqCategoriaFilter, setArqCategoriaFilter] = useState('TODAS');
+  const [arqViewMode, setArqViewMode] = useState<'grid' | 'compact'>('grid');
+
+  const categoriasPresentes = useMemo(() => {
+    const cats = new Set<string>();
+    arquetipos.forEach((a) => {
+      if (a.categoria?.trim()) cats.add(a.categoria.trim());
+    });
+    return Array.from(cats).sort();
+  }, [arquetipos]);
+
+  const arquetiposFiltrados = useMemo(() => {
+    return arquetipos.filter((arq) => {
+      if (arqCategoriaFilter !== 'TODAS') {
+        if (arq.categoria?.trim() !== arqCategoriaFilter) return false;
+      }
+      if (arqSearch.trim()) {
+        const q = arqSearch.trim().toLowerCase();
+        const matchNom = (arq.nombre_canonico || arq.nombre_tipo || '').toLowerCase().includes(q);
+        const matchCod = (arq.codigo_corto || arq.codigo_tipo || '').toLowerCase().includes(q);
+        const matchCat = (arq.categoria || '').toLowerCase().includes(q);
+        return matchNom || matchCod || matchCat;
+      }
+      return true;
+    });
+  }, [arquetipos, arqCategoriaFilter, arqSearch]);
+
   const [showLinkModModal, setShowLinkModModal] = useState(false);
   const [linkModId, setLinkModId] = useState<string>('');
   const [linkModObligatorio, setLinkModObligatorio] = useState<boolean>(true);
@@ -1045,12 +1076,21 @@ export function TabArquetiposEquipo() {
     <div className="space-y-6">
       {/* SELECTOR DE TIPOS DE EQUIPO ORDENADOS POR RELEVANCIA OPERATIVA */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
+        {/* Cabecera Principal */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Cpu className="h-5 w-5 text-blue-600" />
-              <span>Tipos de Equipo ({arquetipos.length} Clases)</span>
-            </h3>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Cpu className="h-5 w-5 text-blue-600" />
+                <span>Tipos de Equipo ({arquetipos.length} Clases)</span>
+              </h3>
+              {selectedArquetipo && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                  Activo: <strong>{selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}</strong>
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Selecciona un tipo de equipo para configurar sus partes, planes preventivos y probar su ficha técnica en vivo.
             </p>
@@ -1084,46 +1124,292 @@ export function TabArquetiposEquipo() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
-          {arquetipos.map((arq) => {
-            const isSelected = selectedArquetipo?.id_tipo_equipo === arq.id_tipo_equipo;
-            const activos = arq.equipos_activos ?? arq._count.equipos;
-            const codigoLimpio = arq.codigo_corto || arq.codigo_tipo;
+        {/* Barra de Herramientas Prémium: Buscador en vivo + Filtro por Disciplina + Selector de Vista */}
+        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-100">
+          <div className="flex items-center gap-2.5 flex-1 max-w-xl">
+            {/* Buscador predictivo */}
+            <div className="relative flex-1">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre, código o disciplina (ej: Ascensor, ELEV, Bomba)..."
+                value={arqSearch}
+                onChange={(e) => setArqSearch(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium transition-colors"
+              />
+              {arqSearch && (
+                <button
+                  type="button"
+                  onClick={() => setArqSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
 
-            return (
-              <div
-                key={arq.id_tipo_equipo}
-                onClick={() => setSelectedArqId(arq.id_tipo_equipo)}
-                className={`group rounded-2xl border p-4.5 cursor-pointer transition-all duration-150 flex flex-col justify-between gap-3 min-h-[168px] ${
-                  isSelected
-                    ? 'bg-blue-50/70 border-blue-600 ring-2 ring-blue-500/20 shadow-sm'
-                    : 'bg-white border-slate-200/90 hover:border-blue-300 hover:shadow-xs hover:bg-slate-50/30'
+            {/* Filtro por Categoría / Disciplina */}
+            {categoriasPresentes.length > 0 && (
+              <div className="shrink-0 w-52">
+                <EamSelect
+                  value={arqCategoriaFilter}
+                  onChange={(val) => setArqCategoriaFilter(val)}
+                  options={[
+                    { value: 'TODAS', label: `Todas las disciplinas (${arquetipos.length})` },
+                    ...categoriasPresentes.map((c) => ({
+                      value: c,
+                      label: c,
+                    })),
+                  ]}
+                  placeholder="Disciplina industrial..."
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Estadísticas de filtrado y Alternador de Vista (Cuadrícula vs Compacto) */}
+          <div className="flex items-center justify-between sm:justify-end gap-3 text-xs text-slate-500 shrink-0">
+            <span className="font-medium text-[11px]">
+              Mostrando <strong className="text-slate-800">{arquetiposFiltrados.length}</strong> de {arquetipos.length} clases
+            </span>
+
+            <div className="flex items-center border border-slate-200 rounded-xl p-0.5 bg-slate-50">
+              <button
+                type="button"
+                onClick={() => setArqViewMode('grid')}
+                className={`p-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  arqViewMode === 'grid'
+                    ? 'bg-white text-blue-600 shadow-2xs font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
                 }`}
+                title="Vista Cuadrícula (Tarjetas Detalladas)"
               >
-                <div className="space-y-2.5">
-                  {/* Fila 1: Metadatos Técnicos (Código + Contador) vs Acciones Rápidas */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-xs font-black border border-slate-200/80 shrink-0">
-                        {codigoLimpio}
-                      </span>
-                      {arq.requiere_horometro === false ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 shrink-0">
-                          <CalendarClock className="h-3 w-3 shrink-0 text-slate-500" />
-                          <span>Sin Contador</span>
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setArqViewMode('compact')}
+                className={`p-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  arqViewMode === 'compact'
+                    ? 'bg-white text-blue-600 shadow-2xs font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+                title="Vista Lista Compacta (Alta Densidad)"
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Estado Vacío de Búsqueda */}
+        {arquetiposFiltrados.length === 0 && (
+          <div className="p-8 text-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+              <Search className="h-5 w-5" />
+            </div>
+            <p className="text-xs font-bold text-slate-700">
+              No se encontraron tipos de equipo para "{arqSearch}"
+            </p>
+            <p className="text-[11px] text-slate-500">
+              Prueba con otro término de búsqueda o restablece los filtros.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setArqSearch('');
+                setArqCategoriaFilter('TODAS');
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs transition-colors"
+            >
+              Restablecer Filtros
+            </button>
+          </div>
+        )}
+
+        {/* VISTA 1: CUADRÍCULA DE TARJETAS (GRID MODE) */}
+        {arqViewMode === 'grid' && arquetiposFiltrados.length > 0 && (
+          <div
+            className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 ${
+              arquetiposFiltrados.length > 6 ? 'max-h-[540px] overflow-y-auto pr-1' : ''
+            }`}
+          >
+            {arquetiposFiltrados.map((arq) => {
+              const isSelected = selectedArquetipo?.id_tipo_equipo === arq.id_tipo_equipo;
+              const activos = arq.equipos_activos ?? arq._count.equipos;
+              const codigoLimpio = arq.codigo_corto || arq.codigo_tipo;
+
+              return (
+                <div
+                  key={arq.id_tipo_equipo}
+                  onClick={() => setSelectedArqId(arq.id_tipo_equipo)}
+                  className={`group rounded-2xl border p-4.5 cursor-pointer transition-all duration-150 flex flex-col justify-between gap-3 min-h-[168px] ${
+                    isSelected
+                      ? 'bg-blue-50/70 border-blue-600 ring-2 ring-blue-500/20 shadow-sm'
+                      : 'bg-white border-slate-200/90 hover:border-blue-300 hover:shadow-xs hover:bg-slate-50/30'
+                  }`}
+                >
+                  <div className="space-y-2.5">
+                    {/* Fila 1: Metadatos Técnicos (Código + Contador) vs Acciones Rápidas */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-xs font-black border border-slate-200/80 shrink-0">
+                          {codigoLimpio}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 text-[10px] font-bold border border-amber-200/80 shrink-0">
-                          <Clock className="h-3 w-3 shrink-0 text-amber-600" />
-                          <span>{arq.etiqueta_contador || 'Horómetro'}</span>
-                          {arq.unidad_uso && (
-                            <span className="font-mono text-[9px] opacity-75">({arq.unidad_uso})</span>
-                          )}
-                        </span>
-                      )}
+                        {arq.requiere_horometro === false ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 shrink-0">
+                            <CalendarClock className="h-3 w-3 shrink-0 text-slate-500" />
+                            <span>Sin Contador</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 text-[10px] font-bold border border-amber-200/80 shrink-0">
+                            <Clock className="h-3 w-3 shrink-0 text-amber-600" />
+                            <span>{arq.etiqueta_contador || 'Horómetro'}</span>
+                            {arq.unidad_uso && (
+                              <span className="font-mono text-[9px] opacity-75">({arq.unidad_uso})</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditArq(arq);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Editar tipo de equipo"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenDeleteArq(arq);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Eliminar tipo de equipo"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                    {/* Fila 2: Nombre del Tipo de Equipo (Ancho Completo, Tipografía Industrial) */}
+                    <div>
+                      <h4
+                        className="text-sm font-extrabold text-slate-900 leading-snug tracking-tight"
+                        title={arq.nombre_canonico || arq.nombre_tipo}
+                      >
+                        {arq.nombre_canonico || arq.nombre_tipo}
+                      </h4>
+
+                      {/* Fila 3: Disciplina / Categoría Industrial */}
+                      {arq.categoria && (() => {
+                        const cBadge = getCategoryBadgeInfo(arq.categoria);
+                        const CIcon = cBadge.icon;
+                        return (
+                          <div className="mt-1.5 flex items-center">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${cBadge.bg} ${cBadge.color}`}
+                              title={arq.categoria}
+                            >
+                              <CIcon className="h-3 w-3 shrink-0" />
+                              <span className="truncate max-w-[260px]">{arq.categoria}</span>
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Fila 4: Footer de Flota y Estructura */}
+                  <div className="pt-2.5 border-t border-slate-200/70 flex items-center justify-between text-xs mt-1">
+                    <div>
+                      <span className="font-extrabold text-blue-700 text-sm">{activos}</span>{' '}
+                      <span className="text-slate-600 font-medium">equipos activos</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-500 font-semibold">
+                      <span>{arq.tipo_equipo_modulos.length} partes</span>
+                      <span>•</span>
+                      <span>{arq.tipo_equipo_planes.length} planes</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* VISTA 2: LISTA COMPACTA DE ALTA DENSIDAD (COMPACT MODE) */}
+        {arqViewMode === 'compact' && arquetiposFiltrados.length > 0 && (
+          <div
+            className={`space-y-2 ${
+              arquetiposFiltrados.length > 6 ? 'max-h-[460px] overflow-y-auto pr-1' : ''
+            }`}
+          >
+            {arquetiposFiltrados.map((arq) => {
+              const isSelected = selectedArquetipo?.id_tipo_equipo === arq.id_tipo_equipo;
+              const activos = arq.equipos_activos ?? arq._count.equipos;
+              const codigoLimpio = arq.codigo_corto || arq.codigo_tipo;
+              const cBadge = arq.categoria ? getCategoryBadgeInfo(arq.categoria) : null;
+              const CIcon = cBadge ? cBadge.icon : Tag;
+
+              return (
+                <div
+                  key={arq.id_tipo_equipo}
+                  onClick={() => setSelectedArqId(arq.id_tipo_equipo)}
+                  className={`group p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-4 ${
+                    isSelected
+                      ? 'bg-blue-50/80 border-blue-600 ring-2 ring-blue-500/20 shadow-xs'
+                      : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-xs font-black border border-slate-200 shrink-0">
+                      {codigoLimpio}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-extrabold text-slate-900 truncate">
+                          {arq.nombre_canonico || arq.nombre_tipo}
+                        </span>
+                        {cBadge && (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${cBadge.bg} ${cBadge.color}`}
+                          >
+                            <CIcon className="h-3 w-3 shrink-0" />
+                            <span className="truncate max-w-[200px]">{arq.categoria}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    {arq.requiere_horometro === false ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold border border-slate-200">
+                        <CalendarClock className="h-3 w-3 shrink-0 text-slate-500" />
+                        <span className="hidden sm:inline">Sin Contador</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-bold border border-amber-200">
+                        <Clock className="h-3 w-3 shrink-0 text-amber-600" />
+                        <span>{arq.etiqueta_contador || 'Horómetro'}</span>
+                      </span>
+                    )}
+
+                    <div className="text-right hidden md:block text-xs font-semibold text-slate-500">
+                      <span className="font-bold text-blue-700">{activos}</span> activos ·{' '}
+                      <span>{arq.tipo_equipo_modulos.length} partes</span> ·{' '}
+                      <span>{arq.tipo_equipo_planes.length} planes</span>
+                    </div>
+
+                    <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1148,51 +1434,11 @@ export function TabArquetiposEquipo() {
                       </button>
                     </div>
                   </div>
-
-                  {/* Fila 2: Nombre del Tipo de Equipo (Ancho Completo, Tipografía Industrial) */}
-                  <div>
-                    <h4
-                      className="text-sm font-extrabold text-slate-900 leading-snug tracking-tight"
-                      title={arq.nombre_canonico || arq.nombre_tipo}
-                    >
-                      {arq.nombre_canonico || arq.nombre_tipo}
-                    </h4>
-
-                    {/* Fila 3: Disciplina / Categoría Industrial */}
-                    {arq.categoria && (() => {
-                      const cBadge = getCategoryBadgeInfo(arq.categoria);
-                      const CIcon = cBadge.icon;
-                      return (
-                        <div className="mt-1.5 flex items-center">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${cBadge.bg} ${cBadge.color}`}
-                            title={arq.categoria}
-                          >
-                            <CIcon className="h-3 w-3 shrink-0" />
-                            <span className="truncate max-w-[260px]">{arq.categoria}</span>
-                          </span>
-                        </div>
-                      );
-                    })()}
-                  </div>
                 </div>
-
-                {/* Fila 4: Footer de Flota y Estructura */}
-                <div className="pt-2.5 border-t border-slate-200/70 flex items-center justify-between text-xs mt-1">
-                  <div>
-                    <span className="font-extrabold text-blue-700 text-sm">{activos}</span>{' '}
-                    <span className="text-slate-600 font-medium">equipos activos</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-slate-500 font-semibold">
-                    <span>{arq.tipo_equipo_modulos.length} partes</span>
-                    <span>•</span>
-                    <span>{arq.tipo_equipo_planes.length} planes</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 1° PRIORIDAD VISUAL: CONFIGURACIÓN DE PARTES Y PLANES PREVENTIVOS DEL TIPO DE EQUIPO */}
