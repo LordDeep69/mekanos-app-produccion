@@ -33,7 +33,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     generarCodigoSistema,
     verificarCodigoDuplicado,
-    useArquetiposEam
+    useArquetiposEam,
+    ArquetiposMultiCombobox
 } from '@/features/catalogos-eam';
 
 // Helpers para indicadores de uso
@@ -693,60 +694,18 @@ function SistemaModal({
                             </span>
                         </div>
                         <p className="text-xs text-gray-500">
-                            Cada tipo de equipo mantiene su propia secuencia de inspección (1, 2, 3...) sin colisionar con otros equipos.
+                            Busca y selecciona uno o varios tipos de activo, o déjalo en Universal para aplicar globalmente.
                         </p>
-                        <div className="flex flex-wrap gap-2 pt-1">
-                            {/* Opción Universal */}
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setFormData(prev => ({ ...prev, aplica_a: [] }));
-                                    setIsManualOrden(false);
-                                    setDesplazarSiguientes(false);
-                                }}
-                                className={cn(
-                                    "px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer",
-                                    formData.aplica_a.length === 0
-                                        ? "bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-200"
-                                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                                )}
-                            >
-                                <span>🌐 Universal (Todos los Equipos)</span>
-                                {formData.aplica_a.length === 0 && <Check className="h-3.5 w-3.5" />}
-                            </button>
-
-                            {/* Opciones por Arquetipo */}
-                            {opcionesTipos.map((opt: any) => {
-                                const selected = formData.aplica_a.includes(opt.codigo);
-                                return (
-                                    <button
-                                        key={opt.codigo}
-                                        type="button"
-                                        onClick={() => {
-                                            const curr = [...formData.aplica_a];
-                                            const idx = curr.indexOf(opt.codigo);
-                                            if (idx >= 0) {
-                                                curr.splice(idx, 1);
-                                            } else {
-                                                curr.push(opt.codigo);
-                                            }
-                                            setFormData(prev => ({ ...prev, aplica_a: curr }));
-                                            setIsManualOrden(false);
-                                            setDesplazarSiguientes(false);
-                                        }}
-                                        className={cn(
-                                            "px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer",
-                                            selected
-                                                ? "bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-200"
-                                                : "bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-gray-50"
-                                        )}
-                                    >
-                                        <span>{opt.label}</span>
-                                        {selected && <Check className="h-3.5 w-3.5" />}
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        <ArquetiposMultiCombobox
+                            value={formData.aplica_a}
+                            onChange={(newAplicaA) => {
+                                setFormData((prev) => ({ ...prev, aplica_a: newAplicaA }));
+                                setIsManualOrden(false);
+                                setDesplazarSiguientes(false);
+                            }}
+                            options={opcionesTipos}
+                            placeholder="Buscar o seleccionar tipo de activo industrial..."
+                        />
                     </div>
 
                     {/* VISUALIZADOR DE SECUENCIA ACTUAL DE INSPECCIÓN */}

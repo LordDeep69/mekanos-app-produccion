@@ -6,5 +6,6 @@ export * from './utils/eam-code-generator';
 export * from './components/DynamicEquipmentFormPreview';
 export * from './components/EamSelect';
 export * from './components/MarcaCombobox';
+export * from './components/ArquetiposMultiCombobox';
 
 
