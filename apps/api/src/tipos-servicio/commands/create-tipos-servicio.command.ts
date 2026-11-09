@@ -1,6 +1,6 @@
 /**
  * Command: Crear tipo de servicio
- * 
+ *
  * Encapsula los datos necesarios para crear un nuevo tipo de servicio
  * siguiendo arquitectura CQRS (Command Query Responsibility Segregation)
  */
@@ -22,5 +22,6 @@ export class CreateTiposServicioCommand {
     public readonly observaciones: string | null,
     public readonly userId: number | null,
     public readonly plantillaObservacion: string | null = null,
+    public readonly aplicaA?: string[],
   ) {}
 }

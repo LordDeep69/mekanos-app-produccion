@@ -76,13 +76,32 @@ export default function EditarOrdenPage() {
 
     // Queries
     const { data: ordenData, isLoading, isError } = useOrden(ordenId);
-    const { data: tiposServicio } = useTiposServicio();
+    const { data: tiposServicioRaw } = useTiposServicio();
     const { data: tecnicosData } = useTecnicosSelector();
     const updateOrden = useUpdateOrden();
 
     const tecnicos = Array.isArray(tecnicosData) ? tecnicosData : [];
 
     const orden = ordenData?.data;
+
+    // Filtrar tipos de servicio compatibles con el equipo de la orden
+    const tiposServicio = (() => {
+        const list = Array.isArray(tiposServicioRaw) ? tiposServicioRaw : [];
+        if (!orden) return list;
+        const eq = orden.equipos;
+        const codEq = String(eq?.tipos_equipo?.codigo_tipo || '').toUpperCase().trim();
+        const idTipoEq = eq?.id_tipo_equipo ?? eq?.tipos_equipo?.id_tipo_equipo ?? null;
+        if (!codEq && !idTipoEq) return list;
+        return list.filter((t: any) => {
+            if (t.id_tipo_servicio === orden.id_tipo_servicio) return true;
+            if (t.activo === false) return false;
+            const aplica = Array.isArray(t.aplica_a) ? t.aplica_a.map((c: string) => String(c).toUpperCase().trim()) : [];
+            if (aplica.length === 0 && !t.id_tipo_equipo) return true;
+            if (codEq && aplica.includes(codEq)) return true;
+            if (idTipoEq && Number(t.id_tipo_equipo) === Number(idTipoEq)) return true;
+            return false;
+        });
+    })();
 
     // Form state
     const [formData, setFormData] = useState<FormData>({

@@ -287,6 +287,12 @@ export interface TipoServicioEam {
   nombre_tipo: string;
   categoria: string;
   id_tipo_equipo?: number | null;
+  aplica_a?: string[];
+  tipos_equipo?: {
+    id_tipo_equipo: number;
+    codigo_tipo: string;
+    nombre_tipo: string;
+  } | null;
   descripcion?: string | null;
   duracion_estimada_horas?: number | null;
   tiene_checklist?: boolean | null;

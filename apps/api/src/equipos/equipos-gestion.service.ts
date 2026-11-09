@@ -1641,6 +1641,7 @@ export class EquiposGestionService {
             }
           : null,
         tipo_equipo: equipo.tipos_equipo,
+        tipos_equipo: equipo.tipos_equipo,
         motor: motorConsolidado,
         datos_especificos: datosEspecificos,
         especificaciones: (equipo as any).especificaciones || null,

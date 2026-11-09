@@ -797,24 +797,43 @@ export function TabArquetiposEquipo() {
     return `Plan Preventivo ${nom}`;
   };
 
-  // Catálogo completo de servicios normalizado (específicos de este equipo primero, luego universales; excluye correctivos y emergencias)
+  // Catálogo de servicios compatibles con el arquetipo actual (específicos primero, luego universales; excluye otros equipos y correctivos)
   const todosLosServicios = useMemo(() => {
     const rawList = tiposServicioList.length > 0 ? tiposServicioList : (resumen?.tipos_servicio_preventivos || []);
-    const soloPreventivos = rawList.filter((s) => {
+    const currentArqId = selectedArquetipo?.id_tipo_equipo;
+    const currentArqCod = (selectedArquetipo?.codigo_corto || selectedArquetipo?.codigo_tipo || '').toUpperCase().trim();
+    const syncCods: string[] = Array.isArray(selectedArquetipo?.codigos_sincronizados)
+      ? selectedArquetipo.codigos_sincronizados.map((c: string) => String(c).toUpperCase().trim())
+      : currentArqCod ? [currentArqCod] : [];
+
+    const esDelArquetipoActual = (s: any) => {
+      if (currentArqId && Number(s.id_tipo_equipo) === Number(currentArqId)) return true;
+      if (Array.isArray(s.aplica_a) && s.aplica_a.length > 0) {
+        return s.aplica_a.some((c: string) => syncCods.includes(String(c).toUpperCase().trim()));
+      }
+      return false;
+    };
+
+    const esUniversal = (s: any) => {
+      return s.id_tipo_equipo == null && (!Array.isArray(s.aplica_a) || s.aplica_a.length === 0);
+    };
+
+    const soloPreventivosCompatibles = rawList.filter((s) => {
       const cat = (s.categoria || '').toUpperCase();
       const nom = (s.nombre_tipo || '').toLowerCase();
       if (cat === 'CORRECTIVO' || cat === 'EMERGENCIA') return false;
       if (nom.includes('correctivo') || nom.includes('emergencia')) return false;
-      return true;
+      if (!selectedArquetipo) return true;
+      return esDelArquetipoActual(s) || esUniversal(s);
     });
-    const currentArqId = selectedArquetipo?.id_tipo_equipo;
-    return [...soloPreventivos].sort((a, b) => {
-      const aEsEspecifico = currentArqId && a.id_tipo_equipo === currentArqId ? 1 : (a.id_tipo_equipo == null ? 2 : 3);
-      const bEsEspecifico = currentArqId && b.id_tipo_equipo === currentArqId ? 1 : (b.id_tipo_equipo == null ? 2 : 3);
+
+    return [...soloPreventivosCompatibles].sort((a, b) => {
+      const aEsEspecifico = esDelArquetipoActual(a) ? 1 : 2;
+      const bEsEspecifico = esDelArquetipoActual(b) ? 1 : 2;
       if (aEsEspecifico !== bEsEspecifico) return aEsEspecifico - bEsEspecifico;
       return a.nombre_tipo.localeCompare(b.nombre_tipo);
     });
-  }, [tiposServicioList, resumen?.tipos_servicio_preventivos, selectedArquetipo?.id_tipo_equipo]);
+  }, [tiposServicioList, resumen?.tipos_servicio_preventivos, selectedArquetipo]);
 
   const serviciosFiltrados = useMemo(() => {
     return todosLosServicios.filter((s) => {

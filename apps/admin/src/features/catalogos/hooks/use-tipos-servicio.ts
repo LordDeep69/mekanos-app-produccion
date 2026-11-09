@@ -95,6 +95,9 @@ export function useUpdateTipoServicio() {
             queryClient.invalidateQueries({ queryKey: [...TIPOS_SERVICIO_KEY, id] });
             queryClient.invalidateQueries({ queryKey: TIPOS_SERVICIO_KEY });
             queryClient.invalidateQueries({ queryKey: ['tipos-servicio'] });
+            queryClient.invalidateQueries({ queryKey: ['catalogos', 'tipos-servicio'] });
+            queryClient.invalidateQueries({ queryKey: ['catalogos-eam', 'tipos-servicio'] });
+            queryClient.invalidateQueries({ queryKey: ['catalogos-eam', 'resumen'] });
             toast.success(result.message || 'Tipo de servicio actualizado exitosamente');
         },
         onError: (error: unknown) => {
@@ -117,6 +120,9 @@ export function useDeleteTipoServicio() {
         onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: TIPOS_SERVICIO_KEY });
             queryClient.invalidateQueries({ queryKey: ['tipos-servicio'] });
+            queryClient.invalidateQueries({ queryKey: ['catalogos', 'tipos-servicio'] });
+            queryClient.invalidateQueries({ queryKey: ['catalogos-eam', 'tipos-servicio'] });
+            queryClient.invalidateQueries({ queryKey: ['catalogos-eam', 'resumen'] });
             toast.success(result.message || 'Tipo de servicio desactivado');
         },
         onError: (error: unknown) => {

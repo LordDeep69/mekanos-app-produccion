@@ -4,27 +4,18 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 /**
  * Repository para tipos_servicio
  * Implementa acceso a datos con Prisma ORM siguiendo arquitectura CQRS
- * 
+ *
  * RESPONSABILIDADES:
- * - CRUD completo con validaciones FK
+ * - CRUD completo con validaciones FK y soporte multi-arquetipo (aplica_a: string[])
+ * - Sincronización bidireccional aplica_a <-> id_tipo_equipo
  * - Normalización codigo_tipo (UPPER/TRIM)
  * - Soft delete (activo: false)
- * - Queries custom (por categoria, tipo equipo)
- * - Includes quirúrgicos (no masivos)
- * 
- * PATRONES:
- * - Repository Pattern (desacoplamiento ORM)
- * - Validación FK antes INSERT/UPDATE
- * - Mensajes error descriptivos
+ * - Queries custom con filtrado Zero-Trust por Tipo de Equipo
  */
 @Injectable()
 export class PrismaTiposServicioRepository {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
-  /**
-   * Includes QUIRÚRGICOS (selectivos) para performance
-   * Solo relaciones necesarias, sin recursión profunda
-   */
   private readonly INCLUDE_RELATIONS_DETAIL = {
     tipos_equipo: {
       select: {
@@ -36,9 +27,6 @@ export class PrismaTiposServicioRepository {
     },
   };
 
-  /**
-   * Includes BÁSICOS para listados (sin creado_por/modificado_por)
-   */
   private readonly INCLUDE_RELATIONS_LIST = {
     tipos_equipo: {
       select: {
@@ -49,22 +37,10 @@ export class PrismaTiposServicioRepository {
     },
   };
 
-  // ============================================================================
-  // MÉTODOS AUXILIARES
-  // ============================================================================
-
-  /**
-   * Normaliza codigo_tipo según schema BD
-   * Backend responsabilidad: UPPER(TRIM())
-   */
   private normalizarCodigoTipo(codigo: string): string {
     return codigo.trim().toUpperCase();
   }
 
-  /**
-   * Valida que tipo_equipo existe si se proporciona FK
-   * Previene FK constraint errors con mensaje descriptivo
-   */
   private async validarTipoEquipo(id_tipo_equipo: number): Promise<void> {
     const tipoEquipo = await this.prisma.tipos_equipo.findUnique({
       where: { id_tipo_equipo },
@@ -78,9 +54,6 @@ export class PrismaTiposServicioRepository {
     }
   }
 
-  /**
-   * Valida que usuario existe si se proporciona FK
-   */
   private async validarUsuario(id_usuario: number, campo: string): Promise<void> {
     const usuario = await this.prisma.usuarios.findUnique({
       where: { id_usuario },
@@ -94,38 +67,158 @@ export class PrismaTiposServicioRepository {
     }
   }
 
+  /**
+   * Expande códigos hermanos históricos de tipos_equipo (GEN/GENERADOR, BOM/BOMBA, MOT/MOTOR)
+   * y conserva intacto cualquier otro código de arquetipo presente o futuro (ej. ELEV, HVAC, COMP).
+   */
+  private expandirCodigosSinonimos(codigos: string[]): string[] {
+    const set = new Set<string>();
+    for (const raw of codigos) {
+      const c = String(raw || '').trim().toUpperCase();
+      if (!c) continue;
+      set.add(c);
+      if (c === 'GEN' || c === 'GENERADOR') {
+        set.add('GEN');
+        set.add('GENERADOR');
+      } else if (c === 'BOM' || c === 'BOMBA') {
+        set.add('BOM');
+        set.add('BOMBA');
+      } else if (c === 'MOT' || c === 'MOTOR') {
+        set.add('MOT');
+        set.add('MOTOR');
+      }
+    }
+    return Array.from(set);
+  }
+
+  /**
+   * Sincroniza bidireccionalmente `aplica_a` (String[]) y `id_tipo_equipo` (Int?):
+   * - Si `aplica_a` se envía vacío `[]` -> es Universal (`id_tipo_equipo = null`, `aplica_a = []`).
+   * - Si `aplica_a` tiene 1 o N códigos -> resuelve el `id_tipo_equipo` del primer código para mantener la FK principal.
+   * - Si no se envió `aplica_a` pero sí `id_tipo_equipo` -> pobla `aplica_a` desde el código de ese `id_tipo_equipo`.
+   */
+  private async sincronizarAlcanceArquetipos(
+    data: any,
+    isUpdate = false,
+  ): Promise<void> {
+    if (Array.isArray(data.aplica_a)) {
+      const codigosLimpios = Array.from(
+        new Set(
+          data.aplica_a
+            .map((c: string) => String(c || '').trim().toUpperCase())
+            .filter(Boolean),
+        ),
+      );
+
+      if (codigosLimpios.length === 0) {
+        if (!isUpdate && data.id_tipo_equipo) {
+          const te = await this.prisma.tipos_equipo.findUnique({
+            where: { id_tipo_equipo: Number(data.id_tipo_equipo) },
+            select: { codigo_tipo: true },
+          });
+          data.aplica_a = te?.codigo_tipo
+            ? this.expandirCodigosSinonimos([te.codigo_tipo])
+            : [];
+        } else {
+          data.aplica_a = [];
+          data.id_tipo_equipo = null;
+        }
+      } else {
+        data.aplica_a = codigosLimpios;
+        // Resolver el id_tipo_equipo principal a partir del primer código seleccionado
+        const primerCodigo = codigosLimpios[0];
+        const tePrincipal = await this.prisma.tipos_equipo.findFirst({
+          where: {
+            codigo_tipo: {
+              equals: primerCodigo,
+              mode: 'insensitive',
+            },
+          },
+          select: { id_tipo_equipo: true },
+        });
+        if (tePrincipal) {
+          data.id_tipo_equipo = tePrincipal.id_tipo_equipo;
+        }
+      }
+      return;
+    }
+
+    // Si aplica_a no vino en el payload pero id_tipo_equipo sí fue especificado
+    if (data.id_tipo_equipo !== undefined) {
+      if (data.id_tipo_equipo === null) {
+        data.aplica_a = [];
+      } else {
+        const te = await this.prisma.tipos_equipo.findUnique({
+          where: { id_tipo_equipo: Number(data.id_tipo_equipo) },
+          select: { codigo_tipo: true },
+        });
+        if (te?.codigo_tipo) {
+          data.aplica_a = [te.codigo_tipo.trim().toUpperCase()];
+        }
+      }
+    }
+  }
+
+  /**
+   * Resuelve los IDs y códigos compatibles para un `tipoEquipoId` dado
+   */
+  private async resolverFiltroTipoEquipo(tipoEquipoId: number): Promise<{
+    ids: number[];
+    codigos: string[];
+  }> {
+    const ids = new Set<number>([tipoEquipoId]);
+    const codigosRaw: string[] = [];
+
+    try {
+      const te = await this.prisma.tipos_equipo.findUnique({
+        where: { id_tipo_equipo: tipoEquipoId },
+        select: { codigo_tipo: true, nombre_tipo: true },
+      });
+
+      if (te?.codigo_tipo) {
+        const code = te.codigo_tipo.trim().toUpperCase();
+        codigosRaw.push(code);
+
+        if (code === 'GEN' || code === 'GENERADOR') {
+          ids.add(1);
+          ids.add(3);
+        } else if (code === 'BOM' || code === 'BOMBA') {
+          ids.add(2);
+          ids.add(5);
+        } else if (code === 'MOT' || code === 'MOTOR') {
+          ids.add(4);
+          ids.add(6);
+        }
+      }
+    } catch {
+      // Mantiene al menos el tipoEquipoId original
+    }
+
+    return {
+      ids: Array.from(ids),
+      codigos: this.expandirCodigosSinonimos(codigosRaw),
+    };
+  }
+
   // ============================================================================
   // CREATE
   // ============================================================================
 
-  /**
-   * Crear nuevo tipo de servicio
-   * 
-   * VALIDACIONES:
-   * - Normaliza codigo_tipo (UPPER/TRIM)
-   * - Valida FK tipo_equipo si se proporciona
-   * - Valida FK creado_por si se proporciona
-   * 
-   * @param data Datos del tipo servicio
-   * @returns Tipo servicio creado con relaciones
-   */
   async create(data: any): Promise<any> {
-    // 1. Normalizar codigo_tipo
     if (data.codigo_tipo) {
       data.codigo_tipo = this.normalizarCodigoTipo(data.codigo_tipo);
     }
 
-    // 2. Validar FK tipo_equipo
+    await this.sincronizarAlcanceArquetipos(data, false);
+
     if (data.id_tipo_equipo) {
       await this.validarTipoEquipo(data.id_tipo_equipo);
     }
 
-    // 3. Validar FK creado_por
     if (data.creado_por) {
       await this.validarUsuario(data.creado_por, 'creado_por');
     }
 
-    // 4. Crear registro
     return this.prisma.tipos_servicio.create({
       data: {
         ...data,
@@ -139,19 +232,6 @@ export class PrismaTiposServicioRepository {
   // READ (ALL)
   // ============================================================================
 
-  /**
-   * Listar tipos servicio con filtros y paginación
-   * 
-   * FILTROS SOPORTADOS:
-   * - activo: boolean
-   * - categoria: categoria_servicio_enum
-   * - tipoEquipoId: number
-   * - search: string (búsqueda ILIKE en nombre_tipo, codigo_tipo, descripcion)
-   * - skip/limit: paginación
-   * 
-   * @param filters Objeto con filtros opcionales
-   * @returns Array de tipos servicio
-   */
   async findAll(filters?: {
     activo?: boolean;
     categoria?: string;
@@ -160,50 +240,29 @@ export class PrismaTiposServicioRepository {
     skip?: number;
     limit?: number;
   }): Promise<any[]> {
-    let compatibleTipoEquipoIds: number[] | null = null;
+    let filtroEquipoOr: any[] | null = null;
+
     if (filters?.tipoEquipoId) {
-      compatibleTipoEquipoIds = [filters.tipoEquipoId];
-      try {
-        const te = await this.prisma.tipos_equipo.findUnique({
-          where: { id_tipo_equipo: filters.tipoEquipoId },
-          select: { codigo_tipo: true, nombre_tipo: true },
-        });
-        if (te) {
-          const code = (te.codigo_tipo || '').toUpperCase();
-          const name = (te.nombre_tipo || '').toUpperCase();
-          if (code.includes('GEN') || name.includes('GENERADOR') || name.includes('PLANTA')) {
-            compatibleTipoEquipoIds = [1, 3];
-          } else if (code.includes('BOM') || name.includes('BOMBA')) {
-            compatibleTipoEquipoIds = [2, 5];
-          } else if (code.includes('MOT') || name.includes('MOTOR')) {
-            compatibleTipoEquipoIds = [4, 6];
-          } else if (code.includes('COMP') || name.includes('COMPRESOR')) {
-            compatibleTipoEquipoIds = [20];
-          }
-        }
-      } catch (err) {
-        // Fallback al ID original si ocurre error
-        compatibleTipoEquipoIds = [filters.tipoEquipoId];
-      }
+      const { ids, codigos } = await this.resolverFiltroTipoEquipo(
+        filters.tipoEquipoId,
+      );
+      filtroEquipoOr = [
+        { id_tipo_equipo: { in: ids } },
+        ...(codigos.length > 0 ? [{ aplica_a: { hasSome: codigos } }] : []),
+        {
+          AND: [
+            { id_tipo_equipo: null },
+            { aplica_a: { isEmpty: true } },
+          ],
+        },
+      ];
     }
 
     return this.prisma.tipos_servicio.findMany({
       where: {
-        // Filtro activo (default: solo activos)
-        activo: filters?.activo !== undefined ? filters.activo : true,
-
-        // Filtro por categoría
+        ...(filters?.activo !== undefined && { activo: filters.activo }),
         categoria: filters?.categoria as any,
-
-        // Filtro por tipo equipo: Incluir específicos de la familia + globales (null)
-        ...(compatibleTipoEquipoIds && {
-          OR: [
-            { id_tipo_equipo: { in: compatibleTipoEquipoIds } },
-            { id_tipo_equipo: null },
-          ],
-        }),
-
-        // Búsqueda global (nombre, codigo, descripcion)
+        ...(filtroEquipoOr && { OR: filtroEquipoOr }),
         ...(filters?.search && {
           OR: [
             {
@@ -229,25 +288,18 @@ export class PrismaTiposServicioRepository {
       },
       include: this.INCLUDE_RELATIONS_LIST,
       orderBy: [
-        { orden_visualizacion: 'asc' }, // Priorizar orden manual
-        { nombre_tipo: 'asc' },         // Fallback alfabético
+        { orden_visualizacion: 'asc' },
+        { nombre_tipo: 'asc' },
       ],
       skip: filters?.skip,
-      take: filters?.limit || 50, // Default 50 registros
+      take: filters?.limit || 50,
     });
   }
 
   // ============================================================================
-  // READ (BY ID)
+  // READ (BY ID & CODIGO)
   // ============================================================================
 
-  /**
-   * Obtener tipo servicio por ID con relaciones completas
-   * 
-   * @param id ID del tipo servicio
-   * @returns Tipo servicio con relaciones
-   * @throws NotFoundException si no existe
-   */
   async findById(id: number): Promise<any> {
     const tipoServicio = await this.prisma.tipos_servicio.findUnique({
       where: { id_tipo_servicio: id },
@@ -263,17 +315,6 @@ export class PrismaTiposServicioRepository {
     return tipoServicio;
   }
 
-  // ============================================================================
-  // READ (BY CODIGO)
-  // ============================================================================
-
-  /**
-   * Obtener tipo servicio por código único
-   * Útil para validaciones y lookups
-   * 
-   * @param codigo Código del tipo (se normaliza automáticamente)
-   * @returns Tipo servicio o null si no existe
-   */
   async findByCodigo(codigo: string): Promise<any | null> {
     const codigoNormalizado = this.normalizarCodigoTipo(codigo);
 
@@ -287,38 +328,23 @@ export class PrismaTiposServicioRepository {
   // UPDATE
   // ============================================================================
 
-  /**
-   * Actualizar tipo servicio
-   * 
-   * VALIDACIONES:
-   * - Verifica que registro existe
-   * - Normaliza codigo_tipo si se actualiza
-   * - Valida FKs si se actualizan
-   * 
-   * @param id ID del tipo servicio
-   * @param data Datos a actualizar
-   * @returns Tipo servicio actualizado
-   */
   async update(id: number, data: any): Promise<any> {
-    // 1. Verificar que existe
     await this.findById(id);
 
-    // 2. Normalizar codigo_tipo si se actualiza
     if (data.codigo_tipo) {
       data.codigo_tipo = this.normalizarCodigoTipo(data.codigo_tipo);
     }
 
-    // 3. Validar FK tipo_equipo si se actualiza
+    await this.sincronizarAlcanceArquetipos(data, true);
+
     if (data.id_tipo_equipo) {
       await this.validarTipoEquipo(data.id_tipo_equipo);
     }
 
-    // 4. Validar FK modificado_por si se proporciona
     if (data.modificado_por) {
       await this.validarUsuario(data.modificado_por, 'modificado_por');
     }
 
-    // 5. Actualizar registro
     return this.prisma.tipos_servicio.update({
       where: { id_tipo_servicio: id },
       data: {
@@ -333,13 +359,6 @@ export class PrismaTiposServicioRepository {
   // DELETE (SOFT)
   // ============================================================================
 
-  /**
-   * Soft delete: marcar como inactivo
-   * NO elimina físicamente el registro (preserva auditoría)
-   * 
-   * @param id ID del tipo servicio
-   * @returns Tipo servicio desactivado
-   */
   async delete(id: number): Promise<any> {
     return this.update(id, { activo: false });
   }
@@ -348,13 +367,6 @@ export class PrismaTiposServicioRepository {
   // QUERIES CUSTOM
   // ============================================================================
 
-  /**
-   * Obtener tipos servicio por categoría
-   * 
-   * @param categoria Categoría del servicio (ENUM)
-   * @param soloActivos Filtrar solo activos (default: true)
-   * @returns Array de tipos servicio
-   */
   async findByCategoria(
     categoria: string,
     soloActivos: boolean = true,
@@ -369,34 +381,24 @@ export class PrismaTiposServicioRepository {
     });
   }
 
-  /**
-   * Obtener tipos servicio compatibles con un tipo de equipo
-   * 
-   * @param tipoEquipoId ID del tipo de equipo
-   * @param soloActivos Filtrar solo activos (default: true)
-   * @returns Array de tipos servicio
-   */
   async findByTipoEquipo(
     tipoEquipoId: number,
     soloActivos: boolean = true,
   ): Promise<any[]> {
+    const { ids, codigos } = await this.resolverFiltroTipoEquipo(tipoEquipoId);
     return this.prisma.tipos_servicio.findMany({
       where: {
-        id_tipo_equipo: tipoEquipoId,
         activo: soloActivos ? true : undefined,
+        OR: [
+          { id_tipo_equipo: { in: ids } },
+          ...(codigos.length > 0 ? [{ aplica_a: { hasSome: codigos } }] : []),
+        ],
       },
       include: this.INCLUDE_RELATIONS_LIST,
       orderBy: { nombre_tipo: 'asc' },
     });
   }
 
-  /**
-   * Obtener tipos servicio que tienen checklist
-   * Útil para generar listados de servicios que requieren actividades
-   * 
-   * @param soloActivos Filtrar solo activos (default: true)
-   * @returns Array de tipos servicio
-   */
   async findConChecklist(soloActivos: boolean = true): Promise<any[]> {
     return this.prisma.tipos_servicio.findMany({
       where: {
@@ -408,34 +410,35 @@ export class PrismaTiposServicioRepository {
     });
   }
 
-  // ============================================================================
-  // UTILIDADES
-  // ============================================================================
-
-  /**
-   * Contar registros con filtros opcionales
-   * Útil para paginación
-   * 
-   * @param filters Filtros opcionales (mismo formato que findAll)
-   * @returns Total de registros
-   */
   async count(filters?: {
     activo?: boolean;
     categoria?: string;
     tipoEquipoId?: number;
     search?: string;
   }): Promise<number> {
+    let filtroEquipoOr: any[] | null = null;
+
+    if (filters?.tipoEquipoId) {
+      const { ids, codigos } = await this.resolverFiltroTipoEquipo(
+        filters.tipoEquipoId,
+      );
+      filtroEquipoOr = [
+        { id_tipo_equipo: { in: ids } },
+        ...(codigos.length > 0 ? [{ aplica_a: { hasSome: codigos } }] : []),
+        {
+          AND: [
+            { id_tipo_equipo: null },
+            { aplica_a: { isEmpty: true } },
+          ],
+        },
+      ];
+    }
+
     return this.prisma.tipos_servicio.count({
       where: {
-        activo: filters?.activo !== undefined ? filters.activo : true,
+        ...(filters?.activo !== undefined && { activo: filters.activo }),
         categoria: filters?.categoria as any,
-        // Filtro por tipo equipo: Incluir específicos + globales (null)
-        ...(filters?.tipoEquipoId && {
-          OR: [
-            { id_tipo_equipo: filters.tipoEquipoId },
-            { id_tipo_equipo: null },
-          ],
-        }),
+        ...(filtroEquipoOr && { OR: filtroEquipoOr }),
         ...(filters?.search && {
           OR: [
             { nombre_tipo: { contains: filters.search, mode: 'insensitive' } },
@@ -447,14 +450,6 @@ export class PrismaTiposServicioRepository {
     });
   }
 
-  /**
-   * Verificar si existe un tipo servicio con un código específico
-   * Útil para validaciones de duplicados
-   * 
-   * @param codigo Código a verificar (se normaliza)
-   * @param excludeId ID a excluir de la búsqueda (para updates)
-   * @returns true si existe, false si no
-   */
   async existsByCodigo(codigo: string, excludeId?: number): Promise<boolean> {
     const codigoNormalizado = this.normalizarCodigoTipo(codigo);
 

@@ -4,7 +4,7 @@ import { CreateTiposServicioCommand } from './create-tipos-servicio.command';
 
 /**
  * Handler: Crear tipo de servicio
- * 
+ *
  * Ejecuta la lógica de negocio para crear un nuevo tipo de servicio
  * Delega persistencia al Repository
  */
@@ -18,7 +18,7 @@ export class CreateTiposServicioHandler
 
   async execute(command: CreateTiposServicioCommand) {
     // Transformar Command a estructura de base de datos
-    const data = {
+    const data: any = {
       codigo_tipo: command.codigoTipo,
       nombre_tipo: command.nombreTipo,
       descripcion: command.descripcion,
@@ -37,7 +37,11 @@ export class CreateTiposServicioHandler
       creado_por: command.userId,
     };
 
-    // Repository valida FKs, normaliza codigo_tipo y persiste
+    if (command.aplicaA !== undefined) {
+      data.aplica_a = command.aplicaA;
+    }
+
+    // Repository valida FKs, sincroniza aplica_a <-> id_tipo_equipo y persiste
     return this.repository.create(data);
   }
 }

@@ -138,9 +138,17 @@ export class CatalogosEamService implements OnModuleInit {
           nombre_tipo: true,
           categoria: true,
           id_tipo_equipo: true,
+          aplica_a: true,
           descripcion: true,
           color_hex: true,
           duracion_estimada_horas: true,
+          tipos_equipo: {
+            select: {
+              id_tipo_equipo: true,
+              codigo_tipo: true,
+              nombre_tipo: true,
+            },
+          },
         },
         orderBy: [{ id_tipo_equipo: 'asc' }, { nombre_tipo: 'asc' }],
       }),
@@ -1862,9 +1870,17 @@ export class CatalogosEamService implements OnModuleInit {
         nombre_tipo: true,
         categoria: true,
         id_tipo_equipo: true,
+        aplica_a: true,
         descripcion: true,
         duracion_estimada_horas: true,
         color_hex: true,
+        tipos_equipo: {
+          select: {
+            id_tipo_equipo: true,
+            codigo_tipo: true,
+            nombre_tipo: true,
+          },
+        },
       },
       orderBy: [{ id_tipo_equipo: 'asc' }, { nombre_tipo: 'asc' }],
     });
@@ -1872,6 +1888,21 @@ export class CatalogosEamService implements OnModuleInit {
 
   async createTipoServicioEam(dto: CreateTipoServicioEamDto) {
     const codigo = dto.codigo_tipo.trim().toUpperCase();
+    let aplicaACalculado: string[] = [];
+    if (dto.id_tipo_equipo) {
+      const arq = await this.prisma.tipos_equipo.findUnique({
+        where: { id_tipo_equipo: Number(dto.id_tipo_equipo) },
+        select: { codigo_tipo: true },
+      });
+      if (arq?.codigo_tipo) {
+        const codArq = arq.codigo_tipo.trim().toUpperCase();
+        if (codArq === 'GEN' || codArq === 'GENERADOR') aplicaACalculado = ['GEN', 'GENERADOR'];
+        else if (codArq === 'BOM' || codArq === 'BOMBA') aplicaACalculado = ['BOM', 'BOMBA'];
+        else if (codArq === 'MOT' || codArq === 'MOTOR') aplicaACalculado = ['MOT', 'MOTOR'];
+        else aplicaACalculado = [codArq];
+      }
+    }
+
     const existing = await this.prisma.tipos_servicio.findFirst({
       where: { codigo_tipo: codigo },
     });
@@ -1884,6 +1915,7 @@ export class CatalogosEamService implements OnModuleInit {
             nombre_tipo: dto.nombre_tipo.trim(),
             categoria: dto.categoria as any,
             id_tipo_equipo: dto.id_tipo_equipo || existing.id_tipo_equipo,
+            aplica_a: aplicaACalculado.length > 0 ? aplicaACalculado : existing.aplica_a,
             descripcion: dto.descripcion?.trim() || existing.descripcion,
           },
         });
@@ -1898,6 +1930,7 @@ export class CatalogosEamService implements OnModuleInit {
         descripcion: dto.descripcion?.trim() || null,
         categoria: dto.categoria as any,
         id_tipo_equipo: dto.id_tipo_equipo || null,
+        aplica_a: aplicaACalculado,
         tiene_checklist: true,
         tiene_plantilla_informe: true,
         requiere_mediciones: true,

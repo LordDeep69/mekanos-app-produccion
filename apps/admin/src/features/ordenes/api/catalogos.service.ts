@@ -23,6 +23,13 @@ export interface TipoServicio {
     nombre_tipo: string;
     descripcion?: string;
     categoria: string;
+    id_tipo_equipo?: number | null;
+    aplica_a?: string[];
+    tipos_equipo?: {
+        id_tipo_equipo: number;
+        codigo_tipo?: string;
+        nombre_tipo?: string;
+    } | null;
     tiene_checklist: boolean;
     duracion_estimada_horas?: number;
     color_hex?: string;
@@ -563,7 +570,8 @@ export interface CatalogoServicio {
     descripcion?: string;
     categoria: string;
     id_tipo_servicio?: number;
-    id_tipo_equipo?: number;
+    id_tipo_equipo?: number | null;
+    aplica_a?: string[];
     duracion_estimada_horas?: number;
     requiere_certificacion: boolean;
     tipo_certificacion_requerida?: string;
@@ -573,6 +581,11 @@ export interface CatalogoServicio {
     observaciones?: string;
     // Relación
     tipos_servicio?: { nombre_tipo: string };
+    tipos_equipo?: {
+        id_tipo_equipo?: number;
+        codigo_tipo?: string;
+        nombre_tipo?: string;
+    } | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

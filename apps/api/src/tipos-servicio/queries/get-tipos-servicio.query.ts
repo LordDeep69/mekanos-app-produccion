@@ -10,6 +10,6 @@ export class GetTiposServicioQuery {
     public readonly search?: string,
     public readonly categoria?: string,
     public readonly tipoEquipoId?: number,
-    public readonly activo: boolean = true,
+    public readonly activo?: boolean,
   ) {}
 }

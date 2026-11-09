@@ -33,7 +33,8 @@ export interface TipoServicio {
     nombre_tipo: string;
     descripcion?: string;
     categoria: CategoriaServicio;
-    id_tipo_equipo?: number;
+    id_tipo_equipo?: number | null;
+    aplica_a?: string[];
     tiene_checklist: boolean;
     tiene_plantilla_informe: boolean;
     requiere_mediciones: boolean;
@@ -70,7 +71,7 @@ export interface TiposServicioQueryParams {
     search?: string;
     categoria?: CategoriaServicio;
     tipoEquipoId?: number;
-    activo?: boolean;
+    activo?: boolean | 'all' | string;
 }
 
 export interface CreateTipoServicioDto {
@@ -78,7 +79,9 @@ export interface CreateTipoServicioDto {
     nombreTipo: string;
     descripcion?: string;
     categoria: CategoriaServicio;
-    tipoEquipoId?: number;
+    tipoEquipoId?: number | null;
+    aplicaA?: string[];
+    aplica_a?: string[];
     tieneChecklist?: boolean;
     tienePlantillaInforme?: boolean;
     requiereMediciones?: boolean;

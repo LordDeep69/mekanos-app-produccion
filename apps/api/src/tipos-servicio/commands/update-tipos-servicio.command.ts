@@ -1,6 +1,6 @@
 /**
  * Command: Actualizar tipo de servicio
- * 
+ *
  * Encapsula los datos necesarios para actualizar un tipo de servicio existente
  */
 export class UpdateTiposServicioCommand {
@@ -12,6 +12,7 @@ export class UpdateTiposServicioCommand {
       descripcion?: string | null;
       categoria?: string;
       tipoEquipoId?: number | null;
+      aplicaA?: string[];
       tieneChecklist?: boolean;
       tienePlantillaInforme?: boolean;
       requiereMediciones?: boolean;

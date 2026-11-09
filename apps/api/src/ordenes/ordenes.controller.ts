@@ -1284,7 +1284,17 @@ export class OrdenesController {
         numero_orden: true,
         fecha_creacion: true,
         tipos_servicio: {
-          select: { id_tipo_servicio: true, nombre_tipo: true, categoria: true },
+          select: {
+            id_tipo_servicio: true,
+            codigo_tipo: true,
+            nombre_tipo: true,
+            categoria: true,
+            id_tipo_equipo: true,
+            aplica_a: true,
+            tipos_equipo: {
+              select: { id_tipo_equipo: true, codigo_tipo: true, nombre_tipo: true },
+            },
+          },
         },
         ordenes_equipos: {
           orderBy: { orden_secuencia: 'asc' },

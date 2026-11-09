@@ -141,6 +141,14 @@ export function TipoServicioDetailDrawer({ tipoServicioId, onClose }: Props) {
                                 )}>
                                     {getCategoriaInfo(detalle.categoria).label}
                                 </span>
+                                <span className={cn(
+                                    "px-3 py-1 rounded-full text-xs font-bold",
+                                    (detalle as any).activo !== false
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : "bg-gray-100 text-gray-600"
+                                )}>
+                                    {(detalle as any).activo !== false ? '✓ Habilitado para Órdenes' : '✕ Deshabilitado / Inactivo'}
+                                </span>
                                 {detalle.tiene_checklist && (
                                     <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">
                                         ✓ Checklist

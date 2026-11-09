@@ -114,6 +114,8 @@ export function ProgramarVisitaModal({
                         id_equipo: (eq?.id_equipo || oe.id_equipo) as number,
                         codigo_equipo: eq?.codigo_equipo || `EQ-${oe.orden_secuencia || 1}`,
                         nombre_equipo: eq?.nombre_equipo || oe.nombre_sistema || 'Equipo',
+                        id_tipo_equipo: eq?.id_tipo_equipo ?? eq?.tipos_equipo?.id_tipo_equipo ?? null,
+                        codigo_tipo: eq?.tipos_equipo?.codigo_tipo || null,
                     };
                 })
                 .filter((e) => Boolean(e.id_equipo));
@@ -125,11 +127,32 @@ export function ProgramarVisitaModal({
                     id_equipo: fallbackId,
                     codigo_equipo: orden.equipos?.codigo_equipo || `EQ-${fallbackId}`,
                     nombre_equipo: orden.equipos?.nombre_equipo || 'Equipo Principal',
+                    id_tipo_equipo: orden.equipos?.id_tipo_equipo ?? (orden.equipos as any)?.tipos_equipo?.id_tipo_equipo ?? null,
+                    codigo_tipo: (orden.equipos as any)?.tipos_equipo?.codigo_tipo || null,
                 },
             ];
         }
         return [];
     }, [orden]);
+
+    const tiposServicioCompatibles = useMemo(() => {
+        const list = Array.isArray(tiposServicio) ? tiposServicio : [];
+        const codsEq = equiposHeredados
+            .map((e: any) => String(e.codigo_tipo || '').toUpperCase().trim())
+            .filter(Boolean);
+        const idsEq = equiposHeredados
+            .map((e: any) => (e.id_tipo_equipo != null ? Number(e.id_tipo_equipo) : null))
+            .filter((v): v is number => v !== null);
+        if (codsEq.length === 0 && idsEq.length === 0) return list;
+        return list.filter((t: any) => {
+            if (t.id_tipo_servicio === (orden.tipos_servicio?.id_tipo_servicio || (orden as any).id_tipo_servicio)) return true;
+            const aplica = Array.isArray(t.aplica_a) ? t.aplica_a.map((c: string) => String(c).toUpperCase().trim()) : [];
+            if (aplica.length === 0 && !t.id_tipo_equipo) return true;
+            if (codsEq.some((c) => aplica.includes(c))) return true;
+            if (t.id_tipo_equipo != null && idsEq.includes(Number(t.id_tipo_equipo))) return true;
+            return false;
+        });
+    }, [tiposServicio, equiposHeredados, orden]);
 
     // Pendientes activos de todo el caso (PENDIENTE o EN_GESTION)
     const pendientesActivosCaso = useMemo(() => {
@@ -504,7 +527,7 @@ export function ProgramarVisitaModal({
                                 className="w-full text-sm px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white font-semibold text-slate-800"
                             >
                                 <option value={0}>Seleccione tipo de servicio...</option>
-                                {tiposServicio.map((t: any) => (
+                                {tiposServicioCompatibles.map((t: any) => (
                                     <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>
                                         {t.nombre_tipo} ({t.codigo_tipo})
                                     </option>

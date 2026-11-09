@@ -1,15 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-    IsBoolean,
-    IsEnum,
-    IsInt,
-    IsNotEmpty,
-    IsNumber,
-    IsOptional,
-    IsString,
-    Matches,
-    MaxLength,
-    Min
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  Min,
+  ValidateIf,
 } from 'class-validator';
 
 /**
@@ -26,7 +28,7 @@ export enum CategoriaServicioEnum {
 
 /**
  * DTO: Crear tipo de servicio
- * 
+ *
  * Validaciones con class-validator
  * Documentación con Swagger
  */
@@ -69,12 +71,34 @@ export class CreateTiposServicioDto {
   categoria: CategoriaServicioEnum;
 
   @ApiPropertyOptional({
-    description: 'ID del tipo de equipo al que aplica',
+    description: 'ID del tipo de equipo principal al que aplica (null para universal)',
     example: 1,
+    nullable: true,
   })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
   @IsInt()
   @IsOptional()
-  tipoEquipoId?: number;
+  tipoEquipoId?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Lista de códigos de tipos de equipo a los que aplica este servicio ([] = Universal)',
+    example: ['ELEV'],
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  aplicaA?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Alias snake_case para aplicaA',
+    example: ['ELEV'],
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  aplica_a?: string[];
 
   @ApiPropertyOptional({
     description: 'Indica si tiene checklist de actividades',

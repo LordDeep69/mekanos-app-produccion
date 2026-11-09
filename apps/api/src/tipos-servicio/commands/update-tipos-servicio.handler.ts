@@ -4,7 +4,7 @@ import { UpdateTiposServicioCommand } from './update-tipos-servicio.command';
 
 /**
  * Handler: Actualizar tipo de servicio
- * 
+ *
  * Ejecuta la lógica de negocio para actualizar un tipo de servicio existente
  * Repository valida existencia, FKs y normaliza datos
  */
@@ -34,6 +34,9 @@ export class UpdateTiposServicioHandler
     }
     if (command.data.tipoEquipoId !== undefined) {
       dbData.id_tipo_equipo = command.data.tipoEquipoId;
+    }
+    if (command.data.aplicaA !== undefined) {
+      dbData.aplica_a = command.data.aplicaA;
     }
     if (command.data.tieneChecklist !== undefined) {
       dbData.tiene_checklist = command.data.tieneChecklist;
@@ -69,7 +72,7 @@ export class UpdateTiposServicioHandler
     // Agregar campo de auditoría
     dbData.modificado_por = command.userId;
 
-    // Repository valida existencia, FKs, normaliza y persiste
+    // Repository valida existencia, FKs, sincroniza aplica_a <-> id_tipo_equipo y persiste
     return this.repository.update(command.id, dbData);
   }
 }

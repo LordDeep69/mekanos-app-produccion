@@ -50,6 +50,8 @@ import {
     clasificarServicioCorrectivo,
     detectarFamiliaEquipos,
     esServicioCompatibleConFamilia,
+    obtenerArquetiposDeServicio,
+    obtenerEtiquetaFamilia,
     type FamiliaEquipo,
 } from '@/features/ordenes/lib/familia-equipo';
 import { calculateSmartMatchScore } from '@/lib/search-utils';
@@ -401,7 +403,7 @@ function PasoContexto({
                 id_sede: eqData.id_sede,
                 sede: eqData.sede?.nombre || '',
                 id_tipo_equipo: eqData.id_tipo_equipo,
-                tipos_equipo: eqData.tipos_equipo,
+                tipos_equipo: eqData.tipos_equipo || eqData.tipo_equipo,
             };
             onChange({ equiposSeleccionados: [eqItem] });
             setPreselectEquipoId(null);
@@ -1389,27 +1391,39 @@ function PasoAlcance({
     const { data: serviciosComerciales, isLoading: isLoadingServicios } = useServiciosComerciales({ activo: true, limit: 100 });
     const [busquedaCorrectivo, setBusquedaCorrectivo] = useState('');
 
-    // Estado del filtro de correctivos: por defecto "FAMILIA_Y_GLOBAL" para evitar errores de asignación cruzada
-    const defaultTab = (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR' || familiaEquipo === 'COMPRESOR' || familiaEquipo === 'HVAC')
+    // Estado del filtro de correctivos: por defecto "FAMILIA_Y_GLOBAL" para cualquier tipo específico de equipo
+    const defaultTab = (familiaEquipo !== 'GLOBAL' && familiaEquipo !== 'MIXTO')
         ? 'FAMILIA_Y_GLOBAL'
         : 'TODOS';
     const [filtroTab, setFiltroTab] = useState<string>(defaultTab);
 
     // Sincronizar tab cuando cambia la familia del equipo
     useEffect(() => {
-        if (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR' || familiaEquipo === 'COMPRESOR' || familiaEquipo === 'HVAC') {
+        if (familiaEquipo !== 'GLOBAL' && familiaEquipo !== 'MIXTO') {
             setFiltroTab('FAMILIA_Y_GLOBAL');
         } else {
             setFiltroTab('TODOS');
         }
     }, [familiaEquipo]);
 
-    // Filtrar servicios macro de acuerdo con la familia de los equipos seleccionados
+    // Filtrar servicios macro de acuerdo con la familia de los equipos seleccionados (Zero-Trust Whitelist)
     const tiposServicioCompatibles = useMemo(() => {
         return (tiposServicio || []).filter((tipo) =>
-            esServicioCompatibleConFamilia(tipo, familiaEquipo)
+            tipo.activo !== false && esServicioCompatibleConFamilia(tipo, familiaEquipo, data.equiposSeleccionados)
         );
-    }, [tiposServicio, familiaEquipo]);
+    }, [tiposServicio, familiaEquipo, data.equiposSeleccionados]);
+
+    // Si el equipo cambió y el servicio macro previamente seleccionado ya no es compatible, limpiarlo
+    useEffect(() => {
+        if (
+            !isLoadingTipos &&
+            data.tipoServicioId &&
+            tiposServicioCompatibles.length > 0 &&
+            !tiposServicioCompatibles.some((t) => t.id_tipo_servicio === data.tipoServicioId)
+        ) {
+            onChange({ tipoServicioId: undefined, tipoServicioSeleccionado: undefined });
+        }
+    }, [isLoadingTipos, data.tipoServicioId, tiposServicioCompatibles, onChange]);
 
     const tiposPorCategoria = useMemo(() => {
         return tiposServicioCompatibles.reduce((acc, tipo) => {
@@ -1428,14 +1442,17 @@ function PasoAlcance({
 
     // Determinar la familia activa efectiva para correctivos (toma en cuenta el servicio macro si especifica familia)
     const familiaEfectiva: FamiliaEquipo = useMemo(() => {
-        const codTipoServ = (data.tipoServicioSeleccionado?.codigo_tipo || '').toUpperCase();
-        if (codTipoServ.includes('GEN') || codTipoServ.includes('PLANTA')) return 'GENERADOR';
-        if (codTipoServ.includes('BOM')) return 'BOMBA';
-        if (codTipoServ.includes('MOT')) return 'MOTOR';
-        if (codTipoServ.includes('COMP')) return 'COMPRESOR';
-        if (codTipoServ.includes('HVAC') || codTipoServ.includes('CHILLER') || codTipoServ.includes('CLIMA')) return 'HVAC';
+        if (data.tipoServicioSeleccionado) {
+            const arqsServ = obtenerArquetiposDeServicio(data.tipoServicioSeleccionado);
+            if (arqsServ.length === 1) return arqsServ[0];
+        }
         return familiaEquipo;
     }, [data.tipoServicioSeleccionado, familiaEquipo]);
+
+    const etiquetaFamiliaEfectiva = useMemo(
+        () => obtenerEtiquetaFamilia(familiaEfectiva, data.equiposSeleccionados),
+        [familiaEfectiva, data.equiposSeleccionados]
+    );
 
     // Filtrar servicios comerciales correctivos/especializados inteligentemente
     const serviciosFiltrados = useMemo(() => {
@@ -1588,7 +1605,7 @@ function PasoAlcance({
                             />
                         </div>
                         <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0">
-                            {familiaEfectiva === 'GENERADOR' ? (
+                            {familiaEfectiva !== 'GLOBAL' && familiaEfectiva !== 'MIXTO' ? (
                                 <>
                                     <button
                                         type="button"
@@ -1599,9 +1616,11 @@ function PasoAlcance({
                                                 ? 'bg-orange-600 text-white shadow-sm'
                                                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
                                         )}
-                                        title="Servicios propios de Generador y los que aplican a todos los equipos"
+                                        title={`Servicios propios de ${etiquetaFamiliaEfectiva} y los que aplican a todos los equipos`}
                                     >
-                                        Generador + Generales
+                                        {familiaEfectiva === 'COMPRESOR'
+                                            ? 'Compresor / Bomba + Generales'
+                                            : `${etiquetaFamiliaEfectiva} + Generales`}
                                     </button>
                                     <button
                                         type="button"
@@ -1612,9 +1631,11 @@ function PasoAlcance({
                                                 ? 'bg-orange-600 text-white shadow-sm'
                                                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
                                         )}
-                                        title="Solo intervenciones específicas de generadores eléctricos"
+                                        title={`Solo intervenciones específicas de ${etiquetaFamiliaEfectiva}`}
                                     >
-                                        Solo Generador
+                                        {familiaEfectiva === 'COMPRESOR'
+                                            ? 'Solo Compresor / Bomba'
+                                            : `Solo ${etiquetaFamiliaEfectiva}`}
                                     </button>
                                     <button
                                         type="button"
@@ -1639,167 +1660,6 @@ function PasoAlcance({
                                                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
                                         )}
                                         title="Ver todo el catálogo sin restricciones"
-                                    >
-                                        Ver Todo
-                                    </button>
-                                </>
-                            ) : (familiaEfectiva === 'BOMBA' || familiaEfectiva === 'COMPRESOR') ? (
-                                <>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('FAMILIA_Y_GLOBAL')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'FAMILIA_Y_GLOBAL'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                        title="Servicios propios de Bomba / Compresor y los que aplican a todos los equipos"
-                                    >
-                                        {familiaEfectiva === 'COMPRESOR' ? 'Compresor / Bomba + Generales' : 'Bomba + Generales'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('SOLO_FAMILIA')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'SOLO_FAMILIA'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                        title="Solo intervenciones específicas de bombas y compresores"
-                                    >
-                                        {familiaEfectiva === 'COMPRESOR' ? 'Solo Compresor / Bomba' : 'Solo Bomba'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('SOLO_GLOBAL')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'SOLO_GLOBAL'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                        title="Solo servicios universales que aplican a cualquier equipo"
-                                    >
-                                        Solo Generales
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('TODOS')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'TODOS'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                        title="Ver todo el catálogo sin restricciones"
-                                    >
-                                        Ver Todo
-                                    </button>
-                                </>
-                            ) : familiaEfectiva === 'HVAC' ? (
-                                <>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('FAMILIA_Y_GLOBAL')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'FAMILIA_Y_GLOBAL'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                        title="Servicios de Climatización / HVAC y generales"
-                                    >
-                                        HVAC / Chiller + Generales
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('SOLO_FAMILIA')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'SOLO_FAMILIA'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                        title="Solo intervenciones de aire acondicionado y chillers"
-                                    >
-                                        Solo HVAC / Chiller
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('SOLO_GLOBAL')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'SOLO_GLOBAL'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                        title="Solo servicios universales"
-                                    >
-                                        Solo Generales
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('TODOS')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'TODOS'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                        title="Ver todo el catálogo"
-                                    >
-                                        Ver Todo
-                                    </button>
-                                </>
-                            ) : familiaEfectiva === 'MOTOR' ? (
-                                <>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('FAMILIA_Y_GLOBAL')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'FAMILIA_Y_GLOBAL'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                    >
-                                        Motor + Generales
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('SOLO_FAMILIA')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'SOLO_FAMILIA'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                    >
-                                        Solo Motor
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('SOLO_GLOBAL')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'SOLO_GLOBAL'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
-                                    >
-                                        Solo Generales
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFiltroTab('TODOS')}
-                                        className={cn(
-                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                            filtroTab === 'TODOS'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                        )}
                                     >
                                         Ver Todo
                                     </button>

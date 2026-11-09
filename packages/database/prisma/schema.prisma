@@ -2142,6 +2142,7 @@ model tipos_servicio {
   descripcion             String?
   categoria               categoria_servicio_enum
   id_tipo_equipo          Int?
+  aplica_a                String[]                @default([]) @db.VarChar
   tiene_checklist         Boolean?                @default(true)
   tiene_plantilla_informe Boolean?                @default(true)
   requiere_mediciones     Boolean?                @default(true)

@@ -20,14 +20,17 @@ import {
     Unlock,
     CheckCircle2,
     Layers,
-    Globe
+    Globe,
+    Power
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useEffect, useMemo, useState } from 'react';
 import {
     generarCodigoTipoServicio,
     verificarCodigoDuplicado,
     useArquetiposEam,
-    EamSelect
+    EamSelect,
+    ArquetiposMultiCombobox
 } from '@/features/catalogos-eam';
 import {
     CATEGORIAS_SERVICIO,
@@ -54,6 +57,101 @@ function getCategoriaLabel(cat: string) {
     return CATEGORIAS_SERVICIO.find(c => c.value === cat)?.label || cat;
 }
 
+/**
+ * Normaliza `aplica_a` (y el respaldo `tipos_equipo` / `id_tipo_equipo`) hacia los códigos
+ * canónicos únicos de `arquetipos` (evitando mostrar duplicados de sinónimos como GEN y GENERADOR).
+ */
+function resolverArquetiposAplicables(
+    tipo: any,
+    arquetipos: any[]
+): Array<{ codigo: string; nombre: string; id_tipo_equipo?: number }> {
+    const rawCodes = new Set<string>();
+    if (Array.isArray(tipo?.aplica_a) && tipo.aplica_a.length > 0) {
+        for (const c of tipo.aplica_a) {
+            if (c && String(c).trim()) rawCodes.add(String(c).trim().toUpperCase());
+        }
+    }
+    if (tipo?.tipos_equipo?.codigo_tipo) {
+        rawCodes.add(String(tipo.tipos_equipo.codigo_tipo).trim().toUpperCase());
+    }
+
+    if (rawCodes.size === 0 && !tipo?.id_tipo_equipo) {
+        return [];
+    }
+
+    const matchedMap = new Map<string, { codigo: string; nombre: string; id_tipo_equipo?: number }>();
+
+    for (const code of Array.from(rawCodes)) {
+        const arq = (arquetipos || []).find((a: any) => {
+            const cCorto = String(a.codigo_corto || '').toUpperCase().trim();
+            const cTipo = String(a.codigo_tipo || '').toUpperCase().trim();
+            const syncs: string[] = Array.isArray(a.codigos_sincronizados)
+                ? a.codigos_sincronizados.map((s: string) => String(s).toUpperCase().trim())
+                : [];
+            if (cCorto === code || cTipo === code || syncs.includes(code)) return true;
+            if ((code === 'GEN' || code === 'GENERADOR') && (cTipo === 'GEN' || cTipo === 'GENERADOR')) return true;
+            if ((code === 'BOM' || code === 'BOMBA') && (cTipo === 'BOM' || cTipo === 'BOMBA')) return true;
+            if ((code === 'MOT' || code === 'MOTOR') && (cTipo === 'MOT' || cTipo === 'MOTOR')) return true;
+            if ((code === 'COMP' || code === 'COMPRESOR') && (cTipo === 'COMP' || cTipo === 'COMPRESOR')) return true;
+            return false;
+        });
+
+        if (arq) {
+            const key = String(arq.codigo_corto || arq.codigo_tipo).toUpperCase().trim();
+            if (!matchedMap.has(key)) {
+                matchedMap.set(key, {
+                    codigo: key,
+                    nombre: arq.nombre_canonico || arq.nombre_tipo || key,
+                    id_tipo_equipo: arq.id_tipo_equipo,
+                });
+            }
+        } else {
+            // Si aún no cargaron arquetipos o es un código independiente
+            const canonKey =
+                code === 'GENERADOR' ? 'GEN' :
+                code === 'BOMBA' ? 'BOM' :
+                code === 'MOTOR' ? 'MOT' :
+                code === 'COMPRESOR' ? 'COMP' : code;
+            if (!matchedMap.has(canonKey)) {
+                matchedMap.set(canonKey, {
+                    codigo: canonKey,
+                    nombre:
+                        tipo?.tipos_equipo?.codigo_tipo?.toUpperCase() === code
+                            ? tipo.tipos_equipo.nombre_tipo
+                            : canonKey,
+                    id_tipo_equipo: tipo?.id_tipo_equipo ?? undefined,
+                });
+            }
+        }
+    }
+
+    // Fallback si solo tenía id_tipo_equipo numérico
+    if (matchedMap.size === 0 && tipo?.id_tipo_equipo) {
+        const arqById = (arquetipos || []).find(
+            (a: any) =>
+                Number(a.id_tipo_equipo) === Number(tipo.id_tipo_equipo) ||
+                (Array.isArray(a.ids_sincronizados) && a.ids_sincronizados.includes(Number(tipo.id_tipo_equipo)))
+        );
+        if (arqById) {
+            const key = String(arqById.codigo_corto || arqById.codigo_tipo).toUpperCase().trim();
+            matchedMap.set(key, {
+                codigo: key,
+                nombre: arqById.nombre_canonico || arqById.nombre_tipo || key,
+                id_tipo_equipo: arqById.id_tipo_equipo,
+            });
+        } else if (tipo?.tipos_equipo) {
+            const key = String(tipo.tipos_equipo.codigo_tipo || '').toUpperCase().trim();
+            matchedMap.set(key, {
+                codigo: key,
+                nombre: tipo.tipos_equipo.nombre_tipo || key,
+                id_tipo_equipo: tipo.id_tipo_equipo,
+            });
+        }
+    }
+
+    return Array.from(matchedMap.values());
+}
+
 export default function TiposServicioPage() {
     const [busqueda, setBusqueda] = useState('');
     const [categoriaFiltro, setCategoriaFiltro] = useState('');
@@ -62,13 +160,38 @@ export default function TiposServicioPage() {
     const [editingTipo, setEditingTipo] = useState<any>(null);
     const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
 
-    const { data: response, isLoading, isError, refetch } = useTiposServicio({ activo: true });
+    const { data: response, isLoading, isError, refetch } = useTiposServicio({ activo: 'all' as any, limit: 100 });
+    const [estadoFiltro, setEstadoFiltro] = useState<'TODOS' | 'ACTIVOS' | 'INACTIVOS'>('TODOS');
+    const [togglingId, setTogglingId] = useState<number | null>(null);
     const { data: arquetipos = [] } = useArquetiposEam();
     const crearTipo = useCreateTipoServicio();
     const actualizarTipo = useUpdateTipoServicio();
     const eliminarTipo = useDeleteTipoServicio();
 
     const tipos = response?.data || [];
+    const activosCount = useMemo(() => tipos.filter(t => t.activo !== false).length, [tipos]);
+    const inactivosCount = useMemo(() => tipos.filter(t => t.activo === false).length, [tipos]);
+
+    const handleToggleActivo = async (e: React.MouseEvent, tipo: any) => {
+        e.stopPropagation();
+        const nuevoEstado = tipo.activo === false;
+        setTogglingId(tipo.id_tipo_servicio);
+        try {
+            await actualizarTipo.mutateAsync({
+                id: tipo.id_tipo_servicio,
+                data: { activo: nuevoEstado },
+            });
+            toast.success(
+                nuevoEstado
+                    ? `Servicio "${tipo.nombre_tipo}" activado correctamente`
+                    : `Servicio "${tipo.nombre_tipo}" desactivado. No aparecerá en nuevas órdenes.`
+            );
+        } catch (err) {
+            toast.error('Error al actualizar el estado del servicio');
+        } finally {
+            setTogglingId(null);
+        }
+    };
 
     const handleEdit = (tipo: any) => {
         setEditingTipo(tipo);
@@ -82,16 +205,26 @@ export default function TiposServicioPage() {
     };
 
     const filteredTipos = tipos.filter(t => {
+        if (estadoFiltro === 'ACTIVOS' && t.activo === false) return false;
+        if (estadoFiltro === 'INACTIVOS' && t.activo !== false) return false;
         const nombre = t.nombre_tipo || '';
         const codigo = t.codigo_tipo || '';
         const term = busqueda.toLowerCase();
         const matchesBusqueda = nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
         const matchesCategoria = !categoriaFiltro || t.categoria === categoriaFiltro;
-        const matchesTipoEquipo = !tipoEquipoFiltro
-            ? true
-            : tipoEquipoFiltro === 'universal'
-            ? !t.id_tipo_equipo
-            : String(t.id_tipo_equipo) === tipoEquipoFiltro;
+
+        const arqsResueltos = resolverArquetiposAplicables(t, arquetipos);
+        let matchesTipoEquipo = true;
+        if (tipoEquipoFiltro === 'universal') {
+            matchesTipoEquipo = arqsResueltos.length === 0;
+        } else if (tipoEquipoFiltro) {
+            const arqFiltro = (arquetipos || []).find((a: any) => String(a.id_tipo_equipo) === tipoEquipoFiltro);
+            const codFiltro = String(arqFiltro?.codigo_corto || arqFiltro?.codigo_tipo || '').toUpperCase().trim();
+            matchesTipoEquipo =
+                String(t.id_tipo_equipo) === tipoEquipoFiltro ||
+                (Boolean(codFiltro) && arqsResueltos.some((ar) => ar.codigo === codFiltro));
+        }
+
         return matchesBusqueda && matchesCategoria && matchesTipoEquipo;
     });
 
@@ -105,7 +238,7 @@ export default function TiposServicioPage() {
                         Tipos de Servicio
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        Define las categorías de mantenimiento y servicios técnicos
+                        Define las categorías de mantenimiento y servicios técnicos (Universales, por Equipo o Multi-Equipo)
                     </p>
                 </div>
                 <button
@@ -119,7 +252,7 @@ export default function TiposServicioPage() {
 
             {/* Barra de Filtros Prémium */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm items-center">
-                <div className="relative md:col-span-5">
+                <div className="relative md:col-span-4">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                         type="text"
@@ -129,7 +262,7 @@ export default function TiposServicioPage() {
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     />
                 </div>
-                <div className="md:col-span-4">
+                <div className="md:col-span-3">
                     <EamSelect
                         value={tipoEquipoFiltro}
                         onChange={setTipoEquipoFiltro}
@@ -159,6 +292,18 @@ export default function TiposServicioPage() {
                             }))
                         ]}
                         placeholder="Filtrar por categoría..."
+                    />
+                </div>
+                <div className="md:col-span-2">
+                    <EamSelect
+                        value={estadoFiltro}
+                        onChange={(val) => setEstadoFiltro(val as any)}
+                        options={[
+                            { value: 'TODOS', label: `Todos (${tipos.length})` },
+                            { value: 'ACTIVOS', label: `Solo Activos (${activosCount})`, badge: 'ACTIVO' },
+                            { value: 'INACTIVOS', label: `Solo Inactivos (${inactivosCount})`, badge: 'INACTIVO' },
+                        ]}
+                        placeholder="Estado..."
                     />
                 </div>
             </div>
@@ -192,106 +337,141 @@ export default function TiposServicioPage() {
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Servicio</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Aplica a</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoría</th>
+                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Estado</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Checklist</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Duración Est.</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {filteredTipos.map((tipo, idx) => (
-                                    <tr
-                                        key={tipo.id_tipo_servicio ?? `tipo-${idx}`}
-                                        className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
-                                        onClick={() => setSelectedTipoId(tipo.id_tipo_servicio)}
-                                    >
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div
-                                                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm shrink-0"
-                                                    style={{ backgroundColor: tipo.color_hex || '#3b82f6' }}
-                                                >
-                                                    <Wrench className="h-5 w-5" />
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{tipo.nombre_tipo}</p>
-                                                        {tipo.plantilla_observacion && (
-                                                            <span
-                                                                title="Tiene plantilla de observación configurada"
-                                                                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded-md"
-                                                            >
-                                                                <FileText className="h-3 w-3 text-emerald-600" />
-                                                                Plantilla
-                                                            </span>
-                                                        )}
+                                {filteredTipos.map((tipo, idx) => {
+                                    const arqsAplicables = resolverArquetiposAplicables(tipo, arquetipos);
+                                    return (
+                                        <tr
+                                            key={tipo.id_tipo_servicio ?? `tipo-${idx}`}
+                                            className={cn("transition-colors group cursor-pointer", tipo.activo === false ? "bg-slate-50/70 hover:bg-slate-100/80 text-gray-500 opacity-75" : "hover:bg-blue-50/30 text-gray-900")}
+                                            onClick={() => setSelectedTipoId(tipo.id_tipo_servicio)}
+                                        >
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm shrink-0"
+                                                        style={{ backgroundColor: tipo.color_hex || '#3b82f6' }}
+                                                    >
+                                                        <Wrench className="h-5 w-5" />
                                                     </div>
-                                                    <p className="text-xs font-mono text-gray-400">{tipo.codigo_tipo}</p>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{tipo.nombre_tipo}</p>
+                                                            {tipo.plantilla_observacion && (
+                                                                <span
+                                                                    title="Tiene plantilla de observación configurada"
+                                                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded-md"
+                                                                >
+                                                                    <FileText className="h-3 w-3 text-emerald-600" />
+                                                                    Plantilla
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs font-mono text-gray-400">{tipo.codigo_tipo}</p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {tipo.tipos_equipo ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs">
-                                                    <Layers className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                                                    <span>{tipo.tipos_equipo.nombre_tipo}</span>
-                                                    <span className="px-1.5 py-0.2 rounded text-[10px] bg-blue-200/60 text-blue-800 font-mono font-bold">
-                                                        {tipo.tipos_equipo.codigo_tipo}
-                                                    </span>
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-50 text-slate-500 border border-slate-200/80">
-                                                    <Globe className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                    <span>Universal</span>
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={cn(
-                                                "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                                                getCategoriaColor(tipo.categoria)
-                                            )}>
-                                                {getCategoriaLabel(tipo.categoria)}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex justify-center">
-                                                {tipo.tiene_checklist ? (
-                                                    <div className="bg-green-100 p-1 rounded-full">
-                                                        <Check className="h-4 w-4 text-green-600" />
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {arqsAplicables.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-1.5 max-w-xs">
+                                                        {arqsAplicables.map((arqItem) => (
+                                                            <span
+                                                                key={arqItem.codigo}
+                                                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs"
+                                                            >
+                                                                <Layers className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                                                                <span>{arqItem.nombre}</span>
+                                                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-blue-200/60 text-blue-800 font-mono font-bold">
+                                                                    {arqItem.codigo}
+                                                                </span>
+                                                            </span>
+                                                        ))}
                                                     </div>
                                                 ) : (
-                                                    <div className="bg-gray-100 p-1 rounded-full">
-                                                        <X className="h-4 w-4 text-gray-400" />
-                                                    </div>
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-50 text-slate-500 border border-slate-200/80">
+                                                        <Globe className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                        <span>Universal</span>
+                                                    </span>
                                                 )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-1.5 text-sm text-gray-600 font-medium">
-                                                <Clock className="h-4 w-4 text-gray-400" />
-                                                {tipo.duracion_estimada_horas ? `${tipo.duracion_estimada_horas}h` : 'N/A'}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={cn(
+                                                    "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                                                    getCategoriaColor(tipo.categoria)
+                                                )}>
+                                                    {getCategoriaLabel(tipo.categoria)}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); handleEdit(tipo); }}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                    title="Editar"
+                                                    type="button"
+                                                    onClick={(e) => handleToggleActivo(e, tipo)}
+                                                    disabled={togglingId === tipo.id_tipo_servicio}
+                                                    className={cn(
+                                                        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all border shadow-2xs cursor-pointer",
+                                                        tipo.activo !== false
+                                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300"
+                                                            : "bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200 hover:text-gray-700"
+                                                    )}
+                                                    title={tipo.activo !== false ? "Clic para desactivar (ocultar de órdenes)" : "Clic para activar (disponible en órdenes)"}
                                                 >
-                                                    <Edit className="h-4 w-4" />
+                                                    {togglingId === tipo.id_tipo_servicio ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <span className={cn(
+                                                            "w-2 h-2 rounded-full",
+                                                            tipo.activo !== false ? "bg-emerald-500 animate-pulse" : "bg-gray-400"
+                                                        )} />
+                                                    )}
+                                                    <span>{tipo.activo !== false ? 'Activo' : 'Inactivo'}</span>
                                                 </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDelete(tipo.id_tipo_servicio); }}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                    title="Desactivar"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex justify-center">
+                                                    {tipo.tiene_checklist ? (
+                                                        <div className="bg-green-100 p-1 rounded-full">
+                                                            <Check className="h-4 w-4 text-green-600" />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="bg-gray-100 p-1 rounded-full">
+                                                            <X className="h-4 w-4 text-gray-400" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-1.5 text-sm text-gray-600 font-medium">
+                                                    <Clock className="h-4 w-4 text-gray-400" />
+                                                    {tipo.duracion_estimada_horas ? `${tipo.duracion_estimada_horas}h` : 'N/A'}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleEdit(tipo); }}
+                                                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                        title="Editar"
+                                                    >
+                                                        <Edit className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDelete(tipo.id_tipo_servicio); }}
+                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                        title="Desactivar"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -311,13 +491,16 @@ export default function TiposServicioPage() {
                             nombreTipo: formData.nombre_tipo,
                             codigoTipo: formData.codigo_tipo,
                             categoria: formData.categoria,
-                            tipoEquipoId: formData.id_tipo_equipo ? Number(formData.id_tipo_equipo) : undefined,
+                            tipoEquipoId: formData.id_tipo_equipo ? Number(formData.id_tipo_equipo) : null,
+                            aplicaA: Array.isArray(formData.aplica_a) ? formData.aplica_a : [],
+                            aplica_a: Array.isArray(formData.aplica_a) ? formData.aplica_a : [],
                             descripcion: formData.descripcion || undefined,
                             tieneChecklist: Boolean(formData.tiene_checklist),
                             duracionEstimadaHoras: formData.duracion_estimada_horas,
                             colorHex: formData.color_hex,
                             plantillaObservacion: formData.plantilla_observacion || null,
                             plantilla_observacion: formData.plantilla_observacion || null,
+                            activo: formData.activo !== undefined ? Boolean(formData.activo) : true,
                         };
                         if (editingTipo) {
                             await actualizarTipo.mutateAsync({
@@ -454,24 +637,58 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], arquetipos = [],
         );
     }, [tipos, tipo]);
 
+    // Opciones formateadas de arquetipos técnicos para el selector múltiple
+    const opcionesTipos = useMemo(() => {
+        if (arquetipos && arquetipos.length > 0) {
+            return arquetipos.map((a: any) => {
+                const cod = (a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim();
+                const nom = a.nombre_canonico || a.nombre_tipo || '';
+                return {
+                    codigo: cod,
+                    nombre: nom,
+                    label: `${nom} (${cod})`,
+                    id_tipo_equipo: a.id_tipo_equipo,
+                };
+            });
+        }
+        return [
+            { codigo: 'GEN', nombre: 'Generador Eléctrico', label: 'Generador Eléctrico (GEN)', id_tipo_equipo: 3 },
+            { codigo: 'BOM', nombre: 'Bomba Hidráulica', label: 'Bomba Hidráulica (BOM)', id_tipo_equipo: 5 },
+            { codigo: 'COMP', nombre: 'Compresor Industrial', label: 'Compresor Industrial (COMP)', id_tipo_equipo: 20 },
+            { codigo: 'MOT', nombre: 'Motor Industrial', label: 'Motor Industrial (MOT)', id_tipo_equipo: 4 },
+            { codigo: 'HVAC', nombre: 'Aire Acondicionado / Chiller', label: 'Aire Acondicionado / Chiller (HVAC)', id_tipo_equipo: 21 },
+            { codigo: 'ELEV', nombre: 'Ascensor de Pasajeros', label: 'Ascensor de Pasajeros (ELEV)', id_tipo_equipo: 22 },
+        ];
+    }, [arquetipos]);
+
+    const initialAplicaA = useMemo(() => {
+        if (!tipo) return [];
+        return resolverArquetiposAplicables(tipo, arquetipos).map((a) => a.codigo);
+    }, [tipo, arquetipos]);
+
     const [isAutoCodigo, setIsAutoCodigo] = useState(!tipo);
 
     const [formData, setFormData] = useState({
         nombre_tipo: tipo?.nombre_tipo || '',
         codigo_tipo: tipo?.codigo_tipo || '',
         id_tipo_equipo: tipo?.id_tipo_equipo ? String(tipo.id_tipo_equipo) : '',
+        aplica_a: initialAplicaA,
         categoria: tipo?.categoria || 'PREVENTIVO',
         descripcion: tipo?.descripcion || '',
         tiene_checklist: tipo?.tiene_checklist ?? true,
         duracion_estimada_horas: tipo?.duracion_estimada_horas ?? '',
         color_hex: tipo?.color_hex || '#3b82f6',
         plantilla_observacion: tipo?.plantilla_observacion || '',
+        activo: tipo?.activo ?? true,
     });
 
-    const selectedArquetipo = useMemo(() => {
-        if (!formData.id_tipo_equipo) return null;
-        return arquetipos.find((a: any) => String(a.id_tipo_equipo) === String(formData.id_tipo_equipo)) || null;
-    }, [arquetipos, formData.id_tipo_equipo]);
+    const selectedArquetiposInfo = useMemo(() => {
+        return (formData.aplica_a || [])
+            .map((cod: string) => opcionesTipos.find((o: any) => o.codigo === cod))
+            .filter(Boolean);
+    }, [formData.aplica_a, opcionesTipos]);
+
+    const primaryArquetipo = selectedArquetiposInfo[0] || null;
 
     const isCodigoDuplicado = useMemo(() => {
         return verificarCodigoDuplicado(
@@ -481,22 +698,30 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], arquetipos = [],
         );
     }, [formData.codigo_tipo, codigosExistentes, tipo]);
 
-    const handleArquetipoChange = (newIdStr: string) => {
-        const arq = arquetipos.find((a: any) => String(a.id_tipo_equipo) === newIdStr);
+    const handleAplicaAChange = (newCodes: string[]) => {
+        const firstOpt = opcionesTipos.find((o: any) => o.codigo === newCodes[0]);
+        const prefijoCodigo = newCodes.length === 1 ? firstOpt?.codigo : newCodes.length > 1 ? 'MULTI' : undefined;
         const auto = (isAutoCodigo && !tipo)
-            ? generarCodigoTipoServicio(formData.nombre_tipo, formData.categoria, codigosExistentes, arq?.codigo_tipo)
+            ? generarCodigoTipoServicio(formData.nombre_tipo, formData.categoria, codigosExistentes, prefijoCodigo)
             : formData.codigo_tipo;
         setFormData(prev => ({
             ...prev,
-            id_tipo_equipo: newIdStr,
+            aplica_a: newCodes,
+            id_tipo_equipo: firstOpt?.id_tipo_equipo ? String(firstOpt.id_tipo_equipo) : '',
             codigo_tipo: auto,
         }));
     };
 
     const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newNombre = e.target.value;
+        const prefijoCodigo =
+            formData.aplica_a.length === 1
+                ? primaryArquetipo?.codigo
+                : formData.aplica_a.length > 1
+                ? 'MULTI'
+                : undefined;
         const auto = (isAutoCodigo && !tipo)
-            ? generarCodigoTipoServicio(newNombre, formData.categoria, codigosExistentes, selectedArquetipo?.codigo_tipo)
+            ? generarCodigoTipoServicio(newNombre, formData.categoria, codigosExistentes, prefijoCodigo)
             : formData.codigo_tipo;
         setFormData(prev => ({
             ...prev,
@@ -506,8 +731,14 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], arquetipos = [],
     };
 
     const handleCategoriaChange = (newCat: string) => {
+        const prefijoCodigo =
+            formData.aplica_a.length === 1
+                ? primaryArquetipo?.codigo
+                : formData.aplica_a.length > 1
+                ? 'MULTI'
+                : undefined;
         const auto = (isAutoCodigo && !tipo)
-            ? generarCodigoTipoServicio(formData.nombre_tipo, newCat, codigosExistentes, selectedArquetipo?.codigo_tipo)
+            ? generarCodigoTipoServicio(formData.nombre_tipo, newCat, codigosExistentes, prefijoCodigo)
             : formData.codigo_tipo;
         setFormData(prev => ({
             ...prev,
@@ -520,11 +751,17 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], arquetipos = [],
         const nuevoModo = !isAutoCodigo;
         setIsAutoCodigo(nuevoModo);
         if (nuevoModo) {
+            const prefijoCodigo =
+                formData.aplica_a.length === 1
+                    ? primaryArquetipo?.codigo
+                    : formData.aplica_a.length > 1
+                    ? 'MULTI'
+                    : undefined;
             const auto = generarCodigoTipoServicio(
                 formData.nombre_tipo,
                 formData.categoria,
                 codigosExistentes,
-                selectedArquetipo?.codigo_tipo
+                prefijoCodigo
             );
             setFormData((prev) => ({ ...prev, codigo_tipo: auto }));
         }
@@ -542,18 +779,27 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], arquetipos = [],
             }
         }
 
+        const prefijoCodigo =
+            formData.aplica_a.length === 1
+                ? primaryArquetipo?.codigo
+                : formData.aplica_a.length > 1
+                ? 'MULTI'
+                : undefined;
+
         const finalCode = formData.codigo_tipo.trim() || generarCodigoTipoServicio(
             formData.nombre_tipo,
             formData.categoria,
             codigosExistentes,
-            selectedArquetipo?.codigo_tipo
+            prefijoCodigo
         );
 
         onSubmit({
             ...formData,
             codigo_tipo: finalCode.toUpperCase().trim(),
-            id_tipo_equipo: formData.id_tipo_equipo ? Number(formData.id_tipo_equipo) : undefined,
-            duracion_estimada_horas: parsedDuracion
+            id_tipo_equipo: primaryArquetipo?.id_tipo_equipo ? Number(primaryArquetipo.id_tipo_equipo) : null,
+            aplica_a: formData.aplica_a,
+            duracion_estimada_horas: parsedDuracion,
+            activo: Boolean(formData.activo)
         });
     };
 
@@ -616,46 +862,42 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], arquetipos = [],
                 <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
                     {/* Tab 1: Datos Generales */}
                     <div className={cn('space-y-4', activeTab === 'general' ? 'block' : 'hidden')}>
-                        {/* Selector de Arquetipo de Equipo */}
+                        {/* Selector Multi-Arquetipo de Equipo */}
                         <div>
                             <div className="flex items-center justify-between mb-1.5">
                                 <label className="block text-sm font-bold text-gray-700 flex items-center gap-1.5">
                                     <Layers className="h-4 w-4 text-blue-600" />
-                                    ¿A qué Tipo de Activo / Equipo aplica este servicio?
+                                    ¿A qué Tipo(s) de Activo / Equipo aplica este servicio?
                                 </label>
-                                {selectedArquetipo && (
+                                {selectedArquetiposInfo.length > 0 ? (
                                     <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md">
-                                        Arquetipo: {selectedArquetipo.codigo_tipo}
+                                        {selectedArquetiposInfo.length === 1
+                                            ? `Arquetipo: ${selectedArquetiposInfo[0].codigo}`
+                                            : `${selectedArquetiposInfo.length} Arquetipos (${selectedArquetiposInfo.map((a: any) => a.codigo).join(', ')})`}
+                                    </span>
+                                ) : (
+                                    <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                                        🌐 Universal (Todos)
                                     </span>
                                 )}
                             </div>
-                            <EamSelect
-                                value={formData.id_tipo_equipo}
-                                onChange={handleArquetipoChange}
-                                options={[
-                                    {
-                                        value: '',
-                                        label: '🌐 Universal (Aplica a cualquier tipo de equipo)',
-                                        badge: 'GLOBAL',
-                                        description: 'Protocolo transversal utilizable en cualquier activo sin restricción de arquetipo.',
-                                    },
-                                    ...arquetipos.map((arq: any) => ({
-                                        value: String(arq.id_tipo_equipo),
-                                        label: `${arq.nombre_tipo} (${arq.codigo_tipo})`,
-                                        badge: arq.codigo_tipo,
-                                        description: arq.descripcion || `Especializado para ${arq.nombre_tipo}`,
-                                    }))
-                                ]}
-                                placeholder="Selecciona el tipo de equipo..."
-                                searchable={arquetipos.length > 5}
+                            <ArquetiposMultiCombobox
+                                value={formData.aplica_a}
+                                onChange={handleAplicaAChange}
+                                options={opcionesTipos}
+                                placeholder="Buscar y seleccionar uno o varios tipos de equipo..."
                             />
-                            <p className="text-[11px] text-gray-500 mt-1">
-                                {selectedArquetipo ? (
+                            <p className="text-[11px] text-gray-500 mt-1.5">
+                                {selectedArquetiposInfo.length === 1 ? (
                                     <span className="text-blue-600 font-medium">
-                                        ⚡ Vinculado al arquetipo <strong>{selectedArquetipo.nombre_tipo}</strong>. Se genera código de referencia industrial <strong>{selectedArquetipo.codigo_tipo}_...</strong>
+                                        ⚡ Exclusivo para <strong>{selectedArquetiposInfo[0].nombre}</strong>. Solo aparecerá cuando se programe una orden para este tipo de activo.
+                                    </span>
+                                ) : selectedArquetiposInfo.length > 1 ? (
+                                    <span className="text-indigo-600 font-medium">
+                                        🔗 Servicio Multi-Equipo: habilitado para <strong>{selectedArquetiposInfo.map((a: any) => a.nombre).join(' + ')}</strong> y oculto para el resto de equipos.
                                     </span>
                                 ) : (
-                                    'Define si este servicio es específico para un activo (ej: Ascensores) o aplicable a cualquier equipo.'
+                                    'Modo Universal activo: este servicio aparecerá disponible para cualquier tipo de equipo al crear una orden.'
                                 )}
                             </p>
                         </div>
@@ -780,6 +1022,42 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], arquetipos = [],
                             <label htmlFor="tiene_checklist" className="text-sm font-semibold text-blue-900 cursor-pointer flex items-center gap-2">
                                 <CheckSquare className="h-4 w-4" />
                                 ¿Requiere Checklist Técnico?
+                            </label>
+                        </div>
+
+                        {/* Switch de Activación para Órdenes */}
+                        <div className={cn(
+                            "flex items-center justify-between p-3.5 rounded-xl border transition-all",
+                            formData.activo
+                                ? "bg-emerald-50/70 border-emerald-200"
+                                : "bg-gray-50 border-gray-200"
+                        )}>
+                            <div className="flex items-center gap-3">
+                                <div className={cn(
+                                    "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
+                                    formData.activo ? "bg-emerald-600 text-white" : "bg-gray-300 text-gray-600"
+                                )}>
+                                    <Power className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-gray-900">
+                                        {formData.activo ? 'Servicio Habilitado para Órdenes' : 'Servicio Deshabilitado (Inactivo)'}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                        {formData.activo
+                                            ? 'Disponible para selección al programar nuevas órdenes de trabajo.'
+                                            : 'Oculto: no aparecerá en el selector de servicios al crear órdenes para ningún equipo.'}
+                                    </p>
+                                </div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.activo}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, activo: e.target.checked }))}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                             </label>
                         </div>
                     </div>

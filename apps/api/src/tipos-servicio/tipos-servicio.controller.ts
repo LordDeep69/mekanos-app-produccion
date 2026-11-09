@@ -26,10 +26,10 @@ import { GetTiposServicioQuery } from './queries/get-tipos-servicio.query';
 
 /**
  * Controller: Tipos de Servicio
- * 
+ *
  * Gestiona tipos/formatos estandarizados de servicio y plantillas enriquecidas de observación
  * Arquitectura: CQRS (Commands/Queries separados)
- * 
+ *
  * ENDPOINTS:
  * - POST /tipos-servicio - Crear tipo servicio
  * - GET /tipos-servicio - Listar con filtros
@@ -45,7 +45,7 @@ export class TiposServicioController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
-  ) { }
+  ) {}
 
   // ============================================================================
   // CREATE
@@ -57,15 +57,16 @@ export class TiposServicioController {
   @ApiResponse({ status: 400, description: 'Validación fallida' })
   @ApiResponse({ status: 404, description: 'FK no encontrada (tipo_equipo)' })
   async create(@Body() dto: CreateTiposServicioDto) {
-    // TODO: Obtener userId desde JWT (CurrentUser decorator)
     const userId = 1; // Temporal
+
+    const aplicaA = dto.aplicaA !== undefined ? dto.aplicaA : dto.aplica_a;
 
     const command = new CreateTiposServicioCommand(
       dto.codigoTipo,
       dto.nombreTipo,
       dto.descripcion || null,
       dto.categoria,
-      dto.tipoEquipoId || null,
+      dto.tipoEquipoId ?? null,
       dto.tieneChecklist !== undefined ? dto.tieneChecklist : true,
       dto.tienePlantillaInforme !== undefined ? dto.tienePlantillaInforme : true,
       dto.requiereMediciones !== undefined ? dto.requiereMediciones : true,
@@ -77,6 +78,7 @@ export class TiposServicioController {
       dto.observaciones || null,
       userId,
       dto.plantillaObservacion !== undefined ? dto.plantillaObservacion : (dto.plantilla_observacion || null),
+      aplicaA,
     );
 
     const result = await this.commandBus.execute(command);
@@ -116,7 +118,12 @@ export class TiposServicioController {
     const page = pageStr ? parseInt(pageStr, 10) : 1;
     const limit = limitStr ? parseInt(limitStr, 10) : 50;
     const tipoEquipoId = tipoEquipoIdStr ? parseInt(tipoEquipoIdStr, 10) : undefined;
-    const activo = activoStr !== undefined ? activoStr === 'true' : true;
+    let activo: boolean | undefined = true;
+    if (activoStr === 'all' || activoStr === 'todos') {
+      activo = undefined;
+    } else if (activoStr !== undefined) {
+      activo = activoStr === 'true';
+    }
 
     const query = new GetTiposServicioQuery(
       page,
@@ -171,8 +178,8 @@ export class TiposServicioController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateTiposServicioDto,
   ) {
-    // TODO: Obtener userId desde JWT
     const userId = 1; // Temporal
+    const aplicaA = dto.aplicaA !== undefined ? dto.aplicaA : dto.aplica_a;
 
     const command = new UpdateTiposServicioCommand(
       id,
@@ -182,6 +189,7 @@ export class TiposServicioController {
         descripcion: dto.descripcion,
         categoria: dto.categoria,
         tipoEquipoId: dto.tipoEquipoId,
+        aplicaA,
         tieneChecklist: dto.tieneChecklist,
         tienePlantillaInforme: dto.tienePlantillaInforme,
         requiereMediciones: dto.requiereMediciones,
