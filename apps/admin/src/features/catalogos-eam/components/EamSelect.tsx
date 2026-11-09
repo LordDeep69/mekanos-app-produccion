@@ -87,7 +87,8 @@ export function EamSelect({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [coords, setCoords] = useState<{
-    top: number;
+    top?: number;
+    bottom?: number;
     left: number;
     width: number;
     openUpward: boolean;
@@ -131,16 +132,29 @@ export function EamSelect({
     if (!triggerRef.current) return null;
     const rect = triggerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
+    const popoverWidth = dropdownWidth
+      ? (typeof dropdownWidth === 'number' ? dropdownWidth : parseInt(String(dropdownWidth), 10) || 320)
+      : Math.max(rect.width, minDropdownWidth);
+
     const estimatedHeight = Math.min(320, filteredOptions.length * 40 + (shouldShowSearch ? 50 : 20));
-    const openUpward = spaceBelow < estimatedHeight && rect.top > spaceBelow;
+    // Solo abrir hacia arriba si abajo no cabe y arriba sí cabe holgadamente
+    const openUpward = spaceBelow < estimatedHeight && rect.top >= estimatedHeight + 10;
+
+    // Alinear al borde derecho del trigger si está en la mitad derecha o desbordaría a la derecha
+    const shouldAlignRight =
+      rect.left + popoverWidth > window.innerWidth - 16 ||
+      rect.right > window.innerWidth * 0.55;
+    let targetLeft = shouldAlignRight ? rect.right - popoverWidth : rect.left;
+    targetLeft = Math.max(12, Math.min(targetLeft, window.innerWidth - popoverWidth - 12));
 
     return {
-      top: openUpward ? rect.top : rect.bottom,
-      left: rect.left,
-      width: rect.width,
+      top: openUpward ? undefined : rect.bottom + 4,
+      bottom: openUpward ? window.innerHeight - rect.top + 4 : undefined,
+      left: targetLeft,
+      width: popoverWidth,
       openUpward,
     };
-  }, [filteredOptions.length, shouldShowSearch]);
+  }, [dropdownWidth, minDropdownWidth, filteredOptions.length, shouldShowSearch]);
 
   const handleToggle = () => {
     if (disabled) return;
@@ -219,21 +233,36 @@ export function EamSelect({
       }
     };
 
-    const handleScrollOrResize = () => {
+    const handleScroll = (e: Event) => {
+      // Si el scroll ocurre dentro de la lista de opciones del popover, permitirlo
+      if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+        return;
+      }
+      // Si el usuario hace scroll en la página o en cualquier contenedor externo, cerrar limpiamente para evitar desfase visual
+      setIsOpen(false);
+      setCoords(null);
+    };
+
+    const handleResize = () => {
       const nextCoords = calculatePosition();
-      if (nextCoords) setCoords(nextCoords);
+      if (nextCoords) {
+        setCoords(nextCoords);
+      } else {
+        setIsOpen(false);
+        setCoords(null);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('scroll', handleScrollOrResize, true);
-    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('scroll', handleScrollOrResize, true);
-      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
     };
   }, [isOpen, calculatePosition, filteredOptions, highlightedIndex, shouldShowSearch]);
 
@@ -295,26 +324,19 @@ export function EamSelect({
       {mounted &&
         isOpen &&
         coords &&
-        (() => {
-          const targetWidth = dropdownWidth || Math.max(coords.width, minDropdownWidth);
-          const numWidth = typeof targetWidth === 'number' ? targetWidth : parseInt(String(targetWidth), 10) || 320;
-          const safeLeft = typeof window !== 'undefined'
-            ? Math.max(12, Math.min(coords.left, window.innerWidth - numWidth - 16))
-            : coords.left;
-
-          return createPortal(
-            <div
-              ref={popoverRef}
-              style={{
-                position: 'fixed',
-                top: coords.openUpward ? undefined : coords.top + 4,
-                bottom: coords.openUpward ? window.innerHeight - coords.top + 4 : undefined,
-                left: safeLeft,
-                width: targetWidth,
-                maxWidth: 'calc(100vw - 24px)',
-                zIndex: 99999,
-                transformOrigin: coords.openUpward ? 'bottom left' : 'top left',
-              }}
+        createPortal(
+          <div
+            ref={popoverRef}
+            style={{
+              position: 'fixed',
+              top: coords.top,
+              bottom: coords.bottom,
+              left: coords.left,
+              width: coords.width,
+              maxWidth: 'calc(100vw - 24px)',
+              zIndex: 99999,
+              transformOrigin: coords.openUpward ? 'bottom right' : 'top right',
+            }}
               className={`rounded-2xl border shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
                 coords.openUpward ? 'origin-bottom' : 'origin-top'
               } ${
@@ -427,8 +449,7 @@ export function EamSelect({
               </div>
             </div>,
             document.body,
-          );
-        })()}
+          )}
     </div>
   );
 }
@@ -532,21 +553,36 @@ export function EamUomSelect({
       }
     };
 
-    const handleScrollOrResize = () => {
+    const handleScroll = (e: Event) => {
+      // Si el scroll ocurre dentro de la lista de opciones del popover, permitirlo
+      if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+        return;
+      }
+      // Si el usuario hace scroll en la página o en cualquier contenedor externo, cerrar limpiamente para evitar desfase visual
+      setIsOpen(false);
+      setCoords(null);
+    };
+
+    const handleResize = () => {
       const nextCoords = calculatePosition();
-      if (nextCoords) setCoords(nextCoords);
+      if (nextCoords) {
+        setCoords(nextCoords);
+      } else {
+        setIsOpen(false);
+        setCoords(null);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('scroll', handleScrollOrResize, true);
-    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('scroll', handleScrollOrResize, true);
-      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
     };
   }, [isOpen, calculatePosition]);
 
