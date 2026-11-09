@@ -9,5 +9,6 @@ export class CrearCatalogoSistemasCommand {
     public readonly colorHex?: string,
     public readonly activo?: boolean,
     public readonly observaciones?: string,
+    public readonly intercalar?: boolean,
   ) {}
 }

@@ -144,6 +144,7 @@ export class CatalogoSistemasController {
       dto.colorHex,
       dto.activo,
       dto.observaciones,
+      dto.intercalar,
     );
     return this.commandBus.execute(command);
   }
@@ -172,6 +173,7 @@ export class CatalogoSistemasController {
       dto.colorHex,
       dto.activo,
       dto.observaciones,
+      dto.intercalar,
     );
     return this.commandBus.execute(command);
   }

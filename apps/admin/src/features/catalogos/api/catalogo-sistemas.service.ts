@@ -25,7 +25,7 @@ export interface CatalogoSistema {
     codigo_sistema: string;
     nombre_sistema: string;
     descripcion?: string;
-    aplica_a?: AplicaA | string[];
+    aplica_a?: string[] | string;
     orden_visualizacion: number;
     icono?: string;
     color_hex?: string;
@@ -58,9 +58,7 @@ function transformToSnakeCase(item: CatalogoSistemaBackend): CatalogoSistema {
         codigo_sistema: item.codigoSistema,
         nombre_sistema: item.nombreSistema,
         descripcion: item.descripcion,
-        aplica_a: Array.isArray(item.aplicaA) && item.aplicaA.length > 0
-            ? item.aplicaA[0] as AplicaA
-            : undefined,
+        aplica_a: Array.isArray(item.aplicaA) ? item.aplicaA : (item.aplicaA ? [item.aplicaA] : []),
         orden_visualizacion: item.ordenVisualizacion,
         icono: item.icono,
         color_hex: item.colorHex,
@@ -89,12 +87,13 @@ export interface CreateCatalogoSistemaDto {
     codigoSistema: string;
     nombreSistema: string;
     descripcion?: string;
-    aplicaA?: AplicaA;
+    aplicaA?: string[];
     ordenVisualizacion?: number;
     icono?: string;
     colorHex?: string;
     activo?: boolean;
     observaciones?: string;
+    intercalar?: boolean;
 }
 
 export interface UpdateCatalogoSistemaDto extends Partial<CreateCatalogoSistemaDto> { }

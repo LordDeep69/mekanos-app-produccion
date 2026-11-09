@@ -1,7 +1,6 @@
 'use client';
 
 import {
-    APLICA_A_OPTIONS,
     useCatalogoSistemasConUso,
     useCreateCatalogoSistema,
     useDeleteCatalogoSistema,
@@ -13,21 +12,22 @@ import {
     Activity,
     AlertCircle,
     Check,
+    CheckCircle2,
     Edit,
+    Info,
     Layers,
-    LayoutList,
+    ListOrdered,
     Loader2,
+    Lock,
     Palette,
     Plus,
     Search,
+    Sparkles,
     Trash2,
-    X,
-    Lock,
     Unlock,
-    CheckCircle2,
-    Info
+    X
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     generarCodigoSistema,
     verificarCodigoDuplicado,
@@ -44,6 +44,7 @@ const NIVEL_USO_CONFIG: Record<NivelUso, { label: string; color: string; bgColor
 
 export default function SistemasPage() {
     const [busqueda, setBusqueda] = useState('');
+    const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSistema, setEditingSistema] = useState<any>(null);
 
@@ -65,12 +66,48 @@ export default function SistemasPage() {
         }
     };
 
-    const filteredSistemas = sistemas.filter((s: any) => {
-        const nombre = s.nombre_sistema || '';
-        const codigo = s.codigo_sistema || '';
-        const term = busqueda.toLowerCase();
-        return nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
-    }).sort((a: any, b: any) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0));
+    // Pestañas / Filtros de ámbito de equipo
+    const tabsArquetipos = useMemo(() => {
+        const tabs: Array<{ codigo: string; label: string; count: number }> = [
+            { codigo: 'TODOS', label: 'Todos los Sistemas', count: sistemas.length },
+        ];
+
+        if (arquetipos && arquetipos.length > 0) {
+            arquetipos.forEach((a: any) => {
+                const cod = (a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim();
+                const nom = a.nombre_canonico || a.nombre_tipo || cod;
+                const count = sistemas.filter((s: any) => {
+                    const aplica = Array.isArray(s.aplica_a) ? s.aplica_a : (s.aplica_a ? [s.aplica_a] : []);
+                    return aplica.includes(cod);
+                }).length;
+                tabs.push({ codigo: cod, label: nom, count });
+            });
+        }
+
+        const universalCount = sistemas.filter((s: any) => !s.aplica_a || s.aplica_a.length === 0).length;
+        if (universalCount > 0) {
+            tabs.push({ codigo: 'UNIVERSAL', label: 'Universal (Sin Filtro)', count: universalCount });
+        }
+
+        return tabs;
+    }, [sistemas, arquetipos]);
+
+    // Filtrar sistemas por búsqueda y por pestaña de tipo de equipo
+    const filteredSistemas = useMemo(() => {
+        return sistemas.filter((s: any) => {
+            const nombre = s.nombre_sistema || '';
+            const codigo = s.codigo_sistema || '';
+            const term = busqueda.toLowerCase().trim();
+            const matchesSearch = !term || nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
+            if (!matchesSearch) return false;
+
+            if (filtroTipo === 'TODOS') return true;
+            if (filtroTipo === 'UNIVERSAL') return !s.aplica_a || s.aplica_a.length === 0;
+
+            const aplica = Array.isArray(s.aplica_a) ? s.aplica_a : (s.aplica_a ? [s.aplica_a] : []);
+            return aplica.includes(filtroTipo);
+        }).sort((a: any, b: any) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0));
+    }, [sistemas, busqueda, filtroTipo]);
 
     return (
         <div className="space-y-6">
@@ -82,16 +119,44 @@ export default function SistemasPage() {
                         Sistemas del Equipo
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        Define los subsistemas técnicos (Motor, Eléctrico, etc.) para los checklists
+                        Define los subsistemas técnicos (Motor, Eléctrico, Cabina, etc.) para los checklists de cada activo industrial
                     </p>
                 </div>
                 <button
                     onClick={() => { setEditingSistema(null); setIsModalOpen(true); }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm"
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm cursor-pointer"
                 >
                     <Plus className="h-4 w-4" />
                     Nuevo Sistema
                 </button>
+            </div>
+
+            {/* Pestañas de Filtro por Arquetipo */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar border-b border-gray-200">
+                {tabsArquetipos.map((tab) => {
+                    const isSelected = filtroTipo === tab.codigo;
+                    return (
+                        <button
+                            key={tab.codigo}
+                            type="button"
+                            onClick={() => setFiltroTipo(tab.codigo)}
+                            className={cn(
+                                "flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-t-xl transition-all cursor-pointer border-b-2 whitespace-nowrap",
+                                isSelected
+                                    ? "border-blue-600 text-blue-600 bg-blue-50/60"
+                                    : "border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                            )}
+                        >
+                            <span>{tab.label}</span>
+                            <span className={cn(
+                                "px-1.5 py-0.5 rounded-full text-[10px] font-mono",
+                                isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"
+                            )}>
+                                {tab.count}
+                            </span>
+                        </button>
+                    );
+                })}
             </div>
 
             {/* Búsqueda */}
@@ -100,7 +165,7 @@ export default function SistemasPage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                         type="text"
-                        placeholder="Buscar por nombre o código..."
+                        placeholder="Buscar subsistema por nombre o código..."
                         value={busqueda}
                         onChange={(e) => setBusqueda(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
@@ -126,7 +191,8 @@ export default function SistemasPage() {
                 ) : filteredSistemas.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                         <Layers className="h-16 w-16 mb-4 opacity-20" />
-                        <p className="text-lg font-medium">No se encontraron sistemas</p>
+                        <p className="text-lg font-medium">No se encontraron sistemas para esta vista</p>
+                        <p className="text-xs text-gray-400 mt-1">Haz clic en &quot;Nuevo Sistema&quot; para crear el primer subsistema.</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -144,12 +210,14 @@ export default function SistemasPage() {
                                 {filteredSistemas.map((sistema: any, idx: number) => (
                                     <tr key={sistema.id_sistema ?? `sistema-${idx}`} className="hover:bg-blue-50/30 transition-colors group">
                                         <td className="px-6 py-4 text-center">
-                                            <span className="text-sm font-bold text-gray-400">#{sistema.orden_visualizacion}</span>
+                                            <span className="text-sm font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md font-mono">
+                                                #{sistema.orden_visualizacion}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div
-                                                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm"
+                                                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm shrink-0"
                                                     style={{ backgroundColor: sistema.color_hex || '#3b82f6' }}
                                                 >
                                                     <Layers className="h-5 w-5" />
@@ -211,13 +279,13 @@ export default function SistemasPage() {
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
                                                     onClick={() => handleEdit(sistema)}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
                                                 >
                                                     <Edit className="h-4 w-4" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(sistema.id_sistema)}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </button>
@@ -239,6 +307,7 @@ export default function SistemasPage() {
                     sistema={editingSistema}
                     sistemas={sistemas}
                     arquetipos={arquetipos}
+                    initialAplicaA={filtroTipo !== 'TODOS' && filtroTipo !== 'UNIVERSAL' ? [filtroTipo] : []}
                     onSubmit={async (formData: any) => {
                         const dto = {
                             codigoSistema: formData.codigo_sistema,
@@ -247,6 +316,7 @@ export default function SistemasPage() {
                             aplicaA: formData.aplica_a,
                             ordenVisualizacion: Number(formData.orden_visualizacion),
                             colorHex: formData.color_hex,
+                            intercalar: Boolean(formData.intercalar),
                         };
                         if (editingSistema) {
                             await actualizarSistema.mutateAsync({ id: editingSistema.id_sistema, data: dto });
@@ -262,7 +332,27 @@ export default function SistemasPage() {
     );
 }
 
-function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = [], onSubmit, isLoading }: any) {
+interface SistemaModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    sistema?: any;
+    sistemas: any[];
+    arquetipos: any[];
+    initialAplicaA?: string[];
+    onSubmit: (formData: any) => Promise<void>;
+    isLoading: boolean;
+}
+
+function SistemaModal({
+    isOpen,
+    onClose,
+    sistema,
+    sistemas = [],
+    arquetipos = [],
+    initialAplicaA = [],
+    onSubmit,
+    isLoading
+}: SistemaModalProps) {
     const codigosExistentes = useMemo(() => {
         return new Set<string>(
             (sistemas || [])
@@ -272,32 +362,97 @@ function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = []
         );
     }, [sistemas, sistema]);
 
-    const siguienteOrdenSugerido = useMemo(() => {
-        if (!sistemas || sistemas.length === 0) return 1;
-        const maxOrden = Math.max(0, ...sistemas.map((s: any) => Number(s.orden_visualizacion) || 0));
-        return maxOrden + 1;
-    }, [sistemas]);
+    // Opciones formateadas de arquetipos técnicos
+    const opcionesTipos = useMemo(() => {
+        if (arquetipos && arquetipos.length > 0) {
+            return arquetipos.map((a: any) => ({
+                codigo: (a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim(),
+                nombre: a.nombre_canonico || a.nombre_tipo || '',
+                label: `${a.nombre_canonico || a.nombre_tipo} (${(a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim()})`,
+            }));
+        }
+        return [
+            { codigo: 'GENERADOR', nombre: 'Generador Eléctrico', label: '⚡ Generador / Planta (GEN)' },
+            { codigo: 'BOMBA', nombre: 'Bomba Hidráulica', label: '💧 Bomba / Motobomba (BOM)' },
+            { codigo: 'COMPRESOR', nombre: 'Compresor de Aire', label: '💨 Compresor de Aire (COMP)' },
+            { codigo: 'MOTOR', nombre: 'Motor Industrial', label: '⚙️ Motor Independiente (MOT)' },
+            { codigo: 'HVAC', nombre: 'Aire Acondicionado', label: '❄️ Climatización / HVAC' },
+            { codigo: 'ELEV', nombre: 'Ascensor de Pasajeros', label: '🛗 Ascensor de Pasajeros (ELEV)' },
+        ];
+    }, [arquetipos]);
 
     const [isAutoCodigo, setIsAutoCodigo] = useState(!sistema);
+    const [isManualOrden, setIsManualOrden] = useState(Boolean(sistema));
+    const [desplazarSiguientes, setDesplazarSiguientes] = useState(false);
 
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<{
+        nombre_sistema: string;
+        codigo_sistema: string;
+        descripcion: string;
+        orden_visualizacion: number | string;
+        color_hex: string;
+        aplica_a: string[];
+    }>({
         nombre_sistema: sistema?.nombre_sistema || '',
         codigo_sistema: sistema?.codigo_sistema || '',
         descripcion: sistema?.descripcion || '',
-        orden_visualizacion: sistema?.orden_visualizacion ?? siguienteOrdenSugerido,
+        orden_visualizacion: sistema?.orden_visualizacion ? Number(sistema.orden_visualizacion) : 1,
         color_hex: sistema?.color_hex || '#3b82f6',
-        aplica_a: sistema?.aplica_a || [],
+        aplica_a: sistema?.aplica_a
+            ? (Array.isArray(sistema.aplica_a) ? sistema.aplica_a : [sistema.aplica_a])
+            : (initialAplicaA && initialAplicaA.length > 0 ? initialAplicaA : []),
     });
 
-    const sistemaEnMismoOrden = useMemo(() => {
+    // 1. Derivar de forma 100% reactiva los sistemas que aplican a este ámbito técnico
+    const sistemasDelTipo = useMemo(() => {
+        const codigosSeleccionados = Array.isArray(formData.aplica_a) ? formData.aplica_a : [];
+        if (codigosSeleccionados.length === 0) {
+            // Modo Universal: sistemas que no tienen restricción de tipo
+            return (sistemas || []).filter((s: any) => !s.aplica_a || s.aplica_a.length === 0)
+                .sort((a: any, b: any) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0));
+        }
+
+        return (sistemas || []).filter((s: any) => {
+            const aplica = Array.isArray(s.aplica_a) ? s.aplica_a : (s.aplica_a ? [s.aplica_a] : []);
+            return aplica.some((cod: string) => codigosSeleccionados.includes(cod));
+        }).sort((a: any, b: any) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0));
+    }, [sistemas, formData.aplica_a]);
+
+    // 2. Calcular el siguiente orden sugerido dentro del ámbito del equipo (no global)
+    const siguienteOrdenSugerido = useMemo(() => {
+        if (!sistemasDelTipo || sistemasDelTipo.length === 0) return 1;
+        const maxOrden = Math.max(0, ...sistemasDelTipo.map((s: any) => Number(s.orden_visualizacion) || 0));
+        return maxOrden + 1;
+    }, [sistemasDelTipo]);
+
+    // 3. Sincronizar orden_visualizacion si el usuario no lo ha personalizado manualmente
+    useEffect(() => {
+        if (!isManualOrden && !sistema) {
+            setFormData((prev) => ({ ...prev, orden_visualizacion: siguienteOrdenSugerido }));
+        }
+    }, [siguienteOrdenSugerido, isManualOrden, sistema]);
+
+    // 4. Nombre descriptivo del ámbito actual seleccionado
+    const nombreAmbitoSeleccionado = useMemo(() => {
+        if (!formData.aplica_a || formData.aplica_a.length === 0) {
+            return 'Universal (Cualquier Equipo)';
+        }
+        return formData.aplica_a.map((cod: string) => {
+            const found = opcionesTipos.find((opt: any) => opt.codigo === cod);
+            return found ? found.nombre || found.label : cod;
+        }).join(', ');
+    }, [formData.aplica_a, opcionesTipos]);
+
+    // 5. Detectar colisión de orden únicamente dentro de los subsistemas del mismo equipo
+    const sistemaEnConflicto = useMemo(() => {
         const ordenNum = Number(formData.orden_visualizacion);
         if (!ordenNum || ordenNum <= 0) return null;
-        return (sistemas || []).find(
+        return sistemasDelTipo.find(
             (s: any) =>
                 Number(s.orden_visualizacion) === ordenNum &&
-                (!sistema || s.id_sistema !== sistema.id_sistema),
+                (!sistema || s.id_sistema !== sistema.id_sistema)
         );
-    }, [formData.orden_visualizacion, sistemas, sistema]);
+    }, [formData.orden_visualizacion, sistemasDelTipo, sistema]);
 
     const isCodigoDuplicado = useMemo(() => {
         return verificarCodigoDuplicado(
@@ -328,22 +483,6 @@ function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = []
         }
     };
 
-    const opcionesTipos = useMemo(() => {
-        if (arquetipos && arquetipos.length > 0) {
-            return arquetipos.map((a: any) => ({
-                codigo: (a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim(),
-                label: `${a.nombre_canonico || a.nombre_tipo} (${(a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim()})`,
-            }));
-        }
-        return [
-            { codigo: 'GENERADOR', label: '⚡ Generador / Planta' },
-            { codigo: 'BOMBA', label: '💧 Bomba / Motobomba' },
-            { codigo: 'COMPRESOR', label: '💨 Compresor de Aire' },
-            { codigo: 'MOTOR', label: '⚙️ Motor Independiente' },
-            { codigo: 'HVAC', label: '❄️ Climatización / HVAC' },
-        ];
-    }, [arquetipos]);
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (isCodigoDuplicado) return;
@@ -351,39 +490,218 @@ function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = []
         onSubmit({
             ...formData,
             codigo_sistema: finalCode.toUpperCase().trim(),
-            orden_visualizacion: Number(formData.orden_visualizacion)
+            orden_visualizacion: Number(formData.orden_visualizacion),
+            intercalar: Boolean(desplazarSiguientes && sistemaEnConflicto),
         });
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                        {sistema ? <Edit className="h-5 w-5 text-blue-600" /> : <Plus className="h-5 w-5 text-blue-600" />}
-                        {sistema ? 'Editar Sistema' : 'Nuevo Sistema'}
-                    </h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                        <X className="h-5 w-5 text-gray-500" />
+            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+                {/* Header */}
+                <div className="p-5 px-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-gray-50 to-blue-50/40">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                            {sistema ? <Edit className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900">
+                                {sistema ? 'Editar Subsistema del Equipo' : 'Nuevo Subsistema del Equipo'}
+                            </h2>
+                            <p className="text-xs text-gray-500">
+                                {sistema ? 'Modifica los parámetros y orden de inspección' : 'Define el tipo de equipo, alcance y posición en el checklist'}
+                            </p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400 hover:text-gray-700 cursor-pointer">
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                {/* Formulario con Scroll Cómodo */}
+                <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[calc(92vh-140px)]">
+                    
+                    {/* PASO 1: Ámbito del Tipo de Equipo (Contexto Reyna) */}
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-extrabold uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[11px] font-bold">1</span>
+                                ¿A qué Tipo de Equipo aplica este subsistema? *
+                            </label>
+                            <span className="text-[11px] text-gray-400 font-medium">
+                                {formData.aplica_a.length === 0 ? 'Universal (Sin filtro)' : `${formData.aplica_a.length} seleccionado(s)`}
+                            </span>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                            Cada tipo de equipo mantiene su propia secuencia de inspección (1, 2, 3...) sin colisionar con otros equipos.
+                        </p>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                            {/* Opción Universal */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setFormData(prev => ({ ...prev, aplica_a: [] }));
+                                    setIsManualOrden(false);
+                                    setDesplazarSiguientes(false);
+                                }}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer",
+                                    formData.aplica_a.length === 0
+                                        ? "bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-200"
+                                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                                )}
+                            >
+                                <span>🌐 Universal (Todos los Equipos)</span>
+                                {formData.aplica_a.length === 0 && <Check className="h-3.5 w-3.5" />}
+                            </button>
+
+                            {/* Opciones por Arquetipo */}
+                            {opcionesTipos.map((opt: any) => {
+                                const selected = formData.aplica_a.includes(opt.codigo);
+                                return (
+                                    <button
+                                        key={opt.codigo}
+                                        type="button"
+                                        onClick={() => {
+                                            const curr = [...formData.aplica_a];
+                                            const idx = curr.indexOf(opt.codigo);
+                                            if (idx >= 0) {
+                                                curr.splice(idx, 1);
+                                            } else {
+                                                curr.push(opt.codigo);
+                                            }
+                                            setFormData(prev => ({ ...prev, aplica_a: curr }));
+                                            setIsManualOrden(false);
+                                            setDesplazarSiguientes(false);
+                                        }}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer",
+                                            selected
+                                                ? "bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-200"
+                                                : "bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-gray-50"
+                                        )}
+                                    >
+                                        <span>{opt.label}</span>
+                                        {selected && <Check className="h-3.5 w-3.5" />}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* VISUALIZADOR DE SECUENCIA ACTUAL DE INSPECCIÓN */}
+                    <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <ListOrdered className="h-4 w-4 text-blue-600" />
+                                <span className="text-xs font-bold text-gray-800">
+                                    Secuencia de Inspección: <span className="text-blue-700 font-extrabold">{nombreAmbitoSeleccionado}</span>
+                                </span>
+                            </div>
+                            <span className="text-[11px] font-mono text-gray-500 bg-white px-2 py-0.5 rounded-md border border-gray-200">
+                                {sistemasDelTipo.length} subsistema(s) registrados
+                            </span>
+                        </div>
+
+                        {sistemasDelTipo.length === 0 ? (
+                            <div className="flex items-center gap-3 p-3 bg-blue-50/90 border border-blue-200 rounded-xl">
+                                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm">
+                                    #1
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                                        <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                                        ¡Este será el primer subsistema para {nombreAmbitoSeleccionado}!
+                                    </p>
+                                    <p className="text-[11px] text-blue-800/80 mt-0.5">
+                                        Se sugiere automáticamente la posición <strong>Orden #1</strong> para liderar la ficha técnica y checklists en campo.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-gray-500">
+                                    Haz clic en cualquier posición para seleccionarla o intercalar tu nuevo subsistema:
+                                </p>
+                                <div className="flex items-center gap-1.5 overflow-x-auto py-1 px-0.5 no-scrollbar">
+                                    {sistemasDelTipo.map((sis: any) => {
+                                        const isSelectedSlot = Number(formData.orden_visualizacion) === Number(sis.orden_visualizacion);
+                                        return (
+                                            <button
+                                                key={sis.id_sistema}
+                                                type="button"
+                                                onClick={() => {
+                                                    setFormData(prev => ({ ...prev, orden_visualizacion: sis.orden_visualizacion }));
+                                                    setIsManualOrden(true);
+                                                }}
+                                                className={cn(
+                                                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs shrink-0 transition-all text-left cursor-pointer",
+                                                    isSelectedSlot
+                                                        ? "border-amber-400 bg-amber-50 text-amber-950 ring-2 ring-amber-300 font-bold shadow-xs"
+                                                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 font-medium"
+                                                )}
+                                                title={`Orden ${sis.orden_visualizacion}: ${sis.nombre_sistema}`}
+                                            >
+                                                <span className={cn(
+                                                    "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-mono font-bold",
+                                                    isSelectedSlot ? "bg-amber-200 text-amber-900" : "bg-gray-100 text-gray-600"
+                                                )}>
+                                                    #{sis.orden_visualizacion}
+                                                </span>
+                                                <span className="truncate max-w-[110px]">{sis.nombre_sistema}</span>
+                                            </button>
+                                        );
+                                    })}
+                                    <div className="text-gray-300 font-bold px-0.5">➔</div>
+                                    {/* Preview slot sugerido */}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFormData(prev => ({ ...prev, orden_visualizacion: siguienteOrdenSugerido }));
+                                            setIsManualOrden(false);
+                                            setDesplazarSiguientes(false);
+                                        }}
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-dashed text-xs shrink-0 transition-all cursor-pointer",
+                                            Number(formData.orden_visualizacion) === siguienteOrdenSugerido
+                                                ? "border-emerald-500 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-300 font-bold shadow-xs"
+                                                : "border-emerald-300 bg-emerald-50/40 text-emerald-800 hover:bg-emerald-50 font-medium"
+                                        )}
+                                        title="Posicionar al final de la secuencia"
+                                    >
+                                        <span className="w-5 h-5 rounded-md bg-emerald-600 text-white flex items-center justify-center text-[10px] font-mono font-bold shadow-xs">
+                                            #{formData.orden_visualizacion || siguienteOrdenSugerido}
+                                        </span>
+                                        <span className="truncate max-w-[120px] font-bold">
+                                            {formData.nombre_sistema.trim() || '+ Nuevo Subsistema'}
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* PASO 2: Identificación Técnica */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Nombre del Sistema *</label>
+                            <label className="text-xs font-extrabold uppercase tracking-wider text-gray-700 flex items-center gap-1.5 mb-1.5">
+                                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[11px] font-bold">2</span>
+                                Nombre del Subsistema *
+                            </label>
                             <input
                                 required
                                 type="text"
                                 value={formData.nombre_sistema}
                                 onChange={handleNombreChange}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
-                                placeholder="Ej: Sistema Eléctrico"
+                                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
+                                placeholder="Ej: Cabina, Puertas y Operador"
                             />
                         </div>
                         <div className="col-span-2 sm:col-span-1">
                             <div className="flex items-center justify-between mb-1.5">
-                                <label className="block text-sm font-bold text-gray-700">Código Único *</label>
+                                <label className="text-xs font-extrabold uppercase tracking-wider text-gray-700">
+                                    Código Único *
+                                </label>
                                 {!sistema && (
                                     <button
                                         type="button"
@@ -401,16 +719,14 @@ function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = []
                                     required
                                     value={formData.codigo_sistema}
                                     onChange={(e) => setFormData({ ...formData, codigo_sistema: e.target.value.toUpperCase().trim() })}
-                                    className={`w-full pl-3.5 pr-14 py-2 border rounded-xl outline-none text-xs font-mono font-bold tracking-tight uppercase transition-colors ${
+                                    className={cn(
+                                        "w-full pl-3.5 pr-14 py-2.5 border rounded-xl outline-none text-xs font-mono font-bold tracking-tight uppercase transition-colors",
                                         isAutoCodigo
-                                            ? 'bg-emerald-50/50 border-emerald-300 text-emerald-950'
-                                            : 'bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500'
-                                    } ${
-                                        isCodigoDuplicado
-                                            ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
-                                            : ''
-                                    }`}
-                                    placeholder="SIS_ELEC"
+                                            ? "bg-emerald-50/50 border-emerald-300 text-emerald-950"
+                                            : "bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500",
+                                        isCodigoDuplicado ? "border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500" : ""
+                                    )}
+                                    placeholder="SIS_CABINA_PUERTAS"
                                     disabled={Boolean(sistema)}
                                     readOnly={Boolean(sistema) || isAutoCodigo}
                                 />
@@ -433,146 +749,124 @@ function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = []
                         </div>
                     </div>
 
+                    {/* PASO 3: Prioridad de Inspección y Color UI */}
                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                        <div className="col-span-2 sm:col-span-1">
+                            <label className="text-xs font-extrabold uppercase tracking-wider text-gray-700 flex items-center justify-between mb-1.5">
                                 <span className="flex items-center gap-1.5">
-                                    <LayoutList className="h-4 w-4 text-blue-600" />
-                                    Orden Visual
+                                    <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[11px] font-bold">3</span>
+                                    Orden Visual *
                                 </span>
-                                <span className="text-[11px] text-gray-400 font-normal">Prioridad en checklist</span>
+                                <span className="text-[11px] text-gray-400 font-normal lowercase">Posición en checklist</span>
                             </label>
                             <input
                                 type="number"
                                 min="1"
                                 value={formData.orden_visualizacion}
-                                onChange={(e) => setFormData({ ...formData, orden_visualizacion: e.target.value })}
-                                className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono font-bold"
+                                onChange={(e) => {
+                                    setFormData({ ...formData, orden_visualizacion: e.target.value });
+                                    setIsManualOrden(true);
+                                }}
+                                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono font-bold"
                                 placeholder="Ej: 1"
                             />
-                            {/* Feedback reactivo en tiempo real */}
+
+                            {/* Feedback reactivo con opciones premium */}
                             {!formData.orden_visualizacion || Number(formData.orden_visualizacion) <= 0 ? (
                                 <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1">
-                                    ✕ El orden debe ser un número mayor a 0.
+                                    ✕ El orden debe ser un número entero mayor a 0.
                                 </p>
-                            ) : sistemaEnMismoOrden ? (
-                                <div className="mt-1.5 p-2 rounded-xl bg-amber-50/90 border border-amber-200 text-[11px] text-amber-900 flex items-start justify-between gap-1.5">
-                                    <div className="flex items-start gap-1">
-                                        <Info className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                            ) : sistemaEnConflicto ? (
+                                <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-2">
+                                    <div className="flex items-start gap-1.5">
+                                        <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                                         <span className="leading-tight">
-                                            Posición {formData.orden_visualizacion}° ocupada por <strong>&quot;{sistemaEnMismoOrden.nombre_sistema}&quot;</strong>.
+                                            La posición <strong>#{formData.orden_visualizacion}</strong> ya está ocupada por <strong>&quot;{sistemaEnConflicto.nombre_sistema}&quot;</strong>.
                                         </span>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData((prev) => ({ ...prev, orden_visualizacion: siguienteOrdenSugerido }))}
-                                        className="text-[10px] font-bold text-blue-700 hover:text-blue-900 underline whitespace-nowrap cursor-pointer shrink-0 ml-1"
-                                    >
-                                        Usar libre ({siguienteOrdenSugerido}°)
-                                    </button>
+                                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200/60">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFormData(prev => ({ ...prev, orden_visualizacion: siguienteOrdenSugerido }));
+                                                setIsManualOrden(false);
+                                                setDesplazarSiguientes(false);
+                                            }}
+                                            className="px-2 py-1 rounded-lg bg-amber-200/80 hover:bg-amber-300 text-amber-950 text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                                        >
+                                            <span>⚡ Usar libre (#{siguienteOrdenSugerido})</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setDesplazarSiguientes(!desplazarSiguientes)}
+                                            className={cn(
+                                                "px-2 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 border",
+                                                desplazarSiguientes
+                                                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                                            )}
+                                        >
+                                            <span>{desplazarSiguientes ? '✓ Intercalando (desplazará los siguientes +1)' : '🔀 Intercalar aquí (desplazar +1)'}</span>
+                                        </button>
+                                    </div>
                                 </div>
                             ) : (
                                 <p className="text-[11px] text-emerald-600 font-medium mt-1.5 flex items-center gap-1">
                                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                                    <span>Posición disponible ({formData.orden_visualizacion}°)</span>
+                                    <span>Posición disponible ({formData.orden_visualizacion}°) en {nombreAmbitoSeleccionado}</span>
                                 </p>
                             )}
                         </div>
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
-                                <Palette className="h-4 w-4" />
+
+                        <div className="col-span-2 sm:col-span-1">
+                            <label className="text-xs font-extrabold uppercase tracking-wider text-gray-700 flex items-center gap-1.5 mb-1.5">
+                                <Palette className="h-4 w-4 text-blue-600" />
                                 Color UI
                             </label>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 p-1.5 border border-gray-200 rounded-xl bg-gray-50/50">
                                 <input
                                     type="color"
                                     value={formData.color_hex}
                                     onChange={(e) => setFormData({ ...formData, color_hex: e.target.value })}
-                                    className="w-10 h-10 border-none bg-transparent cursor-pointer"
+                                    className="w-9 h-9 rounded-lg border-none bg-transparent cursor-pointer"
                                 />
-                                <span className="text-xs font-mono text-gray-500">{formData.color_hex}</span>
+                                <span className="text-xs font-mono font-bold text-gray-700">{formData.color_hex}</span>
+                                <div
+                                    className="w-6 h-6 rounded-md ml-auto border border-black/10 shadow-xs"
+                                    style={{ backgroundColor: formData.color_hex }}
+                                />
                             </div>
                         </div>
                     </div>
 
+                    {/* Descripción Opcional */}
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1.5">Descripción</label>
+                        <label className="text-xs font-bold text-gray-700 mb-1 block">Descripción (Opcional)</label>
                         <textarea
                             rows={2}
                             value={formData.descripcion}
                             onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
-                            placeholder="Breve descripción de los componentes que abarca..."
+                            className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
+                            placeholder="Breve descripción de los componentes o rutinas que abarca..."
                         />
-                    </div>
-
-                    <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                            <label className="block text-sm font-bold text-gray-700">Aplica a Tipos de Equipo</label>
-                            <span className="text-[11px] text-gray-400">
-                                {Array.isArray(formData.aplica_a) && formData.aplica_a.length > 0
-                                    ? `${formData.aplica_a.length} seleccionado(s)`
-                                    : 'Aplica a todos (sin filtro)'}
-                            </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-xl border border-gray-200">
-                            {opcionesTipos.map((opt: any) => {
-                                const selected = Array.isArray(formData.aplica_a) && formData.aplica_a.includes(opt.codigo);
-                                return (
-                                    <button
-                                        key={opt.codigo}
-                                        type="button"
-                                        onClick={() => {
-                                            const curr = Array.isArray(formData.aplica_a) ? [...formData.aplica_a] : [];
-                                            const idx = curr.indexOf(opt.codigo);
-                                            if (idx >= 0) {
-                                                curr.splice(idx, 1);
-                                            } else {
-                                                curr.push(opt.codigo);
-                                            }
-                                            setFormData({ ...formData, aplica_a: curr });
-                                        }}
-                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 ${
-                                            selected
-                                                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        <span>{opt.label}</span>
-                                        {selected && <Check className="h-3 w-3" />}
-                                    </button>
-                                );
-                            })}
-                            {Array.isArray(formData.aplica_a) && formData.aplica_a.length > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({ ...formData, aplica_a: [] })}
-                                    className="px-2 py-1 text-[11px] font-semibold text-gray-500 hover:text-red-600 hover:underline ml-auto"
-                                >
-                                    Restablecer a Todos
-                                </button>
-                            )}
-                        </div>
-                        <p className="text-[11px] text-gray-400 mt-1">
-                            Si no selecciona ningún tipo específico, el sistema estará disponible globalmente para cualquier equipo.
-                        </p>
                     </div>
                 </form>
 
-                <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+                {/* Footer del Modal */}
+                <div className="p-4 px-6 border-t border-gray-100 bg-gray-50 flex gap-3">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-white font-bold transition-all"
+                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-white font-bold transition-all text-sm cursor-pointer"
                     >
                         Cancelar
                     </button>
                     <button
                         onClick={handleSubmit}
                         disabled={isLoading || isCodigoDuplicado || !formData.nombre_sistema.trim() || !formData.codigo_sistema.trim()}
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm cursor-pointer"
                     >
-                        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
+                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                         {sistema ? 'Guardar Cambios' : 'Crear Sistema'}
                     </button>
                 </div>

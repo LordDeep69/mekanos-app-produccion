@@ -88,4 +88,13 @@ export class CrearCatalogoSistemasDto {
   @IsString()
   @IsOptional()
   observaciones?: string;
+
+  @ApiProperty({
+    description: 'Si es true y ya existe un sistema en la posición, desplaza los siguientes +1',
+    required: false,
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  intercalar?: boolean;
 }
