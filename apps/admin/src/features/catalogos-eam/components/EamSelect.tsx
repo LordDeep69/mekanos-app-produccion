@@ -26,6 +26,8 @@ export interface EamSelectProps {
   allowClear?: boolean;
   icon?: React.ReactNode;
   title?: string;
+  minDropdownWidth?: number;
+  dropdownWidth?: number | string;
 }
 
 /**
@@ -72,6 +74,8 @@ export function EamSelect({
   allowClear = false,
   icon,
   title,
+  minDropdownWidth = 320,
+  dropdownWidth,
 }: EamSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -291,129 +295,140 @@ export function EamSelect({
       {mounted &&
         isOpen &&
         coords &&
-        createPortal(
-          <div
-            ref={popoverRef}
-            style={{
-              position: 'fixed',
-              top: coords.openUpward ? undefined : coords.top + 4,
-              bottom: coords.openUpward ? window.innerHeight - coords.top + 4 : undefined,
-              left: coords.left,
-              width: Math.max(coords.width, 220),
-              zIndex: 99999,
-              transformOrigin: coords.openUpward ? 'bottom left' : 'top left',
-            }}
-            className={`rounded-2xl border shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
-              coords.openUpward ? 'origin-bottom' : 'origin-top'
-            } ${
-              isDark
-                ? 'bg-slate-900/95 border-slate-700 text-white divide-slate-800'
-                : 'bg-white/95 border-slate-200/90 text-slate-900 divide-slate-100'
-            }`}
-          >
-            {/* Buscador integrado si hay muchas opciones */}
-            {shouldShowSearch && (
-              <div
-                className={`p-2 border-b flex items-center gap-2 ${
-                  isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-100 bg-slate-50/70'
-                }`}
-              >
-                <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar opción..."
-                  className={`w-full bg-transparent text-xs font-semibold focus:outline-none placeholder:text-slate-400 ${
-                    isDark ? 'text-white' : 'text-slate-800'
+        (() => {
+          const targetWidth = dropdownWidth || Math.max(coords.width, minDropdownWidth);
+          const numWidth = typeof targetWidth === 'number' ? targetWidth : parseInt(String(targetWidth), 10) || 320;
+          const safeLeft = typeof window !== 'undefined'
+            ? Math.max(12, Math.min(coords.left, window.innerWidth - numWidth - 16))
+            : coords.left;
+
+          return createPortal(
+            <div
+              ref={popoverRef}
+              style={{
+                position: 'fixed',
+                top: coords.openUpward ? undefined : coords.top + 4,
+                bottom: coords.openUpward ? window.innerHeight - coords.top + 4 : undefined,
+                left: safeLeft,
+                width: targetWidth,
+                maxWidth: 'calc(100vw - 24px)',
+                zIndex: 99999,
+                transformOrigin: coords.openUpward ? 'bottom left' : 'top left',
+              }}
+              className={`rounded-2xl border shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
+                coords.openUpward ? 'origin-bottom' : 'origin-top'
+              } ${
+                isDark
+                  ? 'bg-slate-900/95 border-slate-700 text-white divide-slate-800'
+                  : 'bg-white/95 border-slate-200/90 text-slate-900 divide-slate-100'
+              }`}
+            >
+              {/* Buscador integrado si hay muchas opciones */}
+              {shouldShowSearch && (
+                <div
+                  className={`p-2 border-b flex items-center gap-2 ${
+                    isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-100 bg-slate-50/70'
                   }`}
-                />
-                {searchTerm && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchTerm('')}
-                    className="p-0.5 rounded text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Lista de Opciones */}
-            <div className="max-h-60 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
-              {filteredOptions.length === 0 ? (
-                <div className="py-4 px-3 text-center text-xs text-slate-400 font-medium">
-                  No se encontraron opciones
-                </div>
-              ) : (
-                filteredOptions.map((op, idx) => {
-                  const isSelected =
-                    selectedOption &&
-                    String(selectedOption.value).toLowerCase() === String(op.value).toLowerCase();
-                  const isHighlighted = idx === highlightedIndex;
-
-                  return (
+                >
+                  <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar opción..."
+                    className={`w-full bg-transparent text-xs font-semibold focus:outline-none placeholder:text-slate-400 ${
+                      isDark ? 'text-white' : 'text-slate-800'
+                    }`}
+                  />
+                  {searchTerm && (
                     <button
-                      key={op.key || `opt-${idx}`}
                       type="button"
-                      onClick={() => handleSelect(op.value)}
-                      onMouseEnter={() => setHighlightedIndex(idx)}
-                      className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold transition-all duration-100 flex items-center justify-between gap-2 cursor-pointer ${
-                        isSelected
-                          ? isDark
-                            ? 'bg-blue-600/30 text-blue-300 font-bold border border-blue-500/40 shadow-xs'
-                            : 'bg-blue-50/90 text-blue-800 font-bold border border-blue-200/80 shadow-xs'
-                          : isHighlighted
-                          ? isDark
-                            ? 'bg-slate-800 text-white'
-                            : 'bg-slate-100/90 text-slate-900'
-                          : isDark
-                          ? 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                          : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
-                      }`}
+                      onClick={() => setSearchTerm('')}
+                      className="p-0.5 rounded text-slate-400 hover:text-slate-600"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        {op.icon && <span className="shrink-0">{op.icon}</span>}
-                        <div className="truncate">
-                          <div>{op.label}</div>
-                          {op.description && (
-                            <div className="text-[10px] text-slate-400 font-normal truncate">
-                              {op.description}
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Lista de Opciones */}
+              <div className="max-h-64 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
+                {filteredOptions.length === 0 ? (
+                  <div className="py-4 px-3 text-center text-xs text-slate-400 font-medium">
+                    No se encontraron opciones
+                  </div>
+                ) : (
+                  filteredOptions.map((op, idx) => {
+                    const isSelected =
+                      selectedOption &&
+                      String(selectedOption.value).toLowerCase() === String(op.value).toLowerCase();
+                    const isHighlighted = idx === highlightedIndex;
+
+                    return (
+                      <button
+                        key={op.key || `opt-${idx}`}
+                        type="button"
+                        onClick={() => handleSelect(op.value)}
+                        onMouseEnter={() => setHighlightedIndex(idx)}
+                        className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold transition-all duration-100 flex items-center justify-between gap-3 cursor-pointer ${
+                          isSelected
+                            ? isDark
+                              ? 'bg-blue-600/30 text-blue-300 font-bold border border-blue-500/40 shadow-xs'
+                              : 'bg-blue-50/90 text-blue-800 font-bold border border-blue-200/80 shadow-xs'
+                            : isHighlighted
+                            ? isDark
+                              ? 'bg-slate-800 text-white'
+                              : 'bg-slate-100/90 text-slate-900'
+                            : isDark
+                            ? 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                            : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {op.icon && <span className="shrink-0 text-slate-500">{op.icon}</span>}
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold leading-snug whitespace-normal break-words">
+                              {op.label}
                             </div>
+                            {op.description && (
+                              <div className="text-[10px] text-slate-400 font-normal leading-tight mt-0.5 whitespace-normal break-words">
+                                {op.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {op.badge && (
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                isDark
+                                  ? 'bg-slate-800 text-slate-300'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {op.badge}
+                            </span>
+                          )}
+                          {isSelected && (
+                            <Check
+                              className={`h-4 w-4 shrink-0 ${
+                                isDark ? 'text-blue-400' : 'text-blue-600'
+                              }`}
+                            />
                           )}
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {op.badge && (
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                              isDark
-                                ? 'bg-slate-800 text-slate-300'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {op.badge}
-                          </span>
-                        )}
-                        {isSelected && (
-                          <Check
-                            className={`h-4 w-4 shrink-0 ${
-                              isDark ? 'text-blue-400' : 'text-blue-600'
-                            }`}
-                          />
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>,
-          document.body,
-        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>,
+            document.body,
+          );
+        })()}
     </div>
   );
 }

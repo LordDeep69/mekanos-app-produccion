@@ -1125,23 +1125,23 @@ export function TabArquetiposEquipo() {
         </div>
 
         {/* Barra de Herramientas Prémium: Buscador en vivo + Filtro por Disciplina + Selector de Vista */}
-        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-100">
-          <div className="flex items-center gap-2.5 flex-1 max-w-xl">
-            {/* Buscador predictivo */}
-            <div className="relative flex-1">
-              <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <div className="pt-3 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-3xl">
+            {/* Buscador predictivo prémium con altura h-10 uniforme */}
+            <div className="relative flex-1 min-w-[260px]">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Buscar por nombre, código o disciplina (ej: Ascensor, ELEV, Bomba)..."
                 value={arqSearch}
                 onChange={(e) => setArqSearch(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium transition-colors"
+                className="w-full h-10 pl-10 pr-9 rounded-xl border border-slate-300 bg-white hover:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-xs font-medium placeholder:text-slate-400 shadow-2xs transition-all"
               />
               {arqSearch && (
                 <button
                   type="button"
                   onClick={() => setArqSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
                   title="Limpiar búsqueda"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -1149,12 +1149,13 @@ export function TabArquetiposEquipo() {
               )}
             </div>
 
-            {/* Filtro por Categoría / Disciplina */}
+            {/* Filtro por Categoría / Disciplina con ancho holgado y sin truncar opciones */}
             {categoriasPresentes.length > 0 && (
-              <div className="shrink-0 w-52">
+              <div className="shrink-0 w-full sm:w-72 md:w-80">
                 <EamSelect
                   value={arqCategoriaFilter}
                   onChange={(val) => setArqCategoriaFilter(val)}
+                  minDropdownWidth={360}
                   options={[
                     { value: 'TODAS', label: `Todas las disciplinas (${arquetipos.length})` },
                     ...categoriasPresentes.map((c) => ({
@@ -1174,11 +1175,11 @@ export function TabArquetiposEquipo() {
               Mostrando <strong className="text-slate-800">{arquetiposFiltrados.length}</strong> de {arquetipos.length} clases
             </span>
 
-            <div className="flex items-center border border-slate-200 rounded-xl p-0.5 bg-slate-50">
+            <div className="flex items-center border border-slate-200 rounded-xl p-0.5 bg-slate-50 shadow-2xs">
               <button
                 type="button"
                 onClick={() => setArqViewMode('grid')}
-                className={`p-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`p-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   arqViewMode === 'grid'
                     ? 'bg-white text-blue-600 shadow-2xs font-bold'
                     : 'text-slate-400 hover:text-slate-700'
@@ -1190,7 +1191,7 @@ export function TabArquetiposEquipo() {
               <button
                 type="button"
                 onClick={() => setArqViewMode('compact')}
-                className={`p-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`p-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   arqViewMode === 'compact'
                     ? 'bg-white text-blue-600 shadow-2xs font-bold'
                     : 'text-slate-400 hover:text-slate-700'
