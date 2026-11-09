@@ -42,7 +42,7 @@ import {
     Unlock
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { generarCodigoActividad, verificarCodigoDuplicado } from '@/features/catalogos-eam';
+import { generarCodigoActividad, verificarCodigoDuplicado, EamSelect } from '@/features/catalogos-eam';
 
 // Helper para color de tipo de actividad
 function getTipoActividadColor(tipo: string) {
@@ -312,40 +312,46 @@ export default function ActividadesCatalogoPage() {
                             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-gray-50"
                         />
                     </div>
-                    <select
+                    <EamSelect
                         value={filtroTipoServicio}
-                        onChange={(e) => setFiltroTipoServicio(e.target.value)}
-                        className="px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-gray-50"
-                    >
-                        <option value="">Todos los servicios</option>
-                        {tiposServicio.map((t: any) => (
-                            <option key={`svc-${t.id_tipo_servicio || t.idTipoServicio}`} value={t.id_tipo_servicio || t.idTipoServicio}>
-                                {t.nombre_tipo || t.nombreTipo}
-                            </option>
-                        ))}
-                    </select>
-                    <select
+                        onChange={(val) => setFiltroTipoServicio(val)}
+                        options={[
+                            { value: '', label: 'Todos los servicios' },
+                            ...tiposServicio.map((t: any) => ({
+                                value: String(t.id_tipo_servicio || t.idTipoServicio),
+                                label: t.nombre_tipo || t.nombreTipo,
+                                badge: t.categoria || undefined,
+                            })),
+                        ]}
+                        placeholder="Todos los servicios"
+                        searchable
+                    />
+                    <EamSelect
                         value={filtroSistema}
-                        onChange={(e) => setFiltroSistema(e.target.value)}
-                        className="px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-gray-50"
-                    >
-                        <option value="">Todos los sistemas</option>
-                        {sistemas.map((s: any) => (
-                            <option key={`sys-${s.id_sistema || s.idSistema}`} value={s.id_sistema || s.idSistema}>
-                                {s.nombre_sistema || s.nombreSistema}
-                            </option>
-                        ))}
-                    </select>
-                    <select
+                        onChange={(val) => setFiltroSistema(val)}
+                        options={[
+                            { value: '', label: 'Todos los sistemas' },
+                            ...sistemas.map((s: any) => ({
+                                value: String(s.id_sistema || s.idSistema),
+                                label: s.nombre_sistema || s.nombreSistema,
+                                badge: s.codigo_sistema || undefined,
+                            })),
+                        ]}
+                        placeholder="Todos los sistemas"
+                        searchable
+                    />
+                    <EamSelect
                         value={filtroTipoActividad}
-                        onChange={(e) => setFiltroTipoActividad(e.target.value)}
-                        className="px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-gray-50"
-                    >
-                        <option value="">Todos los tipos</option>
-                        {TIPOS_ACTIVIDAD.map(tipo => (
-                            <option key={`tipo-${tipo.value}`} value={tipo.value}>{tipo.label}</option>
-                        ))}
-                    </select>
+                        onChange={(val) => setFiltroTipoActividad(val)}
+                        options={[
+                            { value: '', label: 'Todos los tipos' },
+                            ...TIPOS_ACTIVIDAD.map(tipo => ({
+                                value: tipo.value,
+                                label: tipo.label,
+                            })),
+                        ]}
+                        placeholder="Todos los tipos"
+                    />
                 </div>
             </div>
 
@@ -717,46 +723,52 @@ function ActividadModal({ isOpen, onClose, actividad, actividades = [], tiposSer
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1.5">Tipo de Actividad *</label>
-                            <select
-                                required
+                            <EamSelect
                                 value={formData.tipo_actividad}
-                                onChange={(e) => setFormData({ ...formData, tipo_actividad: e.target.value as any })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
-                            >
-                                {TIPOS_ACTIVIDAD.map(tipo => (
-                                    <option key={tipo.value} value={tipo.value}>{tipo.label}</option>
-                                ))}
-                            </select>
+                                onChange={(val) => setFormData({ ...formData, tipo_actividad: val as any })}
+                                options={TIPOS_ACTIVIDAD.map(tipo => ({
+                                    value: tipo.value,
+                                    label: tipo.label,
+                                }))}
+                                placeholder="Seleccionar tipo de actividad..."
+                            />
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1.5">Servicio Vinculado *</label>
-                            <select
-                                required
-                                value={formData.id_tipo_servicio}
-                                onChange={(e) => setFormData({ ...formData, id_tipo_servicio: e.target.value })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
-                            >
-                                <option value="">Seleccionar servicio...</option>
-                                {tiposServicio?.map((t: any) => (
-                                    <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>{t.nombre_tipo}</option>
-                                ))}
-                            </select>
+                            <EamSelect
+                                value={formData.id_tipo_servicio ? String(formData.id_tipo_servicio) : ''}
+                                onChange={(val) => setFormData({ ...formData, id_tipo_servicio: val })}
+                                options={[
+                                    { value: '', label: 'Seleccionar servicio...' },
+                                    ...(tiposServicio || []).map((t: any) => ({
+                                        value: String(t.id_tipo_servicio || t.idTipoServicio),
+                                        label: t.nombre_tipo || t.nombreTipo,
+                                        badge: t.codigo_tipo || t.codigoTipo || undefined,
+                                    })),
+                                ]}
+                                placeholder="Seleccionar servicio..."
+                                searchable
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1.5">Sistema (Opcional)</label>
-                            <select
-                                value={formData.id_sistema}
-                                onChange={(e) => setFormData({ ...formData, id_sistema: e.target.value })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
-                            >
-                                <option value="">General / Ninguno</option>
-                                {sistemas?.map((s: any) => (
-                                    <option key={s.id_sistema} value={s.id_sistema}>{s.nombre_sistema}</option>
-                                ))}
-                            </select>
+                            <EamSelect
+                                value={formData.id_sistema ? String(formData.id_sistema) : ''}
+                                onChange={(val) => setFormData({ ...formData, id_sistema: val })}
+                                options={[
+                                    { value: '', label: 'General / Ninguno' },
+                                    ...(sistemas || []).map((s: any) => ({
+                                        value: String(s.id_sistema || s.idSistema),
+                                        label: s.nombre_sistema || s.nombreSistema,
+                                        badge: s.codigo_sistema || s.codigoSistema || undefined,
+                                    })),
+                                ]}
+                                placeholder="General / Ninguno"
+                                searchable
+                            />
                         </div>
                     </div>
 
@@ -789,19 +801,20 @@ function ActividadModal({ isOpen, onClose, actividad, actividades = [], tiposSer
                             <label className="block text-sm font-bold text-cyan-800 flex items-center gap-2">
                                 <Activity className="h-4 w-4" /> Parámetro de Medición a Capturar
                             </label>
-                            <select
-                                required={formData.tipo_actividad === 'MEDICION'}
-                                value={formData.id_parametro_medicion}
-                                onChange={(e) => setFormData({ ...formData, id_parametro_medicion: e.target.value })}
-                                className="w-full px-4 py-2 border border-cyan-200 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none text-sm bg-white"
-                            >
-                                <option value="">Seleccionar parámetro...</option>
-                                {parametros?.map((p: any) => (
-                                    <option key={p.id_parametro_medicion} value={p.id_parametro_medicion}>
-                                        {p.nombre_parametro} ({p.unidad_medida})
-                                    </option>
-                                ))}
-                            </select>
+                            <EamSelect
+                                value={formData.id_parametro_medicion ? String(formData.id_parametro_medicion) : ''}
+                                onChange={(val) => setFormData({ ...formData, id_parametro_medicion: val })}
+                                options={[
+                                    { value: '', label: 'Seleccionar parámetro...' },
+                                    ...(parametros || []).map((p: any) => ({
+                                        value: String(p.id_parametro_medicion || p.idParametroMedicion),
+                                        label: `${p.nombre_parametro || p.nombreParametro} (${p.unidad_medida || p.unidadMedida})`,
+                                        badge: p.codigo_parametro || p.codigoParametro || undefined,
+                                    })),
+                                ]}
+                                placeholder="Seleccionar parámetro..."
+                                searchable
+                            />
                             <p className="text-[10px] text-cyan-600 italic">
                                 Al seleccionar MEDICIÓN, la App móvil pedirá obligatoriamente el valor de este parámetro.
                             </p>

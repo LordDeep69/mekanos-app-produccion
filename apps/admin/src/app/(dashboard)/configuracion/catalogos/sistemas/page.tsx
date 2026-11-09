@@ -34,6 +34,7 @@ import {
     generarCodigoSistema,
     verificarCodigoDuplicado,
     useArquetiposEam,
+    EamSelect,
     ArquetiposMultiCombobox
 } from '@/features/catalogos-eam';
 
@@ -107,6 +108,15 @@ export default function SistemasPage() {
 
         return tabs;
     }, [sistemas, arquetipos]);
+
+    // Opciones para el selector EamSelect de la barra de filtros
+    const selectArquetiposOptions = useMemo(() => {
+        return tabsArquetipos.map((tab) => ({
+            value: tab.codigo,
+            label: tab.label,
+            badge: `${tab.count} subsistemas`,
+        }));
+    }, [tabsArquetipos]);
 
     // Filtrar sistemas por búsqueda y por pestaña de tipo de equipo
     const filteredSistemas = useMemo(() => {
@@ -520,6 +530,17 @@ export default function SistemasPage() {
     );
 }
 
+const COLOR_PRESETS = [
+    { label: 'Azul', hex: '#3b82f6' },
+    { label: 'Cian', hex: '#06b6d4' },
+    { label: 'Esmeralda', hex: '#10b981' },
+    { label: 'Ámbar', hex: '#f59e0b' },
+    { label: 'Rosa', hex: '#f43f5e' },
+    { label: 'Púrpura', hex: '#8b5cf6' },
+    { label: 'Índigo', hex: '#6366f1' },
+    { label: 'Pizarra', hex: '#64748b' },
+];
+
 interface SistemaModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -590,6 +611,46 @@ function SistemaModal({
             ? (Array.isArray(sistema.aplica_a) ? sistema.aplica_a : [sistema.aplica_a])
             : (initialAplicaA && initialAplicaA.length > 0 ? initialAplicaA : []),
     });
+
+    const [isMultiEquipoMode, setIsMultiEquipoMode] = useState<boolean>(() => {
+        const initial = sistema?.aplica_a
+            ? (Array.isArray(sistema.aplica_a) ? sistema.aplica_a : [sistema.aplica_a])
+            : (initialAplicaA && initialAplicaA.length > 0 ? initialAplicaA : []);
+        return initial.length > 1;
+    });
+
+    // Opciones para el selector individual EamSelect
+    const arquetiposSelectOptions = useMemo(() => {
+        return [
+            {
+                value: 'UNIVERSAL',
+                label: '🌐 Universal (Aplica a Todos los Equipos)',
+                badge: 'Global',
+                description: 'Checklist disponible para cualquier tipo de activo industrial',
+            },
+            ...opcionesTipos.map((opt: any) => ({
+                value: opt.codigo,
+                label: opt.label || `${opt.nombre} (${opt.codigo})`,
+                badge: opt.codigo,
+                description: `Exclusivo para la familia técnica de ${opt.nombre}`,
+            })),
+        ];
+    }, [opcionesTipos]);
+
+    const currentSingleAplicaA = useMemo(() => {
+        if (!formData.aplica_a || formData.aplica_a.length === 0) return 'UNIVERSAL';
+        return formData.aplica_a[0] || 'UNIVERSAL';
+    }, [formData.aplica_a]);
+
+    const handleSingleArquetipoChange = (val: string) => {
+        if (val === 'UNIVERSAL' || !val) {
+            setFormData((prev) => ({ ...prev, aplica_a: [] }));
+        } else {
+            setFormData((prev) => ({ ...prev, aplica_a: [val] }));
+        }
+        setIsManualOrden(false);
+        setDesplazarSiguientes(false);
+    };
 
     // 1. Derivar de forma 100% reactiva los sistemas que aplican a este ámbito técnico
     const sistemasDelTipo = useMemo(() => {
@@ -716,23 +777,39 @@ function SistemaModal({
                                 <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[11px] font-bold">1</span>
                                 ¿A qué Tipo de Equipo aplica este subsistema? *
                             </label>
-                            <span className="text-[11px] text-gray-400 font-medium">
-                                {formData.aplica_a.length === 0 ? 'Universal (Sin filtro)' : `${formData.aplica_a.length} seleccionado(s)`}
-                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setIsMultiEquipoMode(!isMultiEquipoMode)}
+                                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                                {isMultiEquipoMode ? '⚡ Modo Selección Directa' : '🔀 Aplicar a múltiples tipos...'}
+                            </button>
                         </div>
                         <p className="text-xs text-gray-500">
-                            Busca y selecciona uno o varios tipos de activo, o déjalo en Universal para aplicar globalmente.
+                            {isMultiEquipoMode
+                                ? 'Selecciona los múltiples tipos de equipo a los que aplica este subsistema técnico.'
+                                : 'Busca y selecciona el tipo de equipo industrial (con autocompletado y buscador) o déjalo en Universal.'}
                         </p>
-                        <ArquetiposMultiCombobox
-                            value={formData.aplica_a}
-                            onChange={(newAplicaA) => {
-                                setFormData((prev) => ({ ...prev, aplica_a: newAplicaA }));
-                                setIsManualOrden(false);
-                                setDesplazarSiguientes(false);
-                            }}
-                            options={opcionesTipos}
-                            placeholder="Buscar o seleccionar tipo de activo industrial..."
-                        />
+                        {isMultiEquipoMode ? (
+                            <ArquetiposMultiCombobox
+                                value={formData.aplica_a}
+                                onChange={(newAplicaA) => {
+                                    setFormData((prev) => ({ ...prev, aplica_a: newAplicaA }));
+                                    setIsManualOrden(false);
+                                    setDesplazarSiguientes(false);
+                                }}
+                                options={opcionesTipos}
+                                placeholder="Buscar o seleccionar tipo de activo industrial..."
+                            />
+                        ) : (
+                            <EamSelect
+                                value={currentSingleAplicaA}
+                                onChange={handleSingleArquetipoChange}
+                                options={arquetiposSelectOptions}
+                                placeholder="Seleccionar tipo de equipo o Universal..."
+                                searchable
+                            />
+                        )}
                     </div>
 
                     {/* VISUALIZADOR DE SECUENCIA ACTUAL DE INSPECCIÓN */}
@@ -981,6 +1058,24 @@ function SistemaModal({
                                     className="w-6 h-6 rounded-md ml-auto border border-black/10 shadow-xs"
                                     style={{ backgroundColor: formData.color_hex }}
                                 />
+                            </div>
+                            {/* Paleta rápida de colores */}
+                            <div className="flex items-center gap-1.5 mt-2">
+                                {COLOR_PRESETS.map((p) => (
+                                    <button
+                                        key={p.hex}
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, color_hex: p.hex })}
+                                        className={cn(
+                                            "w-5 h-5 rounded-full border transition-transform cursor-pointer",
+                                            formData.color_hex === p.hex
+                                                ? "scale-125 ring-2 ring-offset-1 ring-blue-500 border-white"
+                                                : "border-black/10 hover:scale-110"
+                                        )}
+                                        style={{ backgroundColor: p.hex }}
+                                        title={p.label}
+                                    />
+                                ))}
                             </div>
                         </div>
                     </div>
