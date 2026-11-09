@@ -495,6 +495,28 @@ export function TabModelosOemBom() {
             </button>
           </div>
 
+          {/* Buscador de modelos */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por marca, modelo o código..."
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-slate-400 font-medium"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                title="Limpiar búsqueda"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
           <EamSelect
             value={filtroArquetipo}
             onChange={(val) => setFiltroArquetipo(val)}
@@ -509,82 +531,198 @@ export function TabModelosOemBom() {
             placeholder="Todos los Tipos de Equipo"
             searchable
           />
+
+          {searchQuery.trim() && (
+            <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
+              <span>
+                Mostrando <strong className="text-blue-600 font-bold">{modelosFiltrados.length}</strong> de {modelos.length} modelos
+              </span>
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="text-blue-600 hover:underline font-semibold"
+              >
+                Restablecer
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="divide-y divide-slate-100 flex-1 overflow-y-auto min-h-0">
-          {modelos.map((m) => {
-            const isSelected = m.id_modelo_equipo === selectedModeloId;
-            const bomCount = m._count?.modelos_equipo_bom ?? 0;
-            return (
-              <div
-                key={m.id_modelo_equipo}
-                onClick={() => setSelectedModeloId(m.id_modelo_equipo)}
-                className={`p-5 cursor-pointer transition-all flex items-start justify-between gap-4 ${
-                  isSelected
-                    ? 'bg-blue-50/80 border-l-4 border-l-blue-600'
-                    : 'hover:bg-slate-50'
-                }`}
-              >
+        {/* Contenedor scrolleable: Modelo Seleccionado destacado arriba + Lista de otros modelos */}
+        <div className="overflow-y-auto flex-1 p-3 space-y-3 min-h-0">
+          {/* APARTADO DESTACADO ARRIBA: MODELO SELECCIONADO EN EDICIÓN */}
+          {selectedModelo && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                  Modelo Seleccionado
+                </span>
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-md font-mono">
+                  ACTIVO
+                </span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50/70 border-2 border-blue-500/40 shadow-xs flex items-start justify-between gap-3">
                 <div className="space-y-1.5 min-w-0">
                   <div className="flex items-center flex-wrap gap-2">
-                    <span className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs font-extrabold">
-                      {m.marca}
+                    <span className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs font-extrabold shadow-2xs">
+                      {selectedModelo.marca}
                     </span>
-                    <span className="text-sm font-bold text-slate-900">{m.modelo}</span>
-                    {m.tipo_equipo && (
-                      <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-bold">
-                        {m.tipo_equipo.nombre_tipo}
+                    <span className="text-sm font-extrabold text-blue-950">
+                      {selectedModelo.modelo}
+                    </span>
+                    {selectedModelo.tipo_equipo && (
+                      <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white text-[11px] font-bold shadow-2xs">
+                        {selectedModelo.tipo_equipo.nombre_tipo}
                       </span>
                     )}
                   </div>
-                  {m.nombre_comercial && (
-                    <div className="text-xs text-slate-600 font-medium">
-                      {m.nombre_comercial}
-                    </div>
+                  {selectedModelo.nombre_comercial && (
+                    <p className="text-xs text-slate-700 font-semibold leading-relaxed pt-0.5">
+                      {selectedModelo.nombre_comercial}
+                    </p>
                   )}
-                  <div className="font-mono text-[11px] text-slate-400">
-                    Ref. Plantilla: {m.codigo_modelo}
+                  <div className="pt-1 flex items-center flex-wrap gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[11px] font-bold shadow-2xs">
+                      {selectedModelo._count?.modelos_equipo_bom ?? 0} repuestos en kit
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-500 font-semibold">
+                      Ref: {selectedModelo.codigo_modelo}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-2 shrink-0">
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
-                    {bomCount} repuestos en kit
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditModelo(m);
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                      title="Editar Modelo de Fábrica"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (
-                          window.confirm(
-                            `¿Desactivar el modelo "${m.marca} ${m.modelo}"?`,
-                          )
-                        ) {
-                          await deleteModMut.mutateAsync(m.id_modelo_equipo);
-                        }
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                      title="Desactivar Modelo"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+                <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => openEditModelo(selectedModelo)}
+                    className="p-1.5 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors"
+                    title="Editar Modelo de Fábrica"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        window.confirm(
+                          `¿Desactivar el modelo "${selectedModelo.marca} ${selectedModelo.modelo}"?`,
+                        )
+                      ) {
+                        await deleteModMut.mutateAsync(selectedModelo.id_modelo_equipo);
+                      }
+                    }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                    title="Desactivar Modelo"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* OTROS MODELOS DE FÁBRICA */}
+          <div className="pt-1">
+            <div className="px-1 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              {otrosModelos.length > 0
+                ? `Otros Modelos (${otrosModelos.length})`
+                : selectedModelo
+                ? 'Otros Modelos (0)'
+                : 'Todos los Modelos'}
+            </div>
+
+            {modelosFiltrados.length === 0 ? (
+              <div className="p-6 text-center space-y-2 rounded-xl bg-slate-50 border border-slate-100">
+                <Search className="h-5 w-5 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-700">Sin coincidencias</p>
+                <p className="text-[11px] text-slate-400">
+                  No hay modelos que coincidan con la búsqueda o filtro.
+                </p>
+              </div>
+            ) : otrosModelos.length === 0 && selectedModelo ? (
+              <div className="p-4 text-center rounded-xl bg-slate-50/50 border border-dashed border-slate-200">
+                <p className="text-xs text-slate-400 font-medium">
+                  {searchQuery || filtroArquetipo
+                    ? 'Es el único modelo que coincide con el filtro actual.'
+                    : 'No hay más modelos registrados para esta categoría.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {otrosModelos.map((m) => {
+                  const bomCount = m._count?.modelos_equipo_bom ?? 0;
+                  return (
+                    <div
+                      key={m.id_modelo_equipo}
+                      onClick={() => setSelectedModeloId(m.id_modelo_equipo)}
+                      className="p-3.5 rounded-xl border border-slate-200/80 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer flex items-start justify-between gap-3 shadow-2xs group"
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center flex-wrap gap-1.5">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[10px] font-extrabold">
+                            {m.marca}
+                          </span>
+                          <span className="text-xs font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                            {m.modelo}
+                          </span>
+                          {m.tipo_equipo && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-blue-50 text-blue-700 font-semibold border border-blue-100">
+                              {m.tipo_equipo.nombre_tipo}
+                            </span>
+                          )}
+                        </div>
+                        {m.nombre_comercial && (
+                          <div className="text-[11px] text-slate-600 line-clamp-1">
+                            {m.nombre_comercial}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 pt-0.5 text-[10px] text-slate-400 font-mono">
+                          <span>Ref: {m.codigo_modelo}</span>
+                          <span>•</span>
+                          <span className="text-emerald-700 font-bold font-sans">
+                            {bomCount} repuestos
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModelo(m);
+                          }}
+                          className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Editar Modelo de Fábrica"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (
+                              window.confirm(
+                                `¿Desactivar el modelo "${m.marca} ${m.modelo}"?`,
+                              )
+                            ) {
+                              await deleteModMut.mutateAsync(m.id_modelo_equipo);
+                            }
+                          }}
+                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Desactivar Modelo"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
