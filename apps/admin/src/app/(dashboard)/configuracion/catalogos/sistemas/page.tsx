@@ -378,19 +378,31 @@ function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = []
                                     </button>
                                 )}
                             </div>
-                            <input
-                                type="text"
-                                required
-                                value={formData.codigo_sistema}
-                                onChange={(e) => setFormData({ ...formData, codigo_sistema: e.target.value.toUpperCase().trim() })}
-                                className={`w-full px-4 py-2 border rounded-xl outline-none text-sm font-mono uppercase transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
-                                    isCodigoDuplicado
-                                        ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
-                                        : 'border-gray-300'
-                                }`}
-                                placeholder="SIS_ELEC"
-                                disabled={Boolean(sistema) || isAutoCodigo}
-                            />
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    required
+                                    value={formData.codigo_sistema}
+                                    onChange={(e) => setFormData({ ...formData, codigo_sistema: e.target.value.toUpperCase().trim() })}
+                                    className={`w-full pl-3.5 pr-14 py-2 border rounded-xl outline-none text-xs font-mono font-bold tracking-tight uppercase transition-colors ${
+                                        isAutoCodigo
+                                            ? 'bg-emerald-50/50 border-emerald-300 text-emerald-950'
+                                            : 'bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500'
+                                    } ${
+                                        isCodigoDuplicado
+                                            ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                                            : ''
+                                    }`}
+                                    placeholder="SIS_ELEC"
+                                    disabled={Boolean(sistema)}
+                                    readOnly={Boolean(sistema) || isAutoCodigo}
+                                />
+                                {isAutoCodigo && !sistema && (
+                                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                        ✓ Auto
+                                    </span>
+                                )}
+                            </div>
                             {isCodigoDuplicado ? (
                                 <p className="text-[11px] text-rose-600 font-bold mt-1 flex items-center gap-1">
                                     ✕ Código en uso. Modifícalo.

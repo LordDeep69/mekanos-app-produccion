@@ -48,7 +48,7 @@ export class PrismaCatalogoSistemasRepository implements ICatalogoSistemasReposi
    * Buscar sistema por código (normalizado a UPPER)
    */
   async findByCodigo(codigo: string): Promise<catalogo_sistemas | null> {
-    return this.prisma.catalogo_sistemas.findUnique({
+    return this.prisma.catalogo_sistemas.findFirst({
       where: { codigo_sistema: codigo.toUpperCase().trim() },
     });
   }

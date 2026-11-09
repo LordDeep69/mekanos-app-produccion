@@ -517,18 +517,100 @@ export function generarCodigoTipoServicio(
 }
 
 /**
- * 9. Sistemas de Inspección (VarChar 30, mayúsculas con guiones bajos)
- * Ej: "Sistema de Tracción y Cables" -> "SIS_TRACCION_CABLES"
+ * 9. Sistemas de Inspección / Subsistemas del Checklist (VarChar 30, mayúsculas con guiones bajos)
+ * Generador inteligente y compacto: elimina conectores ('de', 'y'), abrevia términos largos y
+ * mantiene una longitud estratégica ergonómica (14-22 caracteres) evitando desbordamientos en UI.
+ * Ej: "Cabina, Puertas y Operador" -> "SIS_CABINA_PUERTAS"
+ * Ej: "Máquina de Tracción, Freno y Cables" -> "SIS_MAQ_TRACCION"
+ * Ej: "Sistema Eléctrico y Control" -> "SIS_ELEC_CTRL"
  */
 export function generarCodigoSistema(
   nombre: string,
   codigosExistentes: Set<string>,
-  maxLen = 30,
+  maxLen = 22,
 ): string {
   if (!nombre || !nombre.trim()) return '';
-  let slug = generarSlugGenerico(nombre, { maxLen: maxLen - 4, uppercase: true, separator: '_' });
-  let base = slug.startsWith('SIS_') || slug.startsWith('SISTEMA_') ? slug : `SIS_${slug}`;
-  base = base.slice(0, maxLen);
+  const nomClean = normalizarTexto(nombre).toUpperCase();
+
+  const stopWords = new Set([
+    'SISTEMA',
+    'SISTEMAS',
+    'DE',
+    'DEL',
+    'LA',
+    'LAS',
+    'EL',
+    'LOS',
+    'Y',
+    'E',
+    'O',
+    'EN',
+    'PARA',
+    'CON',
+    'SIN',
+    'A',
+    'AL',
+    'POR',
+    'SOBRE',
+  ]);
+
+  const palabras = nomClean
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 0 && !stopWords.has(w));
+
+  if (palabras.length === 0) {
+    const slug = generarSlugGenerico(nombre, { maxLen: maxLen - 4, uppercase: true, separator: '_' });
+    const base = `SIS_${slug}`.slice(0, maxLen);
+    return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+  }
+
+  // Diccionario de contracciones técnicas para compacidad
+  const abreviaturas: Record<string, string> = {
+    MAQUINA: 'MAQ',
+    MAQUINAS: 'MAQ',
+    ELECTRICO: 'ELEC',
+    ELECTRICA: 'ELEC',
+    ELECTRONICO: 'ELEC',
+    MECANICO: 'MEC',
+    MECANICA: 'MEC',
+    HIDRAULICO: 'HIDR',
+    HIDRAULICA: 'HIDR',
+    NEUMATICO: 'NEUM',
+    NEUMATICA: 'NEUM',
+    OPERADOR: 'OP',
+    OPERADORES: 'OP',
+    SEGURIDAD: 'SEG',
+    CONTROL: 'CTRL',
+    CONTROLES: 'CTRL',
+    COMBUSTION: 'COMB',
+    REFRIGERACION: 'REFR',
+    REFRIGERANTE: 'REFR',
+    ALIMENTACION: 'ALIM',
+    TRANSMISION: 'TRANS',
+  };
+
+  const palabrasCompactas = palabras.map((p) => abreviaturas[p] || (p.length > 8 && palabras.length > 2 ? p.slice(0, 5) : p));
+
+  // Acumular hasta 2 o 3 términos significativos que no superen maxLen
+  const elegidas: string[] = [];
+  let largoAcumulado = 4; // Longitud de 'SIS_'
+
+  for (const p of palabrasCompactas) {
+    if (elegidas.length >= 2 && largoAcumulado + p.length + 1 > maxLen) break;
+    if (largoAcumulado + p.length + 1 <= maxLen) {
+      elegidas.push(p);
+      largoAcumulado += p.length + 1;
+    } else {
+      break;
+    }
+  }
+
+  if (elegidas.length === 0 && palabrasCompactas.length > 0) {
+    elegidas.push(palabrasCompactas[0].slice(0, maxLen - 4));
+  }
+
+  const base = `SIS_${elegidas.join('_')}`.slice(0, maxLen);
   return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
 }
 
