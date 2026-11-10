@@ -395,12 +395,13 @@ export async function getFirmasHistorialTecnico(
 // ACTIVIDADES EJECUTADAS - EDICIÓN AVANZADA
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export type EstadoActividad = 'B' | 'R' | 'M' | 'I' | 'C' | 'LI' | 'A' | 'L' | null;
+export type EstadoActividad = 'B' | 'R' | 'M' | 'I' | 'C' | 'LI' | 'A' | 'L' | 'NA' | null;
 
 export interface UpdateActividadDto {
     estado?: EstadoActividad;
     observaciones?: string | null;
     ejecutada?: boolean;
+    respuestaJson?: Record<string, unknown> | null;
 }
 
 /**

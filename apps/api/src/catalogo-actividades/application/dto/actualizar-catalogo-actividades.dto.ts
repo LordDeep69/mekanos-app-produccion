@@ -85,6 +85,25 @@ export class ActualizarCatalogoActividadesDto {
   @IsOptional()
   observaciones?: string | null;
 
+  @ApiProperty({ description: 'Naturaleza técnica personalizada', required: false, nullable: true })
+  @IsString()
+  @IsOptional()
+  naturalezaPersonalizada?: string | null;
+
+  @ApiProperty({ description: 'Modo de respuesta / primitivo de input', required: false })
+  @IsString()
+  @IsOptional()
+  tipoControlInput?: string;
+
+  @ApiProperty({ description: 'Configuración declarativa del input', required: false, nullable: true })
+  @IsOptional()
+  configInputJson?: any;
+
+  @ApiProperty({ description: 'Rol semántico', required: false, nullable: true })
+  @IsString()
+  @IsOptional()
+  rolSemantico?: string | null;
+
   @ApiProperty({ description: 'ID del usuario que modifica el registro (auditoría, opcional)', example: 1, required: false })
   @IsInt()
   @IsPositive()

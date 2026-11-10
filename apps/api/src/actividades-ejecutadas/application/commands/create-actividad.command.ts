@@ -14,6 +14,7 @@ export class CreateActividadCommand {
     public readonly tiempoEjecucionMinutos?: number,
     public readonly requiereEvidencia?: boolean,
     public readonly evidenciaCapturada?: boolean,
+    public readonly respuestaJson?: Record<string, unknown> | null,
   ) {}
 }
 

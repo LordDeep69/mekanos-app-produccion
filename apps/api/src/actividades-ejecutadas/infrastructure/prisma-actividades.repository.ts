@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { actividades_ejecutadas } from '@prisma/client';
+import { actividades_ejecutadas, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateActividadCommand } from '../application/commands/create-actividad.command';
 import { UpdateActividadCommand } from '../application/commands/update-actividad.command';
@@ -24,6 +24,7 @@ export class PrismaActividadesRepository implements ActividadesRepository {
         tiempo_ejecucion_minutos: command.tiempoEjecucionMinutos ?? null,
         requiere_evidencia: command.requiereEvidencia ?? false,
         evidencia_capturada: command.evidenciaCapturada ?? false,
+        ...(command.respuestaJson ? { respuesta_json: command.respuestaJson as Prisma.InputJsonValue } : {}),
       },
       include: {
         empleados: true,
@@ -49,6 +50,7 @@ export class PrismaActividadesRepository implements ActividadesRepository {
         ...(command.tiempoEjecucionMinutos !== undefined && { tiempo_ejecucion_minutos: command.tiempoEjecucionMinutos }),
         ...(command.requiereEvidencia !== undefined && { requiere_evidencia: command.requiereEvidencia }),
         ...(command.evidenciaCapturada !== undefined && { evidencia_capturada: command.evidenciaCapturada }),
+        ...(command.respuestaJson !== undefined && { respuesta_json: command.respuestaJson === null ? Prisma.DbNull : (command.respuestaJson as Prisma.InputJsonValue) }),
       },
       include: {
         empleados: true,

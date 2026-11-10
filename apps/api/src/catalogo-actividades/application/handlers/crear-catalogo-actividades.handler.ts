@@ -106,6 +106,10 @@ export class CrearCatalogoActividadesHandler implements ICommandHandler<CrearCat
       precauciones: command.precauciones ?? null,
       activo: command.activo ?? true,
       observaciones: command.observaciones ?? null,
+      naturalezaPersonalizada: command.naturalezaPersonalizada ?? null,
+      tipoControlInput: command.tipoControlInput || 'ESCALA_ESTADO',
+      configInputJson: command.configInputJson ?? undefined,
+      rolSemantico: command.rolSemantico ?? null,
       creadoPor: command.creadoPor,
     });
 

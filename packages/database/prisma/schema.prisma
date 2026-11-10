@@ -29,6 +29,7 @@ model actividades_ejecutadas {
   fecha_registro           DateTime?                 @default(now()) @db.Timestamp(6)
   id_orden_equipo          Int?
   excluido_pdf             Boolean                   @default(false)
+  respuesta_json           Json?
   empleados                empleados?                @relation(fields: [ejecutada_por], references: [id_empleado])
   catalogo_actividades     catalogo_actividades?     @relation(fields: [id_actividad_catalogo], references: [id_actividad_catalogo])
   ordenes_equipos          ordenes_equipos?          @relation(fields: [id_orden_equipo], references: [id_orden_equipo])
@@ -179,6 +180,10 @@ model catalogo_actividades {
   fecha_creacion           DateTime?                  @default(now()) @db.Timestamp(6)
   modificado_por           Int?
   fecha_modificacion       DateTime?                  @db.Timestamp(6)
+  naturaleza_personalizada String?                    @db.VarChar(80)
+  tipo_control_input       String                     @default("ESCALA_ESTADO") @db.VarChar(40)
+  config_input_json        Json?
+  rol_semantico            String?                    @db.VarChar(50)
   actividades_ejecutadas   actividades_ejecutadas[]
   parametros_medicion      parametros_medicion?       @relation(fields: [id_parametro_medicion], references: [id_parametro_medicion])
   catalogo_sistemas        catalogo_sistemas?         @relation(fields: [id_sistema], references: [id_sistema])

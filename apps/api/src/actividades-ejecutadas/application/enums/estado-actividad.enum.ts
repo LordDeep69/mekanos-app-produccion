@@ -7,4 +7,8 @@ export enum EstadoActividadEnum {
   LIMPIA = 'LI',
   ACEPTABLE = 'A',
   LUBRICADA = 'L',
+  NO_APLICA = 'NA',
+  LA = 'LA',
+  S = 'S',
+  NT = 'NT',
 }

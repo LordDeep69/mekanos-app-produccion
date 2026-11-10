@@ -119,6 +119,18 @@ export class CatalogoActividadesResponseDto {
   @ApiProperty({ description: 'Observaciones', example: 'Actividad crítica', nullable: true })
   observaciones?: string | null;
 
+  @ApiProperty({ description: 'Naturaleza personalizada', nullable: true, required: false })
+  naturalezaPersonalizada?: string | null;
+
+  @ApiProperty({ description: 'Primitivo de input', required: false })
+  tipoControlInput?: string;
+
+  @ApiProperty({ description: 'Config declarativa del input', nullable: true, required: false })
+  configInputJson?: any;
+
+  @ApiProperty({ description: 'Rol semántico', nullable: true, required: false })
+  rolSemantico?: string | null;
+
   @ApiProperty({ description: 'ID del usuario creador', example: 1, nullable: true })
   creadoPor?: number | null;
 

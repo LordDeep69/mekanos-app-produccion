@@ -119,6 +119,13 @@ class ActividadesCatalogo extends Table {
   IntColumn get idTipoServicio =>
       integer().nullable().references(TiposServicio, #id)();
 
+  // v19: Motor declarativo de inputs
+  TextColumn get naturalezaPersonalizada => text().nullable()();
+  TextColumn get tipoControlInput =>
+      text().withDefault(const Constant('ESCALA_ESTADO'))();
+  TextColumn get configInputJson => text().nullable()();
+  TextColumn get rolSemantico => text().nullable()();
+
   // Sync control
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
 
@@ -376,6 +383,9 @@ class ActividadesEjecutadas extends Table {
   TextColumn get observacion => text().nullable()();
   TextColumn get observacionTecnico => text().nullable()();
 
+  // v19: respuesta estructurada del input declarativo (JSON string)
+  TextColumn get respuestaJson => text().nullable()();
+
   DateTimeColumn get fechaEjecucion => dateTime().nullable()();
 
   // Sync control
@@ -602,7 +612,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 18; // v18: autorizacion de edicion tecnica por orden // v17: Sistema Inteligente de Pendientes Técnicos
+  int get schemaVersion => 19; // v19: inputs declarativos // v18: autorizacion de edicion tecnica por orden // v17: Sistema Inteligente de Pendientes Técnicos
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -765,6 +775,24 @@ class AppDatabase extends _$AppDatabase {
         // sin confirmacion del servidor.
         await customStatement(
           'ALTER TABLE ordenes ADD COLUMN permite_edicion_tecnico INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (from < 19) {
+        // v19: Motor declarativo de inputs (naturaleza/tipo control/config/rol)
+        await customStatement(
+          'ALTER TABLE actividades_catalogo ADD COLUMN naturaleza_personalizada TEXT',
+        );
+        await customStatement(
+          "ALTER TABLE actividades_catalogo ADD COLUMN tipo_control_input TEXT NOT NULL DEFAULT 'ESCALA_ESTADO'",
+        );
+        await customStatement(
+          'ALTER TABLE actividades_catalogo ADD COLUMN config_input_json TEXT',
+        );
+        await customStatement(
+          'ALTER TABLE actividades_catalogo ADD COLUMN rol_semantico TEXT',
+        );
+        await customStatement(
+          'ALTER TABLE actividades_ejecutadas ADD COLUMN respuesta_json TEXT',
         );
       }
     },

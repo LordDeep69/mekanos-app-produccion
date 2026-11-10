@@ -37,6 +37,7 @@ export class ActividadesController {
       dto.tiempoEjecucionMinutos,
       dto.requiereEvidencia,
       dto.evidenciaCapturada,
+      dto.respuestaJson,
     );
     return this.commandBus.execute(command);
   }
@@ -82,6 +83,7 @@ export class ActividadesController {
       dto.tiempoEjecucionMinutos,
       dto.requiereEvidencia,
       dto.evidenciaCapturada,
+      dto.respuestaJson,
     );
     return this.commandBus.execute(command);
   }

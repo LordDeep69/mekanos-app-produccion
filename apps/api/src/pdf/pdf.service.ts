@@ -300,7 +300,12 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     if (esMulti && datos.actividadesPorEquipo) {
       datosPorEquipo = datos.actividadesPorEquipo.map((grupo) => {
         const extEquipo = this.extraerDatosEstructuradosCorrectivo(
-          grupo.actividades.map((a) => ({ observaciones: a.observaciones, descripcion: a.descripcion })),
+          grupo.actividades.map((a) => ({
+            observaciones: a.observaciones,
+            descripcion: a.descripcion,
+            rolSemantico: a.rolSemantico,
+            respuestaJson: a.respuestaJson,
+          })),
         );
         return {
           equipo: grupo.equipo,
@@ -463,7 +468,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * Los widgets móviles guardan datos con prefijos como ESTADO_INICIAL:, PROBLEMA:, etc.
    */
   private extraerDatosEstructuradosCorrectivo(
-    actividades: Array<{ observaciones?: string; descripcion?: string }>,
+    actividades: Array<{ observaciones?: string; descripcion?: string; rolSemantico?: string | null; respuestaJson?: any }>,
     ordenObservaciones?: string,
   ): {
     estadoInicial: string;
@@ -531,6 +536,20 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       'MATERIALES': 'materiales',
     };
 
+    const mapaRolSemanticoCampo: Record<string, keyof typeof resultado> = {
+      CORR_ESTADO_INICIAL: 'estadoInicial',
+      CORR_ESTADO_FINAL: 'estadoFinal',
+      CORR_SISTEMAS_AFECTADOS: 'sistemasAfectados',
+      CORR_PROBLEMA: 'problema',
+      CORR_FALLAS: 'sintomas',
+      CORR_DIAGNOSTICO: 'diagnostico',
+      CORR_TRABAJOS: 'trabajos',
+      CORR_PENDIENTES: 'pendientes',
+      CORR_RECOMENDACIONES: 'recomendaciones',
+      CORR_REPUESTOS: 'repuestos',
+      CORR_MATERIALES: 'materiales',
+    };
+
     for (const actividad of actividades) {
       const obsRaw = actividad.observaciones || '';
       const partes = obsRaw.split('|||');
@@ -539,7 +558,44 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
       let matched = false;
 
-      if (/^ESTADO_INICIAL:\s*/i.test(obs)) {
+      // Fase 6: Priorizar rol_semantico + respuestaJson si existen
+      const rol = actividad.rolSemantico?.toUpperCase().trim();
+      const campoPorRol = rol ? mapaRolSemanticoCampo[rol] : undefined;
+      if (campoPorRol) {
+        const respObj = actividad.respuestaJson && typeof actividad.respuestaJson === 'object' ? actividad.respuestaJson : null;
+        const valRaw =
+          (Array.isArray(respObj?.seleccionados) ? respObj.seleccionados.join(', ') : null) ??
+          respObj?.etiqueta ??
+          respObj?.valor ??
+          obs.replace(/^(?:ESTADO_INICIAL|ESTADO_FINAL|SISTEMAS|PROBLEMA|SINTOMAS|FALLAS|DIAGNOSTICO|TRABAJOS|PENDIENTES|RECOMENDACIONES|REPUESTOS|MATERIALES):\s*/i, '').trim();
+        const val = String(valRaw || '').trim();
+        if (val && !this.esTextoVacioOSinContenido(val)) {
+          if (campoPorRol === 'sistemasAfectados') {
+            resultado.sistemasAfectados = val.split(',').map(s => s.trim()).filter(s => s && !this.esTextoVacioOSinContenido(s)).map(s => this.mapearSistema(s));
+          } else if (campoPorRol === 'repuestos') {
+            resultado.repuestos = val.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+          } else if (campoPorRol === 'materiales') {
+            resultado.materiales = val.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+          } else if (campoPorRol === 'estadoInicial') {
+            resultado.estadoInicial = this.mapearEstadoInicial(val);
+          } else if (campoPorRol === 'estadoFinal') {
+            resultado.estadoFinal = this.mapearEstadoFinal(val);
+          } else {
+            (resultado as any)[campoPorRol] = val;
+          }
+          if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) {
+            const auxKey = `obs${campoPorRol.charAt(0).toUpperCase()}${campoPorRol.slice(1)}` as keyof typeof resultado;
+            if (auxKey in resultado && typeof resultado[auxKey] === 'string') {
+              (resultado as any)[auxKey] = obsAux;
+            }
+          }
+          matched = true;
+        }
+      }
+
+      if (matched) {
+        // Ya resuelto deterministicamente por rol_semantico
+      } else if (/^ESTADO_INICIAL:\s*/i.test(obs)) {
         const val = obs.replace(/^ESTADO_INICIAL:\s*/i, '').trim();
         if (!this.esTextoVacioOSinContenido(val)) resultado.estadoInicial = this.mapearEstadoInicial(val);
         if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsEstadoInicial = obsAux;

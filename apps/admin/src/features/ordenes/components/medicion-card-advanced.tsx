@@ -20,7 +20,7 @@ import {
     MessageSquare,
     X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useUpdateMedicion } from '../hooks/use-ordenes';
 import { GaleriaActividadFotos } from './galeria-actividad-fotos';
 
@@ -161,6 +161,13 @@ export function MedicionCardAdvanced({ medicion, idOrdenServicio, onUpdate }: Me
         medicion.valor_numerico?.toString() ?? ''
     );
     const [observaciones, setObservaciones] = useState(medicion.observaciones || '');
+
+    useEffect(() => {
+        if (!isEditing) {
+            setValorNumerico(medicion.valor_numerico?.toString() ?? '');
+            setObservaciones(medicion.observaciones || '');
+        }
+    }, [medicion.valor_numerico, medicion.observaciones, isEditing]);
 
     const parametro = medicion.parametros_medicion;
     const nombreParametro = parametro?.nombre_parametro || 'Parámetro desconocido';
@@ -318,6 +325,12 @@ export function MedicionCardAdvanced({ medicion, idOrdenServicio, onUpdate }: Me
                                     step="0.01"
                                     value={valorNumerico}
                                     onChange={(e) => setValorNumerico(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleGuardar();
+                                        }
+                                    }}
                                     placeholder="Ingrese valor..."
                                     className="w-full mt-1 px-3 py-2 text-lg font-bold border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 />

@@ -1698,6 +1698,51 @@ class $ActividadesCatalogoTable extends ActividadesCatalogo
       'REFERENCES tipos_servicio (id)',
     ),
   );
+  static const VerificationMeta _naturalezaPersonalizadaMeta =
+      const VerificationMeta('naturalezaPersonalizada');
+  @override
+  late final GeneratedColumn<String> naturalezaPersonalizada =
+      GeneratedColumn<String>(
+        'naturaleza_personalizada',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _tipoControlInputMeta = const VerificationMeta(
+    'tipoControlInput',
+  );
+  @override
+  late final GeneratedColumn<String> tipoControlInput = GeneratedColumn<String>(
+    'tipo_control_input',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('ESCALA_ESTADO'),
+  );
+  static const VerificationMeta _configInputJsonMeta = const VerificationMeta(
+    'configInputJson',
+  );
+  @override
+  late final GeneratedColumn<String> configInputJson = GeneratedColumn<String>(
+    'config_input_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _rolSemanticoMeta = const VerificationMeta(
+    'rolSemantico',
+  );
+  @override
+  late final GeneratedColumn<String> rolSemantico = GeneratedColumn<String>(
+    'rol_semantico',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _lastSyncedAtMeta = const VerificationMeta(
     'lastSyncedAt',
   );
@@ -1723,6 +1768,10 @@ class $ActividadesCatalogoTable extends ActividadesCatalogo
     idParametroMedicion,
     sistema,
     idTipoServicio,
+    naturalezaPersonalizada,
+    tipoControlInput,
+    configInputJson,
+    rolSemantico,
     lastSyncedAt,
   ];
   @override
@@ -1839,6 +1888,42 @@ class $ActividadesCatalogoTable extends ActividadesCatalogo
         ),
       );
     }
+    if (data.containsKey('naturaleza_personalizada')) {
+      context.handle(
+        _naturalezaPersonalizadaMeta,
+        naturalezaPersonalizada.isAcceptableOrUnknown(
+          data['naturaleza_personalizada']!,
+          _naturalezaPersonalizadaMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tipo_control_input')) {
+      context.handle(
+        _tipoControlInputMeta,
+        tipoControlInput.isAcceptableOrUnknown(
+          data['tipo_control_input']!,
+          _tipoControlInputMeta,
+        ),
+      );
+    }
+    if (data.containsKey('config_input_json')) {
+      context.handle(
+        _configInputJsonMeta,
+        configInputJson.isAcceptableOrUnknown(
+          data['config_input_json']!,
+          _configInputJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('rol_semantico')) {
+      context.handle(
+        _rolSemanticoMeta,
+        rolSemantico.isAcceptableOrUnknown(
+          data['rol_semantico']!,
+          _rolSemanticoMeta,
+        ),
+      );
+    }
     if (data.containsKey('last_synced_at')) {
       context.handle(
         _lastSyncedAtMeta,
@@ -1908,6 +1993,22 @@ class $ActividadesCatalogoTable extends ActividadesCatalogo
         DriftSqlType.int,
         data['${effectivePrefix}id_tipo_servicio'],
       ),
+      naturalezaPersonalizada: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}naturaleza_personalizada'],
+      ),
+      tipoControlInput: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tipo_control_input'],
+      )!,
+      configInputJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}config_input_json'],
+      ),
+      rolSemantico: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rol_semantico'],
+      ),
       lastSyncedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_synced_at'],
@@ -1935,6 +2036,10 @@ class ActividadesCatalogoData extends DataClass
   final int? idParametroMedicion;
   final String? sistema;
   final int? idTipoServicio;
+  final String? naturalezaPersonalizada;
+  final String tipoControlInput;
+  final String? configInputJson;
+  final String? rolSemantico;
   final DateTime? lastSyncedAt;
   const ActividadesCatalogoData({
     required this.id,
@@ -1949,6 +2054,10 @@ class ActividadesCatalogoData extends DataClass
     this.idParametroMedicion,
     this.sistema,
     this.idTipoServicio,
+    this.naturalezaPersonalizada,
+    required this.tipoControlInput,
+    this.configInputJson,
+    this.rolSemantico,
     this.lastSyncedAt,
   });
   @override
@@ -1977,6 +2086,18 @@ class ActividadesCatalogoData extends DataClass
     }
     if (!nullToAbsent || idTipoServicio != null) {
       map['id_tipo_servicio'] = Variable<int>(idTipoServicio);
+    }
+    if (!nullToAbsent || naturalezaPersonalizada != null) {
+      map['naturaleza_personalizada'] = Variable<String>(
+        naturalezaPersonalizada,
+      );
+    }
+    map['tipo_control_input'] = Variable<String>(tipoControlInput);
+    if (!nullToAbsent || configInputJson != null) {
+      map['config_input_json'] = Variable<String>(configInputJson);
+    }
+    if (!nullToAbsent || rolSemantico != null) {
+      map['rol_semantico'] = Variable<String>(rolSemantico);
     }
     if (!nullToAbsent || lastSyncedAt != null) {
       map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
@@ -2010,6 +2131,16 @@ class ActividadesCatalogoData extends DataClass
       idTipoServicio: idTipoServicio == null && nullToAbsent
           ? const Value.absent()
           : Value(idTipoServicio),
+      naturalezaPersonalizada: naturalezaPersonalizada == null && nullToAbsent
+          ? const Value.absent()
+          : Value(naturalezaPersonalizada),
+      tipoControlInput: Value(tipoControlInput),
+      configInputJson: configInputJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(configInputJson),
+      rolSemantico: rolSemantico == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rolSemantico),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSyncedAt),
@@ -2038,6 +2169,12 @@ class ActividadesCatalogoData extends DataClass
       ),
       sistema: serializer.fromJson<String?>(json['sistema']),
       idTipoServicio: serializer.fromJson<int?>(json['idTipoServicio']),
+      naturalezaPersonalizada: serializer.fromJson<String?>(
+        json['naturalezaPersonalizada'],
+      ),
+      tipoControlInput: serializer.fromJson<String>(json['tipoControlInput']),
+      configInputJson: serializer.fromJson<String?>(json['configInputJson']),
+      rolSemantico: serializer.fromJson<String?>(json['rolSemantico']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
     );
   }
@@ -2057,6 +2194,12 @@ class ActividadesCatalogoData extends DataClass
       'idParametroMedicion': serializer.toJson<int?>(idParametroMedicion),
       'sistema': serializer.toJson<String?>(sistema),
       'idTipoServicio': serializer.toJson<int?>(idTipoServicio),
+      'naturalezaPersonalizada': serializer.toJson<String?>(
+        naturalezaPersonalizada,
+      ),
+      'tipoControlInput': serializer.toJson<String>(tipoControlInput),
+      'configInputJson': serializer.toJson<String?>(configInputJson),
+      'rolSemantico': serializer.toJson<String?>(rolSemantico),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
     };
   }
@@ -2074,6 +2217,10 @@ class ActividadesCatalogoData extends DataClass
     Value<int?> idParametroMedicion = const Value.absent(),
     Value<String?> sistema = const Value.absent(),
     Value<int?> idTipoServicio = const Value.absent(),
+    Value<String?> naturalezaPersonalizada = const Value.absent(),
+    String? tipoControlInput,
+    Value<String?> configInputJson = const Value.absent(),
+    Value<String?> rolSemantico = const Value.absent(),
     Value<DateTime?> lastSyncedAt = const Value.absent(),
   }) => ActividadesCatalogoData(
     id: id ?? this.id,
@@ -2096,6 +2243,14 @@ class ActividadesCatalogoData extends DataClass
     idTipoServicio: idTipoServicio.present
         ? idTipoServicio.value
         : this.idTipoServicio,
+    naturalezaPersonalizada: naturalezaPersonalizada.present
+        ? naturalezaPersonalizada.value
+        : this.naturalezaPersonalizada,
+    tipoControlInput: tipoControlInput ?? this.tipoControlInput,
+    configInputJson: configInputJson.present
+        ? configInputJson.value
+        : this.configInputJson,
+    rolSemantico: rolSemantico.present ? rolSemantico.value : this.rolSemantico,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
   );
   ActividadesCatalogoData copyWithCompanion(ActividadesCatalogoCompanion data) {
@@ -2130,6 +2285,18 @@ class ActividadesCatalogoData extends DataClass
       idTipoServicio: data.idTipoServicio.present
           ? data.idTipoServicio.value
           : this.idTipoServicio,
+      naturalezaPersonalizada: data.naturalezaPersonalizada.present
+          ? data.naturalezaPersonalizada.value
+          : this.naturalezaPersonalizada,
+      tipoControlInput: data.tipoControlInput.present
+          ? data.tipoControlInput.value
+          : this.tipoControlInput,
+      configInputJson: data.configInputJson.present
+          ? data.configInputJson.value
+          : this.configInputJson,
+      rolSemantico: data.rolSemantico.present
+          ? data.rolSemantico.value
+          : this.rolSemantico,
       lastSyncedAt: data.lastSyncedAt.present
           ? data.lastSyncedAt.value
           : this.lastSyncedAt,
@@ -2151,6 +2318,10 @@ class ActividadesCatalogoData extends DataClass
           ..write('idParametroMedicion: $idParametroMedicion, ')
           ..write('sistema: $sistema, ')
           ..write('idTipoServicio: $idTipoServicio, ')
+          ..write('naturalezaPersonalizada: $naturalezaPersonalizada, ')
+          ..write('tipoControlInput: $tipoControlInput, ')
+          ..write('configInputJson: $configInputJson, ')
+          ..write('rolSemantico: $rolSemantico, ')
           ..write('lastSyncedAt: $lastSyncedAt')
           ..write(')'))
         .toString();
@@ -2170,6 +2341,10 @@ class ActividadesCatalogoData extends DataClass
     idParametroMedicion,
     sistema,
     idTipoServicio,
+    naturalezaPersonalizada,
+    tipoControlInput,
+    configInputJson,
+    rolSemantico,
     lastSyncedAt,
   );
   @override
@@ -2188,6 +2363,10 @@ class ActividadesCatalogoData extends DataClass
           other.idParametroMedicion == this.idParametroMedicion &&
           other.sistema == this.sistema &&
           other.idTipoServicio == this.idTipoServicio &&
+          other.naturalezaPersonalizada == this.naturalezaPersonalizada &&
+          other.tipoControlInput == this.tipoControlInput &&
+          other.configInputJson == this.configInputJson &&
+          other.rolSemantico == this.rolSemantico &&
           other.lastSyncedAt == this.lastSyncedAt);
 }
 
@@ -2205,6 +2384,10 @@ class ActividadesCatalogoCompanion
   final Value<int?> idParametroMedicion;
   final Value<String?> sistema;
   final Value<int?> idTipoServicio;
+  final Value<String?> naturalezaPersonalizada;
+  final Value<String> tipoControlInput;
+  final Value<String?> configInputJson;
+  final Value<String?> rolSemantico;
   final Value<DateTime?> lastSyncedAt;
   const ActividadesCatalogoCompanion({
     this.id = const Value.absent(),
@@ -2219,6 +2402,10 @@ class ActividadesCatalogoCompanion
     this.idParametroMedicion = const Value.absent(),
     this.sistema = const Value.absent(),
     this.idTipoServicio = const Value.absent(),
+    this.naturalezaPersonalizada = const Value.absent(),
+    this.tipoControlInput = const Value.absent(),
+    this.configInputJson = const Value.absent(),
+    this.rolSemantico = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
   });
   ActividadesCatalogoCompanion.insert({
@@ -2234,6 +2421,10 @@ class ActividadesCatalogoCompanion
     this.idParametroMedicion = const Value.absent(),
     this.sistema = const Value.absent(),
     this.idTipoServicio = const Value.absent(),
+    this.naturalezaPersonalizada = const Value.absent(),
+    this.tipoControlInput = const Value.absent(),
+    this.configInputJson = const Value.absent(),
+    this.rolSemantico = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
   }) : codigo = Value(codigo),
        descripcion = Value(descripcion),
@@ -2251,6 +2442,10 @@ class ActividadesCatalogoCompanion
     Expression<int>? idParametroMedicion,
     Expression<String>? sistema,
     Expression<int>? idTipoServicio,
+    Expression<String>? naturalezaPersonalizada,
+    Expression<String>? tipoControlInput,
+    Expression<String>? configInputJson,
+    Expression<String>? rolSemantico,
     Expression<DateTime>? lastSyncedAt,
   }) {
     return RawValuesInsertable({
@@ -2268,6 +2463,11 @@ class ActividadesCatalogoCompanion
         'id_parametro_medicion': idParametroMedicion,
       if (sistema != null) 'sistema': sistema,
       if (idTipoServicio != null) 'id_tipo_servicio': idTipoServicio,
+      if (naturalezaPersonalizada != null)
+        'naturaleza_personalizada': naturalezaPersonalizada,
+      if (tipoControlInput != null) 'tipo_control_input': tipoControlInput,
+      if (configInputJson != null) 'config_input_json': configInputJson,
+      if (rolSemantico != null) 'rol_semantico': rolSemantico,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
     });
   }
@@ -2285,6 +2485,10 @@ class ActividadesCatalogoCompanion
     Value<int?>? idParametroMedicion,
     Value<String?>? sistema,
     Value<int?>? idTipoServicio,
+    Value<String?>? naturalezaPersonalizada,
+    Value<String>? tipoControlInput,
+    Value<String?>? configInputJson,
+    Value<String?>? rolSemantico,
     Value<DateTime?>? lastSyncedAt,
   }) {
     return ActividadesCatalogoCompanion(
@@ -2301,6 +2505,11 @@ class ActividadesCatalogoCompanion
       idParametroMedicion: idParametroMedicion ?? this.idParametroMedicion,
       sistema: sistema ?? this.sistema,
       idTipoServicio: idTipoServicio ?? this.idTipoServicio,
+      naturalezaPersonalizada:
+          naturalezaPersonalizada ?? this.naturalezaPersonalizada,
+      tipoControlInput: tipoControlInput ?? this.tipoControlInput,
+      configInputJson: configInputJson ?? this.configInputJson,
+      rolSemantico: rolSemantico ?? this.rolSemantico,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
     );
   }
@@ -2346,6 +2555,20 @@ class ActividadesCatalogoCompanion
     if (idTipoServicio.present) {
       map['id_tipo_servicio'] = Variable<int>(idTipoServicio.value);
     }
+    if (naturalezaPersonalizada.present) {
+      map['naturaleza_personalizada'] = Variable<String>(
+        naturalezaPersonalizada.value,
+      );
+    }
+    if (tipoControlInput.present) {
+      map['tipo_control_input'] = Variable<String>(tipoControlInput.value);
+    }
+    if (configInputJson.present) {
+      map['config_input_json'] = Variable<String>(configInputJson.value);
+    }
+    if (rolSemantico.present) {
+      map['rol_semantico'] = Variable<String>(rolSemantico.value);
+    }
     if (lastSyncedAt.present) {
       map['last_synced_at'] = Variable<DateTime>(lastSyncedAt.value);
     }
@@ -2367,6 +2590,10 @@ class ActividadesCatalogoCompanion
           ..write('idParametroMedicion: $idParametroMedicion, ')
           ..write('sistema: $sistema, ')
           ..write('idTipoServicio: $idTipoServicio, ')
+          ..write('naturalezaPersonalizada: $naturalezaPersonalizada, ')
+          ..write('tipoControlInput: $tipoControlInput, ')
+          ..write('configInputJson: $configInputJson, ')
+          ..write('rolSemantico: $rolSemantico, ')
           ..write('lastSyncedAt: $lastSyncedAt')
           ..write(')'))
         .toString();
@@ -7458,6 +7685,17 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _respuestaJsonMeta = const VerificationMeta(
+    'respuestaJson',
+  );
+  @override
+  late final GeneratedColumn<String> respuestaJson = GeneratedColumn<String>(
+    'respuesta_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _fechaEjecucionMeta = const VerificationMeta(
     'fechaEjecucion',
   );
@@ -7524,6 +7762,7 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
     completada,
     observacion,
     observacionTecnico,
+    respuestaJson,
     fechaEjecucion,
     isDirty,
     lastSyncedAt,
@@ -7657,6 +7896,15 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
         ),
       );
     }
+    if (data.containsKey('respuesta_json')) {
+      context.handle(
+        _respuestaJsonMeta,
+        respuestaJson.isAcceptableOrUnknown(
+          data['respuesta_json']!,
+          _respuestaJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('fecha_ejecucion')) {
       context.handle(
         _fechaEjecucionMeta,
@@ -7752,6 +8000,10 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
         DriftSqlType.string,
         data['${effectivePrefix}observacion_tecnico'],
       ),
+      respuestaJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}respuesta_json'],
+      ),
       fechaEjecucion: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}fecha_ejecucion'],
@@ -7793,6 +8045,7 @@ class ActividadesEjecutada extends DataClass
   final bool completada;
   final String? observacion;
   final String? observacionTecnico;
+  final String? respuestaJson;
   final DateTime? fechaEjecucion;
   final bool isDirty;
   final DateTime? lastSyncedAt;
@@ -7812,6 +8065,7 @@ class ActividadesEjecutada extends DataClass
     required this.completada,
     this.observacion,
     this.observacionTecnico,
+    this.respuestaJson,
     this.fechaEjecucion,
     required this.isDirty,
     this.lastSyncedAt,
@@ -7847,6 +8101,9 @@ class ActividadesEjecutada extends DataClass
     }
     if (!nullToAbsent || observacionTecnico != null) {
       map['observacion_tecnico'] = Variable<String>(observacionTecnico);
+    }
+    if (!nullToAbsent || respuestaJson != null) {
+      map['respuesta_json'] = Variable<String>(respuestaJson);
     }
     if (!nullToAbsent || fechaEjecucion != null) {
       map['fecha_ejecucion'] = Variable<DateTime>(fechaEjecucion);
@@ -7889,6 +8146,9 @@ class ActividadesEjecutada extends DataClass
       observacionTecnico: observacionTecnico == null && nullToAbsent
           ? const Value.absent()
           : Value(observacionTecnico),
+      respuestaJson: respuestaJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(respuestaJson),
       fechaEjecucion: fechaEjecucion == null && nullToAbsent
           ? const Value.absent()
           : Value(fechaEjecucion),
@@ -7926,6 +8186,7 @@ class ActividadesEjecutada extends DataClass
       observacionTecnico: serializer.fromJson<String?>(
         json['observacionTecnico'],
       ),
+      respuestaJson: serializer.fromJson<String?>(json['respuestaJson']),
       fechaEjecucion: serializer.fromJson<DateTime?>(json['fechaEjecucion']),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
@@ -7950,6 +8211,7 @@ class ActividadesEjecutada extends DataClass
       'completada': serializer.toJson<bool>(completada),
       'observacion': serializer.toJson<String?>(observacion),
       'observacionTecnico': serializer.toJson<String?>(observacionTecnico),
+      'respuestaJson': serializer.toJson<String?>(respuestaJson),
       'fechaEjecucion': serializer.toJson<DateTime?>(fechaEjecucion),
       'isDirty': serializer.toJson<bool>(isDirty),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
@@ -7972,6 +8234,7 @@ class ActividadesEjecutada extends DataClass
     bool? completada,
     Value<String?> observacion = const Value.absent(),
     Value<String?> observacionTecnico = const Value.absent(),
+    Value<String?> respuestaJson = const Value.absent(),
     Value<DateTime?> fechaEjecucion = const Value.absent(),
     bool? isDirty,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -7997,6 +8260,9 @@ class ActividadesEjecutada extends DataClass
     observacionTecnico: observacionTecnico.present
         ? observacionTecnico.value
         : this.observacionTecnico,
+    respuestaJson: respuestaJson.present
+        ? respuestaJson.value
+        : this.respuestaJson,
     fechaEjecucion: fechaEjecucion.present
         ? fechaEjecucion.value
         : this.fechaEjecucion,
@@ -8040,6 +8306,9 @@ class ActividadesEjecutada extends DataClass
       observacionTecnico: data.observacionTecnico.present
           ? data.observacionTecnico.value
           : this.observacionTecnico,
+      respuestaJson: data.respuestaJson.present
+          ? data.respuestaJson.value
+          : this.respuestaJson,
       fechaEjecucion: data.fechaEjecucion.present
           ? data.fechaEjecucion.value
           : this.fechaEjecucion,
@@ -8068,6 +8337,7 @@ class ActividadesEjecutada extends DataClass
           ..write('completada: $completada, ')
           ..write('observacion: $observacion, ')
           ..write('observacionTecnico: $observacionTecnico, ')
+          ..write('respuestaJson: $respuestaJson, ')
           ..write('fechaEjecucion: $fechaEjecucion, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
@@ -8092,6 +8362,7 @@ class ActividadesEjecutada extends DataClass
     completada,
     observacion,
     observacionTecnico,
+    respuestaJson,
     fechaEjecucion,
     isDirty,
     lastSyncedAt,
@@ -8115,6 +8386,7 @@ class ActividadesEjecutada extends DataClass
           other.completada == this.completada &&
           other.observacion == this.observacion &&
           other.observacionTecnico == this.observacionTecnico &&
+          other.respuestaJson == this.respuestaJson &&
           other.fechaEjecucion == this.fechaEjecucion &&
           other.isDirty == this.isDirty &&
           other.lastSyncedAt == this.lastSyncedAt &&
@@ -8137,6 +8409,7 @@ class ActividadesEjecutadasCompanion
   final Value<bool> completada;
   final Value<String?> observacion;
   final Value<String?> observacionTecnico;
+  final Value<String?> respuestaJson;
   final Value<DateTime?> fechaEjecucion;
   final Value<bool> isDirty;
   final Value<DateTime?> lastSyncedAt;
@@ -8156,6 +8429,7 @@ class ActividadesEjecutadasCompanion
     this.completada = const Value.absent(),
     this.observacion = const Value.absent(),
     this.observacionTecnico = const Value.absent(),
+    this.respuestaJson = const Value.absent(),
     this.fechaEjecucion = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -8176,6 +8450,7 @@ class ActividadesEjecutadasCompanion
     this.completada = const Value.absent(),
     this.observacion = const Value.absent(),
     this.observacionTecnico = const Value.absent(),
+    this.respuestaJson = const Value.absent(),
     this.fechaEjecucion = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -8199,6 +8474,7 @@ class ActividadesEjecutadasCompanion
     Expression<bool>? completada,
     Expression<String>? observacion,
     Expression<String>? observacionTecnico,
+    Expression<String>? respuestaJson,
     Expression<DateTime>? fechaEjecucion,
     Expression<bool>? isDirty,
     Expression<DateTime>? lastSyncedAt,
@@ -8221,6 +8497,7 @@ class ActividadesEjecutadasCompanion
       if (completada != null) 'completada': completada,
       if (observacion != null) 'observacion': observacion,
       if (observacionTecnico != null) 'observacion_tecnico': observacionTecnico,
+      if (respuestaJson != null) 'respuesta_json': respuestaJson,
       if (fechaEjecucion != null) 'fecha_ejecucion': fechaEjecucion,
       if (isDirty != null) 'is_dirty': isDirty,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
@@ -8243,6 +8520,7 @@ class ActividadesEjecutadasCompanion
     Value<bool>? completada,
     Value<String?>? observacion,
     Value<String?>? observacionTecnico,
+    Value<String?>? respuestaJson,
     Value<DateTime?>? fechaEjecucion,
     Value<bool>? isDirty,
     Value<DateTime?>? lastSyncedAt,
@@ -8263,6 +8541,7 @@ class ActividadesEjecutadasCompanion
       completada: completada ?? this.completada,
       observacion: observacion ?? this.observacion,
       observacionTecnico: observacionTecnico ?? this.observacionTecnico,
+      respuestaJson: respuestaJson ?? this.respuestaJson,
       fechaEjecucion: fechaEjecucion ?? this.fechaEjecucion,
       isDirty: isDirty ?? this.isDirty,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
@@ -8315,6 +8594,9 @@ class ActividadesEjecutadasCompanion
     if (observacionTecnico.present) {
       map['observacion_tecnico'] = Variable<String>(observacionTecnico.value);
     }
+    if (respuestaJson.present) {
+      map['respuesta_json'] = Variable<String>(respuestaJson.value);
+    }
     if (fechaEjecucion.present) {
       map['fecha_ejecucion'] = Variable<DateTime>(fechaEjecucion.value);
     }
@@ -8347,6 +8629,7 @@ class ActividadesEjecutadasCompanion
           ..write('completada: $completada, ')
           ..write('observacion: $observacion, ')
           ..write('observacionTecnico: $observacionTecnico, ')
+          ..write('respuestaJson: $respuestaJson, ')
           ..write('fechaEjecucion: $fechaEjecucion, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
@@ -14392,6 +14675,10 @@ typedef $$ActividadesCatalogoTableCreateCompanionBuilder =
       Value<int?> idParametroMedicion,
       Value<String?> sistema,
       Value<int?> idTipoServicio,
+      Value<String?> naturalezaPersonalizada,
+      Value<String> tipoControlInput,
+      Value<String?> configInputJson,
+      Value<String?> rolSemantico,
       Value<DateTime?> lastSyncedAt,
     });
 typedef $$ActividadesCatalogoTableUpdateCompanionBuilder =
@@ -14408,6 +14695,10 @@ typedef $$ActividadesCatalogoTableUpdateCompanionBuilder =
       Value<int?> idParametroMedicion,
       Value<String?> sistema,
       Value<int?> idTipoServicio,
+      Value<String?> naturalezaPersonalizada,
+      Value<String> tipoControlInput,
+      Value<String?> configInputJson,
+      Value<String?> rolSemantico,
       Value<DateTime?> lastSyncedAt,
     });
 
@@ -14582,6 +14873,26 @@ class $$ActividadesCatalogoTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get naturalezaPersonalizada => $composableBuilder(
+    column: $table.naturalezaPersonalizada,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tipoControlInput => $composableBuilder(
+    column: $table.tipoControlInput,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get configInputJson => $composableBuilder(
+    column: $table.configInputJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rolSemantico => $composableBuilder(
+    column: $table.rolSemantico,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get lastSyncedAt => $composableBuilder(
     column: $table.lastSyncedAt,
     builder: (column) => ColumnFilters(column),
@@ -14744,6 +15055,26 @@ class $$ActividadesCatalogoTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get naturalezaPersonalizada => $composableBuilder(
+    column: $table.naturalezaPersonalizada,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tipoControlInput => $composableBuilder(
+    column: $table.tipoControlInput,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get configInputJson => $composableBuilder(
+    column: $table.configInputJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rolSemantico => $composableBuilder(
+    column: $table.rolSemantico,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get lastSyncedAt => $composableBuilder(
     column: $table.lastSyncedAt,
     builder: (column) => ColumnOrderings(column),
@@ -14848,6 +15179,26 @@ class $$ActividadesCatalogoTableAnnotationComposer
 
   GeneratedColumn<String> get sistema =>
       $composableBuilder(column: $table.sistema, builder: (column) => column);
+
+  GeneratedColumn<String> get naturalezaPersonalizada => $composableBuilder(
+    column: $table.naturalezaPersonalizada,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get tipoControlInput => $composableBuilder(
+    column: $table.tipoControlInput,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get configInputJson => $composableBuilder(
+    column: $table.configInputJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get rolSemantico => $composableBuilder(
+    column: $table.rolSemantico,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get lastSyncedAt => $composableBuilder(
     column: $table.lastSyncedAt,
@@ -15006,6 +15357,10 @@ class $$ActividadesCatalogoTableTableManager
                 Value<int?> idParametroMedicion = const Value.absent(),
                 Value<String?> sistema = const Value.absent(),
                 Value<int?> idTipoServicio = const Value.absent(),
+                Value<String?> naturalezaPersonalizada = const Value.absent(),
+                Value<String> tipoControlInput = const Value.absent(),
+                Value<String?> configInputJson = const Value.absent(),
+                Value<String?> rolSemantico = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
               }) => ActividadesCatalogoCompanion(
                 id: id,
@@ -15020,6 +15375,10 @@ class $$ActividadesCatalogoTableTableManager
                 idParametroMedicion: idParametroMedicion,
                 sistema: sistema,
                 idTipoServicio: idTipoServicio,
+                naturalezaPersonalizada: naturalezaPersonalizada,
+                tipoControlInput: tipoControlInput,
+                configInputJson: configInputJson,
+                rolSemantico: rolSemantico,
                 lastSyncedAt: lastSyncedAt,
               ),
           createCompanionCallback:
@@ -15036,6 +15395,10 @@ class $$ActividadesCatalogoTableTableManager
                 Value<int?> idParametroMedicion = const Value.absent(),
                 Value<String?> sistema = const Value.absent(),
                 Value<int?> idTipoServicio = const Value.absent(),
+                Value<String?> naturalezaPersonalizada = const Value.absent(),
+                Value<String> tipoControlInput = const Value.absent(),
+                Value<String?> configInputJson = const Value.absent(),
+                Value<String?> rolSemantico = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
               }) => ActividadesCatalogoCompanion.insert(
                 id: id,
@@ -15050,6 +15413,10 @@ class $$ActividadesCatalogoTableTableManager
                 idParametroMedicion: idParametroMedicion,
                 sistema: sistema,
                 idTipoServicio: idTipoServicio,
+                naturalezaPersonalizada: naturalezaPersonalizada,
+                tipoControlInput: tipoControlInput,
+                configInputJson: configInputJson,
+                rolSemantico: rolSemantico,
                 lastSyncedAt: lastSyncedAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -19370,6 +19737,7 @@ typedef $$ActividadesEjecutadasTableCreateCompanionBuilder =
       Value<bool> completada,
       Value<String?> observacion,
       Value<String?> observacionTecnico,
+      Value<String?> respuestaJson,
       Value<DateTime?> fechaEjecucion,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
@@ -19391,6 +19759,7 @@ typedef $$ActividadesEjecutadasTableUpdateCompanionBuilder =
       Value<bool> completada,
       Value<String?> observacion,
       Value<String?> observacionTecnico,
+      Value<String?> respuestaJson,
       Value<DateTime?> fechaEjecucion,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
@@ -19583,6 +19952,11 @@ class $$ActividadesEjecutadasTableFilterComposer
 
   ColumnFilters<String> get observacionTecnico => $composableBuilder(
     column: $table.observacionTecnico,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get respuestaJson => $composableBuilder(
+    column: $table.respuestaJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -19790,6 +20164,11 @@ class $$ActividadesEjecutadasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get respuestaJson => $composableBuilder(
+    column: $table.respuestaJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get fechaEjecucion => $composableBuilder(
     column: $table.fechaEjecucion,
     builder: (column) => ColumnOrderings(column),
@@ -19936,6 +20315,11 @@ class $$ActividadesEjecutadasTableAnnotationComposer
 
   GeneratedColumn<String> get observacionTecnico => $composableBuilder(
     column: $table.observacionTecnico,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get respuestaJson => $composableBuilder(
+    column: $table.respuestaJson,
     builder: (column) => column,
   );
 
@@ -20135,6 +20519,7 @@ class $$ActividadesEjecutadasTableTableManager
                 Value<bool> completada = const Value.absent(),
                 Value<String?> observacion = const Value.absent(),
                 Value<String?> observacionTecnico = const Value.absent(),
+                Value<String?> respuestaJson = const Value.absent(),
                 Value<DateTime?> fechaEjecucion = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -20154,6 +20539,7 @@ class $$ActividadesEjecutadasTableTableManager
                 completada: completada,
                 observacion: observacion,
                 observacionTecnico: observacionTecnico,
+                respuestaJson: respuestaJson,
                 fechaEjecucion: fechaEjecucion,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
@@ -20175,6 +20561,7 @@ class $$ActividadesEjecutadasTableTableManager
                 Value<bool> completada = const Value.absent(),
                 Value<String?> observacion = const Value.absent(),
                 Value<String?> observacionTecnico = const Value.absent(),
+                Value<String?> respuestaJson = const Value.absent(),
                 Value<DateTime?> fechaEjecucion = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -20194,6 +20581,7 @@ class $$ActividadesEjecutadasTableTableManager
                 completada: completada,
                 observacion: observacion,
                 observacionTecnico: observacionTecnico,
+                respuestaJson: respuestaJson,
                 fechaEjecucion: fechaEjecucion,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,

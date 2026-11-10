@@ -195,6 +195,10 @@ export interface ActividadDetalle {
     precauciones?: string | null;
     observaciones?: string | null;
     id_parametro_medicion?: number | null;
+    naturaleza_personalizada?: string | null;
+    tipo_control_input?: string | null;
+    config_input_json?: any;
+    rol_semantico?: string | null;
     parametro_medicion?: {
         id: number;
         codigo?: string;

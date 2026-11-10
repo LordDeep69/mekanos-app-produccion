@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -74,6 +75,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   int? _idEquipoActual;
   Ordene? _orden;
   List<OrdenesEquipo> _equipos = [];
+  Map<int, ActividadesCatalogoData> _catalogoPorId = {};
+  List<String> _sistemasDinamicosEquipo = [];
 
   // ✅ FIX 17-DIC-2025: Flag para saber si es orden de un solo equipo (necesita tab Resumen)
   bool get _esOrdenSimple => widget.idOrdenEquipo == null;
@@ -133,6 +136,18 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         widget.idOrdenLocal,
         idOrdenEquipo: widget.idOrdenEquipo,
       );
+
+      // Fase 6: Cargar catálogo de actividades indexado + subsistemas dinámicos del equipo
+      final allCatalogo = await db.getAllActividadesCatalogo();
+      _catalogoPorId = {for (final c in allCatalogo) c.id: c};
+      final sistemasSet = <String>{};
+      for (final sis in _actividadesPorSistema.keys) {
+        final sTrim = sis.trim();
+        if (sTrim.isNotEmpty && sTrim.toUpperCase() != 'GENERAL' && sTrim != 'Sin sistema') {
+          sistemasSet.add(sTrim);
+        }
+      }
+      _sistemasDinamicosEquipo = sistemasSet.toList();
 
       // Cargar MEDICIONES desde tabla local (con snapshot completo)
       // ✅ MULTI-EQUIPOS: Pasar idOrdenEquipo para filtrar
@@ -335,6 +350,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     switch (simbologia) {
       case 'B':
         return Colors.green;
+      case 'R':
+        return Colors.amber.shade700;
       case 'M':
         return Colors.red;
       case 'C':
@@ -1270,11 +1287,12 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   Widget _buildSimboloogiaChips(ActividadesEjecutada actividad) {
-    // ✅ FIX: C = Cambiado (según formatos MEKANOS)
+    // Escala homologada MEKANOS: B / R / M / C / NA
     final opciones = [
       ('B', 'Bueno', Colors.green),
+      ('R', 'Regular', Colors.amber.shade700),
       ('M', 'Malo', Colors.red),
-      ('C', 'Cambiado', Colors.orange),
+      ('C', 'Cambiado', Colors.blue),
       ('NA', 'N/A', Colors.grey),
     ];
 
@@ -1450,9 +1468,53 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     return null; // Actividad normal (B/M/C/NA)
   }
 
-  /// Construye el widget apropiado según el tipo de actividad
-  /// ✅ FIX 02-FEB-2026: Soporte para widgets de CORRECTIVO
+  /// Construye el widget apropiado según el Motor Declarativo Fase 6 y fallbacks legacy
   Widget _buildActividadInputWidget(ActividadesEjecutada actividad) {
+    final cat = _catalogoPorId[actividad.idActividadCatalogo];
+    final rol = (cat?.rolSemantico ?? '').toUpperCase().trim();
+    final tipoControl = (cat?.tipoControlInput ?? 'ESCALA_ESTADO').toUpperCase().trim();
+
+    // 1. Prioritario: Rol semántico explícito
+    if (rol == 'LECTURA_CONTADOR_ACTIVO') {
+      return _buildHorometroInput(actividad);
+    }
+    switch (rol) {
+      case 'CORR_ESTADO_INICIAL':
+        return _buildCorrEstadoInicialSelector(actividad);
+      case 'CORR_ESTADO_FINAL':
+        return _buildCorrEstadoFinalSelector(actividad);
+      case 'CORR_SISTEMAS_AFECTADOS':
+        return _buildCorrSistemasAfectadosSelector(actividad);
+      case 'CORR_PROBLEMA':
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_PROBLEMA');
+      case 'CORR_FALLAS':
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_SINTOMAS');
+      case 'CORR_DIAGNOSTICO':
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_DIAGNOSTICO');
+      case 'CORR_TRABAJOS':
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_TRABAJOS');
+      case 'CORR_PENDIENTES':
+        return _buildPendientesActividadInput(actividad);
+      case 'CORR_RECOMENDACIONES':
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_RECOMENDACIONES');
+      case 'CORR_REPUESTOS':
+        return _buildCorrListaItemsInput(actividad, 'CORR_LISTA_REPUESTOS');
+      case 'CORR_MATERIALES':
+        return _buildCorrListaItemsInput(actividad, 'CORR_LISTA_MATERIALES');
+    }
+
+    // 2. Prioritario: Primitivo declarativo configurado en catálogo (tipoControlInput)
+    if (tipoControl == 'LECTURA_CONTADOR') {
+      return _buildHorometroInput(actividad);
+    }
+    if (tipoControl == 'SUBSISTEMAS_EQUIPO') {
+      return _buildCorrSistemasAfectadosSelector(actividad);
+    }
+    if (tipoControl != 'ESCALA_ESTADO' && tipoControl.isNotEmpty) {
+      return _buildDeclarativoSelector(actividad, tipoControl, cat?.configInputJson);
+    }
+
+    // 3. Fallback determinista legacy por descripción de actividad
     final tipo = _getTipoActividadEspecial(actividad.descripcion);
 
     switch (tipo) {
@@ -1497,6 +1559,218 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         return _buildTemperaturaInput(actividad);
       default:
         return _buildSimboloogiaChips(actividad);
+    }
+  }
+
+  /// Motor Declarativo Fase 6: Renderiza presets (BINARIO, CONFORMIDAD, NIVEL, ESTADO_OPERATIVO, PERSONALIZADO)
+  Widget _buildDeclarativoSelector(
+    ActividadesEjecutada actividad,
+    String tipoControl,
+    String? configJsonStr,
+  ) {
+    Map<String, dynamic> cfg = {};
+    if (configJsonStr != null && configJsonStr.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(configJsonStr);
+        if (decoded is Map<String, dynamic>) cfg = decoded;
+      } catch (_) {}
+    }
+
+    List<Map<String, String>> opciones = [];
+    if (tipoControl == 'PERSONALIZADO' && cfg['opciones'] is List) {
+      for (final item in (cfg['opciones'] as List)) {
+        if (item is Map) {
+          opciones.add({
+            'valor': (item['valor'] ?? '').toString(),
+            'etiqueta': (item['etiqueta'] ?? item['valor'] ?? '').toString(),
+            'semaforo': (item['semaforo'] ?? 'B').toString().toUpperCase(),
+          });
+        }
+      }
+    }
+
+    if (opciones.isEmpty) {
+      switch (tipoControl) {
+        case 'BINARIO':
+          opciones = [
+            {'valor': 'SI', 'etiqueta': 'SÍ', 'semaforo': 'B'},
+            {'valor': 'NO', 'etiqueta': 'NO', 'semaforo': 'M'},
+            {'valor': 'NA', 'etiqueta': 'N/A', 'semaforo': 'NA'},
+          ];
+          break;
+        case 'CONFORMIDAD':
+          opciones = [
+            {'valor': 'CONFORME', 'etiqueta': 'Conforme', 'semaforo': 'B'},
+            {'valor': 'NO_CONFORME', 'etiqueta': 'No Conforme', 'semaforo': 'M'},
+            {'valor': 'NA', 'etiqueta': 'N/A', 'semaforo': 'NA'},
+          ];
+          break;
+        case 'NIVEL':
+          opciones = [
+            {'valor': 'LLENO', 'etiqueta': 'Lleno', 'semaforo': 'B'},
+            {'valor': '3_4', 'etiqueta': '3/4', 'semaforo': 'B'},
+            {'valor': '1_2', 'etiqueta': '1/2', 'semaforo': 'R'},
+            {'valor': '1_4', 'etiqueta': '1/4', 'semaforo': 'R'},
+            {'valor': 'VACIO', 'etiqueta': 'Vacío', 'semaforo': 'M'},
+          ];
+          break;
+        case 'ESTADO_OPERATIVO':
+          opciones = [
+            {'valor': 'OPERATIVO', 'etiqueta': 'Operativo', 'semaforo': 'B'},
+            {'valor': 'PARADO', 'etiqueta': 'Parado', 'semaforo': 'R'},
+            {'valor': 'FALLA', 'etiqueta': 'Falla', 'semaforo': 'M'},
+          ];
+          break;
+      }
+    }
+
+    if (opciones.isEmpty) {
+      return _buildSimboloogiaChips(actividad);
+    }
+
+    Map<String, dynamic> respActual = {};
+    if (actividad.respuestaJson != null && actividad.respuestaJson!.trim().isNotEmpty) {
+      try {
+        final d = jsonDecode(actividad.respuestaJson!);
+        if (d is Map<String, dynamic>) respActual = d;
+      } catch (_) {}
+    }
+    final valorSeleccionado = (respActual['valor'] ?? '').toString();
+    final etiquetaSeleccionada = (respActual['etiqueta'] ?? '').toString();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: opciones.map((op) {
+            final valor = op['valor'] ?? '';
+            final etiqueta = op['etiqueta'] ?? valor;
+            final semaforo = op['semaforo'] ?? 'B';
+            final color = _getColorForSimbologia(semaforo);
+            final isSelected =
+                (valorSeleccionado.isNotEmpty && valorSeleccionado == valor) ||
+                (etiquetaSeleccionada.isNotEmpty && etiquetaSeleccionada == etiqueta);
+
+            return Material(
+              color: isSelected ? color : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(10),
+              elevation: isSelected ? 2 : 0,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => _marcarActividadDeclarativa(
+                  actividad,
+                  simbologia: semaforo,
+                  respuestaJsonObj: {
+                    ...respActual,
+                    'valor': valor,
+                    'etiqueta': etiqueta,
+                    'semaforo': semaforo,
+                  },
+                  observacionFallback: respActual['detalle']?.toString(),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected ? color : Colors.grey.shade300,
+                      width: isSelected ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isSelected) ...[
+                        const Icon(Icons.check_circle, size: 16, color: Colors.white),
+                        const SizedBox(width: 6),
+                      ],
+                      Text(
+                        etiqueta,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: isSelected ? Colors.white : color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        if (cfg['permitirTextoLibre'] == true) ...[
+          const SizedBox(height: 8),
+          TextFormField(
+            initialValue: respActual['detalle']?.toString() ?? '',
+            decoration: InputDecoration(
+              labelText: cfg['etiquetaTextoLibre']?.toString() ?? 'Detalle / valor adicional',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              isDense: true,
+            ),
+            onFieldSubmitted: (texto) {
+              final simb = actividad.simbologia ?? 'B';
+              _marcarActividadDeclarativa(
+                actividad,
+                simbologia: simb,
+                respuestaJsonObj: {
+                  ...respActual,
+                  'detalle': texto.trim(),
+                },
+                observacionFallback: texto.trim(),
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _marcarActividadDeclarativa(
+    ActividadesEjecutada actividad, {
+    required String simbologia,
+    required Map<String, dynamic> respuestaJsonObj,
+    String? observacionFallback,
+  }) async {
+    final encoded = jsonEncode(respuestaJsonObj);
+    final service = ref.read(ejecucionServiceProvider);
+    await service.marcarActividad(
+      idActividadLocal: actividad.idLocal,
+      simbologia: simbologia,
+      observacion: observacionFallback,
+      respuestaJson: encoded,
+    );
+
+    final nuevoMapa = <String, List<ActividadesEjecutada>>{};
+    for (final sistema in _actividadesPorSistema.keys) {
+      final list = _actividadesPorSistema[sistema]!;
+      nuevoMapa[sistema] = list.map((a) {
+        if (a.idLocal == actividad.idLocal) {
+          return a.copyWith(
+            simbologia: Value(simbologia),
+            completada: true,
+            respuestaJson: Value(encoded),
+            observacion: observacionFallback != null
+                ? Value(observacionFallback)
+                : const Value.absent(),
+          );
+        }
+        return a;
+      }).toList();
+    }
+
+    int completadas = 0;
+    for (final acts in nuevoMapa.values) {
+      completadas += acts.where((a) => a.completada || a.simbologia != null).length;
+    }
+
+    if (mounted) {
+      setState(() {
+        _actividadesPorSistema = nuevoMapa;
+        _completadas = completadas;
+      });
     }
   }
 
@@ -2668,36 +2942,50 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         ? sistemasStr.split(',').toSet()
         : <String>{};
 
-    // ✅ FIX 09-FEB-2026: Sistemas dinámicos según tipo de equipo (GEN vs BOM)
-    final esBomba = _esBomba;
-    final sistemas = esBomba
-        ? [
-            // Sistemas de BOMBA
-            ('HIDRAULICO', 'Hidráulico', Icons.water_drop),
-            ('MECANICO', 'Mecánico', Icons.settings),
-            ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
-            ('TABLERO', 'Tablero Control', Icons.settings_remote),
-            ('PRESOSTATO', 'Presostato', Icons.speed),
-            ('SELLO', 'Sellos Mecánicos', Icons.donut_large),
-            ('TANQUE', 'Tanques Hidroneum.', Icons.propane_tank),
-            ('VALVULAS', 'Válvulas', Icons.toggle_on),
-            ('TUBERIA', 'Tubería', Icons.plumbing),
-            ('OTRO', 'Otro', Icons.more_horiz),
-          ]
-        : [
-            // Sistemas de GENERADOR
-            ('MOTOR', 'Motor', Icons.settings),
-            ('GENERADOR', 'Generador', Icons.power),
-            ('ELECTRONICO', 'Electrónico', Icons.memory),
-            ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
-            ('CONTROL', 'Control', Icons.settings_remote),
-            ('ENFRIAMIENTO', 'Enfriamiento', Icons.ac_unit),
-            ('COMBUSTIBLE', 'Combustible', Icons.local_gas_station),
-            ('LUBRICACION', 'Lubricación', Icons.oil_barrel),
-            ('ESCAPE', 'Escape', Icons.air),
-            ('ASPIRACION', 'Aspiración', Icons.filter_alt),
-            ('OTRO', 'Otro', Icons.more_horiz),
-          ];
+    // Fase 6: Priorizar subsistemas dinámicos reales del equipo; fallback a Bomba/Generador solo para legacy
+    final List<(String, String, IconData)> sistemas;
+    if (_sistemasDinamicosEquipo.isNotEmpty) {
+      sistemas = [
+        ..._sistemasDinamicosEquipo.map((nom) {
+          final code = nom
+              .toUpperCase()
+              .replaceAll(RegExp(r'[^A-Z0-9]+'), '_')
+              .replaceAll(RegExp(r'^_+|_+$'), '');
+          return (code.isEmpty ? nom.toUpperCase() : code, nom, Icons.settings_input_component);
+        }),
+        ('OTRO', 'Otro', Icons.more_horiz),
+      ];
+    } else {
+      final esBomba = _esBomba;
+      sistemas = esBomba
+          ? [
+              // Sistemas de BOMBA
+              ('HIDRAULICO', 'Hidráulico', Icons.water_drop),
+              ('MECANICO', 'Mecánico', Icons.settings),
+              ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
+              ('TABLERO', 'Tablero Control', Icons.settings_remote),
+              ('PRESOSTATO', 'Presostato', Icons.speed),
+              ('SELLO', 'Sellos Mecánicos', Icons.donut_large),
+              ('TANQUE', 'Tanques Hidroneum.', Icons.propane_tank),
+              ('VALVULAS', 'Válvulas', Icons.toggle_on),
+              ('TUBERIA', 'Tubería', Icons.plumbing),
+              ('OTRO', 'Otro', Icons.more_horiz),
+            ]
+          : [
+              // Sistemas de GENERADOR
+              ('MOTOR', 'Motor', Icons.settings),
+              ('GENERADOR', 'Generador', Icons.power),
+              ('ELECTRONICO', 'Electrónico', Icons.memory),
+              ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
+              ('CONTROL', 'Control', Icons.settings_remote),
+              ('ENFRIAMIENTO', 'Enfriamiento', Icons.ac_unit),
+              ('COMBUSTIBLE', 'Combustible', Icons.local_gas_station),
+              ('LUBRICACION', 'Lubricación', Icons.oil_barrel),
+              ('ESCAPE', 'Escape', Icons.air),
+              ('ASPIRACION', 'Aspiración', Icons.filter_alt),
+              ('OTRO', 'Otro', Icons.more_horiz),
+            ];
+    }
 
     return Wrap(
       spacing: 8,

@@ -522,6 +522,7 @@ class EjecucionService {
     required int idActividadLocal,
     required String simbologia,
     String? observacion,
+    String? respuestaJson,
   }) async {
     try {
       await (_db.update(
@@ -533,6 +534,9 @@ class EjecucionService {
           fechaEjecucion: Value(DateTime.now()),
           observacion: observacion != null
               ? Value(observacion)
+              : const Value.absent(),
+          respuestaJson: respuestaJson != null
+              ? Value(respuestaJson)
               : const Value.absent(),
           isDirty: const Value(true),
         ),

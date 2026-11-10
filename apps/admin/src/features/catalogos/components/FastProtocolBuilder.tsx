@@ -2,9 +2,15 @@
 
 import {
   EamSelect,
+  useArquetiposEam,
   useBancoMagnitudesEam,
   useUnidadesEam,
 } from '@/features/catalogos-eam';
+import {
+  ModoRespuestaSelector,
+  getModoRespuestaBadgeLabel,
+  type ConfigInputDeclarativo,
+} from './ModoRespuestaSelector';
 import {
   TIPOS_ACTIVIDAD,
   createCatalogoActividad,
@@ -144,6 +150,7 @@ export function FastProtocolBuilder({
 
   // 2. Catálogos de soporte (Servicios para switcher, Unidades UoM, Parámetros existentes, Banco Universal)
   const { data: serviciosResp } = useTiposServicio({ activo: 'all' as any, limit: 100 });
+  const { data: arquetipos = [] } = useArquetiposEam();
   const { data: unidadesDb = [] } = useUnidadesEam();
   const { data: bancoMagnitudes = [] } = useBancoMagnitudesEam();
   const { data: parametrosResp, refetch: refetchParametros } = useParametrosMedicion({
@@ -157,14 +164,22 @@ export function FastProtocolBuilder({
 
   // Estados para Quick-Add por Subsistema (Zona A)
   const [quickTaskText, setQuickTaskText] = useState<Record<string, string>>({});
-  const [quickTaskType, setQuickTaskType] = useState<Record<string, TipoActividad>>({});
+  const [quickTaskType, setQuickTaskType] = useState<Record<string, string>>({});
+  const [quickCustomNature, setQuickCustomNature] = useState<Record<string, string>>({});
+  const [quickControlType, setQuickControlType] = useState<Record<string, string>>({});
+  const [quickControlConfig, setQuickControlConfig] = useState<Record<string, ConfigInputDeclarativo | null>>({});
+  const [quickRolSemantico, setQuickRolSemantico] = useState<Record<string, string>>({});
   const [savingSubsystemKey, setSavingSubsystemKey] = useState<string | null>(null);
   const quickInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Estado edición inline de una tarea (Zona A o Zona B)
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editDesc, setEditDesc] = useState('');
-  const [editTipo, setEditTipo] = useState<TipoActividad>('INSPECCION');
+  const [editTipo, setEditTipo] = useState<string>('INSPECCION');
+  const [editCustomNature, setEditCustomNature] = useState('');
+  const [editControlType, setEditControlType] = useState<string>('ESCALA_ESTADO');
+  const [editControlConfig, setEditControlConfig] = useState<ConfigInputDeclarativo | null>(null);
+  const [editRolSemantico, setEditRolSemantico] = useState<string>('');
   const [editSistemaId, setEditSistemaId] = useState<string>('');
   const [editMin, setEditMin] = useState<string>('');
   const [editMax, setEditMax] = useState<string>('');
@@ -175,8 +190,8 @@ export function FastProtocolBuilder({
   const [medNombre, setMedNombre] = useState('');
   const [medSistemaId, setMedSistemaId] = useState<string>('');
   const [medUnidad, setMedUnidad] = useState<string>('mm');
-  const [medMin, setMedMin] = useState<string>('0');
-  const [medMax, setMedMax] = useState<string>('5');
+  const [medMin, setMedMin] = useState<string>('');
+  const [medMax, setMedMax] = useState<string>('');
   const [savingMedicion, setSavingMedicion] = useState(false);
   const medNombreInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -190,7 +205,7 @@ export function FastProtocolBuilder({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importSearch, setImportSearch] = useState('');
   const [importTipoFilter, setImportTipoFilter] = useState<string>('');
-  const [importSoloEquipo, setImportSoloEquipo] = useState<boolean>(false);
+  const [importEquipoFilter, setImportEquipoFilter] = useState<string>('CURRENT');
   const [importTargetSistemaId, setImportTargetSistemaId] = useState<string>('');
   const [selectedImportIds, setSelectedImportIds] = useState<number[]>([]);
   const [savingImport, setSavingImport] = useState(false);
@@ -331,6 +346,15 @@ export function FastProtocolBuilder({
     return list.sort((a, b) => (a.orden_ejecucion ?? 0) - (b.orden_ejecucion ?? 0));
   }, [detalle]);
 
+  const medicionesCountPorSistema = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of medicionesZonaB) {
+      const key = m.id_sistema ? `SYS_${m.id_sistema}` : 'GENERAL';
+      map.set(key, (map.get(key) || 0) + 1);
+    }
+    return map;
+  }, [medicionesZonaB]);
+
   const totalInspecciones = useMemo(
     () => seccionesSubsistema.reduce((acc, s) => acc + s.tareasCualitativas.length, 0),
     [seccionesSubsistema],
@@ -374,7 +398,20 @@ export function FastProtocolBuilder({
     const rawDesc = (quickTaskText[sectionKey] || '').trim();
     if (!rawDesc || !detalle) return;
 
-    const tipoAct = quickTaskType[sectionKey] || 'INSPECCION';
+    const rawTipo = quickTaskType[sectionKey] || 'INSPECCION';
+    const isCustomNature = rawTipo === 'OTRA_PERSONALIZADA';
+    const customNatureText = (quickCustomNature[sectionKey] || '').trim();
+    if (isCustomNature && !customNatureText) {
+      toast.error('Escribe el nombre de la naturaleza técnica personalizada');
+      return;
+    }
+
+    const tipoAct: TipoActividad = isCustomNature ? 'INSPECCION' : (rawTipo as TipoActividad);
+    const tipoControlInput = quickControlType[sectionKey] || 'ESCALA_ESTADO';
+    const configInputJson =
+      tipoControlInput === 'PERSONALIZADO' ? quickControlConfig[sectionKey] ?? null : null;
+    const rolSemantico = (quickRolSemantico[sectionKey] || '').trim() || null;
+
     setSavingSubsystemKey(sectionKey);
 
     try {
@@ -384,11 +421,16 @@ export function FastProtocolBuilder({
         idSistema: idSistema ?? undefined,
         idTipoEquipo: detalle.id_tipo_equipo ?? detalle.tipo_equipo?.id ?? undefined,
         tipoActividad: tipoAct,
+        naturalezaPersonalizada: isCustomNature ? customNatureText : null,
+        tipoControlInput,
+        configInputJson,
+        rolSemantico,
         esObligatoria: true,
         activo: true,
       });
 
       setQuickTaskText((prev) => ({ ...prev, [sectionKey]: '' }));
+      setQuickRolSemantico((prev) => ({ ...prev, [sectionKey]: '' }));
       await refreshAll();
       toast.success('Tarea agregada al protocolo');
 
@@ -398,7 +440,7 @@ export function FastProtocolBuilder({
       }, 30);
     } catch (err: any) {
       const msg = err?.response?.data?.message;
-      toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Error al agregar tarea');
+      toast.error(Array.isArray(msg) ? msg.join(', ') : msg || err?.message || 'Error al agregar tarea');
     } finally {
       setSavingSubsystemKey(null);
     }
@@ -487,8 +529,14 @@ export function FastProtocolBuilder({
       });
 
       setMedNombre('');
+      setMedMin('');
+      setMedMax('');
       await refreshAll();
-      toast.success(`Medición "${rawNombre} (${medUnidad})" vinculada con rango [${medMin} — ${medMax}]`);
+      const rangoMsg =
+        minVal !== undefined || maxVal !== undefined
+          ? ` con rango [${medMin || '—'} — ${medMax || '—'}]`
+          : '';
+      toast.success(`Medición "${rawNombre} (${medUnidad})" vinculada${rangoMsg}`);
 
       setTimeout(() => {
         medNombreInputRef.current?.focus();
@@ -532,7 +580,12 @@ export function FastProtocolBuilder({
   const startEditTask = (act: ActividadDetalle) => {
     setEditingTaskId(act.id_actividad_catalogo);
     setEditDesc(act.descripcion_actividad);
-    setEditTipo((act.tipo_actividad as TipoActividad) || 'INSPECCION');
+    const hasCustomNat = Boolean(act.naturaleza_personalizada && act.naturaleza_personalizada.trim());
+    setEditTipo(hasCustomNat ? 'OTRA_PERSONALIZADA' : (act.tipo_actividad as TipoActividad) || 'INSPECCION');
+    setEditCustomNature(act.naturaleza_personalizada || '');
+    setEditControlType(act.tipo_control_input || 'ESCALA_ESTADO');
+    setEditControlConfig(act.config_input_json ?? null);
+    setEditRolSemantico(act.rol_semantico || '');
     setEditSistemaId(act.id_sistema ? String(act.id_sistema) : '');
     setEditUnidad(act.parametro_medicion?.unidad || 'mm');
     setEditMin(
@@ -545,6 +598,12 @@ export function FastProtocolBuilder({
 
   const handleSaveEditTask = async (act: ActividadDetalle) => {
     if (!editDesc.trim()) return;
+    const isCustomNat = editTipo === 'OTRA_PERSONALIZADA';
+    if (isCustomNat && !editCustomNature.trim()) {
+      toast.error('Ingresa el nombre de la naturaleza técnica personalizada');
+      return;
+    }
+
     setSavingEditId(act.id_actividad_catalogo);
     try {
       if (act.tipo_actividad === 'MEDICION' && act.parametro_medicion?.id) {
@@ -560,7 +619,11 @@ export function FastProtocolBuilder({
 
       await updateCatalogoActividad(act.id_actividad_catalogo, {
         descripcionActividad: editDesc.trim(),
-        tipoActividad: editTipo,
+        tipoActividad: isCustomNat ? 'INSPECCION' : (editTipo as TipoActividad),
+        naturalezaPersonalizada: isCustomNat ? editCustomNature.trim() : null,
+        tipoControlInput: editControlType || 'ESCALA_ESTADO',
+        configInputJson: editControlType === 'PERSONALIZADO' ? editControlConfig : null,
+        rolSemantico: editRolSemantico.trim() || null,
         idSistema: editSistemaId ? Number(editSistemaId) : null,
       });
 
@@ -650,39 +713,56 @@ export function FastProtocolBuilder({
 
     const targetEqId = detalle?.id_tipo_equipo ?? detalle?.tipo_equipo?.id ?? null;
 
-    return Array.from(dedupMap.values()).filter((item) => {
-      const desc = (item.descripcionActividad || item.descripcion_actividad || '').trim();
-      if (existingDescSet.has(desc.toLowerCase())) return false;
+    const filtrados = Array.from(dedupMap.values())
+      .filter((item) => {
+        const desc = (item.descripcionActividad || item.descripcion_actividad || '').trim();
+        const tipo = item.tipoActividad || item.tipo_actividad || 'INSPECCION';
+        if (importTipoFilter && tipo !== importTipoFilter) return false;
 
-      const tipo = item.tipoActividad || item.tipo_actividad || 'INSPECCION';
-      if (importTipoFilter && tipo !== importTipoFilter) return false;
-
-      if (importSoloEquipo && targetEqId) {
         const itemEqId =
           item.idTipoEquipo ??
           item.id_tipo_equipo ??
           item.tipoServicio?.idTipoEquipo ??
           item.tipoEquipo?.idTipoEquipo ??
           null;
-        if (itemEqId !== targetEqId) return false;
-      }
 
-      if (importSearch.trim()) {
-        const q = importSearch.trim().toLowerCase();
-        const sisName = (
-          item.sistema?.nombreSistema ||
-          item.catalogo_sistemas?.nombre_sistema ||
-          ''
-        ).toLowerCase();
-        const code = (item.codigoActividad || item.codigo_actividad || '').toLowerCase();
-        if (!desc.toLowerCase().includes(q) && !sisName.includes(q) && !code.includes(q)) {
-          return false;
+        if (importEquipoFilter === 'CURRENT' && targetEqId) {
+          // Protocolo actual + Universal (itemEqId == null)
+          if (itemEqId !== null && itemEqId !== targetEqId) return false;
+        } else if (importEquipoFilter === 'UNIVERSAL') {
+          if (itemEqId !== null) return false;
+        } else if (importEquipoFilter && importEquipoFilter !== 'ALL' && importEquipoFilter !== 'CURRENT') {
+          const eqFilterNum = Number(importEquipoFilter);
+          if (!Number.isNaN(eqFilterNum) && itemEqId !== eqFilterNum) return false;
         }
-      }
 
-      return true;
-    });
-  }, [allActividadesResp, detalle, importTipoFilter, importSoloEquipo, importSearch]);
+        if (importSearch.trim()) {
+          const q = importSearch.trim().toLowerCase();
+          const sisName = (
+            item.sistema?.nombreSistema ||
+            item.catalogo_sistemas?.nombre_sistema ||
+            ''
+          ).toLowerCase();
+          const code = (item.codigoActividad || item.codigo_actividad || '').toLowerCase();
+          if (!desc.toLowerCase().includes(q) && !sisName.includes(q) && !code.includes(q)) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .map((item) => {
+        const desc = (item.descripcionActividad || item.descripcion_actividad || '').trim();
+        return {
+          item,
+          yaEnProtocolo: existingDescSet.has(desc.toLowerCase()),
+        };
+      });
+
+    // Ordenar disponibles primero y las ya agregadas después
+    filtrados.sort((a, b) => Number(a.yaEnProtocolo) - Number(b.yaEnProtocolo));
+    return filtrados;
+  }, [allActividadesResp, detalle, importTipoFilter, importEquipoFilter, importSearch]);
 
   const handleImportarLote = async () => {
     if (!detalle || selectedImportIds.length === 0) return;
@@ -836,6 +916,9 @@ export function FastProtocolBuilder({
                 type="button"
                 onClick={() => {
                   setSelectedImportIds([]);
+                  setImportEquipoFilter(
+                    detalle.id_tipo_equipo ?? detalle.tipo_equipo?.id ? 'CURRENT' : 'ALL',
+                  );
                   setIsImportModalOpen(true);
                 }}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-all cursor-pointer"
@@ -948,9 +1031,16 @@ export function FastProtocolBuilder({
                     )}
                   </div>
 
-                  <span className="text-xs font-bold text-slate-500">
-                    {sec.tareasCualitativas.length} tarea(s) de inspección
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500">
+                      {sec.tareasCualitativas.length} tarea(s) de inspección
+                    </span>
+                    {(medicionesCountPorSistema.get(sec.key) || 0) > 0 && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                        + {medicionesCountPorSistema.get(sec.key)} mediciones en Zona B
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Lista de tareas del Subsistema */}
@@ -975,64 +1065,90 @@ export function FastProtocolBuilder({
                           className="px-5 py-2.5 flex items-center justify-between gap-3 hover:bg-blue-50/30 transition-colors"
                         >
                           {isEditing ? (
-                            <div className="flex-1 flex flex-wrap items-center gap-2">
-                              <input
-                                type="text"
-                                value={editDesc}
-                                onChange={(e) => setEditDesc(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleSaveEditTask(act);
-                                  } else if (e.key === 'Escape') {
-                                    setEditingTaskId(null);
-                                  }
-                                }}
-                                className="flex-1 min-w-[240px] px-3 py-1.5 text-xs font-semibold border border-blue-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                autoFocus
-                              />
-                              <select
-                                value={editTipo}
-                                onChange={(e) => setEditTipo(e.target.value as TipoActividad)}
-                                className="px-2.5 py-1.5 text-xs font-bold border border-slate-300 rounded-lg bg-white"
-                              >
-                                {TIPOS_CUALITATIVOS.map((t) => (
-                                  <option key={t.value} value={t.value}>
-                                    {t.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                value={editSistemaId}
-                                onChange={(e) => setEditSistemaId(e.target.value)}
-                                className="px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-lg bg-white"
-                              >
-                                {sistemasSelectOptions.map((opt) => (
-                                  <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => handleSaveEditTask(act)}
-                                disabled={savingEditId === act.id_actividad_catalogo}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 inline-flex items-center gap-1"
-                              >
-                                {savingEditId === act.id_actividad_catalogo ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Check className="h-3.5 w-3.5" />
+                            <div className="flex-1 space-y-2.5 bg-blue-50/40 p-3 rounded-xl border border-blue-200">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editDesc}
+                                  onChange={(e) => setEditDesc(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleSaveEditTask(act);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingTaskId(null);
+                                    }
+                                  }}
+                                  className="flex-1 min-w-[240px] px-3 py-1.5 text-xs font-semibold border border-blue-400 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                  autoFocus
+                                />
+                                <select
+                                  value={editTipo}
+                                  onChange={(e) => setEditTipo(e.target.value)}
+                                  className="px-2.5 py-1.5 text-xs font-bold border border-slate-300 rounded-lg bg-white"
+                                >
+                                  {TIPOS_CUALITATIVOS.map((t) => (
+                                    <option key={t.value} value={t.value}>
+                                      {t.label}
+                                    </option>
+                                  ))}
+                                  <option value="OTRA_PERSONALIZADA">+ Otra naturaleza personalizada...</option>
+                                </select>
+                                {editTipo === 'OTRA_PERSONALIZADA' && (
+                                  <input
+                                    type="text"
+                                    value={editCustomNature}
+                                    onChange={(e) => setEditCustomNature(e.target.value)}
+                                    placeholder="Nombre naturaleza..."
+                                    className="px-2.5 py-1.5 text-xs font-semibold border border-indigo-300 rounded-lg bg-white w-44"
+                                  />
                                 )}
-                                <span>Guardar</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingTaskId(null)}
-                                className="p-1.5 text-slate-400 hover:text-slate-600"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
+                                <select
+                                  value={editSistemaId}
+                                  onChange={(e) => setEditSistemaId(e.target.value)}
+                                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-lg bg-white"
+                                >
+                                  {sistemasSelectOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <ModoRespuestaSelector
+                                tipoControlInput={editControlType}
+                                configInputJson={editControlConfig}
+                                rolSemantico={editRolSemantico}
+                                onChange={(next) => {
+                                  setEditControlType(next.tipoControlInput);
+                                  setEditControlConfig(next.configInputJson);
+                                  setEditRolSemantico(next.rolSemantico);
+                                }}
+                              />
+
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingTaskId(null)}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEditTask(act)}
+                                  disabled={savingEditId === act.id_actividad_catalogo}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 inline-flex items-center gap-1 cursor-pointer"
+                                >
+                                  {savingEditId === act.id_actividad_catalogo ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Check className="h-3.5 w-3.5" />
+                                  )}
+                                  <span>Guardar Cambios</span>
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <>
@@ -1073,7 +1189,7 @@ export function FastProtocolBuilder({
                                     tipoMeta.color,
                                   )}
                                 >
-                                  {tipoMeta.label}
+                                  {act.naturaleza_personalizada?.trim() || tipoMeta.label}
                                 </span>
 
                                 <span
@@ -1086,8 +1202,26 @@ export function FastProtocolBuilder({
                               </div>
 
                               <div className="flex items-center gap-1.5 shrink-0">
-                                <span className="hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] font-mono text-slate-400 bg-slate-50 border border-slate-200">
-                                  B / R / M / N/A
+                                {act.rol_semantico && (
+                                  <span
+                                    title={`Rol semántico: ${act.rol_semantico}`}
+                                    className="hidden md:inline-flex px-2 py-0.5 rounded text-[10px] font-mono font-bold text-amber-800 bg-amber-50 border border-amber-200"
+                                  >
+                                    {act.rol_semantico === 'LECTURA_CONTADOR_ACTIVO'
+                                      ? '🔢 CONTADOR'
+                                      : act.rol_semantico}
+                                  </span>
+                                )}
+                                <span
+                                  title="Modo de respuesta configurado para Mobile y Web"
+                                  className={cn(
+                                    'hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] font-mono border max-w-[200px] truncate',
+                                    act.tipo_control_input && act.tipo_control_input !== 'ESCALA_ESTADO'
+                                      ? 'font-bold text-indigo-700 bg-indigo-50 border-indigo-200'
+                                      : 'text-slate-500 bg-slate-50 border-slate-200',
+                                  )}
+                                >
+                                  {getModoRespuestaBadgeLabel(act.tipo_control_input, act.config_input_json)}
                                 </span>
                                 <button
                                   type="button"
@@ -1138,13 +1272,13 @@ export function FastProtocolBuilder({
                     />
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <select
                       value={currentType}
                       onChange={(e) =>
                         setQuickTaskType((prev) => ({
                           ...prev,
-                          [sec.key]: e.target.value as TipoActividad,
+                          [sec.key]: e.target.value,
                         }))
                       }
                       className="px-3 py-2 text-xs font-bold bg-white border border-slate-300 rounded-xl text-slate-700 focus:outline-none focus:border-blue-500"
@@ -1154,7 +1288,35 @@ export function FastProtocolBuilder({
                           {t.label}
                         </option>
                       ))}
+                      <option value="OTRA_PERSONALIZADA">+ Otra naturaleza personalizada...</option>
                     </select>
+
+                    {currentType === 'OTRA_PERSONALIZADA' && (
+                      <input
+                        type="text"
+                        value={quickCustomNature[sec.key] || ''}
+                        onChange={(e) =>
+                          setQuickCustomNature((prev) => ({
+                            ...prev,
+                            [sec.key]: e.target.value,
+                          }))
+                        }
+                        placeholder="Ej: Calibración Láser"
+                        className="px-3 py-2 text-xs font-semibold bg-white border border-indigo-300 rounded-xl w-40 focus:outline-none focus:border-indigo-500"
+                      />
+                    )}
+
+                    <ModoRespuestaSelector
+                      compact
+                      tipoControlInput={quickControlType[sec.key] || 'ESCALA_ESTADO'}
+                      configInputJson={quickControlConfig[sec.key] ?? null}
+                      rolSemantico={quickRolSemantico[sec.key] || ''}
+                      onChange={(next) => {
+                        setQuickControlType((prev) => ({ ...prev, [sec.key]: next.tipoControlInput }));
+                        setQuickControlConfig((prev) => ({ ...prev, [sec.key]: next.configInputJson }));
+                        setQuickRolSemantico((prev) => ({ ...prev, [sec.key]: next.rolSemantico }));
+                      }}
+                    />
 
                     <button
                       type="button"
@@ -1407,6 +1569,7 @@ export function FastProtocolBuilder({
                   options={opcionesUnidadesUom}
                   placeholder="Unidad UoM (mm, m/s, s...)"
                   searchable
+                  dropUp
                 />
               </div>
 
@@ -1566,24 +1729,46 @@ export function FastProtocolBuilder({
 
             {/* Barra de búsqueda y filtros del modal */}
             <div className="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
-              <div className="sm:col-span-5 relative">
+              <div className="sm:col-span-4 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   type="text"
                   value={importSearch}
                   onChange={(e) => setImportSearch(e.target.value)}
-                  placeholder="Buscar por descripción, subsistema o código..."
+                  placeholder="Buscar por descripción o código..."
                   className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-xl"
                 />
               </div>
 
               <div className="sm:col-span-3">
                 <select
+                  value={importEquipoFilter}
+                  onChange={(e) => setImportEquipoFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl"
+                  title="Filtrar por Tipo de Equipo"
+                >
+                  {Boolean(detalle.id_tipo_equipo ?? detalle.tipo_equipo?.id) && (
+                    <option value="CURRENT">
+                      {detalle.tipo_equipo?.nombre || 'Equipo del Protocolo'} + Universal
+                    </option>
+                  )}
+                  <option value="ALL">Todos los equipos (Banco completo)</option>
+                  <option value="UNIVERSAL">Solo Universal (Sin equipo fijo)</option>
+                  {arquetipos.map((a: any) => (
+                    <option key={a.id_tipo_equipo} value={String(a.id_tipo_equipo)}>
+                      {a.nombre_tipo} ({a.codigo_tipo})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <select
                   value={importTipoFilter}
                   onChange={(e) => setImportTipoFilter(e.target.value)}
                   className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl"
                 >
-                  <option value="">Todas las naturalezas</option>
+                  <option value="">Naturalezas</option>
                   {TIPOS_ACTIVIDAD.map((t) => (
                     <option key={t.value} value={t.value}>
                       {t.label}
@@ -1592,13 +1777,13 @@ export function FastProtocolBuilder({
                 </select>
               </div>
 
-              <div className="sm:col-span-4">
+              <div className="sm:col-span-3">
                 <select
                   value={importTargetSistemaId}
                   onChange={(e) => setImportTargetSistemaId(e.target.value)}
                   className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl"
                 >
-                  <option value="">Subsistema automático (según plantilla)</option>
+                  <option value="">Subsistema automático</option>
                   {sistemasSelectOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       Asignar a: {opt.label}
@@ -1615,7 +1800,7 @@ export function FastProtocolBuilder({
                   No se encontraron actividades disponibles con los filtros actuales.
                 </div>
               ) : (
-                candidatosBanco.map((item) => {
+                candidatosBanco.map(({ item, yaEnProtocolo }) => {
                   const id = Number(item.idActividadCatalogo || item.id_actividad_catalogo);
                   const checked = selectedImportIds.includes(id);
                   const desc = item.descripcionActividad || item.descripcion_actividad || '';
@@ -1632,25 +1817,31 @@ export function FastProtocolBuilder({
                     <label
                       key={id}
                       className={cn(
-                        'flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl cursor-pointer transition-colors',
-                        checked ? 'bg-indigo-50/80' : 'hover:bg-slate-50',
+                        'flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl transition-colors',
+                        yaEnProtocolo
+                          ? 'bg-emerald-50/40 opacity-75 cursor-not-allowed'
+                          : checked
+                            ? 'bg-indigo-50/80 cursor-pointer'
+                            : 'hover:bg-slate-50 cursor-pointer',
                       )}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <input
                           type="checkbox"
+                          disabled={yaEnProtocolo}
                           checked={checked}
                           onChange={(e) => {
+                            if (yaEnProtocolo) return;
                             if (e.target.checked) {
                               setSelectedImportIds((prev) => [...prev, id]);
                             } else {
                               setSelectedImportIds((prev) => prev.filter((x) => x !== id));
                             }
                           }}
-                          className="h-4 w-4 rounded text-indigo-600 border-slate-300"
+                          className="h-4 w-4 rounded text-indigo-600 border-slate-300 disabled:opacity-40"
                         />
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                          {tipo}
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 shrink-0">
+                          {item.naturalezaPersonalizada || item.naturaleza_personalizada || tipo}
                         </span>
                         <span className="text-xs font-semibold text-slate-900 truncate">
                           {desc}
@@ -1658,6 +1849,11 @@ export function FastProtocolBuilder({
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
+                        {yaEnProtocolo && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            ✓ Ya en este protocolo
+                          </span>
+                        )}
                         {uom && (
                           <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-100 text-purple-800">
                             UoM: {uom}
@@ -1766,7 +1962,7 @@ export function FastProtocolBuilder({
                         <div className="bg-slate-800 text-white px-3 py-1.5 text-xs font-bold flex justify-between">
                           <span>{sec.nombre_sistema.toUpperCase()}</span>
                           <span className="font-mono text-[10px] text-slate-300">
-                            B = Bueno | R = Regular | M = Malo | N/A
+                            B = Bueno | R = Regular | M = Malo | C = Corregido | NA
                           </span>
                         </div>
                         <table className="w-full text-xs">
@@ -1777,10 +1973,16 @@ export function FastProtocolBuilder({
                                   {i + 1}
                                 </td>
                                 <td className="px-3 py-1.5 font-medium text-slate-800">
-                                  {t.descripcion_actividad}
+                                  <div>{t.descripcion_actividad}</div>
+                                  {(t.naturaleza_personalizada || t.rol_semantico) && (
+                                    <div className="text-[10px] text-slate-400 mt-0.5">
+                                      {t.naturaleza_personalizada ? `${t.naturaleza_personalizada} ` : ''}
+                                      {t.rol_semantico ? `· ${t.rol_semantico}` : ''}
+                                    </div>
+                                  )}
                                 </td>
-                                <td className="px-3 py-1.5 w-28 text-center font-mono text-[10px] text-emerald-700 bg-emerald-50 font-bold">
-                                  [ ✓ BUENO ]
+                                <td className="px-3 py-1.5 w-44 text-center font-mono text-[10px] text-indigo-800 bg-indigo-50/70 font-bold">
+                                  [ {getModoRespuestaBadgeLabel(t.tipo_control_input, t.config_input_json)} ]
                                 </td>
                               </tr>
                             ))}

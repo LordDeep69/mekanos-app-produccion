@@ -330,9 +330,7 @@ function SistemaAccordion({ sistema, isExpanded, onToggle }: {
                                 "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
                                 act.tipo_actividad === 'MEDICION'
                                     ? 'bg-purple-100 text-purple-700'
-                                    : act.tipo_actividad === 'CHECKLIST'
-                                        ? 'bg-green-100 text-green-700'
-                                        : 'bg-gray-100 text-gray-700'
+                                    : 'bg-gray-100 text-gray-700'
                             )}>
                                 {act.tipo_actividad === 'MEDICION' ? (
                                     <Gauge className="h-3 w-3" />

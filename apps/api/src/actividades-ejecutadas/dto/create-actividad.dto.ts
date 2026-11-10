@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsPositive, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { EstadoActividadEnum } from '../application/enums/estado-actividad.enum';
 
 export class CreateActividadDto {
@@ -60,5 +60,10 @@ export class CreateActividadDto {
   @IsOptional()
   @IsBoolean()
   evidenciaCapturada?: boolean;
+
+  @IsOptional()
+  @ValidateIf((o) => o.respuestaJson !== null)
+  @IsObject()
+  respuestaJson?: Record<string, unknown> | null;
 }
 

@@ -326,8 +326,17 @@ export interface ActividadPDF {
   | 'BA'
   | 'F'
   | 'RN'
-  | 'NF';
+  | 'NF'
+  | string;
+  estado?: string;
   observaciones?: string;
+  tipoActividad?: string;
+  idParametroMedicion?: number | null;
+  tipoControlInput?: string;
+  configInputJson?: any;
+  rolSemantico?: string | null;
+  naturalezaPersonalizada?: string | null;
+  respuestaJson?: any;
 }
 
 export interface MedicionPDF {
@@ -335,6 +344,9 @@ export interface MedicionPDF {
   valor: number;
   unidad: string;
   nivelAlerta: 'OK' | 'ADVERTENCIA' | 'CRITICO';
+  rangoMin?: number | null;
+  rangoMax?: number | null;
+  estado?: string;
 }
 
 /**

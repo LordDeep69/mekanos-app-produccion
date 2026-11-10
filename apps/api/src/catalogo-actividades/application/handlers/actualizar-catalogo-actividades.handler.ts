@@ -77,6 +77,10 @@ export class ActualizarCatalogoActividadesHandler implements ICommandHandler<Act
       precauciones: command.precauciones,
       activo: command.activo,
       observaciones: command.observaciones,
+      naturalezaPersonalizada: command.naturalezaPersonalizada,
+      tipoControlInput: command.tipoControlInput,
+      configInputJson: command.configInputJson,
+      rolSemantico: command.rolSemantico,
       modificadoPor: command.modificadoPor,
     });
 

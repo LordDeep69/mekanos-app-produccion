@@ -94,10 +94,10 @@ export class GetTiposServicioDetalleCompletoHandler
     const compatibleCodes = expandEquipCodes(baseCodes);
 
     // Salvaguarda 2: Garantizar que las Partes EAM del arquetipo existan en catalogo_sistemas
-    let allSistemas = await this.prisma.catalogo_sistemas.findMany({
-      where: { activo: true },
+    const allSistemasRaw = await this.prisma.catalogo_sistemas.findMany({
       orderBy: [{ orden_visualizacion: 'asc' }, { nombre_sistema: 'asc' }],
     });
+    let allSistemas = allSistemasRaw.filter((s) => s.activo !== false);
 
     const primaryEqCode = tipoServicio.tipos_equipo?.codigo_tipo?.trim().toUpperCase() || compatibleCodes[0] || null;
     const modulosArquetipo = tipoServicio.tipos_equipo?.tipo_equipo_modulos || [];
@@ -116,10 +116,13 @@ export class GetTiposServicioDetalleCompletoHandler
         const mod = tem.modulo;
         if (!mod?.activo) continue;
         const modTokens = normTokens(mod.nombre_modulo);
+        const rawCode = `SIS_${mod.codigo_modulo.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`.slice(0, 50);
 
-        let match = allSistemas.find((s) => s.id_modulo === mod.id_modulo);
+        let match = allSistemasRaw.find(
+          (s) => s.id_modulo === mod.id_modulo || s.codigo_sistema.toUpperCase() === rawCode,
+        );
         if (!match) {
-          match = allSistemas.find((s) => {
+          match = allSistemasRaw.find((s) => {
             const aplica = (s.aplica_a || []).map((a) => a.toUpperCase());
             const sameName = s.nombre_sistema.trim().toLowerCase() === mod.nombre_modulo.trim().toLowerCase();
             if (sameName) return true;
@@ -131,31 +134,47 @@ export class GetTiposServicioDetalleCompletoHandler
 
         if (match) {
           const curAplica = (match.aplica_a || []).map((a) => a.toUpperCase());
-          if (match.id_modulo !== mod.id_modulo || !curAplica.includes(primaryEqCode)) {
+          if (match.id_modulo !== mod.id_modulo || !curAplica.includes(primaryEqCode) || match.activo === false) {
             await this.prisma.catalogo_sistemas.update({
               where: { id_sistema: match.id_sistema },
               data: {
                 id_modulo: match.id_modulo ?? mod.id_modulo,
                 aplica_a: Array.from(new Set([...curAplica, primaryEqCode])),
+                activo: true,
               },
             });
             mutated = true;
           }
         } else {
-          const rawCode = `SIS_${mod.codigo_modulo.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`.slice(0, 50);
-          await this.prisma.catalogo_sistemas.create({
-            data: {
-              codigo_sistema: rawCode,
-              nombre_sistema: mod.nombre_modulo.trim().slice(0, 100),
-              descripcion: mod.descripcion || `Subsistema sincronizado desde parte EAM (${mod.codigo_modulo})`,
-              aplica_a: [primaryEqCode],
-              orden_visualizacion: tem.orden_visual ?? 1,
-              icono: mod.icono || 'layers',
-              color_hex: (mod.color_ui || '#3B82F6').slice(0, 7),
-              id_modulo: mod.id_modulo,
-              activo: true,
-            },
+          const existingByCode = await this.prisma.catalogo_sistemas.findFirst({
+            where: { codigo_sistema: rawCode },
           });
+          if (existingByCode) {
+            await this.prisma.catalogo_sistemas.update({
+              where: { id_sistema: existingByCode.id_sistema },
+              data: {
+                id_modulo: existingByCode.id_modulo ?? mod.id_modulo,
+                aplica_a: Array.from(
+                  new Set([...(existingByCode.aplica_a || []).map((a) => a.toUpperCase()), primaryEqCode]),
+                ),
+                activo: true,
+              },
+            });
+          } else {
+            await this.prisma.catalogo_sistemas.create({
+              data: {
+                codigo_sistema: rawCode,
+                nombre_sistema: mod.nombre_modulo.trim().slice(0, 100),
+                descripcion: mod.descripcion || `Subsistema sincronizado desde parte EAM (${mod.codigo_modulo})`,
+                aplica_a: [primaryEqCode],
+                orden_visualizacion: tem.orden_visual ?? 1,
+                icono: mod.icono || 'layers',
+                color_hex: (mod.color_ui || '#3B82F6').slice(0, 7),
+                id_modulo: mod.id_modulo,
+                activo: true,
+              },
+            });
+          }
           mutated = true;
         }
       }
@@ -236,6 +255,10 @@ export class GetTiposServicioDetalleCompletoHandler
           instrucciones: a.instrucciones ?? null,
           precauciones: a.precauciones ?? null,
           observaciones: a.observaciones ?? null,
+          naturaleza_personalizada: a.naturaleza_personalizada ?? null,
+          tipo_control_input: a.tipo_control_input ?? 'ESCALA_ESTADO',
+          config_input_json: a.config_input_json ?? null,
+          rol_semantico: a.rol_semantico ?? null,
           id_parametro_medicion: a.id_parametro_medicion ?? null,
           parametro_medicion: a.parametros_medicion
             ? {

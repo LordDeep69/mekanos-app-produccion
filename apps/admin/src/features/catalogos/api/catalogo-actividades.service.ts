@@ -68,6 +68,15 @@ export interface CatalogoActividad {
     fechaCreacion?: string;
     modificadoPor?: number | null;
     fechaModificacion?: string;
+    // Motor declarativo de inputs (camelCase + snake_case)
+    naturalezaPersonalizada?: string | null;
+    tipoControlInput?: string | null;
+    configInputJson?: any;
+    rolSemantico?: string | null;
+    naturaleza_personalizada?: string | null;
+    tipo_control_input?: string | null;
+    config_input_json?: any;
+    rol_semantico?: string | null;
     // Relaciones snake_case
     tipos_servicio?: {
         id_tipo_servicio: number;
@@ -160,6 +169,10 @@ export interface CreateCatalogoActividadDto {
     precauciones?: string | null;
     activo?: boolean;
     observaciones?: string | null;
+    naturalezaPersonalizada?: string | null;
+    tipoControlInput?: string;
+    configInputJson?: any;
+    rolSemantico?: string | null;
     creadoPor?: number;
 }
 
@@ -195,6 +208,10 @@ export interface PropagarActividadBancoPayload {
     instrucciones?: string | null;
     precauciones?: string | null;
     observaciones?: string | null;
+    naturalezaPersonalizada?: string | null;
+    tipoControlInput?: string;
+    configInputJson?: any;
+    rolSemantico?: string | null;
     activo?: boolean;
     propagarAHijas?: boolean;
     propagarLegacyPorNombre?: boolean;

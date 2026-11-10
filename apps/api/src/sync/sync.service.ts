@@ -281,6 +281,19 @@ export class SyncService {
 
       if (dto.actividades && dto.actividades.length > 0) {
         for (const actividadDto of dto.actividades) {
+          let parsedRespuestaJson: any = undefined;
+          if (actividadDto.respuestaJson !== undefined) {
+            if (typeof actividadDto.respuestaJson === 'string') {
+              try {
+                parsedRespuestaJson = JSON.parse(actividadDto.respuestaJson);
+              } catch {
+                parsedRespuestaJson = { valor: actividadDto.respuestaJson };
+              }
+            } else {
+              parsedRespuestaJson = actividadDto.respuestaJson;
+            }
+          }
+
           // Si ya existe en servidor (tiene serverId), actualizar
           if (actividadDto.serverId) {
             await tx.actividades_ejecutadas.update({
@@ -291,6 +304,7 @@ export class SyncService {
                 fecha_ejecucion: actividadDto.horaInicio
                   ? new Date(actividadDto.horaInicio)
                   : undefined,
+                ...(parsedRespuestaJson !== undefined ? { respuesta_json: parsedRespuestaJson } : {}),
               },
             });
             actividadesMapping.push({
@@ -309,6 +323,7 @@ export class SyncService {
                   ? new Date(actividadDto.horaInicio)
                   : null,
                 ejecutada_por: tecnicoId,
+                ...(parsedRespuestaJson !== undefined ? { respuesta_json: parsedRespuestaJson } : {}),
               },
             });
             actividadesMapping.push({
@@ -633,6 +648,10 @@ export class SyncService {
               idParametroMedicion: a.id_parametro_medicion ?? undefined,
               idTipoServicio: a.id_tipo_servicio ?? undefined,
               sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
+        naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
+        tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
+        configInputJson: a.config_input_json ?? undefined,
+        rolSemantico: a.rol_semantico ?? undefined,
             })),
             estadosOrden: estados.map((e) => ({
               id: e.id_estado,
@@ -685,6 +704,10 @@ export class SyncService {
             idParametroMedicion: a.id_parametro_medicion ?? undefined,
             idTipoServicio: a.id_tipo_servicio ?? undefined,
             sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
+        naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
+        tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
+        configInputJson: a.config_input_json ?? undefined,
+        rolSemantico: a.rol_semantico ?? undefined,
           })),
           estadosOrden: [],
           tiposServicio: tiposServicioDelta.map((t) => ({
@@ -1169,6 +1192,10 @@ export class SyncService {
         idParametroMedicion: a.id_parametro_medicion ?? undefined,
         idTipoServicio: a.id_tipo_servicio ?? undefined,
         sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
+        naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
+        tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
+        configInputJson: a.config_input_json ?? undefined,
+        rolSemantico: a.rol_semantico ?? undefined,
       }));
 
       // 5. Obtener estados de orden
@@ -1222,8 +1249,12 @@ export class SyncService {
         instrucciones: a.instrucciones ?? undefined,
         precauciones: a.precauciones ?? undefined,
         idParametroMedicion: a.id_parametro_medicion ?? undefined,
-        idTipoServicio: a.id_tipo_servicio,
+        idTipoServicio: a.id_tipo_servicio ?? undefined,
         sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
+        naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
+        tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
+        configInputJson: a.config_input_json ?? undefined,
+        rolSemantico: a.rol_semantico ?? undefined,
       }));
 
       tiposServicioDownload = tiposServicio.map((t) => ({

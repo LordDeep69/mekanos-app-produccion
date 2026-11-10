@@ -27,6 +27,13 @@ import type { EstadoActividad } from '../api/ordenes.service';
 import { useUpdateActividad } from '../hooks/use-ordenes';
 import { GaleriaActividadFotos } from './galeria-actividad-fotos';
 import {
+    getModoRespuestaBadgeLabel,
+    getPresetOptions,
+    parseConfigInputJson,
+    SEMAFORO_META,
+    type OpcionInputDeclarativo,
+} from '@/features/catalogos/components/ModoRespuestaSelector';
+import {
     EDITOR_STYLES,
     EditorToolbar,
     EditorContent,
@@ -43,11 +50,16 @@ interface Actividad {
     observaciones?: string;
     ejecutada?: boolean;
     fecha_ejecucion?: string;
+    respuesta_json?: Record<string, unknown> | null;
     // ✅ FIX 30-ABR-2026: Soporte multi-equipo para fotos
     id_orden_equipo?: number;
     catalogo_actividades?: {
         descripcion_actividad?: string;
         codigo_actividad?: string;
+        tipo_control_input?: string;
+        config_input_json?: any;
+        rol_semantico?: string | null;
+        naturaleza_personalizada?: string | null;
     };
 }
 
@@ -271,6 +283,34 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
     const estadoActual = actividad.estado as EstadoActividad;
     const estadoConfig = getEstadoConfig(estadoActual);
 
+    const tipoControlInput = (actividad.catalogo_actividades?.tipo_control_input || 'ESCALA_ESTADO').toUpperCase();
+    const configInput = parseConfigInputJson(actividad.catalogo_actividades?.config_input_json);
+    const rolSemantico = actividad.catalogo_actividades?.rol_semantico || null;
+    const tieneControlDeclarativo =
+        tipoControlInput !== 'ESCALA_ESTADO' &&
+        tipoControlInput !== 'LECTURA_CONTADOR' &&
+        tipoControlInput !== 'SUBSISTEMAS_EQUIPO';
+    const opcionesDeclarativas = tieneControlDeclarativo
+        ? getPresetOptions(tipoControlInput, actividad.catalogo_actividades?.config_input_json)
+        : [];
+    const respuestaActualObj =
+        actividad.respuesta_json && typeof actividad.respuesta_json === 'object'
+            ? actividad.respuesta_json
+            : null;
+    const valorContadorInicial =
+        respuestaActualObj?.valor != null
+            ? String(respuestaActualObj.valor)
+            : '';
+    const [contadorInput, setContadorInput] = useState<string>(valorContadorInicial);
+
+    useEffect(() => {
+        const nextVal =
+            actividad.respuesta_json && typeof actividad.respuesta_json === 'object' && (actividad.respuesta_json as any).valor != null
+                ? String((actividad.respuesta_json as any).valor)
+                : '';
+        setContadorInput(nextVal);
+    }, [actividad.respuesta_json]);
+
     // ✅ FIX 23-JUL-2026: Si la actividad es un campo correctivo narrativo
     // (PROBLEMA REPORTADO / FALLAS OBSERVADAS / DIAGNÓSTICO / TRABAJOS / etc.),
     // habilitar editor TipTap en lugar de textarea plano.
@@ -316,6 +356,56 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
             onUpdate?.();
         } catch (error) {
             console.error('Error al cambiar estado:', error);
+        }
+    };
+
+    const handleSeleccionDeclarativa = async (opcion: OpcionInputDeclarativo) => {
+        if (updateActividad.isPending) return;
+        const mappedEstado: EstadoActividad =
+            opcion.semaforo === 'NA' ? 'NA' : (opcion.semaforo as EstadoActividad);
+        try {
+            await updateActividad.mutateAsync({
+                idActividad: actividad.id_actividad_ejecutada,
+                data: {
+                    estado: mappedEstado,
+                    ejecutada: true,
+                    respuestaJson: {
+                        ...(respuestaActualObj || {}),
+                        valor: opcion.valor,
+                        etiqueta: opcion.etiqueta,
+                        semaforo: opcion.semaforo,
+                    },
+                },
+            });
+            onUpdate?.();
+        } catch (error) {
+            console.error('Error al guardar respuesta declarativa:', error);
+        }
+    };
+
+    const handleGuardarContador = async () => {
+        if (updateActividad.isPending) return;
+        const trimmed = contadorInput.trim();
+        if (!trimmed) return;
+        try {
+            await updateActividad.mutateAsync({
+                idActividad: actividad.id_actividad_ejecutada,
+                data: {
+                    estado: (estadoActual || 'B') as EstadoActividad,
+                    ejecutada: true,
+                    observaciones: `HORAS: ${trimmed}`,
+                    respuestaJson: {
+                        ...(respuestaActualObj || {}),
+                        valor: trimmed,
+                        etiqueta: trimmed,
+                        semaforo: 'B',
+                    },
+                },
+            });
+            setObservaciones(`HORAS: ${trimmed}`);
+            onUpdate?.();
+        } catch (error) {
+            console.error('Error al guardar lectura de contador:', error);
         }
     };
 
@@ -402,6 +492,16 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
                                     {actividad.sistema}
                                 </span>
                             )}
+                            {respuestaActualObj?.etiqueta != null && (
+                                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded">
+                                    {String(respuestaActualObj.etiqueta)}
+                                </span>
+                            )}
+                            {tipoControlInput !== 'ESCALA_ESTADO' && !respuestaActualObj?.etiqueta && (
+                                <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                                    {getModoRespuestaBadgeLabel(tipoControlInput, actividad.catalogo_actividades?.config_input_json)}
+                                </span>
+                            )}
                             {actividad.observaciones && (
                                 <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded flex items-center gap-0.5">
                                     <MessageSquare className="h-2.5 w-2.5" />
@@ -426,10 +526,66 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
             {/* Panel Expandido */}
             {isExpanded && (
                 <div className="px-3 pb-3 space-y-3 border-t border-gray-200/50 pt-3">
+                    {/* Respuesta Declarativa (si la actividad tiene un primitivo distinto a escala simple) */}
+                    {tieneControlDeclarativo && opcionesDeclarativas.length > 0 && (
+                        <div>
+                            <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider mb-2">
+                                Respuesta Configurada ({getModoRespuestaBadgeLabel(tipoControlInput, actividad.catalogo_actividades?.config_input_json)})
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {opcionesDeclarativas.map((op) => {
+                                    const selected = respuestaActualObj?.valor === op.valor || respuestaActualObj?.etiqueta === op.etiqueta;
+                                    const meta = SEMAFORO_META[op.semaforo] || SEMAFORO_META.B;
+                                    return (
+                                        <button
+                                            key={op.valor}
+                                            type="button"
+                                            onClick={() => handleSeleccionDeclarativa(op)}
+                                            disabled={updateActividad.isPending}
+                                            className={cn(
+                                                'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer',
+                                                selected ? meta.activeBtnClass + ' ring-2 ring-offset-1 ring-indigo-300' : 'bg-white ' + meta.badgeClass + ' hover:opacity-90',
+                                            )}
+                                        >
+                                            {selected && <Check className="h-3 w-3 inline mr-1" />}
+                                            {op.etiqueta}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Entrada Numérica de Contador / Horómetro / Ciclos */}
+                    {(tipoControlInput === 'LECTURA_CONTADOR' || rolSemantico === 'LECTURA_CONTADOR_ACTIVO') && (
+                        <div className="bg-white/90 p-2.5 rounded-lg border border-indigo-200 space-y-1.5">
+                            <label className="block text-[10px] font-bold text-indigo-800 uppercase tracking-wider">
+                                Lectura de Contador / Horómetro / Ciclos
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={contadorInput}
+                                    onChange={(e) => setContadorInput(e.target.value)}
+                                    placeholder={configInput.placeholder || 'Ej: 1250'}
+                                    className="flex-1 px-3 py-1.5 text-sm font-mono font-bold border border-indigo-300 rounded-lg bg-white"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleGuardarContador}
+                                    disabled={updateActividad.isPending || !contadorInput.trim()}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    Guardar Lectura
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Botones de Estado */}
                     <div>
                         <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                            Cambiar Estado
+                            {tieneControlDeclarativo ? 'Semáforo / Estado Técnico' : 'Cambiar Estado'}
                         </p>
                         <div className="flex gap-2">
                             {ESTADOS_CONFIG.map((e) => (

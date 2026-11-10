@@ -215,6 +215,15 @@ class SyncUploadService {
       // Si las incluimos aquí, aparecen DUPLICADAS (checklist vacío + mediciones)
       final actividades = await _db.getActividadesByOrden(idOrdenLocal);
 
+      dynamic _decodeRespJson(String? raw) {
+        if (raw == null || raw.trim().isEmpty) return null;
+        try {
+          return jsonDecode(raw);
+        } catch (_) {
+          return raw;
+        }
+      }
+
       // ✅ MULTI-EQUIPOS: Agrupar actividades por idOrdenEquipo
       List<Map<String, dynamic>> actividadesPayload;
       List<Map<String, dynamic>>? actividadesPorEquipoPayload;
@@ -229,6 +238,7 @@ class SyncUploadService {
           final idEquipo = a.idOrdenEquipo ?? 0;
           actividadesAgrupadas.putIfAbsent(idEquipo, () => []);
           actividadesAgrupadas[idEquipo]!.add({
+            'idActividadCatalogo': a.idActividadCatalogo,
             'sistema': a.sistema ?? 'Sin sistema',
             'descripcion': a.descripcion,
             'resultado': a.simbologia ?? 'N/A',
@@ -237,6 +247,8 @@ class SyncUploadService {
               a.observacion,
               a.observacionTecnico,
             ),
+            if (a.respuestaJson != null && a.respuestaJson!.isNotEmpty)
+              'respuestaJson': _decodeRespJson(a.respuestaJson),
           });
         }
 
@@ -264,6 +276,7 @@ class SyncUploadService {
             .where((a) => a.idParametroMedicion == null)
             .map(
               (a) => <String, dynamic>{
+                'idActividadCatalogo': a.idActividadCatalogo,
                 'sistema': a.sistema ?? 'Sin sistema',
                 'descripcion': a.descripcion,
                 'resultado': a.simbologia ?? 'N/A',
@@ -273,6 +286,8 @@ class SyncUploadService {
                   a.observacionTecnico,
                 ),
                 'idOrdenEquipo': a.idOrdenEquipo,
+                if (a.respuestaJson != null && a.respuestaJson!.isNotEmpty)
+                  'respuestaJson': _decodeRespJson(a.respuestaJson),
               },
             )
             .toList();
@@ -282,6 +297,7 @@ class SyncUploadService {
             .where((a) => a.idParametroMedicion == null)
             .map(
               (a) => <String, dynamic>{
+                'idActividadCatalogo': a.idActividadCatalogo,
                 'sistema': a.sistema ?? 'Sin sistema',
                 'descripcion': a.descripcion,
                 'resultado': a.simbologia ?? 'N/A',
@@ -290,6 +306,8 @@ class SyncUploadService {
                   a.observacion,
                   a.observacionTecnico,
                 ),
+                if (a.respuestaJson != null && a.respuestaJson!.isNotEmpty)
+                  'respuestaJson': _decodeRespJson(a.respuestaJson),
               },
             )
             .toList();

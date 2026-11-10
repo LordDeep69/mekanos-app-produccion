@@ -97,11 +97,15 @@ export interface ActividadInput {
     /** Descripción de la actividad */
     descripcion: string;
     /** Resultado: B=Bueno, M=Malo, C=Corregido, N/A=No Aplica */
-    resultado: 'B' | 'M' | 'C' | 'N/A';
+    resultado: 'B' | 'R' | 'M' | 'C' | 'N/A' | string;
     /** Observaciones adicionales */
     observaciones?: string;
     /** ID del orden-equipo (para multi-equipos, opcional para backward compatibility) */
     idOrdenEquipo?: number;
+    /** Fase 6: ID exacto del catálogo (trazabilidad; evita adivinar por descripción) */
+    idActividadCatalogo?: number | null;
+    /** Fase 6: Respuesta declarativa (opción elegida, sub-inputs, etc.) */
+    respuestaJson?: any;
 }
 
 /**
@@ -781,6 +785,12 @@ export class FinalizacionOrdenService {
             emitProgress('actualizando_estado', 'in_progress', 'Sincronizando horómetro(s) en hoja de vida...', 93);
             this.logger.log('⏳ Paso 7.5: Sincronizando horómetro(s) en hoja de vida...');
 
+            const contadoresCatalogo = await this.prisma.catalogo_actividades.findMany({
+                where: { rol_semantico: 'LECTURA_CONTADOR_ACTIVO' },
+                select: { id_actividad_catalogo: true },
+            });
+            const idsContadorActivo = new Set(contadoresCatalogo.map(c => c.id_actividad_catalogo));
+
             const equiposSincronizados = new Set<number>();
 
             // A. Si la orden tiene equipos asociados en ordenes_equipos (Multi-Equipo o Mono con relación)
@@ -789,8 +799,23 @@ export class FinalizacionOrdenService {
                     if (!oe.id_equipo) continue;
                     let horasEquipo: number | null = null;
 
+                    // 0. Prioritario Fase 6: Buscar actividad por rol_semantico === 'LECTURA_CONTADOR_ACTIVO'
+                    if (idsContadorActivo.size > 0) {
+                        const grupoAct = dto.actividadesPorEquipo?.find(g => g.idOrdenEquipo === oe.id_orden_equipo);
+                        const actsEq = grupoAct?.actividades || (orden.ordenes_equipos.length === 1 ? dto.actividades : []) || [];
+                        for (const act of actsEq) {
+                            if (act.idActividadCatalogo != null && idsContadorActivo.has(Number(act.idActividadCatalogo))) {
+                                const h = this.extraerHorasDeActividad(act);
+                                if (h != null && h > 0) {
+                                    horasEquipo = h;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     // 1. Buscar en dto.medicionesPorEquipo
-                    if (dto.medicionesPorEquipo) {
+                    if (horasEquipo == null && dto.medicionesPorEquipo) {
                         const grupo = dto.medicionesPorEquipo.find(g => g.idOrdenEquipo === oe.id_orden_equipo);
                         const med = grupo?.mediciones?.find(m => this.esParametroHorometro(m.parametro));
                         if (med && med.valor != null) {
@@ -808,7 +833,7 @@ export class FinalizacionOrdenService {
                         }
                     }
 
-                    // 3. Buscar en dto.actividadesPorEquipo
+                    // 3. Buscar en dto.actividadesPorEquipo (fallback regex legacy)
                     if (horasEquipo == null && dto.actividadesPorEquipo) {
                         const grupo = dto.actividadesPorEquipo.find(g => g.idOrdenEquipo === oe.id_orden_equipo);
                         for (const act of grupo?.actividades || []) {
@@ -849,6 +874,19 @@ export class FinalizacionOrdenService {
                 if (vGeneral != null) {
                     const v = typeof vGeneral === 'number' ? vGeneral : parseFloat(String(vGeneral));
                     if (!isNaN(v) && v > 0) horasPrincipal = v;
+                }
+
+                // Prioritario Fase 6: actividad con rol_semantico LECTURA_CONTADOR_ACTIVO
+                if (idsContadorActivo.size > 0 && dto.actividades) {
+                    for (const act of dto.actividades) {
+                        if (act.idActividadCatalogo != null && idsContadorActivo.has(Number(act.idActividadCatalogo))) {
+                            const h = this.extraerHorasDeActividad(act);
+                            if (h != null && h > 0) {
+                                horasPrincipal = h;
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 // Fallback: buscar en dto.actividades generales
@@ -1478,6 +1516,49 @@ export class FinalizacionOrdenService {
             ? `${tecnicoPersona.primer_nombre} ${tecnicoPersona.primer_apellido}`
             : tecnicoPersona?.nombre_completo || 'N/A';
 
+        // Cargar catálogo por IDs para enriquecer PDF (Fase 6: tipoActividad, rolSemantico, etc.)
+        const allPdfCatIds = Array.from(new Set([
+            ...(dto.actividades || []).map(a => a.idActividadCatalogo),
+            ...(dto.actividadesPorEquipo || []).flatMap(g => g.actividades.map(a => a.idActividadCatalogo)),
+        ].filter((id): id is number => id != null && Number.isFinite(Number(id)))));
+        const catMetaMap = new Map<number, any>();
+        if (allPdfCatIds.length > 0) {
+            const cats = await this.prisma.catalogo_actividades.findMany({
+                where: { id_actividad_catalogo: { in: allPdfCatIds } },
+                select: {
+                    id_actividad_catalogo: true,
+                    tipo_actividad: true,
+                    id_parametro_medicion: true,
+                    tipo_control_input: true,
+                    config_input_json: true,
+                    rol_semantico: true,
+                    naturaleza_personalizada: true,
+                },
+            });
+            for (const c of cats) catMetaMap.set(c.id_actividad_catalogo, c);
+        }
+
+        const enrichActForPdf = (a: ActividadInput) => {
+            const meta = a.idActividadCatalogo != null ? catMetaMap.get(Number(a.idActividadCatalogo)) : undefined;
+            let respuestaJson = a.respuestaJson;
+            if (typeof respuestaJson === 'string') {
+                try { respuestaJson = JSON.parse(respuestaJson); } catch { /* keep raw */ }
+            }
+            return {
+                sistema: a.sistema,
+                descripcion: a.descripcion,
+                resultado: a.resultado,
+                observaciones: a.observaciones,
+                tipoActividad: meta?.tipo_actividad,
+                idParametroMedicion: meta?.id_parametro_medicion ?? undefined,
+                tipoControlInput: meta?.tipo_control_input,
+                configInputJson: meta?.config_input_json,
+                rolSemantico: meta?.rol_semantico,
+                naturalezaPersonalizada: meta?.naturaleza_personalizada,
+                respuestaJson,
+            };
+        };
+
         // ✅ MULTI-EQUIPOS: Construir estructura para PDF multi-equipo
         // La estructura debe coincidir con ActividadesPorEquipoPDF que espera:
         // { equipo: EquipoOrdenPDF, actividades: ActividadPDF[] }
@@ -1495,6 +1576,13 @@ export class FinalizacionOrdenService {
                 descripcion: string;
                 resultado: string;
                 observaciones?: string;
+                tipoActividad?: string;
+                idParametroMedicion?: number | null;
+                tipoControlInput?: string;
+                configInputJson?: any;
+                rolSemantico?: string | null;
+                naturalezaPersonalizada?: string | null;
+                respuestaJson?: any;
             }>;
         }> = [];
 
@@ -1527,12 +1615,7 @@ export class FinalizacionOrdenService {
                     nombreEquipo: eq.nombreEquipo,
                     estado: 'COMPLETADO',
                 },
-                actividades: eq.actividades.map(a => ({
-                    sistema: a.sistema,
-                    descripcion: a.descripcion,
-                    resultado: a.resultado,
-                    observaciones: a.observaciones,
-                })),
+                actividades: eq.actividades.map(a => enrichActForPdf(a)),
             }));
 
             // Log para debugging
@@ -1568,12 +1651,7 @@ export class FinalizacionOrdenService {
                 },
                 actividades: Array.from(actividadesUnicas.entries()).map(([descripcion, acts]) => {
                     const actEquipo = acts[equipoIndex] || acts[0];
-                    return {
-                        sistema: actEquipo.sistema,
-                        descripcion: descripcion,
-                        resultado: actEquipo.resultado,
-                        observaciones: actEquipo.observaciones,
-                    };
+                    return enrichActForPdf({ ...actEquipo, descripcion });
                 }),
             }));
 
@@ -1865,12 +1943,7 @@ export class FinalizacionOrdenService {
             // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades personalizadas para PDF
             configUnidades,
             // Actividades flat (para backward compatibility)
-            actividades: dto.actividades.map(a => ({
-                sistema: a.sistema,
-                descripcion: a.descripcion,
-                resultado: a.resultado,
-                observaciones: a.observaciones,
-            })),
+            actividades: dto.actividades.map(a => enrichActForPdf(a)),
             // Mediciones flat (para backward compatibility)
             mediciones: (dto.mediciones || []).map(m => ({
                 parametro: m.parametro,
@@ -2386,9 +2459,11 @@ export class FinalizacionOrdenService {
             select: { id_actividad_catalogo: true, descripcion_actividad: true },
         });
 
-        // Crear mapa para búsqueda O(1)
+        // Crear mapa para búsqueda O(1) (solo fallback legacy para payloads offline antiguos)
         const catalogoMap = new Map<string, number>();
+        const idsCatalogoValidos = new Set<number>();
         for (const cat of catalogoCompleto) {
+            idsCatalogoValidos.add(cat.id_actividad_catalogo);
             // Indexar por los primeros 50 chars en minúsculas para matching
             const key = cat.descripcion_actividad.substring(0, 50).toLowerCase();
             catalogoMap.set(key, cat.id_actividad_catalogo);
@@ -2397,8 +2472,27 @@ export class FinalizacionOrdenService {
         // PASO 2: Preparar datos para batch insert
         const ahora = new Date();
         const datosParaInsertar = actividades.map((act) => {
-            const keyBusqueda = act.descripcion.substring(0, 50).toLowerCase();
-            const idCatalogo = catalogoMap.get(keyBusqueda) || null;
+            // Fase 6: trazabilidad exacta por idActividadCatalogo; fallback legacy por descripción
+            let idCatalogo: number | null = null;
+            if (act.idActividadCatalogo != null && idsCatalogoValidos.has(Number(act.idActividadCatalogo))) {
+                idCatalogo = Number(act.idActividadCatalogo);
+            } else {
+                const keyBusqueda = act.descripcion.substring(0, 50).toLowerCase();
+                idCatalogo = catalogoMap.get(keyBusqueda) || null;
+            }
+
+            let respuestaJson: any = undefined;
+            if (act.respuestaJson != null) {
+                if (typeof act.respuestaJson === 'string') {
+                    try {
+                        respuestaJson = JSON.parse(act.respuestaJson);
+                    } catch {
+                        respuestaJson = { valor: act.respuestaJson };
+                    }
+                } else {
+                    respuestaJson = act.respuestaJson;
+                }
+            }
 
             return {
                 id_orden_servicio: idOrden,
@@ -2411,6 +2505,7 @@ export class FinalizacionOrdenService {
                 fecha_ejecucion: ahora,
                 ejecutada_por: usuarioId,
                 observaciones: act.observaciones || null,
+                ...(respuestaJson !== undefined ? { respuesta_json: respuestaJson } : {}),
             };
         });
 
@@ -2536,6 +2631,21 @@ export class FinalizacionOrdenService {
     /**
      * Extrae valor numérico de horas desde observaciones de checklist (ej: "HORAS: 276")
      */
+    private extraerHorasDeActividad(act: ActividadInput): number | null {
+        if (act.respuestaJson != null) {
+            let parsed = act.respuestaJson;
+            if (typeof parsed === 'string') {
+                try { parsed = JSON.parse(parsed); } catch { /* ignore */ }
+            }
+            const rawVal = typeof parsed === 'object' ? (parsed?.valor ?? parsed?.lectura ?? parsed?.horas) : parsed;
+            if (rawVal != null) {
+                const n = parseFloat(String(rawVal).replace(',', '.'));
+                if (!isNaN(n) && n > 0) return n;
+            }
+        }
+        return this.extraerHorasDeObservacion(act.observaciones);
+    }
+
     private extraerHorasDeObservacion(obs?: string): number | null {
         if (!obs) return null;
         const match = obs.match(/(?:HORAS|HOROMETRO|HORÓMETRO)\s*:\s*([\d.]+)/i);

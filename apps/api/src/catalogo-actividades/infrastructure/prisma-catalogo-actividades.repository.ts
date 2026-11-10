@@ -74,18 +74,6 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         nombre_componente: true,
       },
     },
-    usuarios_catalogo_actividades_creado_porTousuarios: {
-      select: {
-        id_usuario: true,
-        email: true,
-      },
-    },
-    usuarios_catalogo_actividades_modificado_porTousuarios: {
-      select: {
-        id_usuario: true,
-        email: true,
-      },
-    },
   };
 
   async create(data: any): Promise<catalogo_actividades> {
@@ -375,6 +363,10 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
               precauciones: tpl.precauciones,
               activo: true,
               observaciones: tpl.observaciones,
+              naturaleza_personalizada: tpl.naturaleza_personalizada ?? null,
+              tipo_control_input: tpl.tipo_control_input ?? 'ESCALA_ESTADO',
+              config_input_json: tpl.config_input_json ?? undefined,
+              rol_semantico: tpl.rol_semantico ?? null,
               creado_por: dto.creadoPor ?? userId,
             },
             include: this.INCLUDE_RELATIONS_DETAIL,
@@ -457,6 +449,19 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
       }
       if (dto.observaciones !== undefined) {
         sharedUpdateData.observaciones = dto.observaciones;
+      }
+      if (dto.naturalezaPersonalizada !== undefined) {
+        sharedUpdateData.naturaleza_personalizada = dto.naturalezaPersonalizada;
+      }
+      if (dto.tipoControlInput !== undefined) {
+        sharedUpdateData.tipo_control_input = dto.tipoControlInput;
+      }
+      if (dto.configInputJson !== undefined) {
+        sharedUpdateData.config_input_json =
+          dto.configInputJson === null ? Prisma.JsonNull : dto.configInputJson;
+      }
+      if (dto.rolSemantico !== undefined) {
+        sharedUpdateData.rol_semantico = dto.rolSemantico;
       }
       if (dto.activo !== undefined) {
         sharedUpdateData.activo = dto.activo;

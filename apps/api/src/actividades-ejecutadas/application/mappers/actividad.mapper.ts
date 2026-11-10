@@ -26,6 +26,7 @@ export class ActividadMapper {
       requiereEvidencia: entity.requiere_evidencia ?? undefined,
       evidenciaCapturada: entity.evidencia_capturada ?? undefined,
       fechaRegistro: entity.fecha_registro ?? undefined,
+      respuestaJson: (entity.respuesta_json as Record<string, unknown> | null) ?? null,
       
       empleados: entity.empleados ? {
         idEmpleado: entity.empleados.id_empleado,
@@ -39,6 +40,11 @@ export class ActividadMapper {
         codigoActividad: entity.catalogo_actividades.codigo_actividad,
         descripcionActividad: entity.catalogo_actividades.descripcion_actividad,
         tipoActividad: entity.catalogo_actividades.tipo_actividad,
+        idParametroMedicion: entity.catalogo_actividades.id_parametro_medicion ?? undefined,
+        tipoControlInput: entity.catalogo_actividades.tipo_control_input ?? undefined,
+        configInputJson: entity.catalogo_actividades.config_input_json ?? undefined,
+        rolSemantico: entity.catalogo_actividades.rol_semantico ?? undefined,
+        naturalezaPersonalizada: entity.catalogo_actividades.naturaleza_personalizada ?? undefined,
       } : undefined,
       
       ordenesServicio: entity.ordenes_servicio ? {

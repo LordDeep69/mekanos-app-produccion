@@ -100,6 +100,25 @@ export class CrearCatalogoActividadesDto {
   @IsOptional()
   observaciones?: string | null;
 
+  @ApiProperty({ description: 'Naturaleza técnica personalizada (texto libre)', required: false, nullable: true })
+  @IsString()
+  @IsOptional()
+  naturalezaPersonalizada?: string | null;
+
+  @ApiProperty({ description: 'Modo de respuesta / primitivo de input (ESCALA_ESTADO, BINARIO, ...)', required: false })
+  @IsString()
+  @IsOptional()
+  tipoControlInput?: string;
+
+  @ApiProperty({ description: 'Configuración declarativa del input (opciones, semáforo)', required: false, nullable: true })
+  @IsOptional()
+  configInputJson?: any;
+
+  @ApiProperty({ description: 'Rol semántico (ej. LECTURA_CONTADOR_ACTIVO)', required: false, nullable: true })
+  @IsString()
+  @IsOptional()
+  rolSemantico?: string | null;
+
   @ApiProperty({ description: 'ID del usuario que crea el registro (auditoría, opcional)', example: 1, required: false })
   @IsInt()
   @IsPositive()

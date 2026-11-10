@@ -409,6 +409,16 @@ class SyncService {
             idParametroMedicion: Value(act['idParametroMedicion'] as int?),
             sistema: Value(act['sistema'] as String?),
             idTipoServicio: Value(act['idTipoServicio'] as int?),
+            naturalezaPersonalizada: Value(
+              act['naturalezaPersonalizada']?.toString(),
+            ),
+            tipoControlInput: Value(
+              (act['tipoControlInput'] as String?)?.isNotEmpty == true
+                  ? act['tipoControlInput'] as String
+                  : 'ESCALA_ESTADO',
+            ),
+            configInputJson: Value(_jsonToText(act['configInputJson'])),
+            rolSemantico: Value(act['rolSemantico']?.toString()),
             lastSyncedAt: Value(DateTime.now()),
           ),
         );
@@ -417,6 +427,17 @@ class SyncService {
     });
 
     return count;
+  }
+
+  /// Normaliza un valor JSON (Map/List/String/null) a String? para persistir.
+  String? _jsonToText(dynamic v) {
+    if (v == null) return null;
+    if (v is String) return v.trim().isEmpty ? null : v;
+    try {
+      return jsonEncode(v);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Procesar catálogo de pendientes técnicos

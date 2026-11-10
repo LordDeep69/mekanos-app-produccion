@@ -30,6 +30,8 @@ export interface EamSelectProps {
   dropdownWidth?: number | string;
   usePortal?: boolean;
   align?: 'left' | 'right';
+  /** Abre el menú hacia arriba (modo inline) */
+  dropUp?: boolean;
 }
 
 /**
@@ -80,6 +82,7 @@ export function EamSelect({
   dropdownWidth,
   usePortal = false,
   align = 'left',
+  dropUp = false,
 }: EamSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -456,7 +459,9 @@ export function EamSelect({
             width: dropdownWidth || undefined,
             maxWidth: 'calc(100vw - 24px)',
           }}
-          className={`absolute z-50 mt-1.5 top-full rounded-2xl border shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
+          className={`absolute ${
+            dropUp ? 'bottom-full mb-1.5 z-50 max-h-60 overflow-y-auto shadow-xl' : 'z-50 mt-1.5 top-full overflow-hidden'
+          } rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 ${
             align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'
           } ${
             isDark

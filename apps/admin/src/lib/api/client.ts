@@ -158,6 +158,16 @@ apiClient.interceptors.response.use(
       const status = error.response.status;
 
       switch (status) {
+        case 400: {
+          const rawMsg = (error.response?.data as any)?.message;
+          const exactMsg = Array.isArray(rawMsg) ? rawMsg.join(', ') : rawMsg;
+          console.error('[API] 400 Solicitud inválida:', exactMsg ?? error.response?.data);
+          if (exactMsg && typeof exactMsg === 'string') {
+            // Propagar el mensaje exacto del backend para que los toasts lo muestren
+            error.message = exactMsg;
+          }
+          break;
+        }
         case 401:
           // Token expirado o inválido - ACCIÓN INMEDIATA
           console.error('[API] 401 No autorizado - Evaluando redirección');

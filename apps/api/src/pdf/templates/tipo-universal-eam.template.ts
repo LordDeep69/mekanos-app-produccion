@@ -27,12 +27,10 @@ import {
   generarMedicionesMultiEquipo,
   generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
-  MEKANOS_COLORS,
 } from './mekanos-base.template';
 import {
   EquipoSpecsReader,
   DatosPlacaUniversal,
-  KpiHeader,
 } from '../../equipos/services/equipo-specs.reader';
 
 /**
@@ -60,7 +58,9 @@ const limpiarPrefijosCaption = (caption: string): string => {
  * que debe ser segregado del checklist hacia la sección de telemetría/parámetros.
  */
 export const esActividadMedicion = (act: any): boolean => {
-  if (act.tipoActividad) return act.tipoActividad === 'MEDICION';
+  // Fase 6: discriminador determinista cuando existe metadata explícita del catálogo
+  if (act?.idParametroMedicion != null) return true;
+  if (act?.tipoActividad) return act.tipoActividad === 'MEDICION';
   const desc = (act.descripcion || '').toLowerCase();
   
   // Excluir ajustes mecánicos de tensión en correas o bandas de transmisión
@@ -256,7 +256,7 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
     ${
       esMultiEquipo && datos.medicionesPorEquipo
         ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
-        : generarMedicionesUniversal(datos)
+        : generarMedicionesUniversal(datos, placaUniversal)
     }
 
     <!-- 6. REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO WMS -->
@@ -335,7 +335,9 @@ function generarChecklistUniversal(actividades: any[]): string {
           <tbody>
             ${items
               .map((act) => {
+                const resp = act.respuestaJson && typeof act.respuestaJson === 'object' ? act.respuestaJson : null;
                 const estRaw = (
+                  resp?.semaforo ||
                   (act as any).resultado ||
                   act.estado ||
                   'NA'
@@ -366,6 +368,14 @@ function generarChecklistUniversal(actividades: any[]): string {
                             ? 'AJUSTADO'
                             : estRaw;
 
+                const etiquetaCustom =
+                  resp?.etiqueta ||
+                  (Array.isArray(resp?.seleccionados) && resp.seleccionados.length > 0
+                    ? resp.seleccionados.join(', ')
+                    : resp?.valor != null && String(resp.valor).trim() !== ''
+                      ? String(resp.valor)
+                      : '');
+
                 const obsLimpia = (act.observaciones || '').trim();
                 const obsDisplay = obsLimpia && obsLimpia !== '--' && obsLimpia !== '-' ? obsLimpia : '';
 
@@ -374,6 +384,11 @@ function generarChecklistUniversal(actividades: any[]): string {
                 <td style="padding: 6px 10px; color: #1E293B; line-height: 1.35; font-weight: 500;">${act.descripcion}</td>
                 <td style="padding: 6px 8px; text-align: center; vertical-align: middle;">
                   <span class="${badgeClass}">${estTexto}</span>
+                  ${
+                    etiquetaCustom && etiquetaCustom.toUpperCase() !== estTexto
+                      ? `<div style="margin-top: 2px; font-size: 7.5px; font-weight: 700; color: #334155;">${etiquetaCustom}</div>`
+                      : ''
+                  }
                 </td>
                 <td style="padding: 6px 10px; color: #475569; font-size: 8.5px; line-height: 1.3;">${obsDisplay}</td>
               </tr>
@@ -400,7 +415,7 @@ function generarChecklistUniversal(actividades: any[]): string {
   `;
 }
 
-function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
+function generarMedicionesUniversal(datos: DatosOrdenPDF, placaUniversal?: DatosPlacaUniversal): string {
   const mediciones = datos.mediciones || [];
   const modulo = datos.datosModulo;
   const actividadesMedicion = (datos.actividades || []).filter((act) => esActividadMedicion(act));
@@ -473,8 +488,8 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
           i.label.toLowerCase().includes('odometr'),
       )
     ) {
-      const uUso = placaUniversal.unidadUso || 'HORAS';
-      const etiqRaw = placaUniversal.etiquetaContador;
+      const uUso = placaUniversal?.unidadUso || 'HORAS';
+      const etiqRaw = placaUniversal?.etiquetaContador;
       const labelUso =
         etiqRaw ||
         (uUso === 'CICLOS'

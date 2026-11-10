@@ -389,6 +389,13 @@ export class PdfController {
               descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
               resultado: (act.estado as any) || 'NA',
               observaciones: act.observaciones || '',
+              tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
+              idParametroMedicion: act.catalogo_actividades?.id_parametro_medicion ?? undefined,
+              tipoControlInput: act.catalogo_actividades?.tipo_control_input || undefined,
+              configInputJson: act.catalogo_actividades?.config_input_json || undefined,
+              rolSemantico: act.catalogo_actividades?.rol_semantico || undefined,
+              naturalezaPersonalizada: act.catalogo_actividades?.naturaleza_personalizada || undefined,
+              respuestaJson: act.respuesta_json || undefined,
             })),
         }));
       } else if (actividadesSinEquipo.length > 0) {
@@ -427,6 +434,13 @@ export class PdfController {
               descripcion: descripcion,
               resultado: (actEquipo.estado as any) || 'NA',
               observaciones: actEquipo.observaciones || '',
+              tipoActividad: actEquipo.catalogo_actividades?.tipo_actividad || undefined,
+              idParametroMedicion: actEquipo.catalogo_actividades?.id_parametro_medicion ?? undefined,
+              tipoControlInput: actEquipo.catalogo_actividades?.tipo_control_input || undefined,
+              configInputJson: actEquipo.catalogo_actividades?.config_input_json || undefined,
+              rolSemantico: actEquipo.catalogo_actividades?.rol_semantico || undefined,
+              naturalezaPersonalizada: actEquipo.catalogo_actividades?.naturaleza_personalizada || undefined,
+              respuestaJson: actEquipo.respuesta_json || undefined,
             };
           }),
         }));
@@ -626,12 +640,21 @@ export class PdfController {
         resultado: (act.estado as any) || 'NA',
         observaciones: act.observaciones || '',
         tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
+        idParametroMedicion: act.catalogo_actividades?.id_parametro_medicion ?? undefined,
+        tipoControlInput: act.catalogo_actividades?.tipo_control_input || undefined,
+        configInputJson: act.catalogo_actividades?.config_input_json || undefined,
+        rolSemantico: act.catalogo_actividades?.rol_semantico || undefined,
+        naturalezaPersonalizada: act.catalogo_actividades?.naturaleza_personalizada || undefined,
+        respuestaJson: act.respuesta_json || undefined,
       })) || [],
       mediciones: orden.mediciones_servicio?.filter((med: any) => !med.excluido_pdf).map((med: any) => ({
         parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
         valor: Number(med.valor_numerico) || 0,
         unidad: med.parametros_medicion?.unidad_medida || '',
         nivelAlerta: (med.nivel_alerta as any) || 'OK',
+        rangoMin: med.parametros_medicion?.valor_minimo_normal != null ? Number(med.parametros_medicion.valor_minimo_normal) : undefined,
+        rangoMax: med.parametros_medicion?.valor_maximo_normal != null ? Number(med.parametros_medicion.valor_maximo_normal) : undefined,
+        estado: med.nivel_alerta === 'CRITICAL' ? 'CRITICO' : med.nivel_alerta === 'WARNING' ? 'ALERTA' : 'NORMAL',
       })) || [],
       // ✅ FIX 06-FEB-2026: Mapear evidencias como objetos con caption/tipo (no solo URL)
       // Esto permite al template separar fotos GENERALES de fotos de actividad

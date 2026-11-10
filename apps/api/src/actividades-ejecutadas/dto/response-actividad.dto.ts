@@ -16,6 +16,7 @@ export class ResponseActividadDto {
   requiereEvidencia?: boolean;
   evidenciaCapturada?: boolean;
   fechaRegistro?: Date;
+  respuestaJson?: Record<string, unknown> | null;
   
   // Relaciones (NOMBRES EXACTOS Prisma)
   empleados?: {
@@ -30,6 +31,11 @@ export class ResponseActividadDto {
     codigoActividad: string;
     descripcionActividad: string;
     tipoActividad: string;
+    idParametroMedicion?: number;
+    tipoControlInput?: string;
+    configInputJson?: unknown;
+    rolSemantico?: string;
+    naturalezaPersonalizada?: string;
   };
   
   ordenesServicio?: {

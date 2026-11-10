@@ -99,6 +99,10 @@ export class SyncActividadDto {
   @IsString()
   observaciones?: string;
 
+  @ApiPropertyOptional({ description: 'Fase 6: respuesta declarativa (objeto o JSON string)' })
+  @IsOptional()
+  respuestaJson?: any;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()

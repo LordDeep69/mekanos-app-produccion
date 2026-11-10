@@ -42,6 +42,11 @@ import {
     useUpdateParametroMedicion,
 } from '@/features/catalogos/hooks/use-parametros-medicion';
 import { useTiposServicio } from '@/features/catalogos/hooks/use-tipos-servicio';
+import {
+    ModoRespuestaSelector,
+    getModoRespuestaBadgeLabel,
+    type ConfigInputDeclarativo,
+} from '@/features/catalogos/components/ModoRespuestaSelector';
 import { cn } from '@/lib/utils';
 import {
     Activity,
@@ -170,6 +175,7 @@ const NATURALEZA_OPTIONS: EamSelectOption[] = [
     { value: 'PRUEBA', label: 'Prueba Operativa (B / R / M)', badge: 'CHECKLIST' },
     { value: 'CAMBIO', label: 'Cambio / Reemplazo Preventivo (B / R / M)', badge: 'CHECKLIST' },
     { value: 'MEDICION', label: 'Medición Cuantitativa con Unidad UoM y Rango [Mín — Máx]', badge: 'TELEMETRÍA' },
+    { value: 'OTRA_PERSONALIZADA', label: '+ Otra naturaleza personalizada...', badge: 'CUSTOM' },
 ];
 
 function generarCodigoActividad(prefijo: string, descripcion: string): string {
@@ -229,7 +235,11 @@ function BancoActividadModal({
     const actBase = entradaEditar?.representante ?? null;
 
     const [descripcion, setDescripcion] = useState('');
-    const [tipoActividad, setTipoActividad] = useState<TipoActividad>('INSPECCION');
+    const [tipoActividad, setTipoActividad] = useState<string>('INSPECCION');
+    const [naturalezaPersonalizada, setNaturalezaPersonalizada] = useState('');
+    const [tipoControlInput, setTipoControlInput] = useState<string>('ESCALA_ESTADO');
+    const [configInputJson, setConfigInputJson] = useState<ConfigInputDeclarativo | null>(null);
+    const [rolSemantico, setRolSemantico] = useState<string>('');
     const [idTipoEquipo, setIdTipoEquipo] = useState<string>('');
     const [idSistema, setIdSistema] = useState<string>('');
     const [esObligatoria, setEsObligatoria] = useState(true);
@@ -252,7 +262,14 @@ function BancoActividadModal({
         if (!isOpen) return;
         if (actBase) {
             setDescripcion(getActDesc(actBase));
-            setTipoActividad(getActTipo(actBase));
+            const customNat = actBase.naturalezaPersonalizada ?? actBase.naturaleza_personalizada ?? '';
+            setNaturalezaPersonalizada(customNat || '');
+            setTipoActividad(customNat ? 'OTRA_PERSONALIZADA' : getActTipo(actBase));
+            setTipoControlInput(
+                actBase.tipoControlInput ?? actBase.tipo_control_input ?? 'ESCALA_ESTADO',
+            );
+            setConfigInputJson(actBase.configInputJson ?? actBase.config_input_json ?? null);
+            setRolSemantico(actBase.rolSemantico ?? actBase.rol_semantico ?? '');
             const eqId = getActEquipoId(actBase);
             const sisId = getActSistemaId(actBase);
             const paramId = getActParametroId(actBase);
@@ -283,6 +300,10 @@ function BancoActividadModal({
         } else {
             setDescripcion('');
             setTipoActividad('INSPECCION');
+            setNaturalezaPersonalizada('');
+            setTipoControlInput('ESCALA_ESTADO');
+            setConfigInputJson(null);
+            setRolSemantico('');
             setIdTipoEquipo('');
             setIdSistema('');
             setEsObligatoria(true);
@@ -311,11 +332,20 @@ function BancoActividadModal({
 
     const sistemasOptions = useMemo<EamSelectOption[]>(() => {
         const arquetipoSel = arquetipos.find((a) => String(a.id_tipo_equipo) === idTipoEquipo);
+        const targetCod = arquetipoSel?.codigo_tipo?.toUpperCase().trim() || '';
         const filtrados = sistemas.filter((s) => {
             if (!s.activo) return false;
-            if (!arquetipoSel) return true;
-            const aplica = Array.isArray(s.aplica_a) ? s.aplica_a : [];
-            return aplica.length === 0 || aplica.includes(arquetipoSel.codigo_tipo);
+            if (!arquetipoSel || !targetCod) return true;
+            const aplica = (Array.isArray(s.aplica_a) ? s.aplica_a : []).map((a) =>
+                String(a).toUpperCase().trim(),
+            );
+            if (aplica.length === 0 || aplica.includes('GENERAL') || aplica.includes('ALL')) return true;
+            return aplica.some(
+                (a) =>
+                    a === targetCod ||
+                    targetCod.startsWith(a) ||
+                    a.startsWith(targetCod),
+            );
         });
         return [
             { value: '', label: 'General / Sin subsistema específico', badge: 'GENERAL' },
@@ -420,12 +450,32 @@ function BancoActividadModal({
                 parametroId = null;
             }
 
+            const isCustomNature = tipoActividad === 'OTRA_PERSONALIZADA';
+            if (isCustomNature && !naturalezaPersonalizada.trim()) {
+                toast.error('Escribe el nombre de la naturaleza técnica personalizada');
+                setIsSaving(false);
+                return;
+            }
+            const resolvedTipoActividad: TipoActividad = isCustomNature
+                ? 'INSPECCION'
+                : (tipoActividad as TipoActividad);
+            const resolvedNaturalezaCustom = isCustomNature
+                ? naturalezaPersonalizada.trim()
+                : null;
+            const resolvedConfig =
+                tipoControlInput === 'PERSONALIZADO' ? configInputJson : null;
+            const resolvedRol = rolSemantico.trim() || null;
+
             if (entradaEditar && actBase) {
                 // MODO EDICIÓN CON PROPAGACIÓN EN CASCADA A TODOS LOS SERVICIOS VINCULADOS
                 const res = await propagarBanco.mutateAsync({
                     idActividadOrigen: getActId(actBase),
                     descripcionActividad: descripcion.trim(),
-                    tipoActividad,
+                    tipoActividad: resolvedTipoActividad,
+                    naturalezaPersonalizada: resolvedNaturalezaCustom,
+                    tipoControlInput,
+                    configInputJson: resolvedConfig,
+                    rolSemantico: resolvedRol,
                     idSistema: idSistema ? Number(idSistema) : null,
                     idTipoEquipo: idTipoEquipo ? Number(idTipoEquipo) : null,
                     idParametroMedicion: parametroId,
@@ -441,7 +491,11 @@ function BancoActividadModal({
                 const payload: CreateCatalogoActividadDto = {
                     codigoActividad: generarCodigoActividad('BNK', descripcion),
                     descripcionActividad: descripcion.trim(),
-                    tipoActividad,
+                    tipoActividad: resolvedTipoActividad,
+                    naturalezaPersonalizada: resolvedNaturalezaCustom,
+                    tipoControlInput,
+                    configInputJson: resolvedConfig,
+                    rolSemantico: resolvedRol,
                     idTipoServicio: null,
                     idTipoEquipo: idTipoEquipo ? Number(idTipoEquipo) : null,
                     idSistema: idSistema ? Number(idSistema) : null,
@@ -538,11 +592,20 @@ function BancoActividadModal({
                             <EamSelect
                                 value={tipoActividad}
                                 onChange={(val: string) =>
-                                    setTipoActividad((val || 'INSPECCION') as TipoActividad)
+                                    setTipoActividad(val || 'INSPECCION')
                                 }
                                 options={NATURALEZA_OPTIONS}
                                 placeholder="Seleccionar naturaleza..."
                             />
+                            {tipoActividad === 'OTRA_PERSONALIZADA' && (
+                                <input
+                                    type="text"
+                                    value={naturalezaPersonalizada}
+                                    onChange={(e) => setNaturalezaPersonalizada(e.target.value)}
+                                    placeholder="Nombre de la naturaleza personalizada (Ej: Calibración Láser)"
+                                    className="mt-2 w-full px-3 py-2 text-xs font-semibold rounded-xl border border-indigo-300 bg-indigo-50/40 focus:outline-none focus:border-indigo-500"
+                                />
+                            )}
                         </div>
                         <div className="md:col-span-4">
                             <label className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
@@ -558,6 +621,19 @@ function BancoActividadModal({
                             </label>
                         </div>
                     </div>
+
+                    {tipoActividad !== 'MEDICION' && (
+                        <ModoRespuestaSelector
+                            tipoControlInput={tipoControlInput}
+                            configInputJson={configInputJson}
+                            rolSemantico={rolSemantico}
+                            onChange={(next) => {
+                                setTipoControlInput(next.tipoControlInput);
+                                setConfigInputJson(next.configInputJson);
+                                setRolSemantico(next.rolSemantico);
+                            }}
+                        />
+                    )}
 
                     {/* Tipo de Equipo y Subsistema sugeridos (Opcionales) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1542,8 +1618,18 @@ function BancoUniversalActividadesContent() {
                                                 cfg.border,
                                             )}
                                         >
-                                            {cfg.label}
+                                            {rep.naturalezaPersonalizada || rep.naturaleza_personalizada || cfg.label}
                                         </span>
+
+                                        {(rep.tipoControlInput || rep.tipo_control_input) &&
+                                            (rep.tipoControlInput || rep.tipo_control_input) !== 'ESCALA_ESTADO' && (
+                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                    {getModoRespuestaBadgeLabel(
+                                                        rep.tipoControlInput || rep.tipo_control_input,
+                                                        rep.configInputJson || rep.config_input_json,
+                                                    )}
+                                                </span>
+                                            )}
 
                                         {sistema && (
                                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 inline-flex items-center gap-1">

@@ -134,6 +134,25 @@ export class PropagarActividadBancoDto {
   @IsString()
   observaciones?: string | null;
 
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  naturalezaPersonalizada?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  tipoControlInput?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  configInputJson?: any;
+
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  rolSemantico?: string | null;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()

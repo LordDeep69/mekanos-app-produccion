@@ -1,4 +1,4 @@
-import { catalogo_actividades } from '@prisma/client';
+import { catalogo_actividades, Prisma } from '@prisma/client';
 import { CatalogoActividadesResponseDto } from '../application/dto/catalogo-actividades-response.dto';
 
 export class CatalogoActividadesMapper {
@@ -33,6 +33,10 @@ export class CatalogoActividadesMapper {
       precauciones: entity.precauciones,
       activo: entity.activo ?? true,
       observaciones: entity.observaciones,
+      naturalezaPersonalizada: entity.naturaleza_personalizada ?? null,
+      tipoControlInput: entity.tipo_control_input ?? 'ESCALA_ESTADO',
+      configInputJson: entity.config_input_json ?? null,
+      rolSemantico: entity.rol_semantico ?? null,
       creadoPor: entity.creado_por,
       fechaCreacion: entity.fecha_creacion ?? new Date(),
       modificadoPor: entity.modificado_por,
@@ -120,6 +124,10 @@ export class CatalogoActividadesMapper {
       precauciones: dto.precauciones,
       activo: dto.activo,
       observaciones: dto.observaciones,
+      naturaleza_personalizada: dto.naturalezaPersonalizada,
+      tipo_control_input: dto.tipoControlInput,
+      config_input_json: dto.configInputJson === null ? Prisma.JsonNull : dto.configInputJson,
+      rol_semantico: dto.rolSemantico,
       creado_por: dto.creadoPor,
       modificado_por: dto.modificadoPor,
     };

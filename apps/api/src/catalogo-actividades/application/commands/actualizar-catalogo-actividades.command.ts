@@ -19,6 +19,10 @@ export class ActualizarCatalogoActividadesCommand {
     public readonly precauciones?: string | null,
     public readonly activo?: boolean,
     public readonly observaciones?: string | null,
+    public readonly naturalezaPersonalizada?: string | null,
+    public readonly tipoControlInput?: string,
+    public readonly configInputJson?: any,
+    public readonly rolSemantico?: string | null,
   ) {}
 
   static fromDto(
@@ -44,6 +48,10 @@ export class ActualizarCatalogoActividadesCommand {
       dto.precauciones,
       dto.activo,
       dto.observaciones,
+      dto.naturalezaPersonalizada,
+      dto.tipoControlInput,
+      dto.configInputJson,
+      dto.rolSemantico,
     );
   }
 }

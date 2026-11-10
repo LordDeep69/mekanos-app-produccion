@@ -184,6 +184,14 @@ export class ActividadDto {
     @IsString()
     @MaxLength(500)
     observaciones?: string;
+
+    @ApiPropertyOptional({ description: 'Fase 6: ID exacto de la actividad del catálogo' })
+    @IsOptional()
+    idActividadCatalogo?: number | null;
+
+    @ApiPropertyOptional({ description: 'Fase 6: Respuesta declarativa (JSON u objeto)' })
+    @IsOptional()
+    respuestaJson?: any;
 }
 
 /**

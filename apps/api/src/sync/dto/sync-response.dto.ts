@@ -478,6 +478,18 @@ export class SyncActividadCatalogoDto {
 
   @ApiPropertyOptional({ description: 'Sistema al que pertenece (ENFRIAMIENTO, LUBRICACION, etc.)' })
   sistema?: string;
+
+  @ApiPropertyOptional({ description: 'Naturaleza técnica personalizada' })
+  naturalezaPersonalizada?: string;
+
+  @ApiPropertyOptional({ description: 'Primitivo de input (ESCALA_ESTADO, BINARIO, ...)' })
+  tipoControlInput?: string;
+
+  @ApiPropertyOptional({ description: 'Configuración declarativa del input (JSON)' })
+  configInputJson?: any;
+
+  @ApiPropertyOptional({ description: 'Rol semántico (ej. LECTURA_CONTADOR_ACTIVO)' })
+  rolSemantico?: string;
 }
 
 /**
