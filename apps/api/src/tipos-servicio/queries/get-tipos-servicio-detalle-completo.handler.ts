@@ -39,49 +39,56 @@ export class GetTiposServicioDetalleCompletoHandler
             throw new NotFoundException(`Tipo de servicio con ID ${id} no encontrado`);
         }
 
-        // Agrupar actividades por sistema
-        const actividadesPorSistema = new Map<number | null, any[]>();
+        // Agrupar actividades por nombre normalizado de sistema (evita duplicar General / Sin Sistema)
+        const actividadesPorSistema = new Map<string, { id_sistema: number | null; nombre_sistema: string; codigo_sistema: string; acts: any[] }>();
 
         for (const actividad of tipoServicio.catalogo_actividades) {
-            const sistemaId = actividad.id_sistema;
-            if (!actividadesPorSistema.has(sistemaId)) {
-                actividadesPorSistema.set(sistemaId, []);
+            const sistema = actividad.catalogo_sistemas;
+            const nombreSistema = (sistema?.nombre_sistema || 'General').trim();
+            const codigoSistema = sistema?.codigo_sistema || 'GENERAL';
+            const key = nombreSistema.toUpperCase();
+
+            if (!actividadesPorSistema.has(key)) {
+                actividadesPorSistema.set(key, {
+                    id_sistema: actividad.id_sistema,
+                    nombre_sistema: nombreSistema,
+                    codigo_sistema: codigoSistema,
+                    acts: [],
+                });
             }
-            actividadesPorSistema.get(sistemaId)!.push(actividad);
+            actividadesPorSistema.get(key)!.acts.push(actividad);
         }
 
         // Construir respuesta estructurada
         const sistemasConActividades = [];
-        for (const [sistemaId, actividades] of actividadesPorSistema) {
-            const sistema = actividades[0]?.catalogo_sistemas;
+        for (const [, group] of actividadesPorSistema) {
             sistemasConActividades.push({
-                id_sistema: sistemaId,
-                nombre_sistema: sistema?.nombre_sistema || 'Sin Sistema',
-                codigo_sistema: sistema?.codigo_sistema || 'GENERAL',
-                actividades: actividades.map(a => ({
+                id_sistema: group.id_sistema,
+                nombre_sistema: group.nombre_sistema,
+                codigo_sistema: group.codigo_sistema,
+                actividades: group.acts.map(a => ({
                     id_actividad_catalogo: a.id_actividad_catalogo,
                     codigo_actividad: a.codigo_actividad,
                     descripcion_actividad: a.descripcion_actividad,
                     tipo_actividad: a.tipo_actividad,
                     es_obligatoria: a.es_obligatoria,
                     tiempo_estimado_minutos: a.tiempo_estimado_minutos,
-                    orden_ejecucion: a.orden_ejecucion,
                     parametro_medicion: a.parametros_medicion ? {
                         id: a.parametros_medicion.id_parametro_medicion,
                         nombre: a.parametros_medicion.nombre_parametro,
                         unidad: a.parametros_medicion.unidad_medida,
-                        rango_min: a.parametros_medicion.rango_minimo,
-                        rango_max: a.parametros_medicion.rango_maximo,
+                        rango_min: a.parametros_medicion.valor_minimo_normal != null ? Number(a.parametros_medicion.valor_minimo_normal) : undefined,
+                        rango_max: a.parametros_medicion.valor_maximo_normal != null ? Number(a.parametros_medicion.valor_maximo_normal) : undefined,
                     } : null,
                 })),
-                total_actividades: actividades.length,
+                total_actividades: group.acts.length,
             });
         }
 
         // Ordenar sistemas
         sistemasConActividades.sort((a, b) => {
-            if (a.id_sistema === null) return 1;
-            if (b.id_sistema === null) return -1;
+            if (a.nombre_sistema.toUpperCase() === 'GENERAL') return 1;
+            if (b.nombre_sistema.toUpperCase() === 'GENERAL') return -1;
             return 0;
         });
 
@@ -90,6 +97,8 @@ export class GetTiposServicioDetalleCompletoHandler
             codigo_tipo: tipoServicio.codigo_tipo,
             nombre_tipo: tipoServicio.nombre_tipo,
             descripcion: tipoServicio.descripcion,
+            plantilla_observacion: tipoServicio.plantilla_observacion,
+            activo: tipoServicio.activo,
             categoria: tipoServicio.categoria,
             color_hex: tipoServicio.color_hex,
             icono: tipoServicio.icono,
@@ -97,7 +106,7 @@ export class GetTiposServicioDetalleCompletoHandler
             duracion_estimada_horas: tipoServicio.duracion_estimada_horas,
             tipo_equipo: tipoServicio.tipos_equipo ? {
                 id: tipoServicio.tipos_equipo.id_tipo_equipo,
-                nombre: (tipoServicio.tipos_equipo as any).nombre_tipo || (tipoServicio.tipos_equipo as any).nombre,
+                nombre: tipoServicio.tipos_equipo.nombre_tipo,
             } : null,
             estadisticas: {
                 total_actividades: tipoServicio._count.catalogo_actividades,

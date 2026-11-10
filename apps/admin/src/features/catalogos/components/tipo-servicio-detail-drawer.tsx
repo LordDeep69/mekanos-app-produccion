@@ -5,18 +5,13 @@ import { cn } from '@/lib/utils';
 import {
     Activity,
     AlertCircle,
-    ArrowDown,
-    ArrowUp,
     CheckSquare,
-    ChevronDown,
-    ChevronRight,
+    ChevronDown, ChevronRight,
     Clock,
-    ExternalLink,
     FileText,
     Gauge,
     Layers,
     Loader2,
-    Plus,
     Settings,
     Tag,
     Wrench,
@@ -26,7 +21,6 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { CATEGORIAS_SERVICIO, type SistemaConActividades } from '../api/tipos-servicio.service';
 import { useTipoServicioDetalleCompleto } from '../hooks/use-tipos-servicio';
-import { useUpdateCatalogoActividad } from '../hooks/use-catalogo-actividades';
 
 interface Props {
     tipoServicioId: number | null;
@@ -36,41 +30,8 @@ interface Props {
 export function TipoServicioDetailDrawer({ tipoServicioId, onClose }: Props) {
     const { data, isLoading, error } = useTipoServicioDetalleCompleto(tipoServicioId);
     const [expandedSistemas, setExpandedSistemas] = useState<Set<number | null>>(new Set());
-    const actualizarActividad = useUpdateCatalogoActividad();
-    const [isReordering, setIsReordering] = useState(false);
 
     if (!tipoServicioId) return null;
-
-    const handleReorder = async (sistema: SistemaConActividades, actividadId: number, direccion: 'up' | 'down') => {
-        const idx = sistema.actividades.findIndex(a => a.id_actividad_catalogo === actividadId);
-        if (idx === -1) return;
-        const targetIdx = direccion === 'up' ? idx - 1 : idx + 1;
-        if (targetIdx < 0 || targetIdx >= sistema.actividades.length) return;
-
-        const currentAct = sistema.actividades[idx];
-        const targetAct = sistema.actividades[targetIdx];
-
-        setIsReordering(true);
-        try {
-            const currentOrder = currentAct.orden_ejecucion ?? (idx + 1);
-            const targetOrder = targetAct.orden_ejecucion ?? (targetIdx + 1);
-
-            await Promise.all([
-                actualizarActividad.mutateAsync({
-                    id: currentAct.id_actividad_catalogo,
-                    data: { ordenEjecucion: targetOrder },
-                }),
-                actualizarActividad.mutateAsync({
-                    id: targetAct.id_actividad_catalogo,
-                    data: { ordenEjecucion: currentOrder },
-                }),
-            ]);
-        } catch {
-            // Error manejado en hook toast
-        } finally {
-            setIsReordering(false);
-        }
-    };
 
     const toggleSistema = (sistemaId: number | null) => {
         setExpandedSistemas(prev => {
@@ -224,99 +185,75 @@ export function TipoServicioDetailDrawer({ tipoServicioId, onClose }: Props) {
 
                             {/* Actividades por Sistema */}
                             <div>
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b">
-                                    <div className="flex items-center gap-2">
+                                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                                         <Activity className="h-5 w-5 text-blue-600" />
-                                        <h3 className="text-lg font-bold text-gray-900">
-                                            Protocolo Técnico
-                                        </h3>
-                                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
-                                            {detalle.estadisticas.total_actividades} act.
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2 flex-wrap">
+                                        Protocolo de Actividades por Subsistema
+                                    </h3>
+                                    <div className="flex items-center gap-2">
                                         <Link
-                                            href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}&tab=banco`}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-all shadow-2xs"
-                                            title="Importar tareas desde el Banco Universal de Actividades"
+                                            href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}&nueva=1`}
+                                            onClick={onClose}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-2xs"
                                         >
-                                            <Layers className="h-3.5 w-3.5" />
-                                            + Banco Universal
+                                            <span>+ Agregar Actividad / Medición</span>
                                         </Link>
-                                        <Link
-                                            href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}&action=new`}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-2xs"
-                                            title="Crear nueva tarea para este servicio"
-                                        >
-                                            <Plus className="h-3.5 w-3.5" />
-                                            Nueva Tarea
-                                        </Link>
-                                        <Link
-                                            href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}`}
-                                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                            title="Abrir en Gestor de Protocolos"
-                                        >
-                                            <ExternalLink className="h-4 w-4" />
-                                        </Link>
+                                        {detalle.sistemas_con_actividades.length > 0 && (
+                                            <>
+                                                <button
+                                                    onClick={expandAll}
+                                                    className="text-xs text-blue-600 hover:underline font-medium"
+                                                >
+                                                    Expandir todo
+                                                </button>
+                                                <span className="text-gray-300">|</span>
+                                                <button
+                                                    onClick={collapseAll}
+                                                    className="text-xs text-blue-600 hover:underline font-medium"
+                                                >
+                                                    Colapsar
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
 
                                 {detalle.sistemas_con_actividades.length === 0 ? (
-                                    <div className="p-8 text-center bg-blue-50/40 rounded-2xl border-2 border-dashed border-blue-200">
-                                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                                            <Activity className="h-6 w-6" />
-                                        </div>
-                                        <h4 className="text-base font-bold text-gray-900">Protocolo Sin Actividades</h4>
-                                        <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-4">
-                                            Este tipo de servicio no cuenta aún con checklist asignado. Agrega tareas desde el Banco Universal o crea una nueva tarea personalizada.
+                                    <div className="p-6 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/50 text-center space-y-3">
+                                        <p className="text-sm font-bold text-amber-900">
+                                            Este servicio aún tiene 0 actividades configuradas en su checklist.
                                         </p>
-                                        <div className="flex items-center justify-center gap-3 flex-wrap">
+                                        <p className="text-xs text-amber-800 max-w-md mx-auto">
+                                            Configura las tareas de inspección y puntos de medición con Unidad de Medida (UoM) o reutiliza actividades del Banco Universal.
+                                        </p>
+                                        <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
                                             <Link
-                                                href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}&tab=banco`}
-                                                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-700 transition-all shadow-sm"
+                                                href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}&nueva=1`}
+                                                onClick={onClose}
+                                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-all"
                                             >
-                                                <Layers className="h-4 w-4" />
-                                                Importar del Banco Universal
+                                                <span>+ Crear Primera Actividad / Medición</span>
                                             </Link>
                                             <Link
-                                                href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}&action=new`}
-                                                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm"
+                                                href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}`}
+                                                onClick={onClose}
+                                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 transition-all"
                                             >
-                                                <Plus className="h-4 w-4" />
-                                                Nueva Tarea
+                                                <span>📚 Ir al Constructor y Banco Universal</span>
                                             </Link>
                                         </div>
                                     </div>
                                 ) : (
-                                    <>
-                                        <div className="flex justify-end gap-2 mb-2">
-                                            <button
-                                                onClick={expandAll}
-                                                className="text-xs text-blue-600 hover:underline font-semibold"
-                                            >
-                                                Expandir todo
-                                            </button>
-                                            <span className="text-gray-300">|</span>
-                                            <button
-                                                onClick={collapseAll}
-                                                className="text-xs text-blue-600 hover:underline font-semibold"
-                                            >
-                                                Colapsar
-                                            </button>
-                                        </div>
-                                        <div className="space-y-3">
-                                            {detalle.sistemas_con_actividades.map((sistema: SistemaConActividades) => (
-                                                <SistemaAccordion
-                                                    key={sistema.id_sistema ?? 'null'}
-                                                    sistema={sistema}
-                                                    isExpanded={expandedSistemas.has(sistema.id_sistema)}
-                                                    onToggle={() => toggleSistema(sistema.id_sistema)}
-                                                    onReorder={handleReorder}
-                                                    isReordering={isReordering}
-                                                />
-                                            ))}
-                                        </div>
-                                    </>
+                                    <div className="space-y-3">
+                                        {detalle.sistemas_con_actividades.map((sistema: SistemaConActividades) => (
+                                            <SistemaAccordion
+                                                key={sistema.id_sistema ?? 'null'}
+                                                sistema={sistema}
+                                                isExpanded={expandedSistemas.has(sistema.id_sistema)}
+                                                onToggle={() => toggleSistema(sistema.id_sistema)}
+                                            />
+                                        ))}
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -350,12 +287,10 @@ function StatCard({ icon, label, value, color }: {
     );
 }
 
-function SistemaAccordion({ sistema, isExpanded, onToggle, onReorder, isReordering }: {
+function SistemaAccordion({ sistema, isExpanded, onToggle }: {
     sistema: SistemaConActividades;
     isExpanded: boolean;
     onToggle: () => void;
-    onReorder: (sistema: SistemaConActividades, actividadId: number, direccion: 'up' | 'down') => void;
-    isReordering: boolean;
 }) {
     return (
         <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
@@ -386,41 +321,13 @@ function SistemaAccordion({ sistema, isExpanded, onToggle, onReorder, isReorderi
 
             {isExpanded && (
                 <div className="border-t bg-gray-50 p-4 space-y-2">
-                    {sistema.actividades.map((act, idx) => (
+                    {sistema.actividades.map((act) => (
                         <div
                             key={act.id_actividad_catalogo}
-                            className="flex items-start gap-2.5 p-3 bg-white rounded-lg border group/item hover:border-blue-200 transition-colors"
+                            className="flex items-start gap-3 p-3 bg-white rounded-lg border"
                         >
-                            {/* Reordering arrows */}
-                            <div className="flex flex-col gap-0.5 shrink-0 pt-0.5">
-                                <button
-                                    type="button"
-                                    disabled={idx === 0 || isReordering}
-                                    onClick={(e) => { e.stopPropagation(); onReorder(sistema, act.id_actividad_catalogo, 'up'); }}
-                                    className="p-0.5 text-gray-300 hover:text-blue-600 disabled:opacity-20 hover:bg-blue-50 rounded transition-colors"
-                                    title="Subir posición"
-                                >
-                                    <ArrowUp className="h-3 w-3" />
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={idx === sistema.actividades.length - 1 || isReordering}
-                                    onClick={(e) => { e.stopPropagation(); onReorder(sistema, act.id_actividad_catalogo, 'down'); }}
-                                    className="p-0.5 text-gray-300 hover:text-blue-600 disabled:opacity-20 hover:bg-blue-50 rounded transition-colors"
-                                    title="Bajar posición"
-                                >
-                                    <ArrowDown className="h-3 w-3" />
-                                </button>
-                            </div>
-
-                            {/* Order index */}
-                            <span className="w-5 h-5 rounded bg-slate-100 text-slate-600 font-mono text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                                #{act.orden_ejecucion ?? (idx + 1)}
-                            </span>
-
-                            {/* Type icon */}
                             <div className={cn(
-                                "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5",
+                                "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
                                 act.tipo_actividad === 'MEDICION'
                                     ? 'bg-purple-100 text-purple-700'
                                     : act.tipo_actividad === 'CHECKLIST'
@@ -433,34 +340,23 @@ function SistemaAccordion({ sistema, isExpanded, onToggle, onReorder, isReorderi
                                     <CheckSquare className="h-3 w-3" />
                                 )}
                             </div>
-
-                            {/* Content */}
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 leading-snug">
+                                <p className="text-sm font-medium text-gray-900">
                                     {act.descripcion_actividad}
                                 </p>
-                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
                                     <span className="text-[10px] font-mono text-gray-400">
                                         {act.codigo_actividad}
                                     </span>
                                     {act.es_obligatoria && (
-                                        <span className="text-[10px] bg-red-50 text-red-700 border border-red-200 font-bold px-1.5 py-0.2 rounded">
+                                        <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
                                             Obligatoria
                                         </span>
                                     )}
-                                    {act.tiempo_estimado_minutos ? (
-                                        <span className="text-[10px] text-gray-500 flex items-center gap-1 font-medium">
-                                            <Clock className="h-3 w-3 text-gray-400" />
-                                            {act.tiempo_estimado_minutos} min
-                                        </span>
-                                    ) : null}
                                     {act.parametro_medicion && (
-                                        <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 font-semibold px-2 py-0.5 rounded flex items-center gap-1">
-                                            <Gauge className="h-3 w-3 text-purple-600" />
-                                            {act.parametro_medicion.nombre}:
-                                            <strong className="font-mono">
-                                                [{act.parametro_medicion.rango_min ?? '—'} a {act.parametro_medicion.rango_max ?? '—'}]
-                                            </strong>
+                                        <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                                            📏 {act.parametro_medicion.nombre}
+                                            [{act.parametro_medicion.rango_min}-{act.parametro_medicion.rango_max}]
                                             {act.parametro_medicion.unidad}
                                         </span>
                                     )}

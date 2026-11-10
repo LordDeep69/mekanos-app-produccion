@@ -13,6 +13,9 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         id_tipo_servicio: true,
         codigo_tipo: true,
         nombre_tipo: true,
+        aplica_a: true,
+        id_tipo_equipo: true,
+        categoria: true,
       },
     },
     catalogo_sistemas: {
@@ -20,6 +23,8 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         id_sistema: true,
         codigo_sistema: true,
         nombre_sistema: true,
+        aplica_a: true,
+        orden_visualizacion: true,
       },
     },
     parametros_medicion: {
@@ -28,6 +33,12 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         codigo_parametro: true,
         nombre_parametro: true,
         unidad_medida: true,
+        valor_minimo_normal: true,
+        valor_maximo_normal: true,
+        valor_minimo_critico: true,
+        valor_maximo_critico: true,
+        valor_ideal: true,
+        id_tipo_equipo: true,
       },
     },
   };
@@ -38,6 +49,9 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         id_tipo_servicio: true,
         codigo_tipo: true,
         nombre_tipo: true,
+        aplica_a: true,
+        id_tipo_equipo: true,
+        categoria: true,
       },
     },
     catalogo_sistemas: {
@@ -45,6 +59,8 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         id_sistema: true,
         codigo_sistema: true,
         nombre_sistema: true,
+        aplica_a: true,
+        orden_visualizacion: true,
       },
     },
     parametros_medicion: {
@@ -52,6 +68,13 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         id_parametro_medicion: true,
         codigo_parametro: true,
         nombre_parametro: true,
+        unidad_medida: true,
+        valor_minimo_normal: true,
+        valor_maximo_normal: true,
+        valor_minimo_critico: true,
+        valor_maximo_critico: true,
+        valor_ideal: true,
+        id_tipo_equipo: true,
       },
     },
     tipos_componente: {
@@ -111,7 +134,7 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         skip,
         take,
         include: this.INCLUDE_RELATIONS_LIST,
-        orderBy: { id_actividad_catalogo: 'desc' },
+        orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }, { id_actividad_catalogo: 'asc' }],
       }),
       this.prisma.catalogo_actividades.count(),
     ]);
@@ -126,7 +149,7 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         skip,
         take,
         include: this.INCLUDE_RELATIONS_LIST,
-        orderBy: { id_actividad_catalogo: 'desc' },
+        orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }, { id_actividad_catalogo: 'asc' }],
       }),
       this.prisma.catalogo_actividades.count({ where: { activo: true } }),
     ]);

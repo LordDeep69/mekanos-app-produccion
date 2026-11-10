@@ -87,11 +87,27 @@ export interface CatalogoActividad {
         idTipoServicio: number;
         codigoTipoServicio: string;
         nombreTipoServicio: string;
+        aplicaA?: string[] | null;
+        idTipoEquipo?: number | null;
+        categoria?: string | null;
     };
     sistema?: {
         idSistema: number;
         codigoSistema: string;
         nombreSistema: string;
+        aplicaA?: string[] | null;
+    };
+    parametroMedicion?: {
+        idParametroMedicion: number;
+        codigoParametro: string;
+        nombreParametro: string;
+        unidadMedida?: string | null;
+        valorMinimoNormal?: number | null;
+        valorMaximoNormal?: number | null;
+        valorMinimoCritico?: number | null;
+        valorMaximoCritico?: number | null;
+        valorIdeal?: number | null;
+        idTipoEquipo?: number | null;
     };
 }
 
@@ -144,7 +160,7 @@ export async function getCatalogoActividades(
     const queryParams = new URLSearchParams();
 
     if (params?.page !== undefined) queryParams.append('page', String(params.page));
-    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
+    queryParams.append('limit', String(params?.limit ?? 500));
     if (params?.tipoServicioId !== undefined) queryParams.append('tipoServicioId', String(params.tipoServicioId));
     if (params?.sistemaId !== undefined) queryParams.append('sistemaId', String(params.sistemaId));
     if (params?.tipoActividad) queryParams.append('tipoActividad', params.tipoActividad);

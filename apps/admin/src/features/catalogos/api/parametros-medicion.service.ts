@@ -105,7 +105,7 @@ export async function getParametrosMedicion(
     const queryParams = new URLSearchParams();
 
     if (params?.page !== undefined) queryParams.append('page', String(params.page));
-    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
+    queryParams.append('limit', String(params?.limit ?? 200));
     if (params?.activo !== undefined) queryParams.append('activo', String(params.activo));
     if (params?.categoria) queryParams.append('categoria', params.categoria);
     if (params?.tipoEquipoId !== undefined) queryParams.append('tipoEquipoId', String(params.tipoEquipoId));

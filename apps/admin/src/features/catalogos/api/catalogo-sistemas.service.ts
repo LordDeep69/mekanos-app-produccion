@@ -107,7 +107,7 @@ export async function getCatalogoSistemas(
     const queryParams = new URLSearchParams();
 
     if (params?.page !== undefined) queryParams.append('page', String(params.page));
-    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
+    queryParams.append('limit', String(params?.limit ?? 200));
 
     const url = queryParams.toString() ? `${BASE}?${queryParams.toString()}` : BASE;
     const response = await apiClient.get<{ data: CatalogoSistemaBackend[]; meta?: any }>(url);
@@ -211,7 +211,7 @@ export async function getCatalogoSistemasConUso(
 ): Promise<CatalogoSistemasConUsoResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.append('page', String(params.page));
-    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
+    queryParams.append('limit', String(params?.limit ?? 200));
 
     const url = queryParams.toString() ? `${BASE}/con-uso?${queryParams.toString()}` : `${BASE}/con-uso`;
     const response = await apiClient.get<{ data: any[]; meta?: any }>(url);

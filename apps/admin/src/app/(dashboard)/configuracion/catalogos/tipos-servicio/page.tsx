@@ -21,11 +21,12 @@ import {
     CheckCircle2,
     Layers,
     Globe,
-    Power
+    Power,
+    ClipboardList
 } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import {
     generarCodigoTipoServicio,
     verificarCodigoDuplicado,
@@ -35,11 +36,11 @@ import {
 } from '@/features/catalogos-eam';
 import {
     CATEGORIAS_SERVICIO,
+    useCatalogoActividades,
     useCreateTipoServicio,
     useDeleteTipoServicio,
     useTiposServicio,
-    useUpdateTipoServicio,
-    useCatalogoActividades,
+    useUpdateTipoServicio
 } from '../../../../../features/catalogos';
 import { TipoServicioDetailDrawer } from '../../../../../features/catalogos/components/tipo-servicio-detail-drawer';
 import {
@@ -163,7 +164,7 @@ export default function TiposServicioPage() {
     const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
 
     const { data: response, isLoading, isError, refetch } = useTiposServicio({ activo: 'all' as any, limit: 100 });
-    const { data: actividadesResponse } = useCatalogoActividades({ activo: true });
+    const { data: actividadesResponse } = useCatalogoActividades({ activo: true, limit: 500 });
     const [estadoFiltro, setEstadoFiltro] = useState<'TODOS' | 'ACTIVOS' | 'INACTIVOS'>('TODOS');
     const [togglingId, setTogglingId] = useState<number | null>(null);
     const { data: arquetipos = [] } = useArquetiposEam();
@@ -172,21 +173,16 @@ export default function TiposServicioPage() {
     const eliminarTipo = useDeleteTipoServicio();
 
     const tipos = response?.data || [];
-    const activosCount = useMemo(() => tipos.filter(t => t.activo !== false).length, [tipos]);
-    const inactivosCount = useMemo(() => tipos.filter(t => t.activo === false).length, [tipos]);
-
-    const actividadesMap = useMemo(() => {
+    const conteoActividadesMap = useMemo(() => {
         const map = new Map<number, number>();
-        const acts = actividadesResponse?.data || [];
-        for (const a of acts) {
-            const srvId = (a as any).idTipoServicio || (a as any).id_tipo_servicio;
-            if (srvId) {
-                const numId = Number(srvId);
-                map.set(numId, (map.get(numId) || 0) + 1);
-            }
+        for (const a of actividadesResponse?.data || []) {
+            const sid = Number(a.idTipoServicio || a.id_tipo_servicio);
+            if (sid) map.set(sid, (map.get(sid) || 0) + 1);
         }
         return map;
     }, [actividadesResponse]);
+    const activosCount = useMemo(() => tipos.filter(t => t.activo !== false).length, [tipos]);
+    const inactivosCount = useMemo(() => tipos.filter(t => t.activo === false).length, [tipos]);
 
     const handleToggleActivo = async (e: React.MouseEvent, tipo: any) => {
         e.stopPropagation();
@@ -448,41 +444,38 @@ export default function TiposServicioPage() {
                                                     <span>{tipo.activo !== false ? 'Activo' : 'Inactivo'}</span>
                                                 </button>
                                             </td>
-                                            <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                            <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                                                 <div className="flex justify-center">
                                                     {tipo.tiene_checklist ? (
                                                         (() => {
-                                                            const count = actividadesMap.get(Number(tipo.id_tipo_servicio)) || 0;
-                                                            if (count > 0) {
-                                                                return (
-                                                                    <Link
-                                                                        href={`/configuracion/catalogos/actividades?servicioId=${tipo.id_tipo_servicio}`}
-                                                                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-all shadow-2xs group/btn cursor-pointer"
-                                                                        title="Ver y configurar checklist en Gestor de Protocolos"
-                                                                    >
-                                                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                                                        <span>{count} {count === 1 ? 'actividad' : 'actividades'}</span>
-                                                                        <span className="text-emerald-500 font-normal">· Configurar →</span>
-                                                                    </Link>
-                                                                );
-                                                            }
+                                                            const actCount =
+                                                                conteoActividadesMap.get(tipo.id_tipo_servicio) ??
+                                                                tipo._count?.catalogo_actividades ??
+                                                                0;
                                                             return (
                                                                 <Link
-                                                                    href={`/configuracion/catalogos/actividades?servicioId=${tipo.id_tipo_servicio}`}
-                                                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-all shadow-2xs animate-pulse cursor-pointer"
-                                                                    title="Requiere checklist pero aún tiene 0 actividades. Clic para armar protocolo."
+                                                                    href={`/configuracion/catalogos/actividades?servicioId=${tipo.id_tipo_servicio}${actCount === 0 ? '&nueva=1' : ''}`}
+                                                                    className={cn(
+                                                                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all shadow-2xs",
+                                                                        actCount > 0
+                                                                            ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                                                                            : "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                                                                    )}
+                                                                    title={actCount > 0 ? "Configurar actividades del checklist" : "Este servicio aún tiene 0 actividades · Clic para armar su checklist"}
                                                                 >
-                                                                    <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
-                                                                    <span>0 actividades</span>
-                                                                    <span className="text-amber-700 font-semibold underline">· Armar Checklist →</span>
+                                                                    <ClipboardList className="h-3.5 w-3.5 shrink-0" />
+                                                                    <span>
+                                                                        {actCount === 0
+                                                                            ? '0 act. · Armar Checklist'
+                                                                            : `${actCount} act. · Configurar`}
+                                                                    </span>
                                                                 </Link>
                                                             );
                                                         })()
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-400" title="No requiere checklist técnico">
-                                                            <X className="h-3 w-3 text-gray-400" />
-                                                            <span>No aplica</span>
-                                                        </span>
+                                                        <div className="bg-gray-100 p-1 rounded-full" title="No requiere checklist">
+                                                            <X className="h-4 w-4 text-gray-400" />
+                                                        </div>
                                                     )}
                                                 </div>
                                             </td>

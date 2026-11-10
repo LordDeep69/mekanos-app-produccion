@@ -25,6 +25,13 @@ export class PrismaTiposServicioRepository {
         categoria: true,
       },
     },
+    _count: {
+      select: {
+        catalogo_actividades: {
+          where: { activo: true },
+        },
+      },
+    },
   };
 
   private readonly INCLUDE_RELATIONS_LIST = {
@@ -33,6 +40,13 @@ export class PrismaTiposServicioRepository {
         id_tipo_equipo: true,
         codigo_tipo: true,
         nombre_tipo: true,
+      },
+    },
+    _count: {
+      select: {
+        catalogo_actividades: {
+          where: { activo: true },
+        },
       },
     },
   };

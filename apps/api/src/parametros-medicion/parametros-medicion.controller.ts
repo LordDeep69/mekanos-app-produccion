@@ -105,7 +105,7 @@ export class ParametrosMedicionController {
         ? false
         : undefined,
       pageStr ? parseInt(pageStr, 10) : 1,
-      limitStr ? parseInt(limitStr, 10) : 10,
+      limitStr ? parseInt(limitStr, 10) : 200,
     );
     return this.queryBus.execute(query);
   }

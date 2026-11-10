@@ -41,7 +41,7 @@ export class CatalogoActividadesController {
     @Query('activo') activoStr?: string,
   ) {
     const page = pageStr ? parseInt(pageStr, 10) : 1;
-    const limit = limitStr ? parseInt(limitStr, 10) : 100;
+    const limit = limitStr ? parseInt(limitStr, 10) : 500;
     const activo = activoStr === 'true';
 
     if (activo) {
@@ -58,7 +58,7 @@ export class CatalogoActividadesController {
     @Query('limit') limitStr?: string,
   ) {
     const page = pageStr ? parseInt(pageStr, 10) : 1;
-    const limit = limitStr ? parseInt(limitStr, 10) : 100;
+    const limit = limitStr ? parseInt(limitStr, 10) : 500;
     return this.queryBus.execute(new ListarActividadesActivasQuery(page, limit));
   }
 

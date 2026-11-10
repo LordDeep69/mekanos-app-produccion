@@ -52,7 +52,6 @@ export function useCreateCatalogoActividad() {
         mutationFn: (data: CreateCatalogoActividadDto) => createCatalogoActividad(data),
         onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: CATALOGO_ACTIVIDADES_KEY });
-            queryClient.invalidateQueries({ queryKey: ['tipos-servicio'] });
             queryClient.invalidateQueries({ queryKey: ['catalogos', 'tipos-servicio'] });
             toast.success(result.message || 'Actividad creada exitosamente');
         },
@@ -77,7 +76,6 @@ export function useUpdateCatalogoActividad() {
         onSuccess: (result, { id }) => {
             queryClient.invalidateQueries({ queryKey: [...CATALOGO_ACTIVIDADES_KEY, id] });
             queryClient.invalidateQueries({ queryKey: CATALOGO_ACTIVIDADES_KEY });
-            queryClient.invalidateQueries({ queryKey: ['tipos-servicio'] });
             queryClient.invalidateQueries({ queryKey: ['catalogos', 'tipos-servicio'] });
             toast.success(result.message || 'Actividad actualizada exitosamente');
         },
@@ -100,7 +98,6 @@ export function useDeleteCatalogoActividad() {
         mutationFn: (id: number) => deleteCatalogoActividad(id),
         onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: CATALOGO_ACTIVIDADES_KEY });
-            queryClient.invalidateQueries({ queryKey: ['tipos-servicio'] });
             queryClient.invalidateQueries({ queryKey: ['catalogos', 'tipos-servicio'] });
             toast.success(result.message || 'Actividad desactivada');
         },

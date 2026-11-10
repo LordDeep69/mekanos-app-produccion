@@ -39,6 +39,9 @@ export class CatalogoActividadesMapper {
             idTipoServicio: entity.tipos_servicio.id_tipo_servicio,
             codigoTipoServicio: entity.tipos_servicio.codigo_tipo,
             nombreTipoServicio: entity.tipos_servicio.nombre_tipo,
+            aplicaA: entity.tipos_servicio.aplica_a ?? null,
+            idTipoEquipo: entity.tipos_servicio.id_tipo_equipo ?? null,
+            categoria: entity.tipos_servicio.categoria ?? null,
           }
         : undefined,
 
@@ -47,6 +50,37 @@ export class CatalogoActividadesMapper {
             idSistema: entity.catalogo_sistemas.id_sistema,
             codigoSistema: entity.catalogo_sistemas.codigo_sistema,
             nombreSistema: entity.catalogo_sistemas.nombre_sistema,
+            aplicaA: entity.catalogo_sistemas.aplica_a ?? null,
+          }
+        : undefined,
+
+      parametroMedicion: entity.parametros_medicion
+        ? {
+            idParametroMedicion: entity.parametros_medicion.id_parametro_medicion,
+            codigoParametro: entity.parametros_medicion.codigo_parametro,
+            nombreParametro: entity.parametros_medicion.nombre_parametro,
+            unidadMedida: entity.parametros_medicion.unidad_medida ?? null,
+            valorMinimoNormal:
+              entity.parametros_medicion.valor_minimo_normal != null
+                ? Number(entity.parametros_medicion.valor_minimo_normal)
+                : null,
+            valorMaximoNormal:
+              entity.parametros_medicion.valor_maximo_normal != null
+                ? Number(entity.parametros_medicion.valor_maximo_normal)
+                : null,
+            valorMinimoCritico:
+              entity.parametros_medicion.valor_minimo_critico != null
+                ? Number(entity.parametros_medicion.valor_minimo_critico)
+                : null,
+            valorMaximoCritico:
+              entity.parametros_medicion.valor_maximo_critico != null
+                ? Number(entity.parametros_medicion.valor_maximo_critico)
+                : null,
+            valorIdeal:
+              entity.parametros_medicion.valor_ideal != null
+                ? Number(entity.parametros_medicion.valor_ideal)
+                : null,
+            idTipoEquipo: entity.parametros_medicion.id_tipo_equipo ?? null,
           }
         : undefined,
     };

@@ -65,6 +65,9 @@ export class CatalogoActividadesResponseDto {
     idTipoServicio: number;
     codigoTipoServicio: string;
     nombreTipoServicio: string;
+    aplicaA?: string[] | null;
+    idTipoEquipo?: number | null;
+    categoria?: string | null;
   };
 
   @ApiProperty({ description: 'Sistema relacionado', required: false })
@@ -72,5 +75,20 @@ export class CatalogoActividadesResponseDto {
     idSistema: number;
     codigoSistema: string;
     nombreSistema: string;
+    aplicaA?: string[] | null;
+  };
+
+  @ApiProperty({ description: 'Parámetro de medición relacionado', required: false })
+  parametroMedicion?: {
+    idParametroMedicion: number;
+    codigoParametro: string;
+    nombreParametro: string;
+    unidadMedida?: string | null;
+    valorMinimoNormal?: number | null;
+    valorMaximoNormal?: number | null;
+    valorMinimoCritico?: number | null;
+    valorMaximoCritico?: number | null;
+    valorIdeal?: number | null;
+    idTipoEquipo?: number | null;
   };
 }

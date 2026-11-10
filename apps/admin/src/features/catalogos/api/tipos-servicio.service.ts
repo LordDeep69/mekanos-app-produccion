@@ -51,6 +51,9 @@ export interface TipoServicio {
         codigo_tipo: string;
         nombre_tipo: string;
     };
+    _count?: {
+        catalogo_actividades?: number;
+    };
 }
 
 export interface TiposServicioResponse {
@@ -183,7 +186,6 @@ export interface ActividadDetalle {
     descripcion_actividad: string;
     tipo_actividad: string;
     es_obligatoria: boolean;
-    orden_ejecucion?: number;
     tiempo_estimado_minutos?: number;
     parametro_medicion?: {
         id: number;
