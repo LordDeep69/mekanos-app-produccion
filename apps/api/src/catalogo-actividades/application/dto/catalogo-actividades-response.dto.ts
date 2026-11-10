@@ -1,6 +1,72 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { TipoActividadEnum } from './crear-catalogo-actividades.dto';
 
+export class CatalogoActividadTipoServicioRelDto {
+  @ApiProperty({ example: 1 })
+  idTipoServicio: number;
+
+  @ApiProperty({ example: 'ELEV_PREV_A' })
+  codigoTipoServicio: string;
+
+  @ApiProperty({ example: 'Mantenimiento Preventivo Tipo A - Ascensor' })
+  nombreTipoServicio: string;
+
+  @ApiProperty({ type: [String], required: false, nullable: true })
+  aplicaA?: string[] | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  idTipoEquipo?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  categoria?: string | null;
+}
+
+export class CatalogoActividadSistemaRelDto {
+  @ApiProperty({ example: 1 })
+  idSistema: number;
+
+  @ApiProperty({ example: 'SIS_CABINA' })
+  codigoSistema: string;
+
+  @ApiProperty({ example: 'Cabina, Puertas y Operador' })
+  nombreSistema: string;
+
+  @ApiProperty({ type: [String], required: false, nullable: true })
+  aplicaA?: string[] | null;
+}
+
+export class CatalogoActividadParametroRelDto {
+  @ApiProperty({ example: 1 })
+  idParametroMedicion: number;
+
+  @ApiProperty({ example: 'PAR_DESNIVEL' })
+  codigoParametro: string;
+
+  @ApiProperty({ example: 'Desnivel de parada' })
+  nombreParametro: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  unidadMedida?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  valorMinimoNormal?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  valorMaximoNormal?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  valorMinimoCritico?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  valorMaximoCritico?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  valorIdeal?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  idTipoEquipo?: number | null;
+}
+
 export class CatalogoActividadesResponseDto {
   @ApiProperty({ description: 'ID único de la actividad', example: 1 })
   idActividadCatalogo: number;
@@ -60,35 +126,12 @@ export class CatalogoActividadesResponseDto {
   fechaModificacion?: Date | null;
 
   // Relaciones incluidas (opcionales según endpoint)
-  @ApiProperty({ description: 'Tipo de servicio relacionado', required: false })
-  tipoServicio?: {
-    idTipoServicio: number;
-    codigoTipoServicio: string;
-    nombreTipoServicio: string;
-    aplicaA?: string[] | null;
-    idTipoEquipo?: number | null;
-    categoria?: string | null;
-  };
+  @ApiProperty({ type: () => CatalogoActividadTipoServicioRelDto, required: false })
+  tipoServicio?: CatalogoActividadTipoServicioRelDto;
 
-  @ApiProperty({ description: 'Sistema relacionado', required: false })
-  sistema?: {
-    idSistema: number;
-    codigoSistema: string;
-    nombreSistema: string;
-    aplicaA?: string[] | null;
-  };
+  @ApiProperty({ type: () => CatalogoActividadSistemaRelDto, required: false })
+  sistema?: CatalogoActividadSistemaRelDto;
 
-  @ApiProperty({ description: 'Parámetro de medición relacionado', required: false })
-  parametroMedicion?: {
-    idParametroMedicion: number;
-    codigoParametro: string;
-    nombreParametro: string;
-    unidadMedida?: string | null;
-    valorMinimoNormal?: number | null;
-    valorMaximoNormal?: number | null;
-    valorMinimoCritico?: number | null;
-    valorMaximoCritico?: number | null;
-    valorIdeal?: number | null;
-    idTipoEquipo?: number | null;
-  };
+  @ApiProperty({ type: () => CatalogoActividadParametroRelDto, required: false })
+  parametroMedicion?: CatalogoActividadParametroRelDto;
 }
