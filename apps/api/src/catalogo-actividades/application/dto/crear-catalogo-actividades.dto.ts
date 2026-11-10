@@ -7,41 +7,55 @@ export enum TipoActividadEnum {
   LIMPIEZA = 'LIMPIEZA',
   LUBRICACION = 'LUBRICACION',
   AJUSTE = 'AJUSTE',
-  REMPLAZO = 'REMPLAZO',
+  CAMBIO = 'CAMBIO',
   PRUEBA = 'PRUEBA',
-  REPARACION = 'REPARACION',
+  VERIFICACION = 'VERIFICACION',
 }
 
 export class CrearCatalogoActividadesDto {
-  @ApiProperty({ description: 'Código único de la actividad (se normalizará a MAYÚSCULAS)', example: 'ACT_MOT_001', maxLength: 50 })
+  @ApiProperty({ description: 'Código de actividad (opcional: si se omite, se autogenera único)', example: 'ACT_MOT_001', maxLength: 50, required: false })
   @IsString()
-  @IsNotEmpty()
-  codigoActividad: string;
+  @IsOptional()
+  codigoActividad?: string;
 
   @ApiProperty({ description: 'Descripción de la actividad', example: 'Inspección visual del motor' })
   @IsString()
   @IsNotEmpty()
   descripcionActividad: string;
 
-  @ApiProperty({ description: 'ID del tipo de servicio (FK requerido)', example: 1 })
-  @IsInt()
-  @IsPositive()
-  idTipoServicio: number;
-
-  @ApiProperty({ description: 'ID del sistema al que aplica (FK opcional)', example: 1, required: false })
+  @ApiProperty({ description: 'ID del tipo de servicio (opcional: NULL para plantillas puras del Banco Universal)', example: 1, required: false, nullable: true })
   @IsInt()
   @IsPositive()
   @IsOptional()
-  idSistema?: number;
+  idTipoServicio?: number | null;
+
+  @ApiProperty({ description: 'ID del subsistema / sistema al que aplica (FK opcional)', example: 1, required: false, nullable: true })
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  idSistema?: number | null;
+
+  @ApiProperty({ description: 'ID del tipo de equipo / arquetipo (FK opcional para Banco Universal)', example: 22, required: false, nullable: true })
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  idTipoEquipo?: number | null;
+
+  @ApiProperty({ description: 'ID de plantilla origen en Banco Universal (opcional)', required: false, nullable: true })
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  idPlantillaOrigen?: number | null;
 
   @ApiProperty({ description: 'Tipo de actividad', enum: TipoActividadEnum, example: TipoActividadEnum.INSPECCION })
   @IsEnum(TipoActividadEnum)
   tipoActividad: TipoActividadEnum;
 
-  @ApiProperty({ description: 'Orden de ejecución (debe ser positivo)', example: 1, minimum: 1 })
+  @ApiProperty({ description: 'Orden de ejecución (opcional: si se omite se calcula automáticamente)', example: 1, minimum: 1, required: false })
   @IsInt()
   @IsPositive()
-  ordenEjecucion: number;
+  @IsOptional()
+  ordenEjecucion?: number;
 
   @ApiProperty({ description: 'Indica si la actividad es obligatoria', example: true, default: true, required: false })
   @IsBoolean()
@@ -52,29 +66,29 @@ export class CrearCatalogoActividadesDto {
   @IsInt()
   @IsPositive()
   @IsOptional()
-  tiempoEstimadoMinutos?: number;
+  tiempoEstimadoMinutos?: number | null;
 
   @ApiProperty({ description: 'ID del parámetro de medición (FK opcional)', example: 1, required: false })
   @IsInt()
   @IsPositive()
   @IsOptional()
-  idParametroMedicion?: number;
+  idParametroMedicion?: number | null;
 
   @ApiProperty({ description: 'ID del tipo de componente (FK opcional)', example: 1, required: false })
   @IsInt()
   @IsPositive()
   @IsOptional()
-  idTipoComponente?: number;
+  idTipoComponente?: number | null;
 
   @ApiProperty({ description: 'Instrucciones detalladas para ejecutar la actividad', example: 'Verificar conexiones eléctricas...', required: false })
   @IsString()
   @IsOptional()
-  instrucciones?: string;
+  instrucciones?: string | null;
 
   @ApiProperty({ description: 'Precauciones de seguridad', example: 'Usar guantes dieléctricos', required: false })
   @IsString()
   @IsOptional()
-  precauciones?: string;
+  precauciones?: string | null;
 
   @ApiProperty({ description: 'Indica si la actividad está activa', example: true, default: true, required: false })
   @IsBoolean()
@@ -84,10 +98,11 @@ export class CrearCatalogoActividadesDto {
   @ApiProperty({ description: 'Observaciones adicionales', example: 'Actividad crítica de seguridad', required: false })
   @IsString()
   @IsOptional()
-  observaciones?: string;
+  observaciones?: string | null;
 
-  @ApiProperty({ description: 'ID del usuario que crea el registro (auditoría)', example: 1 })
+  @ApiProperty({ description: 'ID del usuario que crea el registro (auditoría, opcional)', example: 1, required: false })
   @IsInt()
   @IsPositive()
-  creadoPor: number;
+  @IsOptional()
+  creadoPor?: number;
 }

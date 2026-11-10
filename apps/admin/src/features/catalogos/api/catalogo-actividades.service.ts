@@ -1,6 +1,6 @@
 /**
  * MEKANOS S.A.S - Portal Admin
- * Servicio API para Catálogo de Actividades
+ * Servicio API para Catálogo de Actividades y Banco Universal (Fase 5.9)
  * 
  * Backend: @Controller('catalogo-actividades')
  */
@@ -9,7 +9,6 @@ import { apiClient } from '@/lib/api/client';
 
 const BASE = '/catalogo-actividades';
 
-// Tipo de actividad (desde backend ENUM)
 export type TipoActividad =
     | 'INSPECCION'
     | 'MEDICION'
@@ -36,34 +35,38 @@ export interface CatalogoActividad {
     id_actividad_catalogo?: number;
     codigo_actividad?: string;
     descripcion_actividad?: string;
-    id_tipo_servicio?: number;
-    id_sistema?: number;
+    id_tipo_servicio?: number | null;
+    id_sistema?: number | null;
+    id_tipo_equipo?: number | null;
+    id_plantilla_origen?: number | null;
     tipo_actividad?: TipoActividad;
     orden_ejecucion?: number;
     es_obligatoria?: boolean;
-    tiempo_estimado_minutos?: number;
-    id_parametro_medicion?: number;
-    id_tipo_componente?: number;
-    instrucciones?: string;
-    precauciones?: string;
+    tiempo_estimado_minutos?: number | null;
+    id_parametro_medicion?: number | null;
+    id_tipo_componente?: number | null;
+    instrucciones?: string | null;
+    precauciones?: string | null;
     activo?: boolean;
-    observaciones?: string;
+    observaciones?: string | null;
     fecha_creacion?: string;
     // CamelCase (CQRS backend)
     idActividadCatalogo?: number;
     codigoActividad?: string;
     descripcionActividad?: string;
-    idTipoServicio?: number;
-    idSistema?: number;
+    idTipoServicio?: number | null;
+    idSistema?: number | null;
+    idTipoEquipo?: number | null;
+    idPlantillaOrigen?: number | null;
     tipoActividad?: TipoActividad;
     ordenEjecucion?: number;
     esObligatoria?: boolean;
-    tiempoEstimadoMinutos?: number;
-    idParametroMedicion?: number;
-    idTipoComponente?: number;
-    creadoPor?: number;
+    tiempoEstimadoMinutos?: number | null;
+    idParametroMedicion?: number | null;
+    idTipoComponente?: number | null;
+    creadoPor?: number | null;
     fechaCreacion?: string;
-    modificadoPor?: number;
+    modificadoPor?: number | null;
     fechaModificacion?: string;
     // Relaciones snake_case
     tipos_servicio?: {
@@ -91,6 +94,11 @@ export interface CatalogoActividad {
         idTipoEquipo?: number | null;
         categoria?: string | null;
     };
+    tipoEquipo?: {
+        idTipoEquipo: number;
+        codigoTipo: string;
+        nombreTipo: string;
+    };
     sistema?: {
         idSistema: number;
         codigoSistema: string;
@@ -112,8 +120,8 @@ export interface CatalogoActividad {
 }
 
 export interface CatalogoActividadesResponse {
-    success: boolean;
-    message: string;
+    success?: boolean;
+    message?: string;
     data: CatalogoActividad[];
     meta?: {
         page: number;
@@ -127,33 +135,72 @@ export interface CatalogoActividadesQueryParams {
     page?: number;
     limit?: number;
     tipoServicioId?: number;
+    tipoEquipoId?: number;
     sistemaId?: number;
+    soloPlantillas?: boolean;
     tipoActividad?: TipoActividad;
-    activo?: boolean;
+    search?: string;
+    activo?: boolean | 'all';
 }
 
 export interface CreateCatalogoActividadDto {
-    codigoActividad: string;
+    codigoActividad?: string;
     descripcionActividad: string;
-    idTipoServicio: number;
-    idSistema?: number;
+    idTipoServicio?: number | null;
+    idSistema?: number | null;
+    idTipoEquipo?: number | null;
+    idPlantillaOrigen?: number | null;
     tipoActividad: TipoActividad;
-    ordenEjecucion: number;
+    ordenEjecucion?: number;
     esObligatoria?: boolean;
-    tiempoEstimadoMinutos?: number;
-    idParametroMedicion?: number;
-    idTipoComponente?: number;
-    instrucciones?: string;
-    precauciones?: string;
+    tiempoEstimadoMinutos?: number | null;
+    idParametroMedicion?: number | null;
+    idTipoComponente?: number | null;
+    instrucciones?: string | null;
+    precauciones?: string | null;
     activo?: boolean;
-    observaciones?: string;
+    observaciones?: string | null;
+    creadoPor?: number;
 }
 
-export interface UpdateCatalogoActividadDto extends Partial<CreateCatalogoActividadDto> { }
+export interface UpdateCatalogoActividadDto extends Partial<CreateCatalogoActividadDto> {
+    modificadoPor?: number;
+}
 
-/**
- * Obtener lista de actividades del catálogo
- */
+export interface VincularActividadesLotePayload {
+    actividadIds: number[];
+    tipoServicioIds: number[];
+    overrideSistemaId?: number | null;
+    creadoPor?: number;
+}
+
+export interface ReordenarActividadesLotePayload {
+    items: {
+        idActividadCatalogo: number;
+        ordenEjecucion: number;
+        idSistema?: number | null;
+    }[];
+    modificadoPor?: number;
+}
+
+export interface PropagarActividadBancoPayload {
+    idActividadOrigen: number;
+    descripcionActividad?: string;
+    tipoActividad?: TipoActividad;
+    idSistema?: number | null;
+    idTipoEquipo?: number | null;
+    idParametroMedicion?: number | null;
+    esObligatoria?: boolean;
+    tiempoEstimadoMinutos?: number | null;
+    instrucciones?: string | null;
+    precauciones?: string | null;
+    observaciones?: string | null;
+    activo?: boolean;
+    propagarAHijas?: boolean;
+    propagarLegacyPorNombre?: boolean;
+    modificadoPor?: number;
+}
+
 export async function getCatalogoActividades(
     params?: CatalogoActividadesQueryParams
 ): Promise<CatalogoActividadesResponse> {
@@ -162,8 +209,11 @@ export async function getCatalogoActividades(
     if (params?.page !== undefined) queryParams.append('page', String(params.page));
     queryParams.append('limit', String(params?.limit ?? 500));
     if (params?.tipoServicioId !== undefined) queryParams.append('tipoServicioId', String(params.tipoServicioId));
+    if (params?.tipoEquipoId !== undefined) queryParams.append('tipoEquipoId', String(params.tipoEquipoId));
     if (params?.sistemaId !== undefined) queryParams.append('sistemaId', String(params.sistemaId));
+    if (params?.soloPlantillas) queryParams.append('soloPlantillas', 'true');
     if (params?.tipoActividad) queryParams.append('tipoActividad', params.tipoActividad);
+    if (params?.search) queryParams.append('search', params.search);
     if (params?.activo !== undefined) queryParams.append('activo', String(params.activo));
 
     const url = queryParams.toString() ? `${BASE}?${queryParams.toString()}` : BASE;
@@ -171,45 +221,56 @@ export async function getCatalogoActividades(
     return response.data;
 }
 
-/**
- * Obtener actividad por ID
- */
 export async function getCatalogoActividad(id: number): Promise<{ success: boolean; data: CatalogoActividad }> {
     const response = await apiClient.get<{ success: boolean; data: CatalogoActividad }>(`${BASE}/${id}`);
     return response.data;
 }
 
-/**
- * Crear nueva actividad en el catálogo
- */
 export async function createCatalogoActividad(
     data: CreateCatalogoActividadDto
-): Promise<{ success: boolean; message: string; data: CatalogoActividad }> {
-    const response = await apiClient.post<{ success: boolean; message: string; data: CatalogoActividad }>(
-        BASE,
-        data
-    );
-    return response.data;
+): Promise<{ success?: boolean; message?: string; data?: CatalogoActividad } & CatalogoActividad> {
+    const response = await apiClient.post(BASE, data);
+    return response.data as any;
 }
 
-/**
- * Actualizar actividad del catálogo
- */
 export async function updateCatalogoActividad(
     id: number,
     data: UpdateCatalogoActividadDto
-): Promise<{ success: boolean; message: string; data: CatalogoActividad }> {
-    const response = await apiClient.put<{ success: boolean; message: string; data: CatalogoActividad }>(
-        `${BASE}/${id}`,
-        data
-    );
+): Promise<{ success?: boolean; message?: string; data?: CatalogoActividad } & CatalogoActividad> {
+    const response = await apiClient.put(`${BASE}/${id}`, data);
+    return response.data as any;
+}
+
+export async function deleteCatalogoActividad(id: number): Promise<{ success?: boolean; message?: string }> {
+    const response = await apiClient.delete<{ success?: boolean; message?: string }>(`${BASE}/${id}`);
     return response.data;
 }
 
-/**
- * Eliminar (soft delete) actividad del catálogo
- */
-export async function deleteCatalogoActividad(id: number): Promise<{ success: boolean; message: string }> {
-    const response = await apiClient.delete<{ success: boolean; message: string }>(`${BASE}/${id}`);
+export async function vincularActividadesLote(
+    payload: VincularActividadesLotePayload
+): Promise<{ createdCount: number; skippedCount: number; created: CatalogoActividad[] }> {
+    const response = await apiClient.post<{
+        createdCount: number;
+        skippedCount: number;
+        created: CatalogoActividad[];
+    }>(`${BASE}/vincular-lote`, payload);
+    return response.data;
+}
+
+export async function reordenarActividadesLote(
+    payload: ReordenarActividadesLotePayload
+): Promise<{ updatedCount: number }> {
+    const response = await apiClient.put<{ updatedCount: number }>(`${BASE}/reordenar-lote`, payload);
+    return response.data;
+}
+
+export async function propagarActividadBanco(
+    payload: PropagarActividadBancoPayload
+): Promise<{ origin: CatalogoActividad; propagatedCount: number; affectedServiceIds: number[] }> {
+    const response = await apiClient.put<{
+        origin: CatalogoActividad;
+        propagatedCount: number;
+        affectedServiceIds: number[];
+    }>(`${BASE}/banco/propagar`, payload);
     return response.data;
 }

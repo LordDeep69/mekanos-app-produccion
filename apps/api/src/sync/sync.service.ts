@@ -575,7 +575,7 @@ export class SyncService {
           });
 
           const actividades = await this.prisma.catalogo_actividades.findMany({
-            where: { activo: true },
+            where: { activo: true, id_tipo_servicio: { not: null } },
             include: { catalogo_sistemas: true },
             orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
           });
@@ -631,7 +631,7 @@ export class SyncService {
               instrucciones: a.instrucciones ?? undefined,
               precauciones: a.precauciones ?? undefined,
               idParametroMedicion: a.id_parametro_medicion ?? undefined,
-              idTipoServicio: a.id_tipo_servicio,
+              idTipoServicio: a.id_tipo_servicio ?? undefined,
               sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
             })),
             estadosOrden: estados.map((e) => ({
@@ -654,7 +654,7 @@ export class SyncService {
         // (son apenas ~180 registros / ~25 KB) para garantizar que los técnicos no sufran desincronización
         const [actividadesDelta, tiposServicioDelta] = await Promise.all([
           this.prisma.catalogo_actividades.findMany({
-            where: { activo: true },
+            where: { activo: true, id_tipo_servicio: { not: null } },
             include: { catalogo_sistemas: true },
             orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
           }),
@@ -683,7 +683,7 @@ export class SyncService {
             instrucciones: a.instrucciones ?? undefined,
             precauciones: a.precauciones ?? undefined,
             idParametroMedicion: a.id_parametro_medicion ?? undefined,
-            idTipoServicio: a.id_tipo_servicio,
+            idTipoServicio: a.id_tipo_servicio ?? undefined,
             sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
           })),
           estadosOrden: [],
@@ -1149,9 +1149,9 @@ export class SyncService {
         decimalesPrecision: p.decimales_precision || 2,
       }));
 
-      // 4. Obtener catálogo de actividades activas con sistema incluido
+      // 4. Obtener catálogo de actividades activas con sistema incluido (solo las asignadas a servicios)
       const actividades = await this.prisma.catalogo_actividades.findMany({
-        where: { activo: true },
+        where: { activo: true, id_tipo_servicio: { not: null } },
         include: { catalogo_sistemas: true },
         orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
       });
@@ -1167,7 +1167,7 @@ export class SyncService {
         instrucciones: a.instrucciones ?? undefined,
         precauciones: a.precauciones ?? undefined,
         idParametroMedicion: a.id_parametro_medicion ?? undefined,
-        idTipoServicio: a.id_tipo_servicio,
+        idTipoServicio: a.id_tipo_servicio ?? undefined,
         sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
       }));
 

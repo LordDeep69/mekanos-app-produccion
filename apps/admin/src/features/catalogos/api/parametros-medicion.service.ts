@@ -9,7 +9,18 @@ import { apiClient } from '@/lib/api/client';
 
 const BASE = '/parametros-medicion';
 
-export type CategoriaParametro = 'ELECTRICO' | 'MECANICO' | 'TERMICO' | 'PRESION' | 'FLUJO' | 'NIVEL' | 'VIBRACION' | 'OTRO';
+export type CategoriaParametro =
+    | 'ELECTRICO'
+    | 'MECANICO'
+    | 'HIDRAULICO'
+    | 'OPERACIONAL'
+    | 'AMBIENTAL'
+    | 'TERMICO'
+    | 'PRESION'
+    | 'FLUJO'
+    | 'NIVEL'
+    | 'VIBRACION'
+    | 'OTRO';
 export type TipoDato = 'NUMERICO' | 'BOOLEANO' | 'TEXTO' | 'RANGO';
 
 export const CATEGORIAS_PARAMETRO: { value: CategoriaParametro; label: string; color: string }[] = [

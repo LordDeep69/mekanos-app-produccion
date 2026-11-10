@@ -13,47 +13,60 @@ export class ActualizarCatalogoActividadesHandler implements ICommandHandler<Act
   ) {}
 
   async execute(command: ActualizarCatalogoActividadesCommand): Promise<CatalogoActividadesResponseDto> {
-    // 1. Verificar existencia
     const existing = await this.repository.findById(command.id);
     if (!existing) {
       throw new NotFoundException(`Actividad con ID ${command.id} no encontrada`);
     }
 
-    // 2. Validar FKs opcionales si se están actualizando
-    if (command.idSistema !== undefined) {
+    if (command.idTipoServicio != null) {
+      const tsExists = await this.repository.existsTipoServicio(command.idTipoServicio);
+      if (!tsExists) {
+        throw new NotFoundException(`Tipo de servicio con ID ${command.idTipoServicio} no existe`);
+      }
+    }
+
+    if (command.idTipoEquipo != null) {
+      const teExists = await this.repository.existsTipoEquipo(command.idTipoEquipo);
+      if (!teExists) {
+        throw new NotFoundException(`Tipo de equipo con ID ${command.idTipoEquipo} no existe`);
+      }
+    }
+
+    if (command.idSistema != null) {
       const sistemaExists = await this.repository.existsSistema(command.idSistema);
       if (!sistemaExists) {
         throw new NotFoundException(`Sistema con ID ${command.idSistema} no existe`);
       }
     }
 
-    if (command.idParametroMedicion !== undefined) {
+    if (command.idParametroMedicion != null) {
       const parametroExists = await this.repository.existsParametroMedicion(command.idParametroMedicion);
       if (!parametroExists) {
         throw new NotFoundException(`Parámetro de medición con ID ${command.idParametroMedicion} no existe`);
       }
     }
 
-    if (command.idTipoComponente !== undefined) {
+    if (command.idTipoComponente != null) {
       const componenteExists = await this.repository.existsTipoComponente(command.idTipoComponente);
       if (!componenteExists) {
         throw new NotFoundException(`Tipo de componente con ID ${command.idTipoComponente} no existe`);
       }
     }
 
-    // 3. Validar CHECK constraints
-    if (command.ordenEjecucion !== undefined && command.ordenEjecucion <= 0) {
+    if (command.ordenEjecucion != null && command.ordenEjecucion <= 0) {
       throw new BadRequestException('El orden de ejecución debe ser mayor a 0');
     }
 
-    if (command.tiempoEstimadoMinutos !== undefined && command.tiempoEstimadoMinutos <= 0) {
+    if (command.tiempoEstimadoMinutos != null && command.tiempoEstimadoMinutos <= 0) {
       throw new BadRequestException('El tiempo estimado debe ser mayor a 0');
     }
 
-    // 4. Actualizar entidad
     const data = CatalogoActividadesMapper.toSnakeCase({
+      codigoActividad: command.codigoActividad,
       descripcionActividad: command.descripcionActividad,
+      idTipoServicio: command.idTipoServicio,
       idSistema: command.idSistema,
+      idTipoEquipo: command.idTipoEquipo,
       tipoActividad: command.tipoActividad,
       ordenEjecucion: command.ordenEjecucion,
       esObligatoria: command.esObligatoria,
@@ -66,9 +79,6 @@ export class ActualizarCatalogoActividadesHandler implements ICommandHandler<Act
       observaciones: command.observaciones,
       modificadoPor: command.modificadoPor,
     });
-
-    // Remover campos undefined
-    Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
 
     const entity = await this.repository.update(command.id, data);
     return CatalogoActividadesMapper.toCamelCase(entity);

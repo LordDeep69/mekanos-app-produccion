@@ -25,8 +25,9 @@ import {
     ClipboardList
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import {
     generarCodigoTipoServicio,
     verificarCodigoDuplicado,
@@ -42,6 +43,7 @@ import {
     useTiposServicio,
     useUpdateTipoServicio
 } from '../../../../../features/catalogos';
+import { FastProtocolBuilder } from '../../../../../features/catalogos/components/FastProtocolBuilder';
 import { TipoServicioDetailDrawer } from '../../../../../features/catalogos/components/tipo-servicio-detail-drawer';
 import {
     EditorContent,
@@ -156,6 +158,36 @@ function resolverArquetiposAplicables(
 }
 
 export default function TiposServicioPage() {
+    return (
+        <Suspense fallback={<div className="p-12 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>}>
+            <TiposServicioContent />
+        </Suspense>
+    );
+}
+
+function TiposServicioContent() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const protocoloParam = searchParams.get('protocolo');
+    const [protocoloId, setProtocoloId] = useState<number | null>(
+        protocoloParam ? Number(protocoloParam) : null
+    );
+
+    useEffect(() => {
+        const p = searchParams.get('protocolo');
+        setProtocoloId(p ? Number(p) : null);
+    }, [searchParams]);
+
+    const openProtocolBuilder = (id: number) => {
+        setProtocoloId(id);
+        router.push(`/configuracion/catalogos/tipos-servicio?protocolo=${id}`);
+    };
+
+    const closeProtocolBuilder = () => {
+        setProtocoloId(null);
+        router.push('/configuracion/catalogos/tipos-servicio');
+    };
+
     const [busqueda, setBusqueda] = useState('');
     const [categoriaFiltro, setCategoriaFiltro] = useState('');
     const [tipoEquipoFiltro, setTipoEquipoFiltro] = useState('');
@@ -240,6 +272,16 @@ export default function TiposServicioPage() {
         return matchesBusqueda && matchesCategoria && matchesTipoEquipo;
     });
 
+    if (protocoloId) {
+        return (
+            <FastProtocolBuilder
+                tipoServicioId={protocoloId}
+                onBack={closeProtocolBuilder}
+                onSelectServicio={(id) => openProtocolBuilder(id)}
+            />
+        );
+    }
+
     return (
         <div className="space-y-6">
             {/* Header de la Sección */}
@@ -247,10 +289,10 @@ export default function TiposServicioPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                         <Wrench className="h-7 w-7 text-blue-600" />
-                        Tipos de Servicio
+                        Tipos de Servicio y Constructor de Protocolos
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        Define las categorías de mantenimiento y servicios técnicos (Universales, por Equipo o Multi-Equipo)
+                        Gobierna los tipos de intervención técnica y configura en 1 clic su protocolo de inspección por subsistema y telemetría UoM
                     </p>
                 </div>
                 <button
@@ -453,23 +495,24 @@ export default function TiposServicioPage() {
                                                                 tipo._count?.catalogo_actividades ??
                                                                 0;
                                                             return (
-                                                                <Link
-                                                                    href={`/configuracion/catalogos/actividades?servicioId=${tipo.id_tipo_servicio}${actCount === 0 ? '&nueva=1' : ''}`}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openProtocolBuilder(tipo.id_tipo_servicio)}
                                                                     className={cn(
-                                                                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all shadow-2xs",
+                                                                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all shadow-2xs cursor-pointer",
                                                                         actCount > 0
                                                                             ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
                                                                             : "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
                                                                     )}
-                                                                    title={actCount > 0 ? "Configurar actividades del checklist" : "Este servicio aún tiene 0 actividades · Clic para armar su checklist"}
+                                                                    title={actCount > 0 ? "Abrir Fast-Protocol Builder (Checklist y Mediciones)" : "Este servicio aún tiene 0 actividades · Clic para armar su protocolo"}
                                                                 >
                                                                     <ClipboardList className="h-3.5 w-3.5 shrink-0" />
                                                                     <span>
                                                                         {actCount === 0
-                                                                            ? '0 act. · Armar Checklist'
-                                                                            : `${actCount} act. · Configurar`}
+                                                                            ? '0 act. · Armar Protocolo'
+                                                                            : `${actCount} act. · Configurar Protocolo`}
                                                                     </span>
-                                                                </Link>
+                                                                </button>
                                                             );
                                                         })()
                                                     ) : (

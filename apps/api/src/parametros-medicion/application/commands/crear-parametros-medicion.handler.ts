@@ -83,7 +83,7 @@ export class CrearParametrosMedicionHandler
       if (
         command.valorMinimoNormal !== undefined &&
         command.valorMaximoNormal !== undefined &&
-        command.valorMinimoNormal >= command.valorMaximoNormal
+        command.valorMinimoNormal > command.valorMaximoNormal
       ) {
         throw new BadRequestException(
           `valor_minimo_normal (${command.valorMinimoNormal}) debe ser menor que valor_maximo_normal (${command.valorMaximoNormal})`,

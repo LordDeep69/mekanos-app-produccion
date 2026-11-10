@@ -3,16 +3,33 @@ import { IsBoolean, IsEnum, IsInt, IsOptional, IsPositive, IsString } from 'clas
 import { TipoActividadEnum } from './crear-catalogo-actividades.dto';
 
 export class ActualizarCatalogoActividadesDto {
+  @ApiProperty({ description: 'Código de actividad', required: false })
+  @IsString()
+  @IsOptional()
+  codigoActividad?: string;
+
   @ApiProperty({ description: 'Descripción de la actividad', example: 'Inspección actualizada', required: false })
   @IsString()
   @IsOptional()
   descripcionActividad?: string;
 
-  @ApiProperty({ description: 'ID del sistema al que aplica', example: 2, required: false })
+  @ApiProperty({ description: 'ID del tipo de servicio (null para plantilla pura)', required: false, nullable: true })
   @IsInt()
   @IsPositive()
   @IsOptional()
-  idSistema?: number;
+  idTipoServicio?: number | null;
+
+  @ApiProperty({ description: 'ID del sistema al que aplica', example: 2, required: false, nullable: true })
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  idSistema?: number | null;
+
+  @ApiProperty({ description: 'ID del tipo de equipo / arquetipo', required: false, nullable: true })
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  idTipoEquipo?: number | null;
 
   @ApiProperty({ description: 'Tipo de actividad', enum: TipoActividadEnum, required: false })
   @IsEnum(TipoActividadEnum)
@@ -30,46 +47,47 @@ export class ActualizarCatalogoActividadesDto {
   @IsOptional()
   esObligatoria?: boolean;
 
-  @ApiProperty({ description: 'Tiempo estimado en minutos', example: 45, minimum: 1, required: false })
+  @ApiProperty({ description: 'Tiempo estimado en minutos', example: 45, minimum: 1, required: false, nullable: true })
   @IsInt()
   @IsPositive()
   @IsOptional()
-  tiempoEstimadoMinutos?: number;
+  tiempoEstimadoMinutos?: number | null;
 
-  @ApiProperty({ description: 'ID del parámetro de medición', example: 2, required: false })
+  @ApiProperty({ description: 'ID del parámetro de medición', example: 2, required: false, nullable: true })
   @IsInt()
   @IsPositive()
   @IsOptional()
-  idParametroMedicion?: number;
+  idParametroMedicion?: number | null;
 
-  @ApiProperty({ description: 'ID del tipo de componente', example: 2, required: false })
+  @ApiProperty({ description: 'ID del tipo de componente', example: 2, required: false, nullable: true })
   @IsInt()
   @IsPositive()
   @IsOptional()
-  idTipoComponente?: number;
+  idTipoComponente?: number | null;
 
-  @ApiProperty({ description: 'Instrucciones detalladas', example: 'Instrucciones actualizadas', required: false })
+  @ApiProperty({ description: 'Instrucciones detalladas', example: 'Instrucciones actualizadas', required: false, nullable: true })
   @IsString()
   @IsOptional()
-  instrucciones?: string;
+  instrucciones?: string | null;
 
-  @ApiProperty({ description: 'Precauciones de seguridad', example: 'Precauciones actualizadas', required: false })
+  @ApiProperty({ description: 'Precauciones de seguridad', example: 'Precauciones actualizadas', required: false, nullable: true })
   @IsString()
   @IsOptional()
-  precauciones?: string;
+  precauciones?: string | null;
 
   @ApiProperty({ description: 'Indica si la actividad está activa', example: false, required: false })
   @IsBoolean()
   @IsOptional()
   activo?: boolean;
 
-  @ApiProperty({ description: 'Observaciones adicionales', example: 'Observaciones actualizadas', required: false })
+  @ApiProperty({ description: 'Observaciones adicionales', example: 'Observaciones actualizadas', required: false, nullable: true })
   @IsString()
   @IsOptional()
-  observaciones?: string;
+  observaciones?: string | null;
 
-  @ApiProperty({ description: 'ID del usuario que modifica el registro (auditoría)', example: 1 })
+  @ApiProperty({ description: 'ID del usuario que modifica el registro (auditoría, opcional)', example: 1, required: false })
   @IsInt()
   @IsPositive()
-  modificadoPor: number;
+  @IsOptional()
+  modificadoPor?: number;
 }

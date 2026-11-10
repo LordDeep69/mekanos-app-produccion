@@ -192,11 +192,11 @@ export function TipoServicioDetailDrawer({ tipoServicioId, onClose }: Props) {
                                     </h3>
                                     <div className="flex items-center gap-2">
                                         <Link
-                                            href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}&nueva=1`}
+                                            href={`/configuracion/catalogos/tipos-servicio?protocolo=${tipoServicioId}`}
                                             onClick={onClose}
                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-2xs"
                                         >
-                                            <span>+ Agregar Actividad / Medición</span>
+                                            <span>🛠️ Abrir Constructor de Protocolo</span>
                                         </Link>
                                         {detalle.sistemas_con_actividades.length > 0 && (
                                             <>
@@ -224,22 +224,22 @@ export function TipoServicioDetailDrawer({ tipoServicioId, onClose }: Props) {
                                             Este servicio aún tiene 0 actividades configuradas en su checklist.
                                         </p>
                                         <p className="text-xs text-amber-800 max-w-md mx-auto">
-                                            Configura las tareas de inspección y puntos de medición con Unidad de Medida (UoM) o reutiliza actividades del Banco Universal.
+                                            Configura las tareas de inspección por subsistema y los puntos de telemetría con Unidad de Medida (UoM) en el Constructor Rápido de Protocolo.
                                         </p>
                                         <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
                                             <Link
-                                                href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}&nueva=1`}
+                                                href={`/configuracion/catalogos/tipos-servicio?protocolo=${tipoServicioId}`}
                                                 onClick={onClose}
                                                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-all"
                                             >
-                                                <span>+ Crear Primera Actividad / Medición</span>
+                                                <span>🛠️ Configurar Checklist y Mediciones</span>
                                             </Link>
                                             <Link
-                                                href={`/configuracion/catalogos/actividades?servicioId=${tipoServicioId}`}
+                                                href="/configuracion/catalogos/actividades"
                                                 onClick={onClose}
                                                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 transition-all"
                                             >
-                                                <span>📚 Ir al Constructor y Banco Universal</span>
+                                                <span>📚 Ir al Banco Universal</span>
                                             </Link>
                                         </div>
                                     </div>

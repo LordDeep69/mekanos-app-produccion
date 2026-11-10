@@ -77,11 +77,17 @@ export class CatalogoActividadesResponseDto {
   @ApiProperty({ description: 'Descripción de la actividad', example: 'Inspección visual del motor' })
   descripcionActividad: string;
 
-  @ApiProperty({ description: 'ID del tipo de servicio', example: 1 })
-  idTipoServicio: number;
+  @ApiProperty({ description: 'ID del tipo de servicio (null en plantillas del Banco Universal)', example: 1, nullable: true })
+  idTipoServicio?: number | null;
 
   @ApiProperty({ description: 'ID del sistema', example: 1, nullable: true })
   idSistema?: number | null;
+
+  @ApiProperty({ description: 'ID del tipo de equipo base', example: 22, nullable: true, required: false })
+  idTipoEquipo?: number | null;
+
+  @ApiProperty({ description: 'ID de plantilla origen en Banco Universal', example: 12, nullable: true, required: false })
+  idPlantillaOrigen?: number | null;
 
   @ApiProperty({ description: 'Tipo de actividad', enum: TipoActividadEnum, example: TipoActividadEnum.INSPECCION })
   tipoActividad: TipoActividadEnum;
@@ -134,4 +140,11 @@ export class CatalogoActividadesResponseDto {
 
   @ApiProperty({ type: () => CatalogoActividadParametroRelDto, required: false })
   parametroMedicion?: CatalogoActividadParametroRelDto;
+
+  @ApiProperty({ required: false, nullable: true })
+  tipoEquipo?: {
+    idTipoEquipo: number;
+    codigoTipo: string;
+    nombreTipo: string;
+  };
 }

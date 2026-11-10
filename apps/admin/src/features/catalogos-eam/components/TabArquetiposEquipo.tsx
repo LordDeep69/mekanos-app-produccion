@@ -42,6 +42,7 @@ import {
   verificarCodigoDuplicado,
 } from '../utils/eam-code-generator';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   ArquetipoEquipo,
   DynamicEquipmentFormPreview,
@@ -1674,21 +1675,31 @@ export function TabArquetiposEquipo() {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (window.confirm(`¿Eliminar el plan "${plan.nombre_plan}"?`)) {
-                          await deletePlanMut.mutateAsync({
-                            idTipoEquipo: selectedArquetipo.id_tipo_equipo,
-                            idPlan: plan.id_plan,
-                          });
-                        }
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                      title="Eliminar plan"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Link
+                        href={`/configuracion/catalogos/tipos-servicio?protocolo=${plan.id_tipo_servicio}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-2xs"
+                        title="Abrir Constructor Rápido de Checklist y Telemetría (Fast-Protocol Builder)"
+                      >
+                        <Wrench className="h-3.5 w-3.5" />
+                        <span>🛠️ Configurar Checklist y Mediciones</span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (window.confirm(`¿Eliminar el plan "${plan.nombre_plan}"?`)) {
+                            await deletePlanMut.mutateAsync({
+                              idTipoEquipo: selectedArquetipo.id_tipo_equipo,
+                              idPlan: plan.id_plan,
+                            });
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Eliminar plan"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}

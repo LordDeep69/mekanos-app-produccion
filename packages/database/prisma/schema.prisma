@@ -161,8 +161,10 @@ model catalogo_actividades {
   id_actividad_catalogo    Int                        @id @default(autoincrement())
   codigo_actividad         String                     @db.VarChar(50)
   descripcion_actividad    String
-  id_tipo_servicio         Int
+  id_tipo_servicio         Int?
   id_sistema               Int?
+  id_tipo_equipo           Int?
+  id_plantilla_origen      Int?
   tipo_actividad           tipo_actividad_enum
   orden_ejecucion          Int
   es_obligatoria           Boolean?                   @default(true)
@@ -181,10 +183,16 @@ model catalogo_actividades {
   parametros_medicion      parametros_medicion?       @relation(fields: [id_parametro_medicion], references: [id_parametro_medicion])
   catalogo_sistemas        catalogo_sistemas?         @relation(fields: [id_sistema], references: [id_sistema])
   tipos_componente         tipos_componente?          @relation(fields: [id_tipo_componente], references: [id_tipo_componente])
-  tipos_servicio           tipos_servicio             @relation(fields: [id_tipo_servicio], references: [id_tipo_servicio], onDelete: SetNull)
+  tipos_servicio           tipos_servicio?            @relation(fields: [id_tipo_servicio], references: [id_tipo_servicio], onDelete: SetNull)
+  tipos_equipo             tipos_equipo?              @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: SetNull, map: "fk_actividades_tipo_equipo")
+  plantilla_origen         catalogo_actividades?      @relation("ActividadPlantillaOrigen", fields: [id_plantilla_origen], references: [id_actividad_catalogo], onDelete: SetNull, map: "fk_actividades_plantilla_origen")
+  instancias_hijas         catalogo_actividades[]     @relation("ActividadPlantillaOrigen")
   ordenes_actividades_plan ordenes_actividades_plan[]
 
   @@index([tipo_actividad], map: "idx_actividades_tipo")
+  @@index([id_tipo_servicio], map: "idx_actividades_tipo_servicio")
+  @@index([id_tipo_equipo], map: "idx_actividades_tipo_equipo")
+  @@index([id_plantilla_origen], map: "idx_actividades_plantilla_origen")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -302,12 +310,15 @@ model catalogo_sistemas {
   orden_visualizacion  Int
   icono                String?                @db.VarChar(50)
   color_hex            String?                @db.VarChar(7)
+  id_modulo            Int?
   activo               Boolean?               @default(true)
   observaciones        String?
   fecha_creacion       DateTime?              @default(now()) @db.Timestamp(6)
+  modulos_tecnicos     modulos_tecnicos?      @relation(fields: [id_modulo], references: [id_modulo], onDelete: SetNull, map: "fk_sistemas_modulo")
   catalogo_actividades catalogo_actividades[]
 
   @@index([orden_visualizacion], map: "idx_sistemas_orden")
+  @@index([id_modulo], map: "idx_sistemas_id_modulo")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -2129,6 +2140,7 @@ model tipos_equipo {
   tipo_equipo_modulos          tipo_equipo_modulos[]
   tipo_equipo_planes           tipo_equipo_planes[]
   modelos_equipo               modelos_equipo[]
+  catalogo_actividades         catalogo_actividades[]
 
   @@index([codigo_tipo], map: "idx_tipos_equipo_codigo")
 }
@@ -3244,6 +3256,7 @@ model modulos_tecnicos {
 
   modulo_atributos    modulo_atributos[]
   tipo_equipo_modulos tipo_equipo_modulos[]
+  catalogo_sistemas   catalogo_sistemas[]
 
   @@map("modulos_tecnicos")
 }

@@ -13,68 +13,99 @@ export class CrearCatalogoActividadesHandler implements ICommandHandler<CrearCat
   ) {}
 
   async execute(command: CrearCatalogoActividadesCommand): Promise<CatalogoActividadesResponseDto> {
-    // 1. Normalizar código
-    const codigoNormalizado = command.codigoActividad.toUpperCase().trim();
-
-    // 2. Verificar si ya existe el código
-    const existing = await this.repository.findByCodigo(codigoNormalizado);
-    if (existing) {
-      throw new ConflictException(`Ya existe una actividad con el código: ${codigoNormalizado}`);
+    // 1. Resolver o autogenerar código normalizado
+    let codigoNormalizado = command.codigoActividad?.toUpperCase().trim() || '';
+    if (!codigoNormalizado) {
+      const slug = command.descripcionActividad
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 24) || 'TASK';
+      const prefix = command.tipoActividad.slice(0, 4).toUpperCase();
+      const stamp = Date.now().toString(36).toUpperCase().slice(-5);
+      codigoNormalizado = `ACT_${prefix}_${slug}_${stamp}`.slice(0, 50);
     }
 
-    // 3. Validar FK requerido: tipo_servicio
-    const tipoServicioExists = await this.repository.existsTipoServicio(command.idTipoServicio);
-    if (!tipoServicioExists) {
-      throw new NotFoundException(`Tipo de servicio con ID ${command.idTipoServicio} no existe`);
+    // 2. Verificar si ya existe el código (disambiguar si fue autogenerado, lanzar Conflict si fue explícito)
+    const existing = await this.repository.findByCodigo(codigoNormalizado);
+    if (existing) {
+      if (command.codigoActividad?.trim()) {
+        throw new ConflictException(`Ya existe una actividad con el código: ${codigoNormalizado}`);
+      }
+      codigoNormalizado = `${codigoNormalizado.slice(0, 43)}_${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+
+    // 3. Validar FK opcional: tipo_servicio (puede ser NULL para plantillas del Banco Universal)
+    if (command.idTipoServicio != null) {
+      const tipoServicioExists = await this.repository.existsTipoServicio(command.idTipoServicio);
+      if (!tipoServicioExists) {
+        throw new NotFoundException(`Tipo de servicio con ID ${command.idTipoServicio} no existe`);
+      }
     }
 
     // 4. Validar FKs opcionales
-    if (command.idSistema) {
+    if (command.idTipoEquipo != null) {
+      const tipoEquipoExists = await this.repository.existsTipoEquipo(command.idTipoEquipo);
+      if (!tipoEquipoExists) {
+        throw new NotFoundException(`Tipo de equipo con ID ${command.idTipoEquipo} no existe`);
+      }
+    }
+
+    if (command.idSistema != null) {
       const sistemaExists = await this.repository.existsSistema(command.idSistema);
       if (!sistemaExists) {
         throw new NotFoundException(`Sistema con ID ${command.idSistema} no existe`);
       }
     }
 
-    if (command.idParametroMedicion) {
+    if (command.idParametroMedicion != null) {
       const parametroExists = await this.repository.existsParametroMedicion(command.idParametroMedicion);
       if (!parametroExists) {
         throw new NotFoundException(`Parámetro de medición con ID ${command.idParametroMedicion} no existe`);
       }
     }
 
-    if (command.idTipoComponente) {
+    if (command.idTipoComponente != null) {
       const componenteExists = await this.repository.existsTipoComponente(command.idTipoComponente);
       if (!componenteExists) {
         throw new NotFoundException(`Tipo de componente con ID ${command.idTipoComponente} no existe`);
       }
     }
 
-    // 5. Validar CHECK constraints
-    if (command.ordenEjecucion <= 0) {
+    // 5. Resolver orden de ejecución y validar constraints
+    let ordenEjecucion = command.ordenEjecucion;
+    if (ordenEjecucion == null) {
+      const maxOrden = await this.repository.getMaxOrdenPorServicio(command.idTipoServicio);
+      ordenEjecucion = maxOrden + 1;
+    }
+    if (ordenEjecucion <= 0) {
       throw new BadRequestException('El orden de ejecución debe ser mayor a 0');
     }
 
-    if (command.tiempoEstimadoMinutos && command.tiempoEstimadoMinutos <= 0) {
+    if (command.tiempoEstimadoMinutos != null && command.tiempoEstimadoMinutos <= 0) {
       throw new BadRequestException('El tiempo estimado debe ser mayor a 0');
     }
 
     // 6. Crear entidad
     const data = CatalogoActividadesMapper.toSnakeCase({
       codigoActividad: codigoNormalizado,
-      descripcionActividad: command.descripcionActividad,
-      idTipoServicio: command.idTipoServicio,
-      idSistema: command.idSistema,
+      descripcionActividad: command.descripcionActividad.trim(),
+      idTipoServicio: command.idTipoServicio ?? null,
+      idSistema: command.idSistema ?? null,
+      idTipoEquipo: command.idTipoEquipo ?? null,
+      idPlantillaOrigen: command.idPlantillaOrigen ?? null,
       tipoActividad: command.tipoActividad,
-      ordenEjecucion: command.ordenEjecucion,
-      esObligatoria: command.esObligatoria,
-      tiempoEstimadoMinutos: command.tiempoEstimadoMinutos,
-      idParametroMedicion: command.idParametroMedicion,
-      idTipoComponente: command.idTipoComponente,
-      instrucciones: command.instrucciones,
-      precauciones: command.precauciones,
-      activo: command.activo,
-      observaciones: command.observaciones,
+      ordenEjecucion,
+      esObligatoria: command.esObligatoria ?? true,
+      tiempoEstimadoMinutos: command.tiempoEstimadoMinutos ?? null,
+      idParametroMedicion: command.idParametroMedicion ?? null,
+      idTipoComponente: command.idTipoComponente ?? null,
+      instrucciones: command.instrucciones ?? null,
+      precauciones: command.precauciones ?? null,
+      activo: command.activo ?? true,
+      observaciones: command.observaciones ?? null,
       creadoPor: command.creadoPor,
     });
 

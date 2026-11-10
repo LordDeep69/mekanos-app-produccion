@@ -185,15 +185,36 @@ export interface ActividadDetalle {
     codigo_actividad: string;
     descripcion_actividad: string;
     tipo_actividad: string;
+    orden_ejecucion?: number;
+    id_sistema?: number | null;
+    id_tipo_equipo?: number | null;
+    id_plantilla_origen?: number | null;
     es_obligatoria: boolean;
-    tiempo_estimado_minutos?: number;
+    tiempo_estimado_minutos?: number | null;
+    instrucciones?: string | null;
+    precauciones?: string | null;
+    observaciones?: string | null;
+    id_parametro_medicion?: number | null;
     parametro_medicion?: {
         id: number;
+        codigo?: string;
         nombre: string;
         unidad: string;
         rango_min?: number;
         rango_max?: number;
+        min_critico?: number;
+        max_critico?: number;
+        ideal?: number;
     } | null;
+}
+
+export interface SistemaDisponibleDetalle {
+    id_sistema: number;
+    codigo_sistema: string;
+    nombre_sistema: string;
+    orden_visualizacion: number;
+    id_modulo?: number | null;
+    aplica_a?: string[];
 }
 
 export interface SistemaConActividades {
@@ -210,13 +231,17 @@ export interface TipoServicioDetalleCompleto {
     nombre_tipo: string;
     descripcion?: string;
     plantilla_observacion?: string | null;
+    activo?: boolean;
     categoria: CategoriaServicio;
     color_hex?: string;
     icono?: string;
     tiene_checklist: boolean;
     duracion_estimada_horas?: number;
+    id_tipo_equipo?: number | null;
+    aplica_a?: string[];
     tipo_equipo?: {
         id: number;
+        codigo?: string;
         nombre: string;
     } | null;
     estadisticas: {
@@ -224,6 +249,7 @@ export interface TipoServicioDetalleCompleto {
         total_ordenes_historicas: number;
         total_sistemas: number;
     };
+    sistemas_disponibles?: SistemaDisponibleDetalle[];
     sistemas_con_actividades: SistemaConActividades[];
 }
 

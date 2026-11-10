@@ -20,11 +20,18 @@ import Link from 'next/link';
 export default function ConfiguracionPage() {
   const modulosCat = [
     {
-      title: 'Tipos de Servicio',
-      description: 'Clasificación de intervenciones preventivas, correctivas y diagnósticos.',
+      title: 'Tipos de Servicio y Protocolos',
+      description: 'Intervenciones preventivas, correctivas y constructor rápido de checklists y telemetría.',
       href: '/configuracion/catalogos/tipos-servicio',
       icon: Activity,
       color: 'text-blue-600 bg-blue-50 border-blue-100',
+    },
+    {
+      title: 'Banco Universal de Actividades',
+      description: 'Diccionario maestro reutilizable de tareas de inspección y mediciones con propagación en cascada.',
+      href: '/configuracion/catalogos/actividades',
+      icon: ClipboardList,
+      color: 'text-amber-600 bg-amber-50 border-amber-100',
     },
     {
       title: 'Servicios Específicos',
@@ -32,27 +39,6 @@ export default function ConfiguracionPage() {
       href: '/configuracion/catalogos/servicios',
       icon: Tag,
       color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
-    },
-    {
-      title: 'Parámetros de Medición',
-      description: 'Variables metrológicas de checklist y rangos de alerta crítica en campo.',
-      href: '/configuracion/catalogos/parametros',
-      icon: Gauge,
-      color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
-    },
-    {
-      title: 'Actividades de Mantenimiento',
-      description: 'Rutinas paso a paso y listas de chequeo por tipo de servicio y sistema.',
-      href: '/configuracion/catalogos/actividades',
-      icon: ClipboardList,
-      color: 'text-amber-600 bg-amber-50 border-amber-100',
-    },
-    {
-      title: 'Sistemas Técnicos',
-      description: 'Agrupación de subsistemas mecánicos, eléctricos, hidráulicos y control.',
-      href: '/configuracion/catalogos/sistemas',
-      icon: Layers,
-      color: 'text-purple-600 bg-purple-50 border-purple-100',
     },
     {
       title: 'Estados de Orden',

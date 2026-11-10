@@ -5,6 +5,7 @@ export class CatalogoActividadesMapper {
   static toCamelCase(
     entity: catalogo_actividades & {
       tipos_servicio?: any;
+      tipos_equipo?: any;
       catalogo_sistemas?: any;
       parametros_medicion?: any;
       tipos_componente?: any;
@@ -12,12 +13,16 @@ export class CatalogoActividadesMapper {
       usuarios_catalogo_actividades_modificado_porTousuarios?: any;
     },
   ): CatalogoActividadesResponseDto {
+    const resolvedTipoEquipo = entity.tipos_equipo ?? entity.tipos_servicio?.tipos_equipo ?? null;
+
     return {
       idActividadCatalogo: entity.id_actividad_catalogo,
       codigoActividad: entity.codigo_actividad,
       descripcionActividad: entity.descripcion_actividad,
-      idTipoServicio: entity.id_tipo_servicio,
-      idSistema: entity.id_sistema,
+      idTipoServicio: entity.id_tipo_servicio ?? null,
+      idSistema: entity.id_sistema ?? null,
+      idTipoEquipo: entity.id_tipo_equipo ?? entity.tipos_servicio?.id_tipo_equipo ?? null,
+      idPlantillaOrigen: entity.id_plantilla_origen ?? null,
       tipoActividad: entity.tipo_actividad as any,
       ordenEjecucion: entity.orden_ejecucion,
       esObligatoria: entity.es_obligatoria ?? true,
@@ -33,7 +38,6 @@ export class CatalogoActividadesMapper {
       modificadoPor: entity.modificado_por,
       fechaModificacion: entity.fecha_modificacion,
 
-      // Relaciones
       tipoServicio: entity.tipos_servicio
         ? {
             idTipoServicio: entity.tipos_servicio.id_tipo_servicio,
@@ -46,6 +50,14 @@ export class CatalogoActividadesMapper {
                 : null),
             idTipoEquipo: entity.tipos_servicio.id_tipo_equipo ?? null,
             categoria: entity.tipos_servicio.categoria ?? null,
+          }
+        : undefined,
+
+      tipoEquipo: resolvedTipoEquipo
+        ? {
+            idTipoEquipo: resolvedTipoEquipo.id_tipo_equipo,
+            codigoTipo: resolvedTipoEquipo.codigo_tipo,
+            nombreTipo: resolvedTipoEquipo.nombre_tipo,
           }
         : undefined,
 
@@ -91,23 +103,28 @@ export class CatalogoActividadesMapper {
   }
 
   static toSnakeCase(dto: any): any {
-    return {
-      codigo_actividad: dto.codigoActividad?.toUpperCase().trim(),
+    const payload: Record<string, any> = {
+      codigo_actividad: dto.codigoActividad !== undefined ? dto.codigoActividad?.toUpperCase().trim() : undefined,
       descripcion_actividad: dto.descripcionActividad,
       id_tipo_servicio: dto.idTipoServicio,
       id_sistema: dto.idSistema,
+      id_tipo_equipo: dto.idTipoEquipo,
+      id_plantilla_origen: dto.idPlantillaOrigen,
       tipo_actividad: dto.tipoActividad,
       orden_ejecucion: dto.ordenEjecucion,
-      es_obligatoria: dto.esObligatoria ?? true,
+      es_obligatoria: dto.esObligatoria,
       tiempo_estimado_minutos: dto.tiempoEstimadoMinutos,
       id_parametro_medicion: dto.idParametroMedicion,
       id_tipo_componente: dto.idTipoComponente,
       instrucciones: dto.instrucciones,
       precauciones: dto.precauciones,
-      activo: dto.activo ?? true,
+      activo: dto.activo,
       observaciones: dto.observaciones,
       creado_por: dto.creadoPor,
       modificado_por: dto.modificadoPor,
     };
+
+    Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+    return payload;
   }
 }

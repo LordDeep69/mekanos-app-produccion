@@ -1,2741 +1,1006 @@
+/**
+ * PÁGINA: BANCO UNIVERSAL DE ACTIVIDADES Y MEDICIONES (DICCIONARIO MAESTRO EAM - FASE 5.9)
+ * Ruta: /configuracion/catalogos/actividades
+ *
+ * Pilar 2 + Salvaguarda 1 y 3:
+ * - 100% dedicado al Diccionario / Banco Maestro Universal de Actividades y Puntos de Telemetría.
+ * - Libre del campo obligatorio "Servicio Vinculado *": las plantillas nacen en el Banco con id_tipo_servicio = NULL.
+ * - Permite crear plantillas maestras, vincularlas en lote a múltiples Tipos de Servicio y Editar con Propagación en Cascada.
+ * - Los protocolos paso a paso de cada servicio viven exclusivamente en /configuracion/catalogos/tipos-servicio (Fast-Protocol Builder).
+ */
+
 'use client';
 
 import {
-    TIPOS_ACTIVIDAD,
+    EamSelect,
+    useArquetiposEam,
+    useUnidadesEam,
+    type EamSelectOption,
+} from '@/features/catalogos-eam';
+import type {
+    CatalogoActividad,
+    CreateCatalogoActividadDto,
+    TipoActividad,
+} from '@/features/catalogos/api/catalogo-actividades.service';
+import type { CatalogoSistema } from '@/features/catalogos/api/catalogo-sistemas.service';
+import type {
+    CreateParametroMedicionDto,
+    ParametroMedicion,
+} from '@/features/catalogos/api/parametros-medicion.service';
+import type { TipoServicio } from '@/features/catalogos/api/tipos-servicio.service';
+import {
     useCatalogoActividades,
     useCreateCatalogoActividad,
     useDeleteCatalogoActividad,
-    useTiposServicio,
-    useUpdateCatalogoActividad,
-} from '@/features/catalogos';
-import {
-    useCatalogoSistemas,
-    useCreateCatalogoSistema,
-} from '@/features/catalogos/hooks/use-catalogo-sistemas';
+    usePropagarActividadBanco,
+    useVincularActividadesLote,
+} from '@/features/catalogos/hooks/use-catalogo-actividades';
+import { useCatalogoSistemas } from '@/features/catalogos/hooks/use-catalogo-sistemas';
 import {
     useCreateParametroMedicion,
     useParametrosMedicion,
     useUpdateParametroMedicion,
 } from '@/features/catalogos/hooks/use-parametros-medicion';
-import {
-    EamSelect,
-    generarCodigoActividad,
-    generarCodigoSistema,
-    useArquetiposEam,
-    useBancoMagnitudesEam,
-    useUnidadesEam,
-    verificarCodigoDuplicado,
-} from '@/features/catalogos-eam';
+import { useTiposServicio } from '@/features/catalogos/hooks/use-tipos-servicio';
 import { cn } from '@/lib/utils';
 import {
     Activity,
     AlertCircle,
-    AlertTriangle,
-    ArrowDown,
-    ArrowUp,
+    ArrowRight,
     BookOpen,
     Check,
     CheckCircle2,
-    ChevronDown,
-    ChevronRight,
-    ClipboardCheck,
-    ClipboardList,
-    Clock,
-    Cog,
-    Copy,
-    Edit,
+    Cpu,
+    Edit2,
     Filter,
-    FolderKanban,
     Gauge,
-    Globe,
-    Info,
     Layers,
     Link2,
-    ListChecks,
     Loader2,
-    Lock,
     Plus,
-    Ruler,
+    RefreshCw,
     Search,
-    Settings2,
+    ShieldCheck,
     Sparkles,
     Trash2,
-    Unlock,
     Wrench,
     X,
-    Zap,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-// Helper para color de tipo de actividad
-function getTipoActividadColor(tipo: string) {
-    return TIPOS_ACTIVIDAD.find(t => t.value === tipo)?.color || 'bg-gray-100 text-gray-800';
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPERS NORMALIZADOS (SOPORTA SNAKE_CASE Y CAMELCASE DE CQRS)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function getActId(a: CatalogoActividad): number {
+    return a.id_actividad_catalogo ?? a.idActividadCatalogo ?? 0;
+}
+function getActDesc(a: CatalogoActividad): string {
+    return a.descripcion_actividad ?? a.descripcionActividad ?? '';
+}
+function getActCode(a: CatalogoActividad): string {
+    return a.codigo_actividad ?? a.codigoActividad ?? '';
+}
+function getActTipo(a: CatalogoActividad): TipoActividad {
+    return a.tipo_actividad ?? a.tipoActividad ?? 'INSPECCION';
+}
+function getActServicioId(a: CatalogoActividad): number | null {
+    return a.id_tipo_servicio ?? a.idTipoServicio ?? null;
+}
+function getActSistemaId(a: CatalogoActividad): number | null {
+    return a.id_sistema ?? a.idSistema ?? null;
+}
+function getActEquipoId(a: CatalogoActividad): number | null {
+    return a.id_tipo_equipo ?? a.idTipoEquipo ?? null;
+}
+function getActParametroId(a: CatalogoActividad): number | null {
+    return a.id_parametro_medicion ?? a.idParametroMedicion ?? null;
+}
+function getActObligatoria(a: CatalogoActividad): boolean {
+    return a.es_obligatoria ?? a.esObligatoria ?? true;
 }
 
-// Helper para obtener el icono del tipo de actividad
-function getTipoActividadIcon(tipo: string) {
-    const iconMap: Record<string, any> = {
-        INSPECCION: CheckCircle2,
-        MEDICION: Gauge,
-        LIMPIEZA: Sparkles,
-        LUBRICACION: Zap,
-        AJUSTE: Settings2,
-        CAMBIO: Wrench,
-        PRUEBA: Activity,
-        VERIFICACION: ClipboardCheck,
-    };
-    return iconMap[tipo] || ClipboardCheck;
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONSTANTES DE NATURALEZA TÉCNICA
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// Colores para tipos de servicio
-const SERVICE_COLORS: Record<string, { bg: string; border: string; text: string; accent: string }> = {
-    GEN_PREV_A: { bg: 'bg-emerald-50/70', border: 'border-emerald-200', text: 'text-emerald-800', accent: 'bg-emerald-500' },
-    GEN_PREV_B: { bg: 'bg-teal-50/70', border: 'border-teal-200', text: 'text-teal-800', accent: 'bg-teal-500' },
-    BOM_PREV_A: { bg: 'bg-blue-50/70', border: 'border-blue-200', text: 'text-blue-800', accent: 'bg-blue-500' },
-    BOM_PREV_B: { bg: 'bg-indigo-50/70', border: 'border-indigo-200', text: 'text-indigo-800', accent: 'bg-indigo-500' },
-    GEN_CORR: { bg: 'bg-orange-50/70', border: 'border-orange-200', text: 'text-orange-800', accent: 'bg-orange-500' },
-    BOM_CORR: { bg: 'bg-amber-50/70', border: 'border-amber-200', text: 'text-amber-800', accent: 'bg-amber-500' },
-    EMERGENCIA: { bg: 'bg-red-50/70', border: 'border-red-200', text: 'text-red-800', accent: 'bg-red-500' },
-    ELEV_PREV_A: { bg: 'bg-violet-50/70', border: 'border-violet-200', text: 'text-violet-900', accent: 'bg-violet-600' },
-    HVAC_PREV_A: { bg: 'bg-sky-50/70', border: 'border-sky-200', text: 'text-sky-900', accent: 'bg-sky-500' },
-    COMP_PREV_A: { bg: 'bg-cyan-50/70', border: 'border-cyan-200', text: 'text-cyan-900', accent: 'bg-cyan-600' },
+const TIPO_ACTIVIDAD_CONFIG: Record<
+    TipoActividad,
+    { label: string; color: string; bg: string; border: string }
+> = {
+    INSPECCION: {
+        label: 'Inspección Visual / Funcional',
+        color: 'text-blue-700',
+        bg: 'bg-blue-50',
+        border: 'border-blue-200',
+    },
+    MEDICION: {
+        label: 'Medición / Telemetría (UoM)',
+        color: 'text-purple-700',
+        bg: 'bg-purple-50',
+        border: 'border-purple-200',
+    },
+    LIMPIEZA: {
+        label: 'Limpieza Técnica',
+        color: 'text-emerald-700',
+        bg: 'bg-emerald-50',
+        border: 'border-emerald-200',
+    },
+    LUBRICACION: {
+        label: 'Lubricación y Engrase',
+        color: 'text-amber-700',
+        bg: 'bg-amber-50',
+        border: 'border-amber-200',
+    },
+    AJUSTE: {
+        label: 'Ajuste y Calibración',
+        color: 'text-indigo-700',
+        bg: 'bg-indigo-50',
+        border: 'border-indigo-200',
+    },
+    PRUEBA: {
+        label: 'Prueba Operativa',
+        color: 'text-cyan-700',
+        bg: 'bg-cyan-50',
+        border: 'border-cyan-200',
+    },
+    CAMBIO: {
+        label: 'Cambio / Reemplazo de Componente',
+        color: 'text-orange-700',
+        bg: 'bg-orange-50',
+        border: 'border-orange-200',
+    },
+    VERIFICACION: {
+        label: 'Verificación de Seguridad',
+        color: 'text-teal-700',
+        bg: 'bg-teal-50',
+        border: 'border-teal-200',
+    },
 };
 
-const DEFAULT_COLOR = { bg: 'bg-slate-50/80', border: 'border-slate-200', text: 'text-slate-800', accent: 'bg-blue-600' };
+const NATURALEZA_OPTIONS: EamSelectOption[] = [
+    { value: 'INSPECCION', label: 'Inspección Visual / Funcional (B / R / M)', badge: 'CHECKLIST' },
+    { value: 'VERIFICACION', label: 'Verificación de Seguridad (B / R / M)', badge: 'CHECKLIST' },
+    { value: 'LIMPIEZA', label: 'Limpieza Técnica (B / R / M)', badge: 'CHECKLIST' },
+    { value: 'LUBRICACION', label: 'Lubricación y Engrase (B / R / M)', badge: 'CHECKLIST' },
+    { value: 'AJUSTE', label: 'Ajuste y Torque (B / R / M)', badge: 'CHECKLIST' },
+    { value: 'PRUEBA', label: 'Prueba Operativa (B / R / M)', badge: 'CHECKLIST' },
+    { value: 'CAMBIO', label: 'Cambio / Reemplazo Preventivo (B / R / M)', badge: 'CHECKLIST' },
+    { value: 'MEDICION', label: 'Medición Cuantitativa con Unidad UoM y Rango [Mín — Máx]', badge: 'TELEMETRÍA' },
+];
 
-/**
- * Resuelve los arquetipos de equipo a los que aplica un Tipo de Servicio o un Subsistema
- */
-function resolverArquetiposDeEntidad(
-    entidad: any,
-    arquetipos: any[]
-): Array<{ codigo: string; nombre: string; id_tipo_equipo?: number }> {
-    if (!entidad) return [];
-    const rawCodes = new Set<string>();
-    const rawAplica = entidad.aplica_a || entidad.aplicaA;
-    if (Array.isArray(rawAplica) && rawAplica.length > 0) {
-        for (const c of rawAplica) {
-            if (c && String(c).trim()) {
-                const upper = String(c).trim().toUpperCase();
-                if (upper !== 'AMBOS' && upper !== 'OTRO' && upper !== 'GENERAL' && upper !== 'UNIVERSAL' && upper !== 'TODOS') {
-                    rawCodes.add(upper);
-                } else if (upper === 'AMBOS') {
-                    rawCodes.add('GEN');
-                    rawCodes.add('BOM');
-                }
-            }
-        }
-    }
-    if (entidad.tipos_equipo?.codigo_tipo) {
-        rawCodes.add(String(entidad.tipos_equipo.codigo_tipo).trim().toUpperCase());
-    }
-
-    const idTipoEquipo = entidad.id_tipo_equipo ?? entidad.idTipoEquipo ?? entidad.tipos_equipo?.id_tipo_equipo;
-    if (rawCodes.size === 0 && !idTipoEquipo) {
-        return [];
-    }
-
-    const matchedMap = new Map<string, { codigo: string; nombre: string; id_tipo_equipo?: number }>();
-
-    for (const code of Array.from(rawCodes)) {
-        const arq = (arquetipos || []).find((a: any) => {
-            const cCorto = String(a.codigo_corto || '').toUpperCase().trim();
-            const cTipo = String(a.codigo_tipo || '').toUpperCase().trim();
-            const syncs: string[] = Array.isArray(a.codigos_sincronizados)
-                ? a.codigos_sincronizados.map((s: string) => String(s).toUpperCase().trim())
-                : [];
-            if (cCorto === code || cTipo === code || syncs.includes(code)) return true;
-            if ((code === 'GEN' || code === 'GENERADOR') && (cTipo === 'GEN' || cTipo === 'GENERADOR')) return true;
-            if ((code === 'BOM' || code === 'BOMBA') && (cTipo === 'BOM' || cTipo === 'BOMBA')) return true;
-            if ((code === 'MOT' || code === 'MOTOR') && (cTipo === 'MOT' || cTipo === 'MOTOR')) return true;
-            if ((code === 'COMP' || code === 'COMPRESOR') && (cTipo === 'COMP' || cTipo === 'COMPRESOR')) return true;
-            return false;
-        });
-
-        if (arq) {
-            const key = String(arq.codigo_corto || arq.codigo_tipo).toUpperCase().trim();
-            if (!matchedMap.has(key)) {
-                matchedMap.set(key, {
-                    codigo: key,
-                    nombre: arq.nombre_canonico || arq.nombre_tipo || key,
-                    id_tipo_equipo: arq.id_tipo_equipo,
-                });
-            }
-        } else {
-            const canonKey =
-                code === 'GENERADOR' ? 'GEN' :
-                code === 'BOMBA' ? 'BOM' :
-                code === 'MOTOR' ? 'MOT' :
-                code === 'COMPRESOR' ? 'COMP' : code;
-            if (!matchedMap.has(canonKey)) {
-                matchedMap.set(canonKey, {
-                    codigo: canonKey,
-                    nombre: entidad.tipos_equipo?.nombre_tipo || canonKey,
-                    id_tipo_equipo: idTipoEquipo ?? undefined,
-                });
-            }
-        }
-    }
-
-    if (matchedMap.size === 0 && idTipoEquipo) {
-        const arqById = (arquetipos || []).find(
-            (a: any) =>
-                Number(a.id_tipo_equipo) === Number(idTipoEquipo) ||
-                (Array.isArray(a.ids_sincronizados) && a.ids_sincronizados.includes(Number(idTipoEquipo)))
-        );
-        if (arqById) {
-            const key = String(arqById.codigo_corto || arqById.codigo_tipo).toUpperCase().trim();
-            matchedMap.set(key, {
-                codigo: key,
-                nombre: arqById.nombre_canonico || arqById.nombre_tipo || key,
-                id_tipo_equipo: arqById.id_tipo_equipo,
-            });
-        }
-    }
-
-    return Array.from(matchedMap.values());
+function generarCodigoActividad(prefijo: string, descripcion: string): string {
+    const limpio = descripcion
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9\s]/g, '')
+        .trim()
+        .split(/\s+/)
+        .slice(0, 3)
+        .map((w) => w.slice(0, 4))
+        .join('_');
+    const sufijo = Math.floor(100 + Math.random() * 900);
+    return `${prefijo}_${limpio || 'ACT'}_${sufijo}`.slice(0, 48);
 }
 
-/**
- * Verifica si un subsistema (`catalogo_sistemas`) es compatible con los arquetipos indicados
- */
-function esSistemaCompatibleConArquetipos(
-    sistema: any,
-    codigosArquetipoServicio: string[],
-    arquetipos: any[]
-): boolean {
-    if (!codigosArquetipoServicio || codigosArquetipoServicio.length === 0) {
-        // Si el servicio es Universal, todos los sistemas están disponibles
-        return true;
-    }
-    const rawAplica = sistema?.aplica_a || sistema?.aplicaA;
-    if (!rawAplica || (Array.isArray(rawAplica) && rawAplica.length === 0)) {
-        // Sistema sin restricción explícita -> Universal
-        return true;
-    }
-    const aplicaArr = (Array.isArray(rawAplica) ? rawAplica : [rawAplica]).map((s: any) =>
-        String(s || '').trim().toUpperCase()
-    );
-    if (aplicaArr.includes('OTRO') || aplicaArr.includes('GENERAL') || aplicaArr.includes('UNIVERSAL') || aplicaArr.includes('TODOS')) {
-        // Verificar que no sea un sistema específico de otro equipo disfrazado
-        const arqsSistema = resolverArquetiposDeEntidad(sistema, arquetipos);
-        if (arqsSistema.length === 0) return true;
-    }
-    const arqsSistema = resolverArquetiposDeEntidad(sistema, arquetipos);
-    if (arqsSistema.length === 0) return true;
-    return arqsSistema.some(arqSis => codigosArquetipoServicio.includes(arqSis.codigo));
-}
-
-export interface PlantillaUniversalActividad {
-    key: string;
-    descripcionActividad: string;
-    tipoActividad: string;
-    esObligatoria: boolean;
-    tiempoEstimadoMinutos?: number | null;
-    instrucciones?: string | null;
-    precauciones?: string | null;
-    idSistema?: number | null;
-    sistemaNombre: string;
-    sistemaCodigo?: string;
-    idParametroMedicion?: number | null;
-    parametroInfo?: {
-        id: number;
-        nombre: string;
-        codigo: string;
-        unidad: string;
-        min?: number | null;
-        max?: number | null;
-    } | null;
-    instancias: any[];
-    serviciosIds: Set<number>;
-    serviciosInfo: Array<{
-        idTipoServicio: number;
-        codigoTipo: string;
-        nombreTipo: string;
-        idActividadCatalogo: number;
-    }>;
-    arquetipos: Array<{ codigo: string; nombre: string }>;
-}
-
-export default function ActividadesCatalogoPage() {
-    const [vistaActiva, setVistaActiva] = useState<'checklists' | 'banco'>('checklists');
-    const [busqueda, setBusqueda] = useState('');
-    const [filtroArquetipo, setFiltroArquetipo] = useState<string>('');
-    const [filtroTipoServicio, setFiltroTipoServicio] = useState<string>('');
-    const [filtroSistema, setFiltroSistema] = useState<string>('');
-    const [filtroTipoActividad, setFiltroTipoActividad] = useState<string>('');
-    const [filtroEstadoChecklist, setFiltroEstadoChecklist] = useState<'TODOS' | 'PENDIENTES' | 'CONFIGURADOS'>('TODOS');
-
-    // Estado para crear/editar actividad individual o multi-servicio
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingActividad, setEditingActividad] = useState<any>(null);
-    const [preselectedServiceId, setPreselectedServiceId] = useState<number | null>(null);
-
-    // Estado para Reutilizar desde el Banco Universal hacia un Servicio o desde una Plantilla hacia N Servicios
-    const [reutilizarTargetService, setReutilizarTargetService] = useState<any | null>(null);
-    const [plantillaAVincular, setPlantillaAVincular] = useState<PlantillaUniversalActividad | null>(null);
-
-    const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set());
-    const [reorderingId, setReorderingId] = useState<number | null>(null);
-
-    const { data: response, isLoading, isError, refetch } = useCatalogoActividades({ activo: true, limit: 500 });
-    const actividades = response?.data || [];
-
-    const { data: tiposServicioResponse, isLoading: isLoadingServicios } = useTiposServicio({ activo: true, limit: 100 });
-    const tiposServicio = tiposServicioResponse?.data || [];
-
-    const { data: sistemasResponse } = useCatalogoSistemas({ activo: true, limit: 200 });
-    const sistemas = sistemasResponse?.data || [];
-
-    const { data: parametrosResponse } = useParametrosMedicion({ activo: true, limit: 200 });
-    const parametros = parametrosResponse?.data || [];
-
-    const { data: arquetipos = [] } = useArquetiposEam();
-
-    const crearActividad = useCreateCatalogoActividad();
-    const actualizarActividad = useUpdateCatalogoActividad();
-    const eliminarActividad = useDeleteCatalogoActividad();
-
-    // Mapa rápido de parámetros por ID
-    const parametrosMap = useMemo(() => {
-        const map = new Map<number, any>();
-        for (const p of parametros) {
-            const id = Number(p.id_parametro_medicion || (p as any).idParametroMedicion);
-            if (id) map.set(id, p);
-        }
-        return map;
-    }, [parametros]);
-
-    // Leer ?servicioId=... o ?vista=... de la URL al montar
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const params = new URLSearchParams(window.location.search);
-        const srvId = params.get('servicioId');
-        const vista = params.get('vista');
-        const openNew = params.get('nueva');
-        if (vista === 'banco') {
-            setVistaActiva('banco');
-        }
-        if (srvId) {
-            setFiltroTipoServicio(srvId);
-            setExpandedServices(new Set([srvId]));
-            if (openNew === '1') {
-                setPreselectedServiceId(Number(srvId));
-                setEditingActividad(null);
-                setIsModalOpen(true);
-            }
-        }
-    }, []);
-
-    // Auto-expandir servicios nuevos con 0 actividades para que nunca pasen desapercibidos
-    useEffect(() => {
-        if (tiposServicio.length > 0 && actividades.length > 0 && expandedServices.size === 0) {
-            const counts = new Map<number, number>();
-            actividades.forEach(a => {
-                const sid = Number(a.idTipoServicio || a.id_tipo_servicio);
-                if (sid) counts.set(sid, (counts.get(sid) || 0) + 1);
-            });
-            const zeroActServices = tiposServicio
-                .filter(t => t.tiene_checklist !== false && (counts.get(t.id_tipo_servicio) || 0) === 0)
-                .map(t => String(t.id_tipo_servicio));
-            if (zeroActServices.length > 0) {
-                setExpandedServices(new Set(zeroActServices));
-            }
-        }
-    }, [tiposServicio, actividades]);
-
-    // Helper para obtener info metrológica enriquecida de una actividad
-    const obtenerInfoParametro = (act: any) => {
-        const idParam = Number(act.idParametroMedicion || act.id_parametro_medicion || 0);
-        const rel = act.parametroMedicion || act.parametros_medicion || (idParam ? parametrosMap.get(idParam) : null);
-        if (!rel) return null;
-        return {
-            id: Number(rel.idParametroMedicion || rel.id_parametro_medicion || idParam),
-            nombre: rel.nombreParametro || rel.nombre_parametro || '',
-            codigo: rel.codigoParametro || rel.codigo_parametro || '',
-            unidad: rel.unidadMedida || rel.unidad_medida || '',
-            min: rel.valorMinimoNormal ?? rel.valor_minimo_normal ?? null,
-            max: rel.valorMaximoNormal ?? rel.valor_maximo_normal ?? null,
-        };
-    };
-
-    // =========================================================================
-    // CONSTRUCCIÓN DE VISTA 1: CHECKLISTS POR TIPO DE SERVICIO (INCLUYE 0 ACT)
-    // =========================================================================
-    const groupedByService = useMemo(() => {
-        const groups: Record<
-            string,
-            {
-                servicio: any;
-                arquetipos: Array<{ codigo: string; nombre: string; id_tipo_equipo?: number }>;
-                actividades: any[];
-                bySystem: Record<string, { sistemaNombre: string; sistemaId: number | null; acts: any[] }>;
-            }
-        > = {};
-
-        // 1. Sembrar TODOS los tipos de servicio activos (o que requieren checklist)
-        tiposServicio.forEach((srv: any) => {
-            const idStr = String(srv.id_tipo_servicio || srv.idTipoServicio);
-            const arqs = resolverArquetiposDeEntidad(srv, arquetipos);
-            groups[idStr] = {
-                servicio: srv,
-                arquetipos: arqs,
-                actividades: [],
-                bySystem: {},
-            };
-        });
-
-        // 2. Poblar con las actividades del catálogo
-        actividades.forEach(act => {
-            const tipoServId = String(act.idTipoServicio || act.id_tipo_servicio || 'sin_servicio');
-            const servicioRel: any = act.tipoServicio || act.tipos_servicio;
-
-            if (!groups[tipoServId]) {
-                groups[tipoServId] = {
-                    servicio: servicioRel || {
-                        id_tipo_servicio: Number(tipoServId) || 0,
-                        codigo_tipo: servicioRel?.codigoTipoServicio || servicioRel?.codigo_tipo || 'SIN_SERVICIO',
-                        nombre_tipo: servicioRel?.nombreTipoServicio || servicioRel?.nombre_tipo || 'Sin Servicio Asignado',
-                        tiene_checklist: true,
-                    },
-                    arquetipos: resolverArquetiposDeEntidad(servicioRel, arquetipos),
-                    actividades: [],
-                    bySystem: {},
-                };
-            }
-
-            // Verificar filtros a nivel de actividad
-            const desc = (act.descripcionActividad || act.descripcion_actividad || '').toLowerCase();
-            const code = (act.codigoActividad || act.codigo_actividad || '').toLowerCase();
-            const matchBusquedaAct = !busqueda || desc.includes(busqueda.toLowerCase()) || code.includes(busqueda.toLowerCase());
-
-            const sistemaId = act.idSistema ?? act.id_sistema ?? null;
-            const matchSistema = !filtroSistema || String(sistemaId || '') === filtroSistema;
-
-            const tipoAct = act.tipoActividad || act.tipo_actividad;
-            const matchTipoAct = !filtroTipoActividad || tipoAct === filtroTipoActividad;
-
-            if (matchBusquedaAct && matchSistema && matchTipoAct) {
-                groups[tipoServId].actividades.push(act);
-
-                // Consolidar por nombre normalizado de sistema (evita dos bloques "General (2)" y "General (5)")
-                const rawSistemaNombre =
-                    act.sistema?.nombreSistema ||
-                    act.catalogo_sistemas?.nombre_sistema ||
-                    (sistemaId ? sistemas.find((s: any) => Number(s.id_sistema) === Number(sistemaId))?.nombre_sistema : null) ||
-                    'General';
-                const sistemaKey = rawSistemaNombre.trim().toUpperCase();
-
-                if (!groups[tipoServId].bySystem[sistemaKey]) {
-                    groups[tipoServId].bySystem[sistemaKey] = {
-                        sistemaNombre: rawSistemaNombre.trim(),
-                        sistemaId: sistemaId ? Number(sistemaId) : null,
-                        acts: [],
-                    };
-                }
-                groups[tipoServId].bySystem[sistemaKey].acts.push({
-                    ...act,
-                    sistemaNombre: rawSistemaNombre.trim(),
-                    parametroInfo: obtenerInfoParametro(act),
-                });
-            }
-        });
-
-        // 3. Ordenar actividades dentro de cada servicio y subsistema
-        Object.values(groups).forEach(group => {
-            group.actividades.sort(
-                (a, b) =>
-                    (a.ordenEjecucion || a.orden_ejecucion || 0) - (b.ordenEjecucion || b.orden_ejecucion || 0) ||
-                    (a.idActividadCatalogo || a.id_actividad_catalogo || 0) - (b.idActividadCatalogo || b.id_actividad_catalogo || 0)
-            );
-            Object.values(group.bySystem).forEach(sysGroup => {
-                sysGroup.acts.sort(
-                    (a, b) =>
-                        (a.ordenEjecucion || a.orden_ejecucion || 0) - (b.ordenEjecucion || b.orden_ejecucion || 0) ||
-                        (a.idActividadCatalogo || a.id_actividad_catalogo || 0) - (b.idActividadCatalogo || b.id_actividad_catalogo || 0)
-                );
-            });
-        });
-
-        return groups;
-    }, [tiposServicio, actividades, arquetipos, busqueda, filtroSistema, filtroTipoActividad, sistemas, parametrosMap]);
-
-    // Filtrar y ordenar la lista de tarjetas de Tipo de Servicio
-    const serviceEntriesFiltrados = useMemo(() => {
-        const entries = Object.entries(groupedByService).filter(([serviceId, group]) => {
-            const srv = group.servicio;
-            // Si no tiene checklist y tiene 0 actividades, solo mostrarlo si el usuario lo filtra explícitamente
-            if (srv?.tiene_checklist === false && group.actividades.length === 0 && filtroTipoServicio !== serviceId) {
-                return false;
-            }
-
-            if (filtroTipoServicio && serviceId !== filtroTipoServicio) {
-                return false;
-            }
-
-            if (filtroArquetipo) {
-                if (filtroArquetipo === 'UNIVERSAL') {
-                    if (group.arquetipos.length > 0) return false;
-                } else {
-                    if (!group.arquetipos.some(a => a.codigo === filtroArquetipo)) return false;
-                }
-            }
-
-            if (filtroEstadoChecklist === 'PENDIENTES' && group.actividades.length > 0) return false;
-            if (filtroEstadoChecklist === 'CONFIGURADOS' && group.actividades.length === 0) return false;
-
-            // Si hay filtros de actividad o búsqueda activa:
-            const srvNombre = (srv?.nombre_tipo || srv?.nombreTipoServicio || '').toLowerCase();
-            const srvCodigo = (srv?.codigo_tipo || srv?.codigoTipoServicio || '').toLowerCase();
-            const srvMatchesSearch =
-                !busqueda ||
-                srvNombre.includes(busqueda.toLowerCase()) ||
-                srvCodigo.includes(busqueda.toLowerCase());
-
-            if ((filtroSistema || filtroTipoActividad) && group.actividades.length === 0) {
-                return false;
-            }
-            if (busqueda && group.actividades.length === 0 && !srvMatchesSearch) {
-                return false;
-            }
-
-            return true;
-        });
-
-        // Ordenar: Primero servicios con 0 actividades (para que el usuario vea inmediatamente los nuevos por configurar), luego por nombre
-        entries.sort(([, a], [, b]) => {
-            const aEmpty = a.actividades.length === 0 ? 0 : 1;
-            const bEmpty = b.actividades.length === 0 ? 0 : 1;
-            if (aEmpty !== bEmpty) return aEmpty - bEmpty;
-            const nomA = a.servicio?.nombre_tipo || a.servicio?.nombreTipoServicio || '';
-            const nomB = b.servicio?.nombre_tipo || b.servicio?.nombreTipoServicio || '';
-            return nomA.localeCompare(nomB);
-        });
-
-        return entries;
-    }, [groupedByService, filtroTipoServicio, filtroArquetipo, filtroEstadoChecklist, busqueda, filtroSistema, filtroTipoActividad]);
-
-    // =========================================================================
-    // CONSTRUCCIÓN DE VISTA 2: BANCO UNIVERSAL DE ACTIVIDADES (DEDUPLICADO)
-    // =========================================================================
-    const plantillasUniversales = useMemo<PlantillaUniversalActividad[]>(() => {
-        const map = new Map<string, PlantillaUniversalActividad>();
-
-        actividades.forEach(act => {
-            const desc = (act.descripcionActividad || act.descripcion_actividad || '').trim();
-            if (!desc) return;
-            const tipo = act.tipoActividad || act.tipo_actividad || 'INSPECCION';
-            const normKey = `${desc.toUpperCase()}|${tipo}`;
-
-            const idServ = Number(act.idTipoServicio || act.id_tipo_servicio || 0);
-            const srvCompleta: any =
-                tiposServicio.find((t: any) => Number(t.id_tipo_servicio) === idServ) ||
-                act.tipoServicio ||
-                act.tipos_servicio;
-
-            const sistemaId = act.idSistema ?? act.id_sistema ?? null;
-            const sistemaObj: any =
-                (sistemaId ? sistemas.find((s: any) => Number(s.id_sistema) === Number(sistemaId)) : null) ||
-                act.sistema ||
-                act.catalogo_sistemas;
-            const sistemaNombre =
-                sistemaObj?.nombre_sistema || sistemaObj?.nombreSistema || 'General';
-            const sistemaCodigo =
-                sistemaObj?.codigo_sistema || sistemaObj?.codigoSistema || undefined;
-
-            const paramInfo = obtenerInfoParametro(act);
-
-            if (!map.has(normKey)) {
-                map.set(normKey, {
-                    key: normKey,
-                    descripcionActividad: desc,
-                    tipoActividad: tipo,
-                    esObligatoria: Boolean(act.esObligatoria ?? act.es_obligatoria ?? true),
-                    tiempoEstimadoMinutos: act.tiempoEstimadoMinutos ?? act.tiempo_estimado_minutos ?? null,
-                    instrucciones: act.instrucciones ?? null,
-                    precauciones: act.precauciones ?? null,
-                    idSistema: sistemaId ? Number(sistemaId) : null,
-                    sistemaNombre,
-                    sistemaCodigo,
-                    idParametroMedicion: paramInfo?.id ?? null,
-                    parametroInfo: paramInfo,
-                    instancias: [],
-                    serviciosIds: new Set<number>(),
-                    serviciosInfo: [],
-                    arquetipos: [],
-                });
-            }
-
-            const entry = map.get(normKey)!;
-            entry.instancias.push(act);
-            if (!entry.parametroInfo && paramInfo) {
-                entry.parametroInfo = paramInfo;
-                entry.idParametroMedicion = paramInfo.id;
-            }
-            if (!entry.idSistema && sistemaId) {
-                entry.idSistema = Number(sistemaId);
-                entry.sistemaNombre = sistemaNombre;
-                entry.sistemaCodigo = sistemaCodigo;
-            }
-
-            if (idServ && !entry.serviciosIds.has(idServ)) {
-                entry.serviciosIds.add(idServ);
-                entry.serviciosInfo.push({
-                    idTipoServicio: idServ,
-                    codigoTipo: srvCompleta?.codigo_tipo || srvCompleta?.codigoTipoServicio || `SRV_${idServ}`,
-                    nombreTipo: srvCompleta?.nombre_tipo || srvCompleta?.nombreTipoServicio || `Servicio #${idServ}`,
-                    idActividadCatalogo: Number(act.idActividadCatalogo || act.id_actividad_catalogo),
-                });
-            }
-
-            const arqsDeSrv = resolverArquetiposDeEntidad(srvCompleta, arquetipos);
-            const arqsDeSis = resolverArquetiposDeEntidad(sistemaObj, arquetipos);
-            for (const a of [...arqsDeSrv, ...arqsDeSis]) {
-                if (!entry.arquetipos.some(existing => existing.codigo === a.codigo)) {
-                    entry.arquetipos.push({ codigo: a.codigo, nombre: a.nombre });
-                }
-            }
-        });
-
-        return Array.from(map.values()).sort((a, b) =>
-            a.descripcionActividad.localeCompare(b.descripcionActividad)
-        );
-    }, [actividades, tiposServicio, sistemas, arquetipos, parametrosMap]);
-
-    const plantillasFiltradas = useMemo(() => {
-        return plantillasUniversales.filter(p => {
-            const term = busqueda.toLowerCase().trim();
-            const matchSearch =
-                !term ||
-                p.descripcionActividad.toLowerCase().includes(term) ||
-                p.sistemaNombre.toLowerCase().includes(term) ||
-                (p.parametroInfo?.unidad || '').toLowerCase().includes(term) ||
-                p.serviciosInfo.some(s => s.codigoTipo.toLowerCase().includes(term) || s.nombreTipo.toLowerCase().includes(term));
-
-            const matchTipo = !filtroTipoActividad || p.tipoActividad === filtroTipoActividad;
-            const matchSis = !filtroSistema || String(p.idSistema || '') === filtroSistema;
-            const matchSrv = !filtroTipoServicio || p.serviciosIds.has(Number(filtroTipoServicio));
-
-            let matchArq = true;
-            if (filtroArquetipo === 'UNIVERSAL') {
-                matchArq = p.arquetipos.length === 0;
-            } else if (filtroArquetipo) {
-                matchArq = p.arquetipos.some(a => a.codigo === filtroArquetipo);
-            }
-
-            return matchSearch && matchTipo && matchSis && matchSrv && matchArq;
-        });
-    }, [plantillasUniversales, busqueda, filtroTipoActividad, filtroSistema, filtroTipoServicio, filtroArquetipo]);
-
-    // Métricas Globales
-    const metricas = useMemo(() => {
-        const total = actividades.length;
-        const obligatorias = actividades.filter(a => a.esObligatoria ?? a.es_obligatoria).length;
-        const mediciones = actividades.filter(a => (a.tipoActividad || a.tipo_actividad) === 'MEDICION').length;
-
-        const todosServiciosChecklist = Object.values(groupedByService).filter(
-            g => g.servicio?.tiene_checklist !== false || g.actividades.length > 0
-        );
-        const serviciosConfigurados = todosServiciosChecklist.filter(g => g.actividades.length > 0).length;
-        const serviciosPendientes = todosServiciosChecklist.filter(g => g.actividades.length === 0).length;
-
-        const porTipo: Record<string, number> = {};
-        actividades.forEach(a => {
-            const tipo = a.tipoActividad || a.tipo_actividad || 'OTRO';
-            porTipo[tipo] = (porTipo[tipo] || 0) + 1;
-        });
-
-        return {
-            total,
-            obligatorias,
-            mediciones,
-            totalServiciosChecklist: todosServiciosChecklist.length,
-            serviciosConfigurados,
-            serviciosPendientes,
-            totalBancoUniversal: plantillasUniversales.length,
-            porTipo,
-        };
-    }, [actividades, groupedByService, plantillasUniversales]);
-
-    const toggleService = (serviceId: string) => {
-        setExpandedServices(prev => {
-            const next = new Set(prev);
-            if (next.has(serviceId)) {
-                next.delete(serviceId);
-            } else {
-                next.add(serviceId);
-            }
-            return next;
-        });
-    };
-
-    const expandAll = () => {
-        setExpandedServices(new Set(serviceEntriesFiltrados.map(([id]) => id)));
-    };
-
-    const collapseAll = () => {
-        setExpandedServices(new Set());
-    };
-
-    const handleOpenNewForService = (serviceId?: number | null) => {
-        setEditingActividad(null);
-        setPreselectedServiceId(serviceId ?? null);
-        setIsModalOpen(true);
-    };
-
-    const handleEdit = (actividad: any) => {
-        setEditingActividad(actividad);
-        setPreselectedServiceId(null);
-        setIsModalOpen(true);
-    };
-
-    const handleDelete = async (id: number) => {
-        if (window.confirm('¿Estás seguro de desactivar esta actividad del protocolo?')) {
-            await eliminarActividad.mutateAsync(id);
-        }
-    };
-
-    // Reordenamiento ↑ / ↓ en 1 clic
-    const handleMoveActivity = async (act: any, direction: 'up' | 'down', listInBlock: any[]) => {
-        const currentIndex = listInBlock.findIndex(
-            item =>
-                (item.idActividadCatalogo || item.id_actividad_catalogo) ===
-                (act.idActividadCatalogo || act.id_actividad_catalogo)
-        );
-        if (currentIndex === -1) return;
-        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-        if (targetIndex < 0 || targetIndex >= listInBlock.length) return;
-
-        const currentAct = listInBlock[currentIndex];
-        const neighborAct = listInBlock[targetIndex];
-        const currentId = Number(currentAct.idActividadCatalogo || currentAct.id_actividad_catalogo);
-        const neighborId = Number(neighborAct.idActividadCatalogo || neighborAct.id_actividad_catalogo);
-
-        let orderCurrent = Number(currentAct.ordenEjecucion || currentAct.orden_ejecucion || currentIndex + 1);
-        let orderNeighbor = Number(neighborAct.ordenEjecucion || neighborAct.orden_ejecucion || targetIndex + 1);
-
-        // Si tenían el mismo número de orden por datos heredados, normalizarlos
-        if (orderCurrent === orderNeighbor) {
-            orderCurrent = direction === 'up' ? Math.max(1, orderNeighbor - 1) : orderNeighbor + 1;
-        }
-
-        setReorderingId(currentId);
-        try {
-            await Promise.all([
-                actualizarActividad.mutateAsync({
-                    id: currentId,
-                    data: { ordenEjecucion: orderNeighbor },
-                }),
-                actualizarActividad.mutateAsync({
-                    id: neighborId,
-                    data: { ordenEjecucion: orderCurrent },
-                }),
-            ]);
-        } finally {
-            setReorderingId(null);
-        }
-    };
-
-    const clearFilters = () => {
-        setBusqueda('');
-        setFiltroArquetipo('');
-        setFiltroTipoServicio('');
-        setFiltroSistema('');
-        setFiltroTipoActividad('');
-        setFiltroEstadoChecklist('TODOS');
-    };
-
-    const hasActiveFilters =
-        Boolean(busqueda || filtroArquetipo || filtroTipoServicio || filtroSistema || filtroTipoActividad) ||
-        filtroEstadoChecklist !== 'TODOS';
-
-    return (
-        <div className="space-y-6">
-            {/* Header Ejecutivo Dual */}
-            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                    <div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                            <div className="p-2.5 bg-blue-500/20 rounded-xl border border-blue-400/20">
-                                <ListChecks className="h-7 w-7 text-blue-400" />
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-bold flex items-center gap-2.5">
-                                    Catálogo Universal de Actividades y Protocolos
-                                </h1>
-                                <p className="text-slate-400 mt-1 text-sm">
-                                    Banco maestro reutilizable de tareas técnicas, mediciones con UoM y constructor de checklists por Tipo de Servicio
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <button
-                            onClick={() => handleOpenNewForService(filtroTipoServicio ? Number(filtroTipoServicio) : null)}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 font-bold transition-all shadow-lg shadow-blue-600/30 cursor-pointer"
-                        >
-                            <Plus className="h-5 w-5" />
-                            Nueva Actividad / Medición
-                        </button>
-                    </div>
-                </div>
-
-                {/* Métricas Dashboard */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-500/20 rounded-lg">
-                                <BookOpen className="h-5 w-5 text-indigo-400" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{metricas.totalBancoUniversal}</p>
-                                <p className="text-xs text-slate-400">Actividades Únicas (Banco Universal)</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-500/20 rounded-lg">
-                                <ClipboardList className="h-5 w-5 text-blue-400" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{metricas.total}</p>
-                                <p className="text-xs text-slate-400">Asignaciones en Checklists</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-cyan-500/20 rounded-lg">
-                                <Gauge className="h-5 w-5 text-cyan-400" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{metricas.mediciones}</p>
-                                <p className="text-xs text-slate-400">Puntos de Medición Metrológica</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-emerald-500/20 rounded-lg">
-                                <Cog className="h-5 w-5 text-emerald-400" />
-                            </div>
-                            <div>
-                                <div className="flex items-baseline gap-2">
-                                    <p className="text-2xl font-bold">{metricas.totalServiciosChecklist}</p>
-                                    {metricas.serviciosPendientes > 0 && (
-                                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
-                                            {metricas.serviciosPendientes} por armar
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="text-xs text-slate-400">Tipos de Servicio con Checklist</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Conmutador Principal de 2 Vistas */}
-                <div className="mt-6 pt-5 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="inline-flex p-1 bg-slate-950/60 rounded-xl border border-white/10">
-                        <button
-                            type="button"
-                            onClick={() => setVistaActiva('checklists')}
-                            className={cn(
-                                'flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-bold transition-all cursor-pointer',
-                                vistaActiva === 'checklists'
-                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
-                            )}
-                        >
-                            <FolderKanban className="h-4 w-4" />
-                            <span>1. Checklists por Tipo de Servicio</span>
-                            <span
-                                className={cn(
-                                    'px-2 py-0.5 rounded-md text-xs font-mono',
-                                    vistaActiva === 'checklists' ? 'bg-blue-700 text-blue-100' : 'bg-white/10 text-slate-300'
-                                )}
-                            >
-                                {metricas.totalServiciosChecklist}
-                            </span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setVistaActiva('banco')}
-                            className={cn(
-                                'flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-bold transition-all cursor-pointer',
-                                vistaActiva === 'banco'
-                                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
-                            )}
-                        >
-                            <BookOpen className="h-4 w-4" />
-                            <span>2. Banco Universal de Actividades (Catálogo Maestro)</span>
-                            <span
-                                className={cn(
-                                    'px-2 py-0.5 rounded-md text-xs font-mono',
-                                    vistaActiva === 'banco' ? 'bg-indigo-700 text-indigo-100' : 'bg-white/10 text-slate-300'
-                                )}
-                            >
-                                {metricas.totalBancoUniversal}
-                            </span>
-                        </button>
-                    </div>
-
-                    {vistaActiva === 'checklists' && metricas.serviciosPendientes > 0 && (
-                        <div className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setFiltroEstadoChecklist(prev => (prev === 'PENDIENTES' ? 'TODOS' : 'PENDIENTES'))
-                                }
-                                className={cn(
-                                    'flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer',
-                                    filtroEstadoChecklist === 'PENDIENTES'
-                                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20'
-                                        : 'bg-amber-500/15 text-amber-300 border-amber-400/30 hover:bg-amber-500/25'
-                                )}
-                            >
-                                <Sparkles className="h-3.5 w-3.5" />
-                                <span>
-                                    {filtroEstadoChecklist === 'PENDIENTES'
-                                        ? `Mostrando solo pendientes (${metricas.serviciosPendientes}) · Ver todos`
-                                        : `${metricas.serviciosPendientes} servicio(s) nuevo(s) con 0 actividades listos para configurar`}
-                                </span>
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Filtros Contextuales Inteligentes */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2">
-                        <Filter className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm font-bold text-gray-700">
-                            Filtros de Gobernanza {vistaActiva === 'banco' ? '(Banco Universal)' : '(Checklists por Servicio)'}
-                        </span>
-                    </div>
-                    {hasActiveFilters && (
-                        <button
-                            onClick={clearFilters}
-                            className="text-xs text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
-                        >
-                            Limpiar todos los filtros
-                        </button>
-                    )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Buscar actividad, servicio, unidad..."
-                            value={busqueda}
-                            onChange={e => setBusqueda(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-gray-50"
-                        />
-                    </div>
-                    <EamSelect
-                        value={filtroArquetipo}
-                        onChange={val => setFiltroArquetipo(val)}
-                        options={[
-                            { value: '', label: 'Todos los Tipos de Equipo' },
-                            { value: 'UNIVERSAL', label: '🌐 Universal (Todos los Equipos)', badge: 'GLOBAL' },
-                            ...arquetipos.map((a: any) => {
-                                const cod = String(a.codigo_corto || a.codigo_tipo).toUpperCase().trim();
-                                return {
-                                    value: cod,
-                                    label: `${a.nombre_canonico || a.nombre_tipo} (${cod})`,
-                                    badge: cod,
-                                };
-                            }),
-                        ]}
-                        placeholder="Tipo de Equipo..."
-                        searchable
-                    />
-                    <EamSelect
-                        value={filtroTipoServicio}
-                        onChange={val => setFiltroTipoServicio(val)}
-                        options={[
-                            { value: '', label: 'Todos los Tipos de Servicio' },
-                            ...tiposServicio.map((t: any) => ({
-                                value: String(t.id_tipo_servicio || t.idTipoServicio),
-                                label: t.nombre_tipo || t.nombreTipo,
-                                badge: t.codigo_tipo || undefined,
-                            })),
-                        ]}
-                        placeholder="Todos los servicios"
-                        searchable
-                    />
-                    <EamSelect
-                        value={filtroSistema}
-                        onChange={val => setFiltroSistema(val)}
-                        options={[
-                            { value: '', label: 'Todos los Subsistemas' },
-                            ...sistemas.map((s: any) => ({
-                                value: String(s.id_sistema || s.idSistema),
-                                label: s.nombre_sistema || s.nombreSistema,
-                                badge: s.codigo_sistema || undefined,
-                            })),
-                        ]}
-                        placeholder="Todos los subsistemas"
-                        searchable
-                    />
-                    <EamSelect
-                        value={filtroTipoActividad}
-                        onChange={val => setFiltroTipoActividad(val)}
-                        options={[
-                            { value: '', label: 'Todos los Tipos de Tarea' },
-                            ...TIPOS_ACTIVIDAD.map(tipo => ({
-                                value: tipo.value,
-                                label: tipo.label,
-                            })),
-                        ]}
-                        placeholder="Todos los tipos"
-                    />
-                </div>
-            </div>
-
-            {/* =========================================================================
-                CONTENIDO PRINCIPAL SEGÚN PESTAÑA ACTIVA
-               ========================================================================= */}
-            {isLoading || isLoadingServicios ? (
-                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-200">
-                    <Loader2 className="h-12 w-12 animate-spin text-blue-500 mb-4" />
-                    <p className="text-gray-500 font-medium">Cargando protocolos y banco universal de actividades...</p>
-                </div>
-            ) : isError ? (
-                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-red-200">
-                    <AlertCircle className="h-14 w-14 text-red-400 mb-4" />
-                    <p className="font-bold text-lg text-red-600">Error al cargar el catálogo</p>
-                    <button
-                        onClick={() => refetch()}
-                        className="mt-4 px-5 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 font-medium transition-colors"
-                    >
-                        Reintentar
-                    </button>
-                </div>
-            ) : vistaActiva === 'checklists' ? (
-                /* ═══════════════════════════════════════════════════════════════════════
-                   VISTA 1: CHECKLISTS POR TIPO DE SERVICIO
-                   ═══════════════════════════════════════════════════════════════════════ */
-                <>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm text-gray-600">
-                                Mostrando <span className="font-bold text-gray-900">{serviceEntriesFiltrados.length}</span> tipos de servicio
-                            </span>
-                            <div className="flex items-center gap-1.5 ml-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setFiltroEstadoChecklist('TODOS')}
-                                    className={cn(
-                                        'px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer',
-                                        filtroEstadoChecklist === 'TODOS'
-                                            ? 'bg-slate-800 text-white'
-                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                    )}
-                                >
-                                    Todos ({metricas.totalServiciosChecklist})
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setFiltroEstadoChecklist('PENDIENTES')}
-                                    className={cn(
-                                        'px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer',
-                                        filtroEstadoChecklist === 'PENDIENTES'
-                                            ? 'bg-amber-600 text-white'
-                                            : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
-                                    )}
-                                >
-                                    ⚡ Sin Actividades ({metricas.serviciosPendientes})
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setFiltroEstadoChecklist('CONFIGURADOS')}
-                                    className={cn(
-                                        'px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer',
-                                        filtroEstadoChecklist === 'CONFIGURADOS'
-                                            ? 'bg-emerald-600 text-white'
-                                            : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                                    )}
-                                >
-                                    ✓ Configurados ({metricas.serviciosConfigurados})
-                                </button>
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={expandAll}
-                                className="text-xs font-semibold px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                            >
-                                Expandir todo
-                            </button>
-                            <button
-                                onClick={collapseAll}
-                                className="text-xs font-semibold px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                            >
-                                Colapsar todo
-                            </button>
-                        </div>
-                    </div>
-
-                    {serviceEntriesFiltrados.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-200">
-                            <ListChecks className="h-16 w-16 text-gray-300 mb-4" />
-                            <p className="text-lg font-semibold text-gray-600">No hay servicios que coincidan con el filtro</p>
-                            {hasActiveFilters && (
-                                <button
-                                    onClick={clearFilters}
-                                    className="mt-3 text-blue-600 hover:text-blue-700 text-sm font-bold cursor-pointer"
-                                >
-                                    Limpiar filtros
-                                </button>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {serviceEntriesFiltrados.map(([serviceId, group]) => {
-                                const isExpanded = expandedServices.has(serviceId);
-                                const serviceCodigo =
-                                    group.servicio?.codigo_tipo || group.servicio?.codigoTipoServicio || '';
-                                const serviceNombre =
-                                    group.servicio?.nombre_tipo || group.servicio?.nombreTipoServicio || 'Sin Servicio';
-                                const isZeroActs = group.actividades.length === 0;
-                                const colors = isZeroActs
-                                    ? {
-                                          bg: 'bg-amber-50/70',
-                                          border: 'border-amber-300',
-                                          text: 'text-slate-900',
-                                          accent: 'bg-amber-500',
-                                      }
-                                    : SERVICE_COLORS[serviceCodigo] || DEFAULT_COLOR;
-                                const numSistemas = Object.keys(group.bySystem).length;
-
-                                return (
-                                    <div
-                                        key={`service-group-${serviceId}`}
-                                        className={cn(
-                                            'rounded-2xl border-2 overflow-hidden transition-all shadow-2xs',
-                                            colors.border,
-                                            colors.bg
-                                        )}
-                                    >
-                                        {/* Header del Servicio */}
-                                        <div
-                                            onClick={() => toggleService(serviceId)}
-                                            className="w-full flex flex-col lg:flex-row lg:items-center justify-between p-4 gap-4 hover:bg-white/60 transition-colors cursor-pointer"
-                                        >
-                                            <div className="flex items-start sm:items-center gap-4">
-                                                <div className={cn('w-1.5 h-12 rounded-full shrink-0', colors.accent)} />
-                                                <div className="text-left">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-white border border-gray-200 text-slate-700">
-                                                            {serviceCodigo}
-                                                        </span>
-                                                        <h3 className={cn('font-bold text-lg', colors.text)}>
-                                                            {serviceNombre}
-                                                        </h3>
-                                                        {group.arquetipos.length > 0 ? (
-                                                            group.arquetipos.map(arq => (
-                                                                <span
-                                                                    key={arq.codigo}
-                                                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-blue-100/90 text-blue-800 border border-blue-200"
-                                                                >
-                                                                    <Layers className="h-3 w-3 text-blue-600" />
-                                                                    {arq.nombre} ({arq.codigo})
-                                                                </span>
-                                                            ))
-                                                        ) : (
-                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-white/80 text-slate-600 border border-slate-200">
-                                                                <Globe className="h-3 w-3 text-slate-400" />
-                                                                Universal
-                                                            </span>
-                                                        )}
-                                                        {isZeroActs && (
-                                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                                                ⚡ Nuevo · Pendiente armar checklist
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-sm text-gray-600 mt-1 font-medium">
-                                                        {isZeroActs ? (
-                                                            <span className="text-amber-800 font-semibold">
-                                                                0 actividades configuradas — Agrega tareas nuevas o reutiliza del Banco Universal
-                                                            </span>
-                                                        ) : (
-                                                            <>
-                                                                <span className="font-bold text-slate-800">
-                                                                    {group.actividades.length}
-                                                                </span>{' '}
-                                                                actividades •{' '}
-                                                                <span className="font-bold text-slate-800">
-                                                                    {numSistemas}
-                                                                </span>{' '}
-                                                                {numSistemas === 1 ? 'subsistema' : 'subsistemas'}
-                                                            </>
-                                                        )}
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            {/* Botones de Acción Directa en el Header del Servicio */}
-                                            <div
-                                                className="flex items-center gap-2.5 self-end lg:self-center flex-wrap"
-                                                onClick={e => e.stopPropagation()}
-                                            >
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setReutilizarTargetService(group.servicio)}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 transition-all shadow-2xs cursor-pointer"
-                                                    title="Seleccionar actividades existentes del Banco Universal para clonarlas en este servicio"
-                                                >
-                                                    <BookOpen className="h-3.5 w-3.5 text-indigo-600" />
-                                                    <span>+ Reutilizar del Banco</span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleOpenNewForService(Number(serviceId))}
-                                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm cursor-pointer"
-                                                >
-                                                    <Plus className="h-3.5 w-3.5" />
-                                                    <span>+ Nueva Actividad aquí</span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => toggleService(serviceId)}
-                                                    className="p-1.5 rounded-lg hover:bg-black/5 transition-colors cursor-pointer"
-                                                >
-                                                    {isExpanded ? (
-                                                        <ChevronDown className={cn('h-5 w-5', colors.text)} />
-                                                    ) : (
-                                                        <ChevronRight className={cn('h-5 w-5', colors.text)} />
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* Contenido Expandido del Servicio */}
-                                        {isExpanded && (
-                                            <div className="bg-white border-t border-gray-200">
-                                                {isZeroActs ? (
-                                                    <div className="p-8 text-center bg-gradient-to-b from-amber-50/30 to-white">
-                                                        <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3">
-                                                            <ClipboardList className="h-6 w-6" />
-                                                        </div>
-                                                        <h4 className="text-base font-bold text-slate-900">
-                                                            Protocolo listo para configurar ({serviceNombre})
-                                                        </h4>
-                                                        <p className="text-xs text-slate-500 max-w-lg mx-auto mt-1">
-                                                            Aún no se han cargado actividades de inspección o medición en este tipo de servicio. Puedes crear actividades específicas para sus subsistemas o reutilizar tareas del Banco Universal.
-                                                        </p>
-                                                        <div className="flex items-center justify-center gap-3 mt-5 flex-wrap">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleOpenNewForService(Number(serviceId))}
-                                                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-                                                            >
-                                                                <Plus className="h-4 w-4" />
-                                                                Crear Primera Actividad / Medición
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setReutilizarTargetService(group.servicio)}
-                                                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-all cursor-pointer"
-                                                            >
-                                                                <BookOpen className="h-4 w-4" />
-                                                                Reutilizar del Banco Universal
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    Object.entries(group.bySystem).map(([sistemaKey, sysBlock]) => (
-                                                        <div
-                                                            key={`system-${serviceId}-${sistemaKey}`}
-                                                            className="border-b border-gray-100 last:border-b-0"
-                                                        >
-                                                            {/* Header Consolidado del Subsistema */}
-                                                            <div className="px-6 py-3 bg-slate-50/80 flex items-center justify-between border-b border-gray-100">
-                                                                <div className="flex items-center gap-2">
-                                                                    <Layers className="h-4 w-4 text-purple-600" />
-                                                                    <span className="text-sm font-bold text-slate-800">
-                                                                        {sysBlock.sistemaNombre}
-                                                                    </span>
-                                                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                                                                        {sysBlock.acts.length}{' '}
-                                                                        {sysBlock.acts.length === 1 ? 'actividad' : 'actividades'}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Lista de Actividades del Subsistema */}
-                                                            <div className="divide-y divide-gray-100">
-                                                                {sysBlock.acts.map((act, idx) => {
-                                                                    const actId = Number(
-                                                                        act.idActividadCatalogo || act.id_actividad_catalogo || idx
-                                                                    );
-                                                                    const tipoAct =
-                                                                        act.tipoActividad || act.tipo_actividad || 'INSPECCION';
-                                                                    const Icon = getTipoActividadIcon(tipoAct);
-                                                                    const pInfo = act.parametroInfo;
-
-                                                                    return (
-                                                                        <div
-                                                                            key={`act-${serviceId}-${sistemaKey}-${actId}`}
-                                                                            className="px-6 py-3.5 hover:bg-blue-50/30 transition-colors group flex items-center gap-4"
-                                                                        >
-                                                                            {/* Orden + Controles ↑ / ↓ en 1 clic */}
-                                                                            <div className="flex items-center gap-1.5">
-                                                                                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-700 border border-slate-200">
-                                                                                    {act.ordenEjecucion || act.orden_ejecucion || idx + 1}
-                                                                                </div>
-                                                                                <div className="flex flex-col gap-0.5">
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        disabled={idx === 0 || reorderingId === actId}
-                                                                                        onClick={() =>
-                                                                                            handleMoveActivity(act, 'up', sysBlock.acts)
-                                                                                        }
-                                                                                        title="Subir orden de ejecución"
-                                                                                        className="p-0.5 rounded hover:bg-blue-100 text-gray-400 hover:text-blue-700 disabled:opacity-25 disabled:pointer-events-none cursor-pointer"
-                                                                                    >
-                                                                                        <ArrowUp className="h-3 w-3" />
-                                                                                    </button>
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        disabled={
-                                                                                            idx === sysBlock.acts.length - 1 ||
-                                                                                            reorderingId === actId
-                                                                                        }
-                                                                                        onClick={() =>
-                                                                                            handleMoveActivity(act, 'down', sysBlock.acts)
-                                                                                        }
-                                                                                        title="Bajar orden de ejecución"
-                                                                                        className="p-0.5 rounded hover:bg-blue-100 text-gray-400 hover:text-blue-700 disabled:opacity-25 disabled:pointer-events-none cursor-pointer"
-                                                                                    >
-                                                                                        <ArrowDown className="h-3 w-3" />
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-
-                                                                            {/* Info Principal */}
-                                                                            <div className="flex-1 min-w-0">
-                                                                                <p className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">
-                                                                                    {act.descripcionActividad || act.descripcion_actividad}
-                                                                                </p>
-                                                                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                                                    <span className="text-[11px] font-mono text-gray-400">
-                                                                                        {act.codigoActividad || act.codigo_actividad}
-                                                                                    </span>
-                                                                                    {pInfo && (
-                                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
-                                                                                            <Ruler className="h-3 w-3 text-cyan-600" />
-                                                                                            <span>
-                                                                                                Unidad: <strong>{pInfo.unidad}</strong>
-                                                                                            </span>
-                                                                                            {(pInfo.min !== null || pInfo.max !== null) && (
-                                                                                                <span className="font-mono text-cyan-700">
-                                                                                                    [{pInfo.min ?? '—'} a {pInfo.max ?? '—'}{' '}
-                                                                                                    {pInfo.unidad}]
-                                                                                                </span>
-                                                                                            )}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-
-                                                                            {/* Badges */}
-                                                                            <div className="hidden md:flex items-center gap-2 flex-wrap">
-                                                                                <span
-                                                                                    className={cn(
-                                                                                        'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold',
-                                                                                        getTipoActividadColor(tipoAct)
-                                                                                    )}
-                                                                                >
-                                                                                    <Icon className="h-3.5 w-3.5" />
-                                                                                    {tipoAct}
-                                                                                </span>
-
-                                                                                {(act.esObligatoria ?? act.es_obligatoria) && (
-                                                                                    <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded-lg text-[11px] font-bold">
-                                                                                        OBLIGATORIA
-                                                                                    </span>
-                                                                                )}
-
-                                                                                {(act.tiempoEstimadoMinutos ||
-                                                                                    act.tiempo_estimado_minutos) && (
-                                                                                    <span className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold border border-blue-100">
-                                                                                        <Clock className="h-3 w-3" />
-                                                                                        {act.tiempoEstimadoMinutos ||
-                                                                                            act.tiempo_estimado_minutos}
-                                                                                        m
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
-
-                                                                            {/* Acciones */}
-                                                                            <div className="flex items-center gap-1">
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => {
-                                                                                        const desc = (
-                                                                                            act.descripcionActividad ||
-                                                                                            act.descripcion_actividad ||
-                                                                                            ''
-                                                                                        ).trim();
-                                                                                        const found = plantillasUniversales.find(
-                                                                                            p =>
-                                                                                                p.key ===
-                                                                                                `${desc.toUpperCase()}|${tipoAct}`
-                                                                                        );
-                                                                                        if (found) setPlantillaAVincular(found);
-                                                                                    }}
-                                                                                    title="Vincular / Reutilizar esta actividad en otro Tipo de Servicio"
-                                                                                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all cursor-pointer"
-                                                                                >
-                                                                                    <Copy className="h-4 w-4" />
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => handleEdit(act)}
-                                                                                    title="Editar actividad"
-                                                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
-                                                                                >
-                                                                                    <Edit className="h-4 w-4" />
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => handleDelete(actId)}
-                                                                                    title="Eliminar actividad"
-                                                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
-                                                                                >
-                                                                                    <Trash2 className="h-4 w-4" />
-                                                                                </button>
-                                                                            </div>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </>
-            ) : (
-                /* ═══════════════════════════════════════════════════════════════════════
-                   VISTA 2: BANCO UNIVERSAL DE ACTIVIDADES (CATÁLOGO MAESTRO REUTILIZABLE)
-                   ═══════════════════════════════════════════════════════════════════════ */
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                    <div className="p-5 border-b border-gray-100 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                                <BookOpen className="h-5 w-5 text-indigo-600" />
-                                Diccionario Maestro de Actividades Técnicas ({plantillasFiltradas.length})
-                            </h2>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                                Cada actividad del banco universal puede vincularse o reutilizarse en múltiples Tipos de Servicio (ej. Preventivo Tipo A, Preventivo Tipo B, Correctivo) con un solo clic.
-                            </p>
-                        </div>
-                    </div>
-
-                    {plantillasFiltradas.length === 0 ? (
-                        <div className="py-16 text-center">
-                            <BookOpen className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                            <p className="text-base font-bold text-gray-600">
-                                No se encontraron actividades en el Banco Universal con estos filtros
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="divide-y divide-gray-100">
-                            {plantillasFiltradas.map(plantilla => {
-                                const Icon = getTipoActividadIcon(plantilla.tipoActividad);
-                                return (
-                                    <div
-                                        key={plantilla.key}
-                                        className="p-4 sm:px-6 hover:bg-indigo-50/20 transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-                                    >
-                                        <div className="space-y-1.5 flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span
-                                                    className={cn(
-                                                        'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-bold',
-                                                        getTipoActividadColor(plantilla.tipoActividad)
-                                                    )}
-                                                >
-                                                    <Icon className="h-3.5 w-3.5" />
-                                                    {plantilla.tipoActividad}
-                                                </span>
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                                                    <Layers className="h-3 w-3" />
-                                                    {plantilla.sistemaNombre}
-                                                </span>
-                                                {plantilla.arquetipos.length > 0 ? (
-                                                    plantilla.arquetipos.map(arq => (
-                                                        <span
-                                                            key={arq.codigo}
-                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200"
-                                                        >
-                                                            {arq.nombre} ({arq.codigo})
-                                                        </span>
-                                                    ))
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600">
-                                                        🌐 Universal
-                                                    </span>
-                                                )}
-                                                {plantilla.parametroInfo && (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
-                                                        <Ruler className="h-3 w-3 text-cyan-600" />
-                                                        Unidad: {plantilla.parametroInfo.unidad}
-                                                        {(plantilla.parametroInfo.min !== null ||
-                                                            plantilla.parametroInfo.max !== null) && (
-                                                            <span className="font-mono">
-                                                                [{plantilla.parametroInfo.min ?? '—'} -{' '}
-                                                                {plantilla.parametroInfo.max ?? '—'}]
-                                                            </span>
-                                                        )}
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            <p className="font-bold text-slate-900 text-sm sm:text-base">
-                                                {plantilla.descripcionActividad}
-                                            </p>
-
-                                            {/* Servicios donde está vinculada actualmente */}
-                                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                                                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                                                    Usada en ({plantilla.serviciosInfo.length}):
-                                                </span>
-                                                {plantilla.serviciosInfo.map(srv => (
-                                                    <span
-                                                        key={srv.idTipoServicio}
-                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200"
-                                                    >
-                                                        <span className="font-mono text-[10px] text-slate-500">
-                                                            {srv.codigoTipo}
-                                                        </span>
-                                                        <span>{srv.nombreTipo}</span>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 shrink-0 self-end lg:self-center">
-                                            <button
-                                                type="button"
-                                                onClick={() => setPlantillaAVincular(plantilla)}
-                                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all cursor-pointer"
-                                            >
-                                                <Link2 className="h-4 w-4" />
-                                                <span>Vincular a otro Servicio</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Modal Crear / Editar Actividad Inteligente (Multi-Servicio + UoM + Filtro Contextual de Sistema) */}
-            {isModalOpen && (
-                <ActividadModal
-                    isOpen={isModalOpen}
-                    onClose={() => {
-                        setIsModalOpen(false);
-                        setPreselectedServiceId(null);
-                    }}
-                    actividad={editingActividad}
-                    preselectedServiceId={preselectedServiceId}
-                    actividades={actividades || []}
-                    tiposServicio={tiposServicio || []}
-                    sistemas={sistemas || []}
-                    parametros={parametros || []}
-                    arquetipos={arquetipos || []}
-                    crearActividad={crearActividad}
-                    actualizarActividad={actualizarActividad}
-                />
-            )}
-
-            {/* Modal para Vincular una Plantilla del Banco Universal a 1 o Múltiples Servicios */}
-            {plantillaAVincular && (
-                <VincularPlantillaAServiciosModal
-                    plantilla={plantillaAVincular}
-                    tiposServicio={tiposServicio}
-                    actividades={actividades}
-                    arquetipos={arquetipos}
-                    crearActividad={crearActividad}
-                    onClose={() => setPlantillaAVincular(null)}
-                />
-            )}
-
-            {/* Modal para Reutilizar Múltiples Actividades del Banco Universal dentro de un Servicio específico */}
-            {reutilizarTargetService && (
-                <ReutilizarDelBancoParaServicioModal
-                    servicioDestino={reutilizarTargetService}
-                    plantillas={plantillasUniversales}
-                    actividades={actividades}
-                    arquetipos={arquetipos}
-                    crearActividad={crearActividad}
-                    onClose={() => setReutilizarTargetService(null)}
-                />
-            )}
-        </div>
-    );
+interface EntradaBancoUniversal {
+    firmaCanonica: string;
+    representante: CatalogoActividad;
+    instancias: CatalogoActividad[];
+    serviciosIds: number[];
+    esPlantillaPura: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODAL INTELIGENTE: NUEVA / EDITAR ACTIVIDAD (MULTI-SERVICIO + FILTRO SUBSISTEMA + UoM)
+// MODAL 1: CREAR NUEVA PLANTILLA EN EL BANCO UNIVERSAL (O EDITAR Y PROPAGAR)
 // ═══════════════════════════════════════════════════════════════════════════════
-function ActividadModal({
+
+interface BancoActividadModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    entradaEditar?: EntradaBancoUniversal | null;
+    arquetipos: Array<{ id_tipo_equipo: number; codigo_tipo: string; nombre_tipo: string }>;
+    sistemas: CatalogoSistema[];
+    tiposServicio: TipoServicio[];
+    parametros: ParametroMedicion[];
+    unidadesOptions: EamSelectOption[];
+}
+
+function BancoActividadModal({
+    isOpen,
     onClose,
-    actividad,
-    preselectedServiceId,
-    actividades = [],
-    tiposServicio = [],
-    sistemas = [],
-    parametros = [],
-    arquetipos = [],
-    crearActividad,
-    actualizarActividad,
-}: any) {
-    const crearSistemaMutation = useCreateCatalogoSistema();
-    const crearParametroMutation = useCreateParametroMedicion();
-    const actualizarParametroMutation = useUpdateParametroMedicion();
-    const { data: unidadesEam = [] } = useUnidadesEam();
-    const { data: bancoMagnitudes = [] } = useBancoMagnitudesEam();
+    entradaEditar,
+    arquetipos,
+    sistemas,
+    tiposServicio,
+    parametros,
+    unidadesOptions,
+}: BancoActividadModalProps) {
+    const createActividad = useCreateCatalogoActividad();
+    const propagarBanco = usePropagarActividadBanco();
+    const vincularLote = useVincularActividadesLote();
+    const createParametro = useCreateParametroMedicion();
+    const updateParametro = useUpdateParametroMedicion();
 
-    const codigosExistentes = useMemo(() => {
-        return new Set<string>(
-            (actividades || [])
-                .filter(
-                    (a: any) =>
-                        !actividad ||
-                        (a.idActividadCatalogo || a.id_actividad_catalogo) !==
-                            (actividad.idActividadCatalogo || actividad.id_actividad_catalogo)
-                )
-                .map((a: any) => (a.codigoActividad || a.codigo_actividad || '').toUpperCase().trim())
-                .filter(Boolean)
-        );
-    }, [actividades, actividad]);
+    const actBase = entradaEditar?.representante ?? null;
 
-    // Calcular el siguiente orden_ejecucion disponible para un servicio dado
-    const calcularSiguienteOrden = (serviceId: number | string) => {
-        if (!serviceId) return 1;
-        const actsDelServicio = (actividades || []).filter(
-            (a: any) => String(a.idTipoServicio || a.id_tipo_servicio) === String(serviceId)
-        );
-        if (actsDelServicio.length === 0) return 1;
-        const maxOrden = Math.max(
-            0,
-            ...actsDelServicio.map((a: any) => Number(a.ordenEjecucion || a.orden_ejecucion || 0))
-        );
-        return maxOrden + 1;
-    };
+    const [descripcion, setDescripcion] = useState('');
+    const [tipoActividad, setTipoActividad] = useState<TipoActividad>('INSPECCION');
+    const [idTipoEquipo, setIdTipoEquipo] = useState<string>('');
+    const [idSistema, setIdSistema] = useState<string>('');
+    const [esObligatoria, setEsObligatoria] = useState(true);
+    const [instrucciones, setInstrucciones] = useState('');
+    const [precauciones, setPrecauciones] = useState('');
 
-    const initialServiceId = actividad
-        ? String(actividad.idTipoServicio || actividad.id_tipo_servicio || '')
-        : preselectedServiceId
-        ? String(preselectedServiceId)
-        : '';
+    // Campos de telemetría UoM cuando tipoActividad === 'MEDICION'
+    const [unidadMedida, setUnidadMedida] = useState('V');
+    const [valorMinimo, setValorMinimo] = useState<string>('0');
+    const [valorMaximo, setValorMaximo] = useState<string>('100');
+    const [valorCriticoMin, setValorCriticoMin] = useState<string>('');
+    const [valorCriticoMax, setValorCriticoMax] = useState<string>('');
 
-    const existingParamId = actividad?.idParametroMedicion || actividad?.id_parametro_medicion || '';
-    const existingParamObj = useMemo(() => {
-        if (!existingParamId) return null;
-        return (
-            actividad?.parametroMedicion ||
-            actividad?.parametros_medicion ||
-            (parametros || []).find(
-                (p: any) => Number(p.id_parametro_medicion || p.idParametroMedicion) === Number(existingParamId)
-            ) ||
-            null
-        );
-    }, [existingParamId, actividad, parametros]);
-
-    const [isAutoCodigo, setIsAutoCodigo] = useState(!actividad);
-    const [serviciosAdicionalesIds, setServiciosAdicionalesIds] = useState<string[]>([]);
-    const [mostrarMultiServicio, setMostrarMultiServicio] = useState(false);
-
-    // Estado para creación rápida inline de Subsistema
-    const [creandoSubsistemaInline, setCreandoSubsistemaInline] = useState(false);
-    const [nuevoSubsistemaNombre, setNuevoSubsistemaNombre] = useState('');
-
-    // Estado para Configuración Metrológica directa (cuando tipo_actividad === 'MEDICION')
-    const [modoMetrologico, setModoMetrologico] = useState<'DIRECTO_UOM' | 'CATALOGO_EXISTENTE'>('DIRECTO_UOM');
-    const [unidadMedidaDirecta, setUnidadMedidaDirecta] = useState<string>(
-        existingParamObj?.unidadMedida || existingParamObj?.unidad_medida || ''
-    );
-    const [rangoMinDirecto, setRangoMinDirecto] = useState<string>(
-        existingParamObj?.valorMinimoNormal != null
-            ? String(existingParamObj.valorMinimoNormal)
-            : existingParamObj?.valor_minimo_normal != null
-            ? String(existingParamObj.valor_minimo_normal)
-            : ''
-    );
-    const [rangoMaxDirecto, setRangoMaxDirecto] = useState<string>(
-        existingParamObj?.valorMaximoNormal != null
-            ? String(existingParamObj.valorMaximoNormal)
-            : existingParamObj?.valor_maximo_normal != null
-            ? String(existingParamObj.valor_maximo_normal)
-            : ''
-    );
-
-    const [formData, setFormData] = useState({
-        descripcion_actividad: actividad?.descripcionActividad || actividad?.descripcion_actividad || '',
-        codigo_actividad: actividad?.codigoActividad || actividad?.codigo_actividad || '',
-        id_tipo_servicio: initialServiceId,
-        id_sistema: actividad ? String(actividad.idSistema || actividad.id_sistema || '') : '',
-        tipo_actividad: actividad?.tipoActividad || actividad?.tipo_actividad || 'INSPECCION',
-        orden_ejecucion: actividad
-            ? actividad.ordenEjecucion || actividad.orden_ejecucion || 1
-            : calcularSiguienteOrden(initialServiceId),
-        es_obligatoria: actividad?.esObligatoria ?? actividad?.es_obligatoria ?? true,
-        tiempo_estimado_minutos:
-            actividad?.tiempoEstimadoMinutos || actividad?.tiempo_estimado_minutos || '',
-        id_parametro_medicion: existingParamId ? String(existingParamId) : '',
-        instrucciones: actividad?.instrucciones || '',
-        precauciones: actividad?.precauciones || '',
-    });
-
+    // Opcional en creación: inyectar de inmediato en 1 o varios servicios
+    const [serviciosSeleccionados, setServiciosSeleccionados] = useState<number[]>([]);
+    const [busquedaServicios, setBusquedaServicios] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
-    // Resolver servicio seleccionado y su(s) arquetipo(s) de equipo
-    const servicioSeleccionado = useMemo(() => {
-        if (!formData.id_tipo_servicio) return null;
-        return (tiposServicio || []).find(
-            (t: any) => String(t.id_tipo_servicio || t.idTipoServicio) === String(formData.id_tipo_servicio)
-        );
-    }, [formData.id_tipo_servicio, tiposServicio]);
+    useEffect(() => {
+        if (!isOpen) return;
+        if (actBase) {
+            setDescripcion(getActDesc(actBase));
+            setTipoActividad(getActTipo(actBase));
+            const eqId = getActEquipoId(actBase);
+            const sisId = getActSistemaId(actBase);
+            const paramId = getActParametroId(actBase);
+            setIdTipoEquipo(eqId ? String(eqId) : '');
+            setIdSistema(sisId ? String(sisId) : '');
+            setEsObligatoria(getActObligatoria(actBase));
+            setInstrucciones(actBase.instrucciones ?? '');
+            setPrecauciones(actBase.precauciones ?? '');
 
-    const arquetiposDelServicio = useMemo(() => {
-        if (!servicioSeleccionado) return [];
-        return resolverArquetiposDeEntidad(servicioSeleccionado, arquetipos);
-    }, [servicioSeleccionado, arquetipos]);
+            const paramLista = parametros.find((p) => p.id_parametro_medicion === paramId);
+            const paramCqrs = actBase.parametroMedicion;
+            const uMed =
+                paramLista?.unidad_medida ??
+                paramCqrs?.unidadMedida ??
+                actBase.parametros_medicion?.unidad_medida ??
+                'V';
+            const minN = paramLista?.valor_minimo_normal ?? paramCqrs?.valorMinimoNormal ?? 0;
+            const maxN = paramLista?.valor_maximo_normal ?? paramCqrs?.valorMaximoNormal ?? 100;
+            const minC = paramLista?.valor_minimo_critico ?? paramCqrs?.valorMinimoCritico;
+            const maxC = paramLista?.valor_maximo_critico ?? paramCqrs?.valorMaximoCritico;
 
-    // Filtrar estrictamente los Subsistemas según el Arquetipo del Servicio seleccionado
-    const sistemasFiltradosContextual = useMemo(() => {
-        const codigosArq = arquetiposDelServicio.map(a => a.codigo);
-        return (sistemas || []).filter((s: any) =>
-            esSistemaCompatibleConArquetipos(s, codigosArq, arquetipos)
-        );
-    }, [sistemas, arquetiposDelServicio, arquetipos]);
+            setUnidadMedida(uMed || 'V');
+            setValorMinimo(String(minN));
+            setValorMaximo(String(maxN));
+            setValorCriticoMin(minC !== null && minC !== undefined ? String(minC) : '');
+            setValorCriticoMax(maxC !== null && maxC !== undefined ? String(maxC) : '');
+            setServiciosSeleccionados([]);
+        } else {
+            setDescripcion('');
+            setTipoActividad('INSPECCION');
+            setIdTipoEquipo('');
+            setIdSistema('');
+            setEsObligatoria(true);
+            setInstrucciones('');
+            setPrecauciones('');
+            setUnidadMedida('V');
+            setValorMinimo('0');
+            setValorMaximo('100');
+            setValorCriticoMin('');
+            setValorCriticoMax('');
+            setServiciosSeleccionados([]);
+        }
+        setBusquedaServicios('');
+    }, [isOpen, actBase, parametros]);
 
-    // Opciones consolidadas de Unidades de Medida (Banco EAM 60 Magnitudes / 263 Unidades + Ingeniería)
-    const opcionesUnidadesMedida = useMemo(() => {
-        const map = new Map<string, { value: string; label: string; badge?: string }>();
-
-        // 1. Unidades esenciales de ingeniería para acceso inmediato
-        const unidadesDestacadas = [
-            { sim: 'mm', nom: 'Milímetros (Longitud / Nivelación)', mag: 'LONGITUD' },
-            { sim: 'm/s', nom: 'Metros por segundo (Velocidad lineal)', mag: 'VELOCIDAD' },
-            { sim: 's', nom: 'Segundos (Tiempo de maniobra / apertura)', mag: 'TIEMPO' },
-            { sim: 'PSI', nom: 'Libras por pulgada cuadrada (Presión)', mag: 'PRESIÓN' },
-            { sim: 'bar', nom: 'Bares (Presión)', mag: 'PRESIÓN' },
-            { sim: '°C', nom: 'Grados Celsius (Temperatura)', mag: 'TEMPERATURA' },
-            { sim: 'VAC', nom: 'Voltios AC (Tensión Alterna)', mag: 'TENSIÓN' },
-            { sim: 'VDC', nom: 'Voltios DC (Tensión Continua)', mag: 'TENSIÓN' },
-            { sim: 'V', nom: 'Voltios (Tensión Eléctrica)', mag: 'TENSIÓN' },
-            { sim: 'A', nom: 'Amperios (Corriente Eléctrica)', mag: 'CORRIENTE' },
-            { sim: 'Hz', nom: 'Hertz (Frecuencia)', mag: 'FRECUENCIA' },
-            { sim: 'RPM', nom: 'Revoluciones por minuto (Velocidad giro)', mag: 'VELOCIDAD' },
-            { sim: 'mm/s', nom: 'Milímetros por segundo RMS (Vibración)', mag: 'VIBRACIÓN' },
-            { sim: 'dB', nom: 'Decibelios (Nivel sonoro)', mag: 'ACÚSTICA' },
-            { sim: '%', nom: 'Porcentaje (Nivel / Carga / Humedad)', mag: 'PORCENTAJE' },
-            { sim: 'kW', nom: 'Kilovatios (Potencia Activa)', mag: 'POTENCIA' },
-            { sim: 'kVA', nom: 'Kilovoltiamperios (Potencia Aparente)', mag: 'POTENCIA' },
-            { sim: 'MΩ', nom: 'Megaohmios (Resistencia de Aislamiento)', mag: 'RESISTENCIA' },
-            { sim: 'Ω', nom: 'Ohmios (Resistencia / Puesta a tierra)', mag: 'RESISTENCIA' },
-            { sim: 'GPM', nom: 'Galones por minuto (Caudal)', mag: 'CAUDAL' },
-            { sim: 'L/min', nom: 'Litros por minuto (Caudal)', mag: 'CAUDAL' },
-            { sim: 'Ciclos', nom: 'Ciclos de operación / viaje', mag: 'CONTADOR' },
-            { sim: 'h', nom: 'Horas de operación (Horómetro)', mag: 'TIEMPO' },
+    const arquetiposOptions = useMemo<EamSelectOption[]>(() => {
+        return [
+            { value: '', label: 'Universal (Aplica a todos los Tipos de Equipo)', badge: 'GLOBAL' },
+            ...arquetipos.map((a) => ({
+                value: String(a.id_tipo_equipo),
+                label: a.nombre_tipo,
+                badge: a.codigo_tipo,
+            })),
         ];
+    }, [arquetipos]);
 
-        for (const u of unidadesDestacadas) {
-            map.set(u.sim, {
-                value: u.sim,
-                label: `${u.sim} — ${u.nom}`,
-                badge: u.mag,
+    const sistemasOptions = useMemo<EamSelectOption[]>(() => {
+        const arquetipoSel = arquetipos.find((a) => String(a.id_tipo_equipo) === idTipoEquipo);
+        const filtrados = sistemas.filter((s) => {
+            if (!s.activo) return false;
+            if (!arquetipoSel) return true;
+            const aplica = Array.isArray(s.aplica_a) ? s.aplica_a : [];
+            return aplica.length === 0 || aplica.includes(arquetipoSel.codigo_tipo);
+        });
+        return [
+            { value: '', label: 'General / Sin subsistema específico', badge: 'GENERAL' },
+            ...filtrados.map((s) => ({
+                value: String(s.id_sistema),
+                label: s.nombre_sistema,
+                badge: s.codigo_sistema,
+            })),
+        ];
+    }, [sistemas, arquetipos, idTipoEquipo]);
+
+    const serviciosFiltrados = useMemo(() => {
+        const q = busquedaServicios.trim().toLowerCase();
+        return tiposServicio
+            .filter((s) => s.activo !== false)
+            .filter((s) => {
+                if (!q) return true;
+                return (
+                    s.nombre_tipo.toLowerCase().includes(q) ||
+                    s.codigo_tipo.toLowerCase().includes(q)
+                );
             });
-        }
+    }, [tiposServicio, busquedaServicios]);
 
-        // 2. Unidades activas en la BD (`unidades_medida`)
-        for (const u of (unidadesEam as any[]) || []) {
-            const sim = String(u.simbolo || u.codigo_unidad || '').trim();
-            if (sim && !map.has(sim)) {
-                map.set(sim, {
-                    value: sim,
-                    label: `${sim} — ${u.nombre_unidad || u.nombre || sim}`,
-                    badge: typeof u.magnitud === 'string' ? u.magnitud : u.magnitud?.nombre_magnitud || undefined,
-                });
-            }
-        }
+    if (!isOpen) return null;
 
-        // 3. Banco completo de 60 Magnitudes / 263 Unidades
-        for (const mag of bancoMagnitudes || []) {
-            for (const u of mag.unidades || []) {
-                const sim = String(u.simbolo || u.codigo_unidad || '').trim();
-                if (sim && !map.has(sim)) {
-                    map.set(sim, {
-                        value: sim,
-                        label: `${sim} — ${u.nombre_unidad}`,
-                        badge: mag.nombre_magnitud || mag.codigo_magnitud,
-                    });
-                }
-            }
-        }
-
-        return Array.from(map.values());
-    }, [unidadesEam, bancoMagnitudes]);
-
-    const isCodigoDuplicado = useMemo(() => {
-        return verificarCodigoDuplicado(
-            formData.codigo_actividad,
-            codigosExistentes,
-            actividad?.codigo_actividad || actividad?.codigoActividad
+    const toggleServicio = (idServicio: number) => {
+        setServiciosSeleccionados((prev) =>
+            prev.includes(idServicio) ? prev.filter((id) => id !== idServicio) : [...prev, idServicio],
         );
-    }, [formData.codigo_actividad, codigosExistentes, actividad]);
-
-    const handleDescripcionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const newDesc = e.target.value;
-        const auto =
-            isAutoCodigo && !actividad
-                ? generarCodigoActividad(newDesc, codigosExistentes)
-                : formData.codigo_actividad;
-        setFormData(prev => ({
-            ...prev,
-            descripcion_actividad: newDesc,
-            codigo_actividad: auto,
-        }));
-    };
-
-    const handleServicioPrincipalChange = (newServiceId: string) => {
-        const nextOrden = !actividad ? calcularSiguienteOrden(newServiceId) : formData.orden_ejecucion;
-        const srv = (tiposServicio || []).find(
-            (t: any) => String(t.id_tipo_servicio || t.idTipoServicio) === String(newServiceId)
-        );
-        const arqs = resolverArquetiposDeEntidad(srv, arquetipos).map(a => a.codigo);
-        const currentSisObj = (sistemas || []).find(
-            (s: any) => String(s.id_sistema || s.idSistema) === String(formData.id_sistema)
-        );
-        const keepSistema =
-            currentSisObj && esSistemaCompatibleConArquetipos(currentSisObj, arqs, arquetipos)
-                ? formData.id_sistema
-                : '';
-
-        setFormData(prev => ({
-            ...prev,
-            id_tipo_servicio: newServiceId,
-            id_sistema: keepSistema,
-            orden_ejecucion: nextOrden,
-        }));
-        setServiciosAdicionalesIds(prev => prev.filter(id => id !== newServiceId));
-    };
-
-    const handleToggleAutoCodigo = () => {
-        const nuevoModo = !isAutoCodigo;
-        setIsAutoCodigo(nuevoModo);
-        if (nuevoModo) {
-            const auto = generarCodigoActividad(formData.descripcion_actividad, codigosExistentes);
-            setFormData(prev => ({ ...prev, codigo_actividad: auto }));
-        }
-    };
-
-    // Crear nuevo subsistema inline vinculado al arquetipo del servicio actual
-    const handleCrearSubsistemaInline = async () => {
-        const nombre = nuevoSubsistemaNombre.trim();
-        if (!nombre) return;
-        const codigosExistentesSis = new Set<string>(
-            (sistemas || []).map((s: any) => String(s.codigo_sistema || '').toUpperCase().trim())
-        );
-        const codigo = generarCodigoSistema(nombre, codigosExistentesSis);
-        const aplicaA = arquetiposDelServicio.length > 0 ? arquetiposDelServicio.map(a => a.codigo) : ['OTRO'];
-
-        try {
-            const res = await crearSistemaMutation.mutateAsync({
-                codigoSistema: codigo,
-                nombreSistema: nombre,
-                aplicaA,
-                ordenVisualizacion: (sistemas?.length || 0) + 1,
-                activo: true,
-            });
-            const createdId = res?.data?.id_sistema || (res as any)?.idSistema;
-            if (createdId) {
-                setFormData(prev => ({ ...prev, id_sistema: String(createdId) }));
-            }
-            setNuevoSubsistemaNombre('');
-            setCreandoSubsistemaInline(false);
-        } catch {
-            // El hook ya muestra toast
-        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (isCodigoDuplicado || !formData.id_tipo_servicio) return;
-
-        // Validar rango coherente si es MEDICION
-        const minNum = rangoMinDirecto !== '' ? Number(rangoMinDirecto) : undefined;
-        const maxNum = rangoMaxDirecto !== '' ? Number(rangoMaxDirecto) : undefined;
-        if (
-            formData.tipo_actividad === 'MEDICION' &&
-            minNum !== undefined &&
-            maxNum !== undefined &&
-            !isNaN(minNum) &&
-            !isNaN(maxNum) &&
-            minNum >= maxNum
-        ) {
-            toast.error('El Valor Mínimo Normal debe ser menor que el Valor Máximo Normal');
-            return;
-        }
-
-        if (
-            formData.tipo_actividad === 'MEDICION' &&
-            modoMetrologico === 'DIRECTO_UOM' &&
-            !unidadMedidaDirecta.trim() &&
-            !formData.id_parametro_medicion
-        ) {
-            toast.error('Selecciona la Unidad de Medida (ej: mm, m/s, s, PSI) para esta actividad de medición');
+        if (!descripcion.trim()) {
+            toast.error('Ingresa la descripción técnica de la actividad o medición');
             return;
         }
 
         setIsSaving(true);
         try {
-            let finalParametroId: number | undefined = formData.id_parametro_medicion
-                ? Number(formData.id_parametro_medicion)
-                : undefined;
+            let parametroId: number | null = actBase ? getActParametroId(actBase) : null;
 
-            // Si es MEDICION y el usuario configuró Unidad / Rangos directamente:
-            if (formData.tipo_actividad === 'MEDICION' && modoMetrologico === 'DIRECTO_UOM' && unidadMedidaDirecta.trim()) {
-                const idTipoEquipoTarget =
-                    arquetiposDelServicio[0]?.id_tipo_equipo ||
-                    servicioSeleccionado?.id_tipo_equipo ||
-                    undefined;
+            // Si es MEDICION, sincronizamos o creamos el parámetro en parametros_medicion
+            if (tipoActividad === 'MEDICION') {
+                const minNum = parseFloat(valorMinimo);
+                const maxNum = parseFloat(valorMaximo);
+                if (Number.isNaN(minNum) || Number.isNaN(maxNum)) {
+                    toast.error('Ingresa valores numéricos válidos para el rango Mínimo y Máximo');
+                    setIsSaving(false);
+                    return;
+                }
+                if (minNum > maxNum) {
+                    toast.error('El valor mínimo no puede ser mayor al valor máximo');
+                    setIsSaving(false);
+                    return;
+                }
 
-                // Si ya tenía un parámetro vinculado y estamos editando, actualizarlo o reutilizarlo
-                if (finalParametroId && existingParamObj) {
-                    await actualizarParametroMutation.mutateAsync({
-                        id: finalParametroId,
+                const paramPayload: CreateParametroMedicionDto = {
+                    codigoParametro: generarCodigoActividad('PAR', descripcion),
+                    nombreParametro: descripcion.trim(),
+                    unidadMedida: unidadMedida.trim() || 'u',
+                    categoria: 'MECANICO',
+                    valorMinimoNormal: minNum,
+                    valorMaximoNormal: maxNum,
+                    valorMinimoCritico:
+                        valorCriticoMin.trim() !== '' ? parseFloat(valorCriticoMin) : undefined,
+                    valorMaximoCritico:
+                        valorCriticoMax.trim() !== '' ? parseFloat(valorCriticoMax) : undefined,
+                    tipoEquipoId: idTipoEquipo ? Number(idTipoEquipo) : undefined,
+                    esCriticoSeguridad: false,
+                    esObligatorio: esObligatoria,
+                    decimalesPrecision: 2,
+                    activo: true,
+                };
+
+                if (parametroId) {
+                    await updateParametro.mutateAsync({
+                        id: parametroId,
                         data: {
-                            unidadMedida: unidadMedidaDirecta.trim().slice(0, 20),
+                            nombreParametro: descripcion.trim(),
+                            unidadMedida: unidadMedida.trim() || 'u',
                             valorMinimoNormal: minNum,
                             valorMaximoNormal: maxNum,
+                            valorMinimoCritico:
+                                valorCriticoMin.trim() !== '' ? parseFloat(valorCriticoMin) : undefined,
+                            valorMaximoCritico:
+                                valorCriticoMax.trim() !== '' ? parseFloat(valorCriticoMax) : undefined,
                         },
                     });
                 } else {
-                    // Buscar si ya existe un parámetro idéntico para no duplicar innecesariamente
-                    const descLimpia = formData.descripcion_actividad.trim();
-                    const paramExistenteCompatible = (parametros || []).find(
-                        (p: any) =>
-                            (p.nombre_parametro || '').toLowerCase() === descLimpia.toLowerCase() &&
-                            (p.unidad_medida || '') === unidadMedidaDirecta.trim()
-                    );
-
-                    if (paramExistenteCompatible) {
-                        finalParametroId = Number(paramExistenteCompatible.id_parametro_medicion);
-                        if (minNum !== undefined || maxNum !== undefined) {
-                            await actualizarParametroMutation.mutateAsync({
-                                id: finalParametroId,
-                                data: {
-                                    valorMinimoNormal: minNum,
-                                    valorMaximoNormal: maxNum,
-                                },
-                            });
-                        }
-                    } else {
-                        // Crear automáticamente el Parámetro de Medición en `parametros_medicion`
-                        const baseCode = generarCodigoActividad(descLimpia, new Set()).replace(/^ACT_/, 'PAR_');
-                        const uniqueSuffix = String(Date.now()).slice(-4);
-                        const codigoParam = `${baseCode.slice(0, 40)}_${uniqueSuffix}`.toUpperCase();
-
-                        const nuevoParamRes = await crearParametroMutation.mutateAsync({
-                            codigoParametro: codigoParam,
-                            nombreParametro: descLimpia.slice(0, 95),
-                            unidadMedida: unidadMedidaDirecta.trim().slice(0, 20),
-                            categoria: 'MECANICO' as any,
-                            tipoDato: 'NUMERICO',
-                            valorMinimoNormal: minNum,
-                            valorMaximoNormal: maxNum,
-                            tipoEquipoId: idTipoEquipoTarget ? Number(idTipoEquipoTarget) : undefined,
-                            esObligatorio: Boolean(formData.es_obligatoria),
-                            decimalesPrecision: 2,
-                            activo: true,
-                        });
-                        const createdParamId =
-                            (nuevoParamRes as any)?.data?.id_parametro_medicion ||
-                            (nuevoParamRes as any)?.id_parametro_medicion ||
-                            (nuevoParamRes as any)?.data?.idParametroMedicion ||
-                            (nuevoParamRes as any)?.idParametroMedicion;
-                        if (createdParamId) {
-                            finalParametroId = Number(createdParamId);
-                        }
+                    const paramCreado = await createParametro.mutateAsync(paramPayload);
+                    const idCreado =
+                        (paramCreado as unknown as { data?: ParametroMedicion })?.data
+                            ?.id_parametro_medicion ??
+                        (paramCreado as unknown as ParametroMedicion)?.id_parametro_medicion;
+                    if (idCreado) {
+                        parametroId = idCreado;
                     }
                 }
+            } else {
+                parametroId = null;
             }
 
-            const finalCode = (
-                formData.codigo_actividad.trim() ||
-                generarCodigoActividad(formData.descripcion_actividad, codigosExistentes)
-            )
-                .toUpperCase()
-                .trim();
-
-            const baseDto = {
-                codigoActividad: finalCode,
-                descripcionActividad: formData.descripcion_actividad.trim(),
-                idTipoServicio: Number(formData.id_tipo_servicio),
-                idSistema: formData.id_sistema ? Number(formData.id_sistema) : undefined,
-                tipoActividad: formData.tipo_actividad,
-                ordenEjecucion: Number(formData.orden_ejecucion) || 1,
-                esObligatoria: Boolean(formData.es_obligatoria),
-                tiempoEstimadoMinutos: formData.tiempo_estimado_minutos
-                    ? Number(formData.tiempo_estimado_minutos)
-                    : undefined,
-                idParametroMedicion: formData.tipo_actividad === 'MEDICION' ? finalParametroId : undefined,
-                instrucciones: formData.instrucciones || undefined,
-                precauciones: formData.precauciones || undefined,
-            };
-
-            if (actividad) {
-                await actualizarActividad.mutateAsync({
-                    id: Number(actividad.idActividadCatalogo || actividad.id_actividad_catalogo),
-                    data: baseDto,
+            if (entradaEditar && actBase) {
+                // MODO EDICIÓN CON PROPAGACIÓN EN CASCADA A TODOS LOS SERVICIOS VINCULADOS
+                const res = await propagarBanco.mutateAsync({
+                    idActividadOrigen: getActId(actBase),
+                    descripcionActividad: descripcion.trim(),
+                    tipoActividad,
+                    idSistema: idSistema ? Number(idSistema) : null,
+                    idTipoEquipo: idTipoEquipo ? Number(idTipoEquipo) : null,
+                    idParametroMedicion: parametroId,
+                    esObligatoria,
+                    instrucciones: instrucciones.trim() || null,
+                    precauciones: precauciones.trim() || null,
                 });
+                toast.success(
+                    `Plantilla actualizada y propagada a ${res.propagatedCount} registro(s) en protocolos`,
+                );
             } else {
-                // 1. Crear en el servicio principal
-                await crearActividad.mutateAsync(baseDto);
+                // MODO CREACIÓN EN EL BANCO UNIVERSAL (idTipoServicio = null)
+                const payload: CreateCatalogoActividadDto = {
+                    codigoActividad: generarCodigoActividad('BNK', descripcion),
+                    descripcionActividad: descripcion.trim(),
+                    tipoActividad,
+                    idTipoServicio: null,
+                    idTipoEquipo: idTipoEquipo ? Number(idTipoEquipo) : null,
+                    idSistema: idSistema ? Number(idSistema) : null,
+                    idParametroMedicion: parametroId,
+                    esObligatoria,
+                    instrucciones: instrucciones.trim() || undefined,
+                    precauciones: precauciones.trim() || undefined,
+                    activo: true,
+                };
+                const creada = await createActividad.mutateAsync(payload);
+                const idCreada =
+                    creada?.data ? getActId(creada.data) : getActId(creada);
 
-                // 2. Si seleccionó servicios adicionales (Multi-Servicio), instanciar en cada uno con código y orden propios
-                const usedCodes = new Set(codigosExistentes);
-                usedCodes.add(finalCode);
-
-                for (const extraServiceId of serviciosAdicionalesIds) {
-                    if (String(extraServiceId) === String(formData.id_tipo_servicio)) continue;
-                    const extraCode = generarCodigoActividad(
-                        `${formData.descripcion_actividad}_${extraServiceId}`,
-                        usedCodes
-                    );
-                    usedCodes.add(extraCode);
-                    const extraOrden = calcularSiguienteOrden(extraServiceId);
-
-                    await crearActividad.mutateAsync({
-                        ...baseDto,
-                        codigoActividad: extraCode,
-                        idTipoServicio: Number(extraServiceId),
-                        ordenEjecucion: extraOrden,
+                // Si el usuario marcó servicios opcionales, los vinculamos en lote de inmediato
+                if (serviciosSeleccionados.length > 0 && idCreada > 0) {
+                    await vincularLote.mutateAsync({
+                        actividadIds: [idCreada],
+                        tipoServicioIds: serviciosSeleccionados,
+                        overrideSistemaId: idSistema ? Number(idSistema) : null,
                     });
+                    toast.success(
+                        `Plantilla creada en el Banco Universal y vinculada a ${serviciosSeleccionados.length} servicio(s)`,
+                    );
+                } else {
+                    toast.success('Plantilla maestra creada en el Banco Universal');
                 }
             }
 
             onClose();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Error al guardar en el Banco Universal';
+            toast.error(msg);
         } finally {
             setIsSaving(false);
         }
     };
 
-    const toggleServicioAdicional = (idStr: string) => {
-        setServiciosAdicionalesIds(prev =>
-            prev.includes(idStr) ? prev.filter(item => item !== idStr) : [...prev, idStr]
-        );
-    };
-
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
-                <div className="p-5 sm:px-6 border-b border-gray-100 flex items-center justify-between bg-slate-50">
-                    <div>
-                        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                            {actividad ? (
-                                <Edit className="h-5 w-5 text-blue-600" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-white/10 border border-white/15">
+                            {entradaEditar ? (
+                                <Edit2 className="h-5 w-5 text-amber-300" />
                             ) : (
-                                <Plus className="h-5 w-5 text-blue-600" />
+                                <BookOpen className="h-5 w-5 text-blue-300" />
                             )}
-                            {actividad ? 'Editar Actividad del Protocolo' : 'Nueva Actividad / Punto de Medición'}
-                        </h2>
-                        {arquetiposDelServicio.length > 0 && (
-                            <p className="text-xs text-blue-700 font-semibold mt-0.5 flex items-center gap-1.5">
-                                <Layers className="h-3.5 w-3.5" />
-                                Equipo contextualizado:{' '}
-                                {arquetiposDelServicio.map(a => `${a.nombre} (${a.codigo})`).join(', ')}
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold">
+                                {entradaEditar
+                                    ? 'Editar en Banco Universal y Propagar en Cascada'
+                                    : 'Nueva Plantilla en el Banco Universal'}
+                            </h3>
+                            <p className="text-xs text-slate-300">
+                                {entradaEditar
+                                    ? `Se actualizará la plantilla maestra y sus ${entradaEditar.serviciosIds.length} protocolo(s) vinculado(s).`
+                                    : 'Nace libre en el Diccionario Maestro (sin obligarte a elegir un Servicio Vinculado).'}
                             </p>
-                        )}
+                        </div>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
                     >
-                        <X className="h-5 w-5 text-gray-500" />
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
-                    {/* 1. Servicio Principal + Multi-Servicio */}
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <label className="block text-sm font-bold text-slate-800">
-                                        Servicio Vinculado *
-                                    </label>
-                                    {!actividad && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setMostrarMultiServicio(prev => !prev)}
-                                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
-                                        >
-                                            <Link2 className="h-3 w-3" />
-                                            <span>
-                                                {mostrarMultiServicio
-                                                    ? 'Ocultar multi-servicio'
-                                                    : `+ Aplicar a varios (${serviciosAdicionalesIds.length + 1})`}
-                                            </span>
-                                        </button>
-                                    )}
-                                </div>
-                                <EamSelect
-                                    value={formData.id_tipo_servicio ? String(formData.id_tipo_servicio) : ''}
-                                    onChange={handleServicioPrincipalChange}
-                                    options={[
-                                        { value: '', label: 'Seleccionar servicio...' },
-                                        ...(tiposServicio || []).map((t: any) => ({
-                                            value: String(t.id_tipo_servicio || t.idTipoServicio),
-                                            label: t.nombre_tipo || t.nombreTipo,
-                                            badge: t.codigo_tipo || t.codigoTipo || undefined,
-                                        })),
-                                    ]}
-                                    placeholder="Seleccionar servicio..."
-                                    searchable
-                                />
-                            </div>
-
-                            {/* Subsistema filtrado estrictamente por el Arquetipo del Servicio */}
-                            <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <label className="block text-sm font-bold text-slate-800">
-                                        Subsistema del Equipo ({sistemasFiltradosContextual.length})
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={() => setCreandoSubsistemaInline(prev => !prev)}
-                                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
-                                    >
-                                        <Plus className="h-3 w-3" />
-                                        <span>{creandoSubsistemaInline ? 'Cancelar' : 'Nuevo subsistema'}</span>
-                                    </button>
-                                </div>
-                                <EamSelect
-                                    value={formData.id_sistema ? String(formData.id_sistema) : ''}
-                                    onChange={val => setFormData({ ...formData, id_sistema: val })}
-                                    options={[
-                                        { value: '', label: 'General / Nivel Equipo' },
-                                        ...sistemasFiltradosContextual.map((s: any) => ({
-                                            value: String(s.id_sistema || s.idSistema),
-                                            label: s.nombre_sistema || s.nombreSistema,
-                                            badge: s.codigo_sistema || s.codigoSistema || undefined,
-                                        })),
-                                    ]}
-                                    placeholder="General / Nivel Equipo"
-                                    searchable
-                                />
-                                {arquetiposDelServicio.length > 0 && (
-                                    <p className="text-[10px] text-emerald-700 font-medium mt-1">
-                                        ✓ Filtrado para {arquetiposDelServicio.map(a => a.codigo).join(', ')} (sin mezcla de otros equipos)
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Creación rápida inline de Subsistema */}
-                        {creandoSubsistemaInline && (
-                            <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center gap-2">
-                                <input
-                                    type="text"
-                                    value={nuevoSubsistemaNombre}
-                                    onChange={e => setNuevoSubsistemaNombre(e.target.value)}
-                                    placeholder={
-                                        arquetiposDelServicio[0]
-                                            ? `Nombre del nuevo subsistema para ${arquetiposDelServicio[0].nombre}...`
-                                            : 'Nombre del nuevo subsistema...'
-                                    }
-                                    className="flex-1 px-3 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <button
-                                    type="button"
-                                    disabled={!nuevoSubsistemaNombre.trim() || crearSistemaMutation.isPending}
-                                    onClick={handleCrearSubsistemaInline}
-                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
-                                >
-                                    {crearSistemaMutation.isPending ? 'Creando...' : 'Crear y Seleccionar'}
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Selector Multi-Servicio Opcional al crear */}
-                        {!actividad && mostrarMultiServicio && (
-                            <div className="pt-2 border-t border-slate-200">
-                                <p className="text-xs font-bold text-indigo-900 mb-2">
-                                    Selecciona otros Tipos de Servicio donde también deseas agregar esta misma actividad simultáneamente:
-                                </p>
-                                <div className="max-h-32 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1.5 pr-1">
-                                    {(tiposServicio || [])
-                                        .filter(
-                                            (t: any) =>
-                                                String(t.id_tipo_servicio || t.idTipoServicio) !==
-                                                String(formData.id_tipo_servicio)
-                                        )
-                                        .map((t: any) => {
-                                            const idStr = String(t.id_tipo_servicio || t.idTipoServicio);
-                                            const checked = serviciosAdicionalesIds.includes(idStr);
-                                            return (
-                                                <label
-                                                    key={idStr}
-                                                    className={cn(
-                                                        'flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors',
-                                                        checked
-                                                            ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-bold'
-                                                            : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                                                    )}
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={checked}
-                                                        onChange={() => toggleServicioAdicional(idStr)}
-                                                        className="rounded border-gray-300 text-indigo-600"
-                                                    />
-                                                    <span className="truncate">{t.nombre_tipo || t.nombreTipo}</span>
-                                                </label>
-                                            );
-                                        })}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 2. Descripción de la Actividad */}
+                <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
+                    {/* Descripción Canónica */}
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1.5">
-                            Descripción de la Actividad / Punto de Control *
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                            Descripción de la Actividad o Punto de Medición *
                         </label>
-                        <textarea
+                        <input
+                            type="text"
                             required
-                            rows={2}
-                            value={formData.descripcion_actividad}
-                            onChange={handleDescripcionChange}
-                            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none font-medium"
-                            placeholder="Ej: Medición de desnivel de parada entre piso de cabina y piso de hall..."
+                            value={descripcion}
+                            onChange={(e) => setDescripcion(e.target.value)}
+                            placeholder="Ej: Revisar tensión y estado de cables de tracción / Medir voltaje entre fases L1-L2..."
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none font-medium"
                         />
                     </div>
 
-                    {/* 3. Código Único + Tipo de Actividad */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <div className="flex items-center justify-between mb-1.5">
-                                <label className="block text-sm font-bold text-gray-700">Código Único *</label>
-                                {!actividad && (
-                                    <button
-                                        type="button"
-                                        onClick={handleToggleAutoCodigo}
-                                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors cursor-pointer"
-                                    >
-                                        {isAutoCodigo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
-                                        <span>{isAutoCodigo ? 'Personalizar' : 'Auto'}</span>
-                                    </button>
-                                )}
-                            </div>
-                            <input
-                                type="text"
-                                required
-                                value={formData.codigo_actividad}
-                                onChange={e =>
-                                    setFormData({ ...formData, codigo_actividad: e.target.value.toUpperCase().trim() })
-                                }
-                                className={cn(
-                                    'w-full px-4 py-2 border rounded-xl outline-none text-sm font-mono uppercase transition-colors disabled:bg-slate-100 disabled:text-slate-600',
-                                    isCodigoDuplicado
-                                        ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
-                                        : 'border-gray-300'
-                                )}
-                                placeholder="ACT_001"
-                                disabled={Boolean(actividad) || isAutoCodigo}
-                            />
-                            {isCodigoDuplicado ? (
-                                <p className="text-[11px] text-rose-600 font-bold mt-1">
-                                    ✕ Código en uso. Modifícalo.
-                                </p>
-                            ) : formData.codigo_actividad && !actividad ? (
-                                <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                    <span>Código único disponible</span>
-                                </p>
-                            ) : null}
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Tipo de Actividad *</label>
+                    {/* Naturaleza de Tarea + Obligatoriedad */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        <div className="md:col-span-8">
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                                Naturaleza Técnica *
+                            </label>
                             <EamSelect
-                                value={formData.tipo_actividad}
-                                onChange={val => setFormData({ ...formData, tipo_actividad: val as any })}
-                                options={TIPOS_ACTIVIDAD.map(tipo => ({
-                                    value: tipo.value,
-                                    label: tipo.label,
-                                }))}
-                                placeholder="Seleccionar tipo de actividad..."
+                                value={tipoActividad}
+                                onChange={(val: string) =>
+                                    setTipoActividad((val || 'INSPECCION') as TipoActividad)
+                                }
+                                options={NATURALEZA_OPTIONS}
+                                placeholder="Seleccionar naturaleza..."
+                            />
+                        </div>
+                        <div className="md:col-span-4">
+                            <label className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={esObligatoria}
+                                    onChange={(e) => setEsObligatoria(e.target.checked)}
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                                />
+                                <span className="text-xs font-bold text-slate-700">
+                                    Ejecución Obligatoria
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Tipo de Equipo y Subsistema sugeridos (Opcionales) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                                Tipo de Equipo Sugerido (Opcional)
+                            </label>
+                            <EamSelect
+                                value={idTipoEquipo}
+                                onChange={(val: string) => {
+                                    setIdTipoEquipo(val);
+                                    setIdSistema('');
+                                }}
+                                options={arquetiposOptions}
+                                placeholder="Universal / Todos los equipos..."
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                                Subsistema / Parte Sugerida (Opcional)
+                            </label>
+                            <EamSelect
+                                value={idSistema}
+                                onChange={(val: string) => setIdSistema(val)}
+                                options={sistemasOptions}
+                                placeholder="General / Sin subsistema..."
                             />
                         </div>
                     </div>
 
-                    {/* 4. BLOQUE METROLÓGICO DIRECTO CUANDO TIPO === 'MEDICION' */}
-                    {formData.tipo_actividad === 'MEDICION' && (
-                        <div className="p-4 bg-gradient-to-br from-cyan-50 via-sky-50 to-blue-50 rounded-2xl border-2 border-cyan-200 space-y-3 shadow-2xs">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                <label className="text-sm font-bold text-cyan-950 flex items-center gap-2">
-                                    <Gauge className="h-4 w-4 text-cyan-700" />
-                                    <span>📏 Configuración Metrológica de la Medición</span>
-                                </label>
-                                <div className="inline-flex p-0.5 bg-white/80 rounded-lg border border-cyan-200 text-[11px] font-bold">
-                                    <button
-                                        type="button"
-                                        onClick={() => setModoMetrologico('DIRECTO_UOM')}
-                                        className={cn(
-                                            'px-2.5 py-1 rounded-md transition-colors cursor-pointer',
-                                            modoMetrologico === 'DIRECTO_UOM'
-                                                ? 'bg-cyan-700 text-white'
-                                                : 'text-cyan-800 hover:bg-cyan-100/50'
-                                        )}
-                                    >
-                                        Unidad y Rango Directo
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setModoMetrologico('CATALOGO_EXISTENTE')}
-                                        className={cn(
-                                            'px-2.5 py-1 rounded-md transition-colors cursor-pointer',
-                                            modoMetrologico === 'CATALOGO_EXISTENTE'
-                                                ? 'bg-cyan-700 text-white'
-                                                : 'text-cyan-800 hover:bg-cyan-100/50'
-                                        )}
-                                    >
-                                        Parámetro Existente ({parametros.length})
-                                    </button>
-                                </div>
+                    {/* Bloque Especial si es MEDICION (Salvaguarda 3: Telemetría con Unidad UoM y Rangos) */}
+                    {tipoActividad === 'MEDICION' && (
+                        <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Gauge className="h-4 w-4 text-purple-700" />
+                                <span className="text-xs font-bold text-purple-900 uppercase tracking-wider">
+                                    Configuración de Telemetría Cuantitativa (Unidad UoM + Rangos de Alerta)
+                                </span>
                             </div>
-
-                            {modoMetrologico === 'DIRECTO_UOM' ? (
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div className="sm:col-span-1">
-                                        <label className="block text-xs font-bold text-cyan-900 mb-1">
-                                            Unidad de Medida (UoM) *
-                                        </label>
-                                        <EamSelect
-                                            value={unidadMedidaDirecta}
-                                            onChange={val => setUnidadMedidaDirecta(val)}
-                                            options={[
-                                                { value: '', label: 'Elegir unidad...' },
-                                                ...opcionesUnidadesMedida,
-                                            ]}
-                                            placeholder="Ej: mm, m/s, s, PSI..."
-                                            searchable
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-cyan-900 mb-1">
-                                            Valor Mín. Normal (Opcional)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            value={rangoMinDirecto}
-                                            onChange={e => setRangoMinDirecto(e.target.value)}
-                                            placeholder="Ej: 0"
-                                            className="w-full px-3 py-2 bg-white border border-cyan-300 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-cyan-900 mb-1">
-                                            Valor Máx. Normal (Opcional)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            value={rangoMaxDirecto}
-                                            onChange={e => setRangoMaxDirecto(e.target.value)}
-                                            placeholder="Ej: 5"
-                                            className="w-full px-3 py-2 bg-white border border-cyan-300 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                </div>
-                            ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-cyan-900 mb-1">
-                                        Seleccionar Parámetro del Catálogo
+                                    <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                                        Unidad de Medida (UoM) *
                                     </label>
                                     <EamSelect
-                                        value={
-                                            formData.id_parametro_medicion
-                                                ? String(formData.id_parametro_medicion)
-                                                : ''
-                                        }
-                                        onChange={val => {
-                                            setFormData({ ...formData, id_parametro_medicion: val });
-                                            const p = (parametros || []).find(
-                                                (item: any) =>
-                                                    String(
-                                                        item.id_parametro_medicion || item.idParametroMedicion
-                                                    ) === String(val)
-                                            );
-                                            if (p) {
-                                                setUnidadMedidaDirecta(p.unidad_medida || p.unidadMedida || '');
-                                                setRangoMinDirecto(
-                                                    p.valor_minimo_normal != null
-                                                        ? String(p.valor_minimo_normal)
-                                                        : ''
-                                                );
-                                                setRangoMaxDirecto(
-                                                    p.valor_maximo_normal != null
-                                                        ? String(p.valor_maximo_normal)
-                                                        : ''
-                                                );
-                                            }
-                                        }}
-                                        options={[
-                                            { value: '', label: 'Seleccionar parámetro...' },
-                                            ...(parametros || []).map((p: any) => ({
-                                                value: String(p.id_parametro_medicion || p.idParametroMedicion),
-                                                label: `${p.nombre_parametro || p.nombreParametro} (${
-                                                    p.unidad_medida || p.unidadMedida
-                                                })`,
-                                                badge: p.unidad_medida || p.unidadMedida || undefined,
-                                            })),
-                                        ]}
-                                        placeholder="Seleccionar parámetro..."
-                                        searchable
+                                        value={unidadMedida}
+                                        onChange={(val: string) => setUnidadMedida(val || 'V')}
+                                        options={unidadesOptions}
+                                        placeholder="Buscar unidad (V, A, PSI, °C, mm/s)..."
                                     />
                                 </div>
-                            )}
-
-                            <p className="text-[11px] text-cyan-800 font-medium">
-                                ✓ Al guardar, el sistema vincula automáticamente la unidad{' '}
-                                <strong>{unidadMedidaDirecta || 'seleccionada'}</strong> y los rangos de tolerancia para la App Móvil y el PDF de la Orden de Servicio.
-                            </p>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                                        Rango Normal Mínimo *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        required
+                                        value={valorMinimo}
+                                        onChange={(e) => setValorMinimo(e.target.value)}
+                                        className="w-full px-3 py-2 text-xs rounded-xl border border-purple-300 bg-white font-semibold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                                        Rango Normal Máximo *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        required
+                                        value={valorMaximo}
+                                        onChange={(e) => setValorMaximo(e.target.value)}
+                                        className="w-full px-3 py-2 text-xs rounded-xl border border-purple-300 bg-white font-semibold"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                                <div>
+                                    <label className="block text-[11px] font-medium text-purple-800 mb-1">
+                                        Umbral Crítico Mínimo (Opcional)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        value={valorCriticoMin}
+                                        onChange={(e) => setValorCriticoMin(e.target.value)}
+                                        placeholder="Opcional"
+                                        className="w-full px-3 py-1.5 text-xs rounded-xl border border-purple-200 bg-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-medium text-purple-800 mb-1">
+                                        Umbral Crítico Máximo (Opcional)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        value={valorCriticoMax}
+                                        onChange={(e) => setValorCriticoMax(e.target.value)}
+                                        placeholder="Opcional"
+                                        className="w-full px-3 py-1.5 text-xs rounded-xl border border-purple-200 bg-white"
+                                    />
+                                </div>
+                            </div>
                         </div>
                     )}
 
-                    {/* 5. Orden de Ejecución Auto-calculado + Tiempo Estimado */}
-                    <div className="grid grid-cols-2 gap-4 p-3.5 bg-gray-50 rounded-2xl border border-gray-200">
+                    {/* Instrucciones y Precauciones */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                            <div className="flex items-center justify-between mb-1">
-                                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
-                                    Secuencia / Orden
-                                </label>
-                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                    Auto #{formData.orden_ejecucion}
-                                </span>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                Instrucción / Criterio de Aceptación (Opcional)
+                            </label>
+                            <textarea
+                                rows={2}
+                                value={instrucciones}
+                                onChange={(e) => setInstrucciones(e.target.value)}
+                                placeholder="Guía breve para el técnico en campo..."
+                                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                Precaución de Seguridad / LOTO (Opcional)
+                            </label>
+                            <textarea
+                                rows={2}
+                                value={precauciones}
+                                onChange={(e) => setPrecauciones(e.target.value)}
+                                placeholder="Ej: Desenergizar equipo antes de intervenir..."
+                                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Opcional en Creación: Vincular de una vez a 1 o más servicios */}
+                    {!entradaEditar && (
+                        <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/60 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                        <Link2 className="h-3.5 w-3.5 text-blue-600" />
+                                        ¿Vincular de inmediato a algún Protocolo de Servicio? (100% Opcional)
+                                    </span>
+                                    <p className="text-[11px] text-slate-500">
+                                        Si no marcas ninguno, la actividad quedará guardada como Plantilla Maestra libre en el Banco Universal.
+                                    </p>
+                                </div>
+                                {serviciosSeleccionados.length > 0 && (
+                                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800">
+                                        {serviciosSeleccionados.length} seleccionado(s)
+                                    </span>
+                                )}
                             </div>
-                            <input
-                                type="number"
-                                min="1"
-                                value={formData.orden_ejecucion}
-                                onChange={e => setFormData({ ...formData, orden_ejecucion: e.target.value })}
-                                className="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"
-                            />
+                            <div className="relative">
+                                <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                <input
+                                    type="text"
+                                    value={busquedaServicios}
+                                    onChange={(e) => setBusquedaServicios(e.target.value)}
+                                    placeholder="Filtrar tipos de servicio..."
+                                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white outline-none"
+                                />
+                            </div>
+                            <div className="max-h-36 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-1.5 pt-1">
+                                {serviciosFiltrados.map((srv) => {
+                                    const checked = serviciosSeleccionados.includes(srv.id_tipo_servicio);
+                                    return (
+                                        <label
+                                            key={srv.id_tipo_servicio}
+                                            className={cn(
+                                                'flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer transition-all',
+                                                checked
+                                                    ? 'bg-blue-50 border-blue-300 text-blue-900 font-semibold'
+                                                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50',
+                                            )}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => toggleServicio(srv.id_tipo_servicio)}
+                                                className="rounded border-slate-300 text-blue-600 h-3.5 w-3.5"
+                                            />
+                                            <span className="truncate flex-1">{srv.nombre_tipo}</span>
+                                            <span className="text-[10px] font-mono text-slate-400">
+                                                {srv.codigo_tipo}
+                                            </span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">
-                                Tiempo Est. (min)
-                            </label>
-                            <input
-                                type="number"
-                                min="1"
-                                value={formData.tiempo_estimado_minutos}
-                                onChange={e => setFormData({ ...formData, tiempo_estimado_minutos: e.target.value })}
-                                className="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                placeholder="15"
-                            />
-                        </div>
-                    </div>
+                    )}
 
-                    {/* 6. Instrucciones + Precauciones */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
-                                <Info className="h-3.5 w-3.5 text-blue-500" /> Instrucciones para Técnico (Opcional)
-                            </label>
-                            <textarea
-                                rows={2}
-                                value={formData.instrucciones}
-                                onChange={e => setFormData({ ...formData, instrucciones: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs resize-none"
-                                placeholder="Paso a paso detallado..."
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
-                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> Precauciones / HSE (Opcional)
-                            </label>
-                            <textarea
-                                rows={2}
-                                value={formData.precauciones}
-                                onChange={e => setFormData({ ...formData, precauciones: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs resize-none"
-                                placeholder="Uso de EPP, bloqueo de energías..."
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 p-3 bg-blue-50/70 rounded-xl border border-blue-100">
-                        <input
-                            type="checkbox"
-                            id="es_obligatoria"
-                            checked={formData.es_obligatoria}
-                            onChange={e => setFormData({ ...formData, es_obligatoria: e.target.checked })}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <label htmlFor="es_obligatoria" className="text-xs font-bold text-blue-900 cursor-pointer">
-                            ¿Es de ejecución obligatoria para cerrar la orden?
-                        </label>
+                    <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isSaving}
+                            className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-2 shadow-sm transition-all"
+                        >
+                            {isSaving ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Check className="h-4 w-4" />
+                            )}
+                            {entradaEditar
+                                ? 'Guardar y Propagar a Servicios'
+                                : 'Guardar en el Banco Universal'}
+                        </button>
                     </div>
                 </form>
-
-                <div className="p-5 border-t border-gray-100 bg-gray-50 flex gap-3">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-white font-bold transition-all cursor-pointer text-sm"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleSubmit}
-                        disabled={
-                            isSaving ||
-                            isCodigoDuplicado ||
-                            !formData.id_tipo_servicio ||
-                            !formData.descripcion_actividad.trim() ||
-                            !formData.codigo_actividad.trim()
-                        }
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm"
-                    >
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                        {actividad
-                            ? 'Guardar Cambios'
-                            : serviciosAdicionalesIds.length > 0
-                            ? `Crear en ${serviciosAdicionalesIds.length + 1} Servicios`
-                            : 'Crear Actividad'}
-                    </button>
-                </div>
             </div>
         </div>
     );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODAL: VINCULAR UNA PLANTILLA DEL BANCO UNIVERSAL A 1 O MÚLTIPLES SERVICIOS
+// MODAL 2: VINCULAR UNA ACTIVIDAD DEL BANCO A 1 O MÚLTIPLES SERVICIOS EN 1 CLIC
 // ═══════════════════════════════════════════════════════════════════════════════
-function VincularPlantillaAServiciosModal({
-    plantilla,
-    tiposServicio = [],
-    actividades = [],
-    arquetipos = [],
-    crearActividad,
-    onClose,
-}: {
-    plantilla: PlantillaUniversalActividad;
-    tiposServicio: any[];
-    actividades: any[];
-    arquetipos: any[];
-    crearActividad: any;
-    onClose: () => void;
-}) {
-    const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([]);
-    const [busquedaSrv, setBusquedaSrv] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const toggleService = (id: number) => {
-        setSelectedServiceIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+interface VincularServiciosModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    entrada: EntradaBancoUniversal | null;
+    tiposServicio: TipoServicio[];
+    sistemas: CatalogoSistema[];
+}
+
+function VincularServiciosModal({
+    isOpen,
+    onClose,
+    entrada,
+    tiposServicio,
+    sistemas,
+}: VincularServiciosModalProps) {
+    const vincularLote = useVincularActividadesLote();
+    const [seleccionados, setSeleccionados] = useState<number[]>([]);
+    const [idSistemaDestino, setIdSistemaDestino] = useState<string>('');
+    const [busqueda, setBusqueda] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen || !entrada) return;
+        setSeleccionados([]);
+        const sisId = getActSistemaId(entrada.representante);
+        setIdSistemaDestino(sisId ? String(sisId) : '');
+        setBusqueda('');
+    }, [isOpen, entrada]);
+
+    const sistemasOptions = useMemo<EamSelectOption[]>(() => {
+        return [
+            { value: '', label: 'Conservar subsistema original de la plantilla', badge: 'AUTO' },
+            ...sistemas
+                .filter((s) => s.activo)
+                .map((s) => ({
+                    value: String(s.id_sistema),
+                    label: s.nombre_sistema,
+                    badge: s.codigo_sistema,
+                })),
+        ];
+    }, [sistemas]);
+
+    if (!isOpen || !entrada) return null;
+
+    const yaVinculadosSet = new Set(entrada.serviciosIds);
+
+    const serviciosFiltrados = tiposServicio
+        .filter((s) => s.activo !== false)
+        .filter((s) => {
+            const q = busqueda.trim().toLowerCase();
+            if (!q) return true;
+            return (
+                s.nombre_tipo.toLowerCase().includes(q) ||
+                s.codigo_tipo.toLowerCase().includes(q)
+            );
+        });
+
+    const toggleServicio = (id: number) => {
+        if (yaVinculadosSet.has(id)) return;
+        setSeleccionados((prev) =>
+            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+        );
     };
 
-    const serviciosDisponibles = useMemo(() => {
-        return (tiposServicio || []).filter(t => {
-            const term = busquedaSrv.toLowerCase().trim();
-            if (!term) return true;
-            const nom = (t.nombre_tipo || '').toLowerCase();
-            const cod = (t.codigo_tipo || '').toLowerCase();
-            return nom.includes(term) || cod.includes(term);
-        });
-    }, [tiposServicio, busquedaSrv]);
-
     const handleVincular = async () => {
-        if (selectedServiceIds.length === 0) return;
-        setIsSubmitting(true);
+        if (seleccionados.length === 0) {
+            toast.error('Selecciona al menos un Tipo de Servicio para vincular');
+            return;
+        }
+        setIsSaving(true);
         try {
-            const usedCodes = new Set<string>(
-                (actividades || [])
-                    .map((a: any) => (a.codigoActividad || a.codigo_actividad || '').toUpperCase().trim())
-                    .filter(Boolean)
-            );
-
-            for (const targetServiceId of selectedServiceIds) {
-                if (plantilla.serviciosIds.has(targetServiceId)) continue;
-
-                const actsInTarget = (actividades || []).filter(
-                    (a: any) => Number(a.idTipoServicio || a.id_tipo_servicio) === Number(targetServiceId)
-                );
-                const maxOrden = Math.max(
-                    0,
-                    ...actsInTarget.map((a: any) => Number(a.ordenEjecucion || a.orden_ejecucion || 0))
-                );
-                const newCode = generarCodigoActividad(
-                    `${plantilla.descripcionActividad}_${targetServiceId}`,
-                    usedCodes
-                );
-                usedCodes.add(newCode);
-
-                await crearActividad.mutateAsync({
-                    codigoActividad: newCode,
-                    descripcionActividad: plantilla.descripcionActividad,
-                    idTipoServicio: Number(targetServiceId),
-                    idSistema: plantilla.idSistema ? Number(plantilla.idSistema) : undefined,
-                    tipoActividad: plantilla.tipoActividad,
-                    ordenEjecucion: maxOrden + 1,
-                    esObligatoria: plantilla.esObligatoria,
-                    tiempoEstimadoMinutos: plantilla.tiempoEstimadoMinutos || undefined,
-                    idParametroMedicion: plantilla.idParametroMedicion
-                        ? Number(plantilla.idParametroMedicion)
-                        : undefined,
-                    instrucciones: plantilla.instrucciones || undefined,
-                    precauciones: plantilla.precauciones || undefined,
-                });
-            }
+            const res = await vincularLote.mutateAsync({
+                actividadIds: [getActId(entrada.representante)],
+                tipoServicioIds: seleccionados,
+                overrideSistemaId: idSistemaDestino ? Number(idSistemaDestino) : undefined,
+            });
             toast.success(
-                `Actividad vinculada exitosamente a ${selectedServiceIds.length} servicio(s)`
+                `Actividad inyectada exitosamente en ${res.createdCount} protocolo(s) de servicio`,
             );
             onClose();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Error al vincular a los servicios';
+            toast.error(msg);
         } finally {
-            setIsSubmitting(false);
+            setIsSaving(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col">
-                <div className="p-5 border-b border-gray-100 bg-indigo-50/70 flex items-center justify-between">
-                    <div>
-                        <h3 className="text-base font-bold text-indigo-950 flex items-center gap-2">
-                            <Link2 className="h-5 w-5 text-indigo-600" />
-                            Vincular Actividad del Banco Universal a Servicio(s)
-                        </h3>
-                        <p className="text-xs text-indigo-700 mt-0.5 line-clamp-1">
-                            {plantilla.descripcionActividad}
-                        </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[88vh] flex flex-col overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-white/10">
+                            <Link2 className="h-5 w-5 text-blue-200" />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold">
+                                Vincular Plantilla a Protocolos de Servicio
+                            </h3>
+                            <p className="text-xs text-blue-200 line-clamp-1">
+                                {getActDesc(entrada.representante)}
+                            </p>
+                        </div>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="p-1.5 rounded-full hover:bg-indigo-100 text-gray-500 cursor-pointer"
+                        className="p-1.5 rounded-lg text-blue-200 hover:text-white hover:bg-white/10"
                     >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <div className="p-5 space-y-4 overflow-y-auto flex-1">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                            type="text"
-                            value={busquedaSrv}
-                            onChange={e => setBusquedaSrv(e.target.value)}
-                            placeholder="Buscar tipo de servicio destino..."
-                            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500"
+                <div className="p-5 overflow-y-auto space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                            Sección / Subsistema Destino (Opcional)
+                        </label>
+                        <EamSelect
+                            value={idSistemaDestino}
+                            onChange={(val: string) => setIdSistemaDestino(val)}
+                            options={sistemasOptions}
+                            placeholder="Conservar subsistema original..."
                         />
                     </div>
 
-                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                        {serviciosDisponibles.map(srv => {
-                            const id = Number(srv.id_tipo_servicio);
-                            const yaVinculada = plantilla.serviciosIds.has(id);
-                            const isChecked = selectedServiceIds.includes(id);
-                            const arqs = resolverArquetiposDeEntidad(srv, arquetipos);
+                    <div className="relative">
+                        <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                            type="text"
+                            value={busqueda}
+                            onChange={(e) => setBusqueda(e.target.value)}
+                            placeholder="Buscar protocolo de servicio por nombre o código..."
+                            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 outline-none focus:border-blue-500"
+                        />
+                    </div>
 
+                    <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+                        {serviciosFiltrados.map((srv) => {
+                            const yaExiste = yaVinculadosSet.has(srv.id_tipo_servicio);
+                            const marcado = seleccionados.includes(srv.id_tipo_servicio);
                             return (
-                                <label
-                                    key={id}
+                                <div
+                                    key={srv.id_tipo_servicio}
+                                    onClick={() => toggleServicio(srv.id_tipo_servicio)}
                                     className={cn(
-                                        'flex items-center justify-between p-3 rounded-xl border transition-all',
-                                        yaVinculada
-                                            ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
-                                            : isChecked
-                                            ? 'bg-indigo-50 border-indigo-400 cursor-pointer shadow-2xs'
-                                            : 'bg-white border-gray-200 hover:border-indigo-200 cursor-pointer'
+                                        'flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs transition-all',
+                                        yaExiste
+                                            ? 'bg-emerald-50/60 border-emerald-200 text-emerald-800 cursor-default'
+                                            : marcado
+                                              ? 'bg-blue-50 border-blue-400 text-blue-950 font-semibold cursor-pointer shadow-2xs'
+                                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer',
                                     )}
                                 >
-                                    <div className="flex items-center gap-3 min-w-0">
+                                    <div className="flex items-center gap-2.5 min-w-0">
                                         <input
                                             type="checkbox"
-                                            disabled={yaVinculada}
-                                            checked={yaVinculada || isChecked}
-                                            onChange={() => !yaVinculada && toggleService(id)}
-                                            className="w-4 h-4 rounded border-gray-300 text-indigo-600"
+                                            disabled={yaExiste}
+                                            checked={yaExiste || marcado}
+                                            onChange={() => {}}
+                                            className="rounded border-slate-300 text-blue-600 h-4 w-4"
                                         />
                                         <div className="min-w-0">
-                                            <p className="text-sm font-bold text-slate-900 truncate">
+                                            <div className="truncate font-semibold">
                                                 {srv.nombre_tipo}
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                                <span className="text-[10px] font-mono text-gray-500">
-                                                    {srv.codigo_tipo}
-                                                </span>
-                                                {arqs.map(a => (
-                                                    <span
-                                                        key={a.codigo}
-                                                        className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200"
-                                                    >
-                                                        {a.codigo}
-                                                    </span>
-                                                ))}
+                                            </div>
+                                            <div className="text-[10px] font-mono text-slate-400">
+                                                {srv.codigo_tipo} • {srv.categoria}
                                             </div>
                                         </div>
                                     </div>
-                                    {yaVinculada && (
-                                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 shrink-0">
-                                            ✓ Ya incluida
+                                    {yaExiste ? (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1 shrink-0">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Ya incluido
                                         </span>
-                                    )}
-                                </label>
+                                    ) : marcado ? (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shrink-0">
+                                            Vincular
+                                        </span>
+                                    ) : null}
+                                </div>
                             );
                         })}
                     </div>
                 </div>
 
-                <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-xl font-bold text-sm hover:bg-white cursor-pointer"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        type="button"
-                        disabled={selectedServiceIds.length === 0 || isSubmitting}
-                        onClick={handleVincular}
-                        className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                        <span>Vincular a {selectedServiceIds.length} Servicio(s)</span>
-                    </button>
+                <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-600">
+                        {seleccionados.length} protocolo(s) nuevo(s) seleccionado(s)
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-white"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            disabled={isSaving || seleccionados.length === 0}
+                            onClick={handleVincular}
+                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5"
+                        >
+                            {isSaving ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <Link2 className="h-3.5 w-3.5" />
+                            )}
+                            Inyectar en {seleccionados.length} Servicio(s)
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2743,234 +1008,681 @@ function VincularPlantillaAServiciosModal({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODAL: REUTILIZAR ACTIVIDADES DEL BANCO UNIVERSAL HACIA UN SERVICIO DESTINO
+// CONTENIDO PRINCIPAL: BANCO UNIVERSAL DE ACTIVIDADES Y MEDICIONES
 // ═══════════════════════════════════════════════════════════════════════════════
-function ReutilizarDelBancoParaServicioModal({
-    servicioDestino,
-    plantillas = [],
-    actividades = [],
-    arquetipos = [],
-    crearActividad,
-    onClose,
-}: {
-    servicioDestino: any;
-    plantillas: PlantillaUniversalActividad[];
-    actividades: any[];
-    arquetipos: any[];
-    crearActividad: any;
-    onClose: () => void;
-}) {
-    const idServicioDestino = Number(servicioDestino.id_tipo_servicio || servicioDestino.idTipoServicio);
-    const arqsDestino = useMemo(
-        () => resolverArquetiposDeEntidad(servicioDestino, arquetipos),
-        [servicioDestino, arquetipos]
-    );
 
-    const [busqueda, setBusqueda] = useState('');
-    const [soloCompatibles, setSoloCompatibles] = useState(false);
-    const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+function BancoUniversalActividadesContent() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const servicioIdRedirect = searchParams.get('servicioId') || searchParams.get('protocolo');
 
-    const plantillasDisponibles = useMemo(() => {
-        return plantillas.filter(p => {
-            if (p.serviciosIds.has(idServicioDestino)) return false;
-            const term = busqueda.toLowerCase().trim();
-            if (
-                term &&
-                !p.descripcionActividad.toLowerCase().includes(term) &&
-                !p.sistemaNombre.toLowerCase().includes(term)
-            ) {
+    // Si alguien entra con ?servicioId=X (enlace antiguo), redirigimos automáticamente al nuevo Fast-Protocol Builder
+    useEffect(() => {
+        if (servicioIdRedirect) {
+            router.replace(`/configuracion/catalogos/tipos-servicio?protocolo=${servicioIdRedirect}`);
+        }
+    }, [servicioIdRedirect, router]);
+
+    const {
+        data: actividadesResp,
+        isLoading,
+        isError,
+        refetch,
+    } = useCatalogoActividades({ activo: 'all', limit: 1000 });
+    const { data: tiposServicioResp } = useTiposServicio();
+    const { data: sistemasResp } = useCatalogoSistemas();
+    const { data: parametrosResp } = useParametrosMedicion();
+    const { data: arquetipos = [] } = useArquetiposEam();
+    const { data: unidades = [] } = useUnidadesEam();
+    const deleteActividad = useDeleteCatalogoActividad();
+
+    const actividades = useMemo<CatalogoActividad[]>(() => {
+        if (!actividadesResp) return [];
+        return Array.isArray(actividadesResp) ? actividadesResp : actividadesResp.data ?? [];
+    }, [actividadesResp]);
+
+    const tiposServicio = useMemo<TipoServicio[]>(() => {
+        if (!tiposServicioResp) return [];
+        return Array.isArray(tiposServicioResp) ? tiposServicioResp : tiposServicioResp.data ?? [];
+    }, [tiposServicioResp]);
+
+    const sistemas = useMemo<CatalogoSistema[]>(() => {
+        if (!sistemasResp) return [];
+        return Array.isArray(sistemasResp) ? sistemasResp : sistemasResp.data ?? [];
+    }, [sistemasResp]);
+
+    const parametros = useMemo<ParametroMedicion[]>(() => {
+        if (!parametrosResp) return [];
+        return Array.isArray(parametrosResp) ? parametrosResp : parametrosResp.data ?? [];
+    }, [parametrosResp]);
+
+    // Filtros del Diccionario Maestro
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filtroEquipo, setFiltroEquipo] = useState<string>('ALL');
+    const [filtroSistema, setFiltroSistema] = useState<string>('ALL');
+    const [filtroNaturaleza, setFiltroNaturaleza] = useState<string>('ALL');
+    const [vistaRapida, setVistaRapida] = useState<'TODAS' | 'MEDICION' | 'INSPECCION' | 'SIN_SERVICIO'>('TODAS');
+
+    // Modales
+    const [modalCrearAbierto, setModalCrearAbierto] = useState(false);
+    const [entradaEditar, setEntradaEditar] = useState<EntradaBancoUniversal | null>(null);
+    const [entradaVincular, setEntradaVincular] = useState<EntradaBancoUniversal | null>(null);
+
+    // Mapas rápidos
+    const serviciosMap = useMemo(() => {
+        const m = new Map<number, TipoServicio>();
+        tiposServicio.forEach((s: TipoServicio) => m.set(s.id_tipo_servicio, s));
+        return m;
+    }, [tiposServicio]);
+
+    const sistemasMap = useMemo(() => {
+        const m = new Map<number, CatalogoSistema>();
+        sistemas.forEach((s: CatalogoSistema) => m.set(s.id_sistema, s));
+        return m;
+    }, [sistemas]);
+
+    const arquetiposMap = useMemo(() => {
+        const m = new Map<number, { id_tipo_equipo: number; codigo_tipo: string; nombre_tipo: string }>();
+        arquetipos.forEach((a) => m.set(a.id_tipo_equipo, a));
+        return m;
+    }, [arquetipos]);
+
+    const parametrosMap = useMemo(() => {
+        const m = new Map<number, ParametroMedicion>();
+        parametros.forEach((p: ParametroMedicion) => m.set(p.id_parametro_medicion, p));
+        return m;
+    }, [parametros]);
+
+    const unidadesOptions = useMemo<EamSelectOption[]>(() => {
+        if (!unidades || unidades.length === 0) {
+            return [
+                { value: 'V', label: 'Voltios (V)', badge: 'TENSIÓN' },
+                { value: 'A', label: 'Amperios (A)', badge: 'CORRIENTE' },
+                { value: 'PSI', label: 'Libras por pulgada cuadrada (PSI)', badge: 'PRESIÓN' },
+                { value: 'bar', label: 'Bar (bar)', badge: 'PRESIÓN' },
+                { value: '°C', label: 'Grados Celsius (°C)', badge: 'TEMPERATURA' },
+                { value: 'Hz', label: 'Hertz (Hz)', badge: 'FRECUENCIA' },
+                { value: 'RPM', label: 'Revoluciones por minuto (RPM)', badge: 'VELOCIDAD' },
+                { value: 'mm/s', label: 'Milímetros por segundo (mm/s)', badge: 'VIBRACIÓN' },
+            ];
+        }
+        return unidades.map((u) => ({
+            value: u.simbolo,
+            label: `${u.nombre} (${u.simbolo})`,
+            badge: u.magnitud?.nombre_magnitud ?? u.codigo,
+        }));
+    }, [unidades]);
+
+    // Opciones de filtros EamSelect
+    const filtroEquipoOptions = useMemo<EamSelectOption[]>(() => {
+        return [
+            { value: 'ALL', label: 'Todos los Tipos de Equipo (Universal + Específicos)', badge: 'TODOS' },
+            { value: 'GLOBAL', label: 'Solo Universales / Multi-Equipo', badge: 'GLOBAL' },
+            ...arquetipos.map((a) => ({
+                value: String(a.id_tipo_equipo),
+                label: a.nombre_tipo,
+                badge: a.codigo_tipo,
+            })),
+        ];
+    }, [arquetipos]);
+
+    const filtroSistemaOptions = useMemo<EamSelectOption[]>(() => {
+        return [
+            { value: 'ALL', label: 'Todos los Subsistemas / Partes', badge: 'TODOS' },
+            ...sistemas
+                .filter((s: CatalogoSistema) => s.activo)
+                .map((s: CatalogoSistema) => ({
+                    value: String(s.id_sistema),
+                    label: s.nombre_sistema,
+                    badge: s.codigo_sistema,
+                })),
+        ];
+    }, [sistemas]);
+
+    const filtroNaturalezaOptions = useMemo<EamSelectOption[]>(() => {
+        return [
+            { value: 'ALL', label: 'Todas las Naturalezas Técnicas', badge: 'TODAS' },
+            ...NATURALEZA_OPTIONS,
+        ];
+    }, []);
+
+    // Construir Diccionario Canónico Deduplicado
+    const entradasBanco = useMemo<EntradaBancoUniversal[]>(() => {
+        const activas = actividades.filter((a: CatalogoActividad) => a.activo !== false);
+        const grupos = new Map<string, CatalogoActividad[]>();
+
+        for (const act of activas) {
+            const desc = getActDesc(act).trim().toLowerCase();
+            if (!desc) continue;
+            const firma = `${desc}::${getActTipo(act)}`;
+            const lista = grupos.get(firma) ?? [];
+            lista.push(act);
+            grupos.set(firma, lista);
+        }
+
+        const resultado: EntradaBancoUniversal[] = [];
+        for (const [firmaCanonica, instancias] of grupos.entries()) {
+            const plantillaPura =
+                instancias.find((i) => getActServicioId(i) === null) ?? null;
+            const representante = plantillaPura ?? instancias[0];
+            const serviciosIds = Array.from(
+                new Set(
+                    instancias
+                        .map((i) => getActServicioId(i))
+                        .filter((id): id is number => typeof id === 'number'),
+                ),
+            );
+            resultado.push({
+                firmaCanonica,
+                representante,
+                instancias,
+                serviciosIds,
+                esPlantillaPura: Boolean(plantillaPura),
+            });
+        }
+
+        return resultado.sort((a, b) =>
+            getActDesc(a.representante).localeCompare(
+                getActDesc(b.representante),
+                'es',
+            ),
+        );
+    }, [actividades]);
+
+    // Filtrado del Banco Universal
+    const entradasFiltradas = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        return entradasBanco.filter((entrada) => {
+            const rep = entrada.representante;
+            const tipo = getActTipo(rep);
+
+            if (vistaRapida === 'MEDICION' && tipo !== 'MEDICION') return false;
+            if (vistaRapida === 'INSPECCION' && tipo === 'MEDICION') return false;
+            if (vistaRapida === 'SIN_SERVICIO' && entrada.serviciosIds.length > 0) return false;
+
+            if (filtroNaturaleza !== 'ALL' && tipo !== filtroNaturaleza) {
                 return false;
             }
-            if (soloCompatibles && arqsDestino.length > 0) {
-                return (
-                    p.arquetipos.length === 0 ||
-                    p.arquetipos.some(a => arqsDestino.some(ad => ad.codigo === a.codigo))
+
+            if (filtroSistema !== 'ALL') {
+                const coincideSistema = entrada.instancias.some(
+                    (i) => String(getActSistemaId(i) ?? '') === filtroSistema,
                 );
+                if (!coincideSistema) return false;
             }
+
+            if (filtroEquipo !== 'ALL') {
+                if (filtroEquipo === 'GLOBAL') {
+                    const esGlobal = entrada.instancias.some((i) => !getActEquipoId(i));
+                    if (!esGlobal) return false;
+                } else {
+                    const idEqNum = Number(filtroEquipo);
+                    const coincideDirecto = entrada.instancias.some(
+                        (i) => getActEquipoId(i) === idEqNum,
+                    );
+                    const coincidePorServicio = entrada.serviciosIds.some((idSrv) => {
+                        const srv = serviciosMap.get(idSrv);
+                        return srv?.id_tipo_equipo === idEqNum;
+                    });
+                    if (!coincideDirecto && !coincidePorServicio) return false;
+                }
+            }
+
+            if (q) {
+                const matchDesc = getActDesc(rep).toLowerCase().includes(q);
+                const matchCod = getActCode(rep).toLowerCase().includes(q);
+                const sisId = getActSistemaId(rep);
+                const sisNombre = sisId
+                    ? sistemasMap.get(sisId)?.nombre_sistema.toLowerCase() ?? ''
+                    : '';
+                return matchDesc || matchCod || sisNombre.includes(q);
+            }
+
             return true;
         });
-    }, [plantillas, idServicioDestino, busqueda, soloCompatibles, arqsDestino]);
+    }, [
+        entradasBanco,
+        searchQuery,
+        vistaRapida,
+        filtroNaturaleza,
+        filtroSistema,
+        filtroEquipo,
+        serviciosMap,
+        sistemasMap,
+    ]);
 
-    const toggleKey = (key: string) => {
-        setSelectedKeys(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
-    };
+    // KPIs Ejecutivos
+    const kpis = useMemo(() => {
+        const totalConceptos = entradasBanco.length;
+        const totalMediciones = entradasBanco.filter(
+            (e) => getActTipo(e.representante) === 'MEDICION',
+        ).length;
+        const totalAsignaciones = actividades.filter(
+            (a: CatalogoActividad) => a.activo !== false && getActServicioId(a) !== null,
+        ).length;
+        const sinServicio = entradasBanco.filter((e) => e.serviciosIds.length === 0).length;
+        return { totalConceptos, totalMediciones, totalAsignaciones, sinServicio };
+    }, [entradasBanco, actividades]);
 
-    const handleImportarSeleccionadas = async () => {
-        if (selectedKeys.length === 0) return;
-        setIsSubmitting(true);
+    const handleEliminarEntrada = async (entrada: EntradaBancoUniversal) => {
+        const confirmacion = window.confirm(
+            `¿Deseas desactivar "${getActDesc(entrada.representante)}" del Banco Universal?`,
+        );
+        if (!confirmacion) return;
         try {
-            const usedCodes = new Set<string>(
-                (actividades || [])
-                    .map((a: any) => (a.codigoActividad || a.codigo_actividad || '').toUpperCase().trim())
-                    .filter(Boolean)
-            );
-            const actsInTarget = (actividades || []).filter(
-                (a: any) => Number(a.idTipoServicio || a.id_tipo_servicio) === idServicioDestino
-            );
-            let nextOrden =
-                Math.max(
-                    0,
-                    ...actsInTarget.map((a: any) => Number(a.ordenEjecucion || a.orden_ejecucion || 0))
-                ) + 1;
-
-            for (const key of selectedKeys) {
-                const p = plantillas.find(item => item.key === key);
-                if (!p) continue;
-
-                const newCode = generarCodigoActividad(
-                    `${p.descripcionActividad}_${idServicioDestino}`,
-                    usedCodes
-                );
-                usedCodes.add(newCode);
-
-                await crearActividad.mutateAsync({
-                    codigoActividad: newCode,
-                    descripcionActividad: p.descripcionActividad,
-                    idTipoServicio: idServicioDestino,
-                    idSistema: p.idSistema ? Number(p.idSistema) : undefined,
-                    tipoActividad: p.tipoActividad,
-                    ordenEjecucion: nextOrden++,
-                    esObligatoria: p.esObligatoria,
-                    tiempoEstimadoMinutos: p.tiempoEstimadoMinutos || undefined,
-                    idParametroMedicion: p.idParametroMedicion ? Number(p.idParametroMedicion) : undefined,
-                    instrucciones: p.instrucciones || undefined,
-                    precauciones: p.precauciones || undefined,
-                });
-            }
-
-            toast.success(
-                `${selectedKeys.length} actividad(es) agregadas al checklist de ${
-                    servicioDestino.nombre_tipo || servicioDestino.nombreTipoServicio
-                }`
-            );
-            onClose();
-        } finally {
-            setIsSubmitting(false);
+            await deleteActividad.mutateAsync(getActId(entrada.representante));
+            toast.success('Actividad desactivada correctamente');
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'No se pudo eliminar la actividad';
+            toast.error(msg);
         }
     };
 
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-24 gap-3">
+                <Loader2 className="h-9 w-9 animate-spin text-blue-600" />
+                <p className="text-sm font-medium text-slate-600">
+                    Cargando Diccionario Maestro del Banco Universal...
+                </p>
+            </div>
+        );
+    }
+
+    if (isError) {
+        return (
+            <div className="p-8 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-3">
+                <AlertCircle className="h-8 w-8 text-rose-600 mx-auto" />
+                <h3 className="text-base font-bold text-rose-900">
+                    Error al cargar el Banco Universal de Actividades
+                </h3>
+                <button
+                    type="button"
+                    onClick={() => refetch()}
+                    className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold inline-flex items-center gap-2"
+                >
+                    <RefreshCw className="h-4 w-4" />
+                    Reintentar
+                </button>
+            </div>
+        );
+    }
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col">
-                <div className="p-5 border-b border-gray-100 bg-indigo-50/70 flex items-center justify-between">
-                    <div>
-                        <h3 className="text-base font-bold text-indigo-950 flex items-center gap-2">
-                            <BookOpen className="h-5 w-5 text-indigo-600" />
-                            Reutilizar del Banco Universal →{' '}
-                            {servicioDestino.nombre_tipo || servicioDestino.nombreTipoServicio}
-                        </h3>
-                        <p className="text-xs text-indigo-700 mt-0.5">
-                            Selecciona las actividades existentes en el Banco Universal para incorporarlas automáticamente a este protocolo.
+        <div className="space-y-6 pb-12">
+            {/* 1. CABECERA EJECUTIVA DEL DICCIONARIO MAESTRO */}
+            <div className="rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white p-6 shadow-xl border border-slate-800">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div className="space-y-1.5">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-[11px] font-bold uppercase tracking-wider">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Diccionario Maestro EAM • Reutilización y Propagación en Cascada
+                        </div>
+                        <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-2.5">
+                            <BookOpen className="h-7 w-7 text-blue-400" />
+                            Banco Universal de Actividades y Telemetría
+                        </h1>
+                        <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+                            Repositorio canónico de inspecciones cualitativas y puntos de medición cuantitativa (UoM).
+                            Crea tareas estándar una sola vez sin atarlas a un servicio, inyéctalas en múltiples protocolos y
+                            propaga correcciones en cascada a todos los servicios vinculados.
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="p-1.5 rounded-full hover:bg-indigo-100 text-gray-500 cursor-pointer"
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
+
+                    <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                        <Link
+                            href="/configuracion/catalogos/tipos-servicio"
+                            className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-xs font-bold flex items-center gap-2 transition-all"
+                        >
+                            <Wrench className="h-4 w-4 text-blue-300" />
+                            Ir a Tipos de Servicio y Protocolos
+                            <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setEntradaEditar(null);
+                                setModalCrearAbierto(true);
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-900/30 transition-all"
+                        >
+                            <Plus className="h-4 w-4" />
+                            Nueva Plantilla en el Banco
+                        </button>
+                    </div>
                 </div>
 
-                <div className="p-5 space-y-3 overflow-y-auto flex-1">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <input
-                                type="text"
-                                value={busqueda}
-                                onChange={e => setBusqueda(e.target.value)}
-                                placeholder="Buscar tarea por descripción o subsistema..."
-                                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
+                {/* KPIs del Banco Universal */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 pt-5 border-t border-white/10">
+                    <div className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
+                        <div className="text-[11px] text-slate-300 font-medium">
+                            Conceptos Únicos en el Banco
                         </div>
-                        {arqsDestino.length > 0 && (
-                            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer shrink-0">
-                                <input
-                                    type="checkbox"
-                                    checked={soloCompatibles}
-                                    onChange={e => setSoloCompatibles(e.target.checked)}
-                                    className="rounded border-gray-300 text-indigo-600"
-                                />
-                                <span>Solo de {arqsDestino.map(a => a.codigo).join('/')} o Universales</span>
-                            </label>
-                        )}
+                        <div className="text-2xl font-black text-white mt-0.5">
+                            {kpis.totalConceptos}
+                        </div>
                     </div>
-
-                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                        {plantillasDisponibles.length === 0 ? (
-                            <p className="text-center text-xs text-gray-500 py-10">
-                                No hay más actividades disponibles con este filtro.
-                            </p>
-                        ) : (
-                            plantillasDisponibles.map(p => {
-                                const isChecked = selectedKeys.includes(p.key);
-                                return (
-                                    <label
-                                        key={p.key}
-                                        className={cn(
-                                            'flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all',
-                                            isChecked
-                                                ? 'bg-indigo-50 border-indigo-400 shadow-2xs'
-                                                : 'bg-white border-gray-200 hover:border-indigo-200'
-                                        )}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={isChecked}
-                                            onChange={() => toggleKey(p.key)}
-                                            className="mt-0.5 w-4 h-4 rounded border-gray-300 text-indigo-600"
-                                        />
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-bold text-slate-900">
-                                                {p.descripcionActividad}
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                <span
-                                                    className={cn(
-                                                        'text-[10px] font-bold px-2 py-0.5 rounded',
-                                                        getTipoActividadColor(p.tipoActividad)
-                                                    )}
-                                                >
-                                                    {p.tipoActividad}
-                                                </span>
-                                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
-                                                    {p.sistemaNombre}
-                                                </span>
-                                                {p.parametroInfo && (
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-50 text-cyan-800 border border-cyan-200">
-                                                        📏 {p.parametroInfo.unidad}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </label>
-                                );
-                            })
-                        )}
+                    <div className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
+                        <div className="text-[11px] text-purple-200 font-medium flex items-center gap-1">
+                            <Gauge className="h-3.5 w-3.5 text-purple-300" />
+                            Puntos de Telemetría (UoM)
+                        </div>
+                        <div className="text-2xl font-black text-purple-200 mt-0.5">
+                            {kpis.totalMediciones}
+                        </div>
                     </div>
-                </div>
-
-                <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-xl font-bold text-sm hover:bg-white cursor-pointer"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        type="button"
-                        disabled={selectedKeys.length === 0 || isSubmitting}
-                        onClick={handleImportarSeleccionadas}
-                        className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                        <span>Agregar {selectedKeys.length} Actividad(es) al Checklist</span>
-                    </button>
+                    <div className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
+                        <div className="text-[11px] text-emerald-200 font-medium">
+                            Asignaciones Activas en Protocolos
+                        </div>
+                        <div className="text-2xl font-black text-emerald-300 mt-0.5">
+                            {kpis.totalAsignaciones}
+                        </div>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
+                        <div className="text-[11px] text-amber-200 font-medium">
+                            Plantillas Libres (Sin Servicio Aún)
+                        </div>
+                        <div className="text-2xl font-black text-amber-300 mt-0.5">
+                            {kpis.sinServicio}
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            {/* 2. BARRA DE FILTROS DE GOBERNANZA */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        <Filter className="h-3.5 w-3.5 text-blue-600" />
+                        Filtros del Diccionario Maestro
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        {(
+                            [
+                                { id: 'TODAS', label: `Todas (${entradasBanco.length})` },
+                                {
+                                    id: 'INSPECCION',
+                                    label: `Inspección / Checklist (${entradasBanco.length - kpis.totalMediciones})`,
+                                },
+                                {
+                                    id: 'MEDICION',
+                                    label: `Telemetría UoM (${kpis.totalMediciones})`,
+                                },
+                                {
+                                    id: 'SIN_SERVICIO',
+                                    label: `Plantillas Libres (${kpis.sinServicio})`,
+                                },
+                            ] as const
+                        ).map((tab) => (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setVistaRapida(tab.id)}
+                                className={cn(
+                                    'px-3 py-1 rounded-full text-xs font-bold transition-all',
+                                    vistaRapida === tab.id
+                                        ? 'bg-slate-900 text-white shadow-2xs'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                                )}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                    <div className="md:col-span-4 relative">
+                        <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Buscar por descripción, código o subsistema..."
+                            className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none font-medium"
+                        />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="md:col-span-3">
+                        <EamSelect
+                            value={filtroEquipo}
+                            onChange={(val: string) => setFiltroEquipo(val || 'ALL')}
+                            options={filtroEquipoOptions}
+                            placeholder="Filtrar por Tipo de Equipo..."
+                        />
+                    </div>
+
+                    <div className="md:col-span-3">
+                        <EamSelect
+                            value={filtroSistema}
+                            onChange={(val: string) => setFiltroSistema(val || 'ALL')}
+                            options={filtroSistemaOptions}
+                            placeholder="Filtrar por Subsistema..."
+                        />
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <EamSelect
+                            value={filtroNaturaleza}
+                            onChange={(val: string) => setFiltroNaturaleza(val || 'ALL')}
+                            options={filtroNaturalezaOptions}
+                            placeholder="Naturaleza..."
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* 3. LISTADO CANÓNICO DEDUPLICADO DEL BANCO UNIVERSAL */}
+            {entradasFiltradas.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+                    <Activity className="h-10 w-10 text-slate-300 mx-auto" />
+                    <h3 className="text-sm font-bold text-slate-800">
+                        No se encontraron plantillas con los filtros actuales
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Puedes limpiar los filtros o crear una nueva plantilla maestra directamente en el Banco Universal.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setEntradaEditar(null);
+                            setModalCrearAbierto(true);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold inline-flex items-center gap-1.5"
+                    >
+                        <Plus className="h-4 w-4" />
+                        Crear Plantilla en el Banco Universal
+                    </button>
+                </div>
+            ) : (
+                <div className="space-y-2.5">
+                    {entradasFiltradas.map((entrada) => {
+                        const rep = entrada.representante;
+                        const tipo = getActTipo(rep);
+                        const cfg =
+                            TIPO_ACTIVIDAD_CONFIG[tipo] ??
+                            TIPO_ACTIVIDAD_CONFIG.INSPECCION;
+                        const sisId = getActSistemaId(rep);
+                        const eqId = getActEquipoId(rep);
+                        const paramId = getActParametroId(rep);
+                        const sistema = sisId ? sistemasMap.get(sisId) : null;
+                        const arquetipo = eqId ? arquetiposMap.get(eqId) : null;
+                        const paramLista = paramId ? parametrosMap.get(paramId) : undefined;
+                        const paramCqrs = rep.parametroMedicion;
+                        const uMed =
+                            paramLista?.unidad_medida ??
+                            paramCqrs?.unidadMedida ??
+                            rep.parametros_medicion?.unidad_medida;
+                        const minN = paramLista?.valor_minimo_normal ?? paramCqrs?.valorMinimoNormal;
+                        const maxN = paramLista?.valor_maximo_normal ?? paramCqrs?.valorMaximoNormal;
+
+                        return (
+                            <div
+                                key={entrada.firmaCanonica}
+                                className="bg-white rounded-2xl border border-slate-200 hover:border-blue-300 px-5 py-4 shadow-2xs transition-all flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
+                            >
+                                <div className="space-y-2 min-w-0 flex-1">
+                                    {/* Badges superiores */}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span
+                                            className={cn(
+                                                'px-2.5 py-0.5 rounded-full text-[10px] font-bold border',
+                                                cfg.bg,
+                                                cfg.color,
+                                                cfg.border,
+                                            )}
+                                        >
+                                            {cfg.label}
+                                        </span>
+
+                                        {sistema && (
+                                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 inline-flex items-center gap-1">
+                                                <Layers className="h-3 w-3 text-slate-500" />
+                                                {sistema.nombre_sistema}
+                                            </span>
+                                        )}
+
+                                        {arquetipo && (
+                                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 inline-flex items-center gap-1">
+                                                <Cpu className="h-3 w-3 text-indigo-500" />
+                                                {arquetipo.nombre_tipo} ({arquetipo.codigo_tipo})
+                                            </span>
+                                        )}
+
+                                        {tipo === 'MEDICION' && uMed && (
+                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-purple-100 text-purple-900 border border-purple-300 inline-flex items-center gap-1.5">
+                                                <Gauge className="h-3.5 w-3.5 text-purple-700" />
+                                                UoM: {uMed} • Rango Normal: [{minN ?? 0} — {maxN ?? 100}{' '}
+                                                {uMed}]
+                                            </span>
+                                        )}
+
+                                        {getActObligatoria(rep) && (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
+                                                <ShieldCheck className="h-3 w-3" />
+                                                Obligatoria
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Descripción principal */}
+                                    <div className="text-sm font-bold text-slate-900">
+                                        {getActDesc(rep)}
+                                    </div>
+
+                                    {/* Chips de Servicios donde se usa esta actividad */}
+                                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                        <span className="text-[11px] font-semibold text-slate-500">
+                                            Presente en {entrada.serviciosIds.length} protocolo(s):
+                                        </span>
+                                        {entrada.serviciosIds.length === 0 ? (
+                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                                Plantilla libre en el Banco (sin vincular aún)
+                                            </span>
+                                        ) : (
+                                            entrada.serviciosIds.map((idSrv) => {
+                                                const srv = serviciosMap.get(idSrv);
+                                                if (!srv) return null;
+                                                return (
+                                                    <Link
+                                                        key={idSrv}
+                                                        href={`/configuracion/catalogos/tipos-servicio?protocolo=${idSrv}`}
+                                                        title="Abrir Fast-Protocol Builder de este servicio"
+                                                        className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors inline-flex items-center gap-1"
+                                                    >
+                                                        {srv.codigo_tipo}
+                                                        <ArrowRight className="h-2.5 w-2.5" />
+                                                    </Link>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Botones de Acción del Diccionario Maestro */}
+                                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEntradaVincular(entrada)}
+                                        className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Link2 className="h-3.5 w-3.5" />
+                                        Vincular a Servicio(s)
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEntradaEditar(entrada);
+                                            setModalCrearAbierto(true);
+                                        }}
+                                        className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Edit2 className="h-3.5 w-3.5" />
+                                        Editar y Propagar
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleEliminarEntrada(entrada)}
+                                        title="Desactivar plantilla"
+                                        className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition-colors"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* MODALES */}
+            <BancoActividadModal
+                isOpen={modalCrearAbierto}
+                onClose={() => {
+                    setModalCrearAbierto(false);
+                    setEntradaEditar(null);
+                }}
+                entradaEditar={entradaEditar}
+                arquetipos={arquetipos}
+                sistemas={sistemas}
+                tiposServicio={tiposServicio}
+                parametros={parametros}
+                unidadesOptions={unidadesOptions}
+            />
+
+            <VincularServiciosModal
+                isOpen={Boolean(entradaVincular)}
+                onClose={() => setEntradaVincular(null)}
+                entrada={entradaVincular}
+                tiposServicio={tiposServicio}
+                sistemas={sistemas}
+            />
         </div>
+    );
+}
+
+export default function ActividadesPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="flex items-center justify-center py-24">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                </div>
+            }
+        >
+            <BancoUniversalActividadesContent />
+        </Suspense>
     );
 }

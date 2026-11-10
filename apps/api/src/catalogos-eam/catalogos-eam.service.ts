@@ -105,6 +105,122 @@ export class CatalogosEamService implements OnModuleInit {
     private readonly uomService: UomConversionService,
   ) {}
 
+  async onModuleInit() {
+    this.syncAllModulosToSistemas().catch(() => {
+      // Non-blocking startup sync between EAM Parts (modulos_tecnicos) and Checklist Subsystems (catalogo_sistemas)
+    });
+  }
+
+  /**
+   * Salvaguarda 2 (Fase 5.9): Auto-Sincronización EAM Partes (modulos_tecnicos) <-> catalogo_sistemas
+   * Evita crear subsistemas dos veces y vincula partes de arquetipos universales (ej. ELEV, HVAC)
+   * sin alterar subsistemas históricos del Golden Master (GEN, BOM).
+   */
+  async syncAllModulosToSistemas() {
+    if (!this.prisma?.tipo_equipo_modulos?.findMany || !this.prisma?.catalogo_sistemas?.findMany) {
+      return;
+    }
+
+    try {
+      const [vinculos, sistemas] = await Promise.all([
+        this.prisma.tipo_equipo_modulos.findMany({
+          include: {
+            tipo_equipo: true,
+            modulo: true,
+          },
+          orderBy: { orden_visual: 'asc' },
+        }),
+        this.prisma.catalogo_sistemas.findMany(),
+      ]);
+
+      const LEGACY_PROTECTED_CODES = new Set(['GEN', 'GENERADOR', 'BOM', 'BOMBA', 'MOT', 'MOTOR', 'COMP', 'COMPRESOR']);
+
+      for (const vinc of vinculos) {
+        if (!vinc.modulo?.activo || !vinc.tipo_equipo?.activo) continue;
+        const eqCode = vinc.tipo_equipo.codigo_tipo.trim().toUpperCase();
+        if (LEGACY_PROTECTED_CODES.has(eqCode)) continue;
+
+        await this.ensureSistemaForModuloAndEquipo(vinc.modulo, eqCode, vinc.orden_visual ?? 1, sistemas);
+      }
+    } catch {
+      // Ignore in test mocks or partial environments
+    }
+  }
+
+  private async ensureSistemaForModuloAndEquipo(
+    modulo: { id_modulo: number; codigo_modulo: string; nombre_modulo: string; descripcion?: string | null; icono?: string | null; color_ui?: string | null },
+    eqCode: string,
+    ordenVisual = 1,
+    cachedSistemas?: any[],
+  ) {
+    if (!this.prisma?.catalogo_sistemas?.findMany) return null;
+    const sistemas = cachedSistemas ?? (await this.prisma.catalogo_sistemas.findMany());
+
+    const normTokens = (str: string) =>
+      str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((w) => w.length >= 4 && !['sistema', 'parte', 'control', 'para'].includes(w));
+
+    const modTokens = normTokens(modulo.nombre_modulo);
+
+    // 1. Buscar por id_modulo exacto o coincidencia semántica en el mismo tipo de equipo
+    let match = sistemas.find((s) => s.id_modulo === modulo.id_modulo);
+    if (!match) {
+      match = sistemas.find((s) => {
+        const aplica = (s.aplica_a || []).map((a: string) => a.toUpperCase());
+        const sameName = s.nombre_sistema.trim().toLowerCase() === modulo.nombre_modulo.trim().toLowerCase();
+        if (sameName) return true;
+        if (!aplica.includes(eqCode) || s.id_modulo != null) return false;
+        const sysTokens = normTokens(s.nombre_sistema);
+        const overlap = modTokens.filter((t) => sysTokens.includes(t));
+        return overlap.length >= 1;
+      });
+    }
+
+    if (match) {
+      const currentAplica: string[] = Array.isArray(match.aplica_a) ? match.aplica_a : [];
+      const nextAplica = Array.from(new Set([...currentAplica.map((c) => c.toUpperCase()), eqCode]));
+      const needsUpdate =
+        match.id_modulo !== modulo.id_modulo ||
+        nextAplica.length !== currentAplica.length ||
+        !match.activo;
+
+      if (needsUpdate) {
+        const updated = await this.prisma.catalogo_sistemas.update({
+          where: { id_sistema: match.id_sistema },
+          data: {
+            id_modulo: match.id_modulo ?? modulo.id_modulo,
+            aplica_a: nextAplica,
+            activo: true,
+          },
+        });
+        Object.assign(match, updated);
+      }
+      return match;
+    }
+
+    // 2. Crear nuevo registro en catalogo_sistemas
+    const rawCode = `SIS_${modulo.codigo_modulo.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`.slice(0, 50);
+    const created = await this.prisma.catalogo_sistemas.create({
+      data: {
+        codigo_sistema: rawCode,
+        nombre_sistema: modulo.nombre_modulo.trim().slice(0, 100),
+        descripcion: modulo.descripcion || `Subsistema sincronizado desde parte EAM (${modulo.codigo_modulo})`,
+        aplica_a: [eqCode],
+        orden_visualizacion: ordenVisual,
+        icono: modulo.icono || 'layers',
+        color_hex: (modulo.color_ui || '#3B82F6').slice(0, 7),
+        id_modulo: modulo.id_modulo,
+        activo: true,
+      },
+    });
+    if (cachedSistemas) cachedSistemas.push(created);
+    return created;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 0. RESUMEN EJECUTIVO DEL ECOSISTEMA EAM (KPIs)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1142,10 +1258,24 @@ export class CatalogosEamService implements OnModuleInit {
     if (dto.color_ui !== undefined) data.color_ui = dto.color_ui?.trim() || '#3B82F6';
     if (dto.activo !== undefined) data.activo = dto.activo;
 
-    return this.prisma.modulos_tecnicos.update({
+    const updatedMod = await this.prisma.modulos_tecnicos.update({
       where: { codigo_modulo: codigo.toLowerCase() },
       data,
     });
+
+    if (this.prisma?.catalogo_sistemas?.updateMany && dto.nombre_modulo !== undefined) {
+      await this.prisma.catalogo_sistemas
+        .updateMany({
+          where: { id_modulo: mod.id_modulo },
+          data: {
+            nombre_sistema: dto.nombre_modulo.trim().slice(0, 100),
+            ...(dto.descripcion !== undefined ? { descripcion: dto.descripcion?.trim() || null } : {}),
+          },
+        })
+        .catch(() => {});
+    }
+
+    return updatedMod;
   }
 
   async deleteModulo(codigo: string) {
@@ -1747,6 +1877,20 @@ export class CatalogosEamService implements OnModuleInit {
       if (idTarget === idTipoEquipo) {
         resultadoPrimario = res;
       }
+    }
+
+    // Auto-sincronizar Parte EAM hacia catalogo_sistemas para que aparezca de inmediato en el Fast-Protocol Builder
+    if (this.prisma?.tipos_equipo?.findUnique && this.prisma?.modulos_tecnicos?.findUnique) {
+      Promise.all([
+        this.prisma.tipos_equipo.findUnique({ where: { id_tipo_equipo: idTipoEquipo } }),
+        this.prisma.modulos_tecnicos.findUnique({ where: { id_modulo: idModulo } }),
+      ])
+        .then(([arq, mod]) => {
+          if (arq && mod) {
+            return this.ensureSistemaForModuloAndEquipo(mod, arq.codigo_tipo.trim().toUpperCase(), 1);
+          }
+        })
+        .catch(() => {});
     }
 
     return resultadoPrimario;
