@@ -13,9 +13,15 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         id_tipo_servicio: true,
         codigo_tipo: true,
         nombre_tipo: true,
-        aplica_a: true,
         id_tipo_equipo: true,
         categoria: true,
+        tipos_equipo: {
+          select: {
+            id_tipo_equipo: true,
+            codigo_tipo: true,
+            nombre_tipo: true,
+          },
+        },
       },
     },
     catalogo_sistemas: {
@@ -49,9 +55,15 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         id_tipo_servicio: true,
         codigo_tipo: true,
         nombre_tipo: true,
-        aplica_a: true,
         id_tipo_equipo: true,
         categoria: true,
+        tipos_equipo: {
+          select: {
+            id_tipo_equipo: true,
+            codigo_tipo: true,
+            nombre_tipo: true,
+          },
+        },
       },
     },
     catalogo_sistemas: {
