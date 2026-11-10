@@ -65,6 +65,7 @@ export class GetTiposServicioDetalleCompletoHandler
                     tipo_actividad: a.tipo_actividad,
                     es_obligatoria: a.es_obligatoria,
                     tiempo_estimado_minutos: a.tiempo_estimado_minutos,
+                    orden_ejecucion: a.orden_ejecucion,
                     parametro_medicion: a.parametros_medicion ? {
                         id: a.parametros_medicion.id_parametro_medicion,
                         nombre: a.parametros_medicion.nombre_parametro,
@@ -96,7 +97,7 @@ export class GetTiposServicioDetalleCompletoHandler
             duracion_estimada_horas: tipoServicio.duracion_estimada_horas,
             tipo_equipo: tipoServicio.tipos_equipo ? {
                 id: tipoServicio.tipos_equipo.id_tipo_equipo,
-                nombre: tipoServicio.tipos_equipo.nombre,
+                nombre: (tipoServicio.tipos_equipo as any).nombre_tipo || (tipoServicio.tipos_equipo as any).nombre,
             } : null,
             estadisticas: {
                 total_actividades: tipoServicio._count.catalogo_actividades,
