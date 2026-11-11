@@ -49,7 +49,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 const ESTADOS_EQUIPO: { value: EstadoEquipo; label: string }[] = [
   { value: 'OPERATIVO', label: 'Operativo' },
@@ -171,13 +171,53 @@ function dateToInput(d: string | null | undefined): string {
 export default function EditarEquipoPage() {
   const params = useParams();
   const router = useRouter();
-  const { toast } = useToast();
   const id = parseInt(params.id as string, 10);
 
   const { data, isLoading, isError, error } = useEquipo(id);
+  const equipo = data?.data;
+
+  if (isLoading)
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+          <p className="text-slate-500 text-xs font-semibold">Cargando información del equipo...</p>
+        </div>
+      </div>
+    );
+
+  if (isError || !equipo)
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <AlertCircle className="h-12 w-12 text-rose-500" />
+        <h2 className="text-lg font-bold text-slate-900">Error al cargar el equipo</h2>
+        <p className="text-slate-500 text-xs">
+          {(error as Error)?.message || 'No se encontró el equipo'}
+        </p>
+        <button
+          onClick={() => router.push('/equipos')}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-bold"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Volver a Equipos
+        </button>
+      </div>
+    );
+
+  return <EditarEquipoForm key={equipo.id_equipo} id={id} equipo={equipo} />;
+}
+
+function EditarEquipoForm({
+  id,
+  equipo,
+}: {
+  id: number;
+  equipo: NonNullable<ReturnType<typeof useEquipo>['data']>['data'];
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
   const actualizarBase = useActualizarEquipo();
   const actualizarEspecificos = useActualizarDatosEspecificos();
-  const equipo = data?.data;
 
   const [openSections, setOpenSections] = useState({
     base: true,
@@ -189,25 +229,81 @@ export default function EditarEquipoPage() {
     fichaModular: true,
     parametros: false,
   });
-  const toggle = (s: keyof typeof openSections) =>
-    setOpenSections((p) => ({ ...p, [s]: !p[s] }));
+  const toggle = (s: keyof typeof openSections) => setOpenSections((p) => ({ ...p, [s]: !p[s] }));
 
-  // Estado Base
-  const [base, setBase] = useState<Record<string, any>>({});
+  // Estado Base inicializado directamente desde el equipo cargado
+  const [base, setBase] = useState<{
+    nombre_equipo: string;
+    codigo_equipo: string;
+    numero_serie_equipo: string;
+    ubicacion_texto: string;
+    estado_equipo: EstadoEquipo;
+    criticidad: Criticidad;
+    criticidad_justificacion: string;
+    fecha_instalacion: string;
+    fecha_inicio_servicio_mekanos: string;
+    en_garantia: boolean;
+    fecha_inicio_garantia: string;
+    fecha_fin_garantia: string;
+    proveedor_garantia: string;
+    estado_pintura: string;
+    requiere_pintura: boolean;
+    tipo_contrato: string;
+    intervalo_tipo_a_dias_override: string | number;
+    intervalo_tipo_a_horas_override: string | number;
+    intervalo_tipo_b_dias_override: string | number;
+    intervalo_tipo_b_horas_override: string | number;
+    criterio_intervalo_override: string;
+    observaciones_generales: string;
+    configuracion_especial: string;
+  }>(() => ({
+    nombre_equipo: equipo.nombre_equipo || '',
+    codigo_equipo: equipo.codigo_equipo || '',
+    numero_serie_equipo: equipo.numero_serie_equipo || '',
+    ubicacion_texto: equipo.ubicacion_texto || '',
+    estado_equipo: equipo.estado_equipo || 'OPERATIVO',
+    criticidad: equipo.criticidad || 'MEDIA',
+    criticidad_justificacion: equipo.criticidad_justificacion || '',
+    fecha_instalacion: dateToInput(equipo.fecha_instalacion),
+    fecha_inicio_servicio_mekanos: dateToInput(equipo.fecha_inicio_servicio_mekanos),
+    en_garantia: equipo.en_garantia ?? false,
+    fecha_inicio_garantia: dateToInput(equipo.fecha_inicio_garantia),
+    fecha_fin_garantia: dateToInput(equipo.fecha_fin_garantia),
+    proveedor_garantia: equipo.proveedor_garantia || '',
+    estado_pintura: equipo.estado_pintura || 'BUENO',
+    requiere_pintura: equipo.requiere_pintura ?? false,
+    tipo_contrato: equipo.tipo_contrato || 'SIN_CONTRATO',
+    intervalo_tipo_a_dias_override: equipo.intervalo_tipo_a_dias_override ?? '',
+    intervalo_tipo_a_horas_override: equipo.intervalo_tipo_a_horas_override ?? '',
+    intervalo_tipo_b_dias_override: equipo.intervalo_tipo_b_dias_override ?? '',
+    intervalo_tipo_b_horas_override: equipo.intervalo_tipo_b_horas_override ?? '',
+    criterio_intervalo_override: equipo.criterio_intervalo_override || '',
+    observaciones_generales: equipo.observaciones_generales || '',
+    configuracion_especial: equipo.configuracion_especial || '',
+  }));
   const [hasBaseChanges, setHasBaseChanges] = useState(false);
 
   // Estado Ficha Técnica Modular EAM (JSONB + Satélites + B-Tree)
-  const [modulosValues, setModulosValues] = useState<Record<string, Record<string, any>>>({});
-  const [origenAtributos, setOrigenAtributos] = useState<Record<string, 'MODELO' | 'CUSTOM'>>({});
-  const [unidadesPersonalizadas, setUnidadesPersonalizadas] = useState<Record<string, string>>({});
-  const [selectedModeloOemId, setSelectedModeloOemId] = useState<number | null>(null);
+  const [modulosValues, setModulosValues] = useState<Record<string, Record<string, unknown>>>(
+    () => equipo.especificaciones?.modulos || {},
+  );
+  const [origenAtributos, setOrigenAtributos] = useState<Record<string, 'MODELO' | 'CUSTOM'>>(
+    () => equipo.especificaciones?.origen_atributos || {},
+  );
+  const [unidadesPersonalizadas, setUnidadesPersonalizadas] = useState<Record<string, string>>(
+    () => equipo.especificaciones?.unidades_personalizadas || {},
+  );
+  const [selectedModeloOemId, setSelectedModeloOemId] = useState<number | null>(
+    () => equipo.id_modelo_equipo || null,
+  );
   const [vincularKitBom, setVincularKitBom] = useState<boolean>(false);
   const [hasEspecificosChanges, setHasEspecificosChanges] = useState(false);
 
-  const [configParametros, setConfigParametros] = useState<ConfigParametros>({});
+  const [configParametros, setConfigParametros] = useState<ConfigParametros>(
+    () => (equipo.config_parametros as ConfigParametros) || {},
+  );
 
-  const idTipoEquipo =
-    equipo?.id_tipo_equipo || equipo?.tipo_equipo?.id_tipo_equipo || null;
+  const idTipoEquipo = equipo.id_tipo_equipo || equipo.tipo_equipo?.id_tipo_equipo || null;
   const { data: modelosOem } = useModelosOemEam(idTipoEquipo || undefined);
 
   const selectedModeloOem = useMemo(
@@ -215,50 +311,7 @@ export default function EditarEquipoPage() {
     [modelosOem, selectedModeloOemId],
   );
 
-  // Cargar datos del activo al montar
-  useEffect(() => {
-    if (!equipo) return;
-    setBase({
-      nombre_equipo: equipo.nombre_equipo || '',
-      codigo_equipo: equipo.codigo_equipo || '',
-      numero_serie_equipo: equipo.numero_serie_equipo || '',
-      ubicacion_texto: equipo.ubicacion_texto || '',
-      estado_equipo: equipo.estado_equipo || 'OPERATIVO',
-      criticidad: equipo.criticidad || 'MEDIA',
-      criticidad_justificacion: equipo.criticidad_justificacion || '',
-      fecha_instalacion: dateToInput(equipo.fecha_instalacion),
-      fecha_inicio_servicio_mekanos: dateToInput(equipo.fecha_inicio_servicio_mekanos),
-      en_garantia: equipo.en_garantia ?? false,
-      fecha_inicio_garantia: dateToInput(equipo.fecha_inicio_garantia),
-      fecha_fin_garantia: dateToInput(equipo.fecha_fin_garantia),
-      proveedor_garantia: equipo.proveedor_garantia || '',
-      estado_pintura: equipo.estado_pintura || 'BUENO',
-      requiere_pintura: equipo.requiere_pintura ?? false,
-      tipo_contrato: equipo.tipo_contrato || 'SIN_CONTRATO',
-      intervalo_tipo_a_dias_override: equipo.intervalo_tipo_a_dias_override ?? '',
-      intervalo_tipo_a_horas_override: equipo.intervalo_tipo_a_horas_override ?? '',
-      intervalo_tipo_b_dias_override: equipo.intervalo_tipo_b_dias_override ?? '',
-      intervalo_tipo_b_horas_override: equipo.intervalo_tipo_b_horas_override ?? '',
-      criterio_intervalo_override: equipo.criterio_intervalo_override || '',
-      observaciones_generales: equipo.observaciones_generales || '',
-      configuracion_especial: equipo.configuracion_especial || '',
-    });
-    if (equipo.config_parametros) {
-      setConfigParametros(equipo.config_parametros as ConfigParametros);
-    }
-    if (equipo.id_modelo_equipo) {
-      setSelectedModeloOemId(equipo.id_modelo_equipo);
-    }
-
-    // Cargar especificaciones modulares unificadas (JSONB + satélites)
-    if (equipo.especificaciones?.modulos) {
-      setModulosValues(equipo.especificaciones.modulos);
-      setOrigenAtributos(equipo.especificaciones.origen_atributos || {});
-      setUnidadesPersonalizadas(equipo.especificaciones.unidades_personalizadas || {});
-    }
-  }, [equipo]);
-
-  const setB = (field: string, value: any) => {
+  const setB = (field: string, value: string | number | boolean) => {
     setBase((p) => ({ ...p, [field]: value }));
     setHasBaseChanges(true);
   };
@@ -267,7 +320,7 @@ export default function EditarEquipoPage() {
     (
       codigoModulo: string,
       codigoAtributo: string,
-      nuevoValor: any,
+      nuevoValor: unknown,
       origen: 'MODELO' | 'CUSTOM' = 'CUSTOM',
     ) => {
       setModulosValues((prev) => ({
@@ -331,13 +384,13 @@ export default function EditarEquipoPage() {
     const modelo = modelosOem?.find((m) => m.id_modelo_equipo === idMod);
     if (!modelo) return;
 
-    const specsBase = (modelo.especificaciones_base || {}) as Record<string, any>;
+    const specsBase = (modelo.especificaciones_base || {}) as {
+      modulos?: Record<string, Record<string, unknown>>;
+    };
     if (specsBase.modulos && typeof specsBase.modulos === 'object') {
       const nuevosOrigenes: Record<string, 'MODELO' | 'CUSTOM'> = { ...origenAtributos };
-      const nuevosModulos: Record<string, Record<string, any>> = { ...modulosValues };
-      for (const [codMod, vals] of Object.entries(
-        specsBase.modulos as Record<string, Record<string, any>>,
-      )) {
+      const nuevosModulos: Record<string, Record<string, unknown>> = { ...modulosValues };
+      for (const [codMod, vals] of Object.entries(specsBase.modulos)) {
         if (vals && typeof vals === 'object') {
           nuevosModulos[codMod] = { ...(nuevosModulos[codMod] || {}), ...vals };
           for (const [k, v] of Object.entries(vals)) {
@@ -375,23 +428,21 @@ export default function EditarEquipoPage() {
       requiere_pintura: base.requiere_pintura,
       tipo_contrato: base.tipo_contrato as TipoContrato,
       intervalo_tipo_a_dias_override: base.intervalo_tipo_a_dias_override
-        ? parseInt(base.intervalo_tipo_a_dias_override, 10)
+        ? parseInt(String(base.intervalo_tipo_a_dias_override), 10)
         : null,
       intervalo_tipo_a_horas_override: base.intervalo_tipo_a_horas_override
-        ? parseFloat(base.intervalo_tipo_a_horas_override)
+        ? parseFloat(String(base.intervalo_tipo_a_horas_override))
         : null,
       intervalo_tipo_b_dias_override: base.intervalo_tipo_b_dias_override
-        ? parseInt(base.intervalo_tipo_b_dias_override, 10)
+        ? parseInt(String(base.intervalo_tipo_b_dias_override), 10)
         : null,
       intervalo_tipo_b_horas_override: base.intervalo_tipo_b_horas_override
-        ? parseFloat(base.intervalo_tipo_b_horas_override)
+        ? parseFloat(String(base.intervalo_tipo_b_horas_override))
         : null,
-      criterio_intervalo_override:
-        (base.criterio_intervalo_override as CriterioIntervalo) || null,
+      criterio_intervalo_override: (base.criterio_intervalo_override as CriterioIntervalo) || null,
       observaciones_generales: base.observaciones_generales || undefined,
       configuracion_especial: base.configuracion_especial || undefined,
-      config_parametros:
-        Object.keys(configParametros).length > 0 ? configParametros : undefined,
+      config_parametros: Object.keys(configParametros).length > 0 ? configParametros : undefined,
     };
     try {
       await actualizarBase.mutateAsync({ id, payload });
@@ -438,36 +489,6 @@ export default function EditarEquipoPage() {
     }
   };
 
-  if (isLoading)
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <p className="text-slate-500 text-xs font-semibold">
-            Cargando información del equipo...
-          </p>
-        </div>
-      </div>
-    );
-
-  if (isError || !equipo)
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <AlertCircle className="h-12 w-12 text-rose-500" />
-        <h2 className="text-lg font-bold text-slate-900">Error al cargar el equipo</h2>
-        <p className="text-slate-500 text-xs">
-          {(error as Error)?.message || 'No se encontró el equipo'}
-        </p>
-        <button
-          onClick={() => router.push('/equipos')}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-bold"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver a Equipos
-        </button>
-      </div>
-    );
-
   const tipoEquipo = equipo.tipo;
   const kitBomItems = selectedModeloOem?.modelos_equipo_bom || [];
 
@@ -493,7 +514,8 @@ export default function EditarEquipoPage() {
               </span>
             </div>
             <h1 className="text-lg font-extrabold text-slate-900">
-              Editar Expediente y Ficha Técnica Modular ({equipo.nombre_equipo || equipo.codigo_equipo})
+              Editar Expediente y Ficha Técnica Modular (
+              {equipo.nombre_equipo || equipo.codigo_equipo})
             </h1>
           </div>
         </div>
@@ -784,8 +806,8 @@ export default function EditarEquipoPage() {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
               <div className="md:col-span-6">
                 <label className="block text-xs font-extrabold text-indigo-950 mb-1 flex items-center gap-1.5">
-                  <Factory className="h-3.5 w-3.5 text-indigo-600" />
-                  ⚡ Vincular o Pre-llenar con Modelo de Fábrica (OEM)
+                  <Factory className="h-3.5 w-3.5 text-indigo-600" />⚡ Vincular o Pre-llenar con
+                  Modelo de Fábrica (OEM)
                 </label>
                 <select
                   value={selectedModeloOemId || ''}
@@ -817,7 +839,8 @@ export default function EditarEquipoPage() {
                     <div className="text-[11px]">
                       <span className="font-bold text-emerald-950 flex items-center gap-1">
                         <PackageCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                        Sincronizar Kit de Repuestos sugerido ({kitBomItems.length} repuestos WMS) a la matriz BOM del equipo al guardar
+                        Sincronizar Kit de Repuestos sugerido ({kitBomItems.length} repuestos WMS) a
+                        la matriz BOM del equipo al guardar
                       </span>
                       {kitBomItems.length > 0 && (
                         <p className="text-[10px] text-slate-500 mt-0.5">

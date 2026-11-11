@@ -1,11 +1,12 @@
 import { PrismaService } from '@mekanos/database';
 import {
-    BadRequestException,
-    Injectable,
-    InternalServerErrorException,
-    NotFoundException,
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
+import { getNextTableId } from '../common/utils/next-id.helper';
 import { CreateRemisionesDetalleDto } from './dto/create-remisiones-detalle.dto';
 import { UpdateRemisionesDetalleDto } from './dto/update-remisiones-detalle.dto';
 
@@ -20,9 +21,7 @@ export class RemisionesDetalleService {
         where: { id_remision: createDto.id_remision },
       });
       if (!remision) {
-        throw new BadRequestException(
-          `Remisión ${createDto.id_remision} no encontrada`,
-        );
+        throw new BadRequestException(`Remisión ${createDto.id_remision} no encontrada`);
       }
 
       // Si es tipo COMPONENTE, validar que el componente existe
@@ -31,14 +30,15 @@ export class RemisionesDetalleService {
           where: { id_componente: createDto.id_componente },
         });
         if (!componente) {
-          throw new BadRequestException(
-            `Componente ${createDto.id_componente} no encontrado`,
-          );
+          throw new BadRequestException(`Componente ${createDto.id_componente} no encontrado`);
         }
       }
 
+      const nextId = await getNextTableId(this.prisma, 'remisiones_detalle', 'id_detalle_remision');
+
       return await this.prisma.remisiones_detalle.create({
         data: {
+          id_detalle_remision: nextId,
           id_remision: createDto.id_remision,
           tipo_item: createDto.tipo_item,
           id_componente: createDto.id_componente,
@@ -64,7 +64,7 @@ export class RemisionesDetalleService {
   async findAll(page: number = 1, limit: number = 10) {
     try {
       const skip = (page - 1) * limit;
-      
+
       const [data, total] = await Promise.all([
         this.prisma.remisiones_detalle.findMany({
           skip,

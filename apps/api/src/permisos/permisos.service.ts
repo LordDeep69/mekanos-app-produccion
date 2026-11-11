@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { getNextTableId } from '../common/utils/next-id.helper';
 import { PrismaService } from '../database/prisma.service';
 import { CreatePermisosDto } from './dto/create-permisos.dto';
 import { UpdatePermisosDto } from './dto/update-permisos.dto';
@@ -9,31 +10,27 @@ export class PermisosService {
 
   async create(createDto: CreatePermisosDto, userId: number) {
     // Validar unique constraint: codigo_permiso
-    const existing = await this.prisma.permisos.findUnique({
+    const existing = await this.prisma.permisos.findFirst({
       where: { codigo_permiso: createDto.codigo_permiso },
     });
 
     if (existing) {
-      throw new Error(
-        `Permiso con código ${createDto.codigo_permiso} ya existe`,
-      );
+      throw new Error(`Permiso con código ${createDto.codigo_permiso} ya existe`);
     }
+
+    const nextId = await getNextTableId(this.prisma, 'permisos', 'id_permiso');
 
     return this.prisma.permisos.create({
       data: {
         ...createDto,
+        id_permiso: nextId,
         creado_por: userId,
         fecha_creacion: new Date(),
       },
     });
   }
 
-  async findAll(params?: {
-    modulo?: string;
-    activo?: boolean;
-    skip?: number;
-    take?: number;
-  }) {
+  async findAll(params?: { modulo?: string; activo?: boolean; skip?: number; take?: number }) {
     const { modulo, activo, skip = 0, take = 100 } = params || {};
 
     return this.prisma.permisos.findMany({
@@ -72,14 +69,12 @@ export class PermisosService {
 
     // Validar unique si se cambia codigo_permiso
     if (updateDto.codigo_permiso) {
-      const existing = await this.prisma.permisos.findUnique({
+      const existing = await this.prisma.permisos.findFirst({
         where: { codigo_permiso: updateDto.codigo_permiso },
       });
 
       if (existing && existing.id_permiso !== id) {
-        throw new Error(
-          `Permiso con código ${updateDto.codigo_permiso} ya existe`,
-        );
+        throw new Error(`Permiso con código ${updateDto.codigo_permiso} ya existe`);
       }
     }
 

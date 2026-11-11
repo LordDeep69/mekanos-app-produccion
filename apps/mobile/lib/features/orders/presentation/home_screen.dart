@@ -440,7 +440,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         isLoading: true,
         pendingCount: 0,
       ),
-      error: (_, __) => _buildSyncChip(
+      error: (_, _) => _buildSyncChip(
         icon: Icons.help_outline,
         text: '?',
         color: Colors.grey,

@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { PdfService } from '../pdf/pdf.service';
 import {
   EnviarEmailResponseDto,
   EnviarInformeTecnicoDto,
@@ -14,14 +13,14 @@ import { EmailService, OrdenEmailData } from './email.service';
  * EMAIL CONTROLLER - MEKANOS S.A.S
  * ============================================================================
  * Controlador para gestión y pruebas de envío de emails.
- * 
+ *
  * ENDPOINTS:
  * - GET  /email/status      - Estado del servicio de email
  * - POST /email/test        - Enviar email de prueba
  * - POST /email/orden       - Enviar email de orden con PDF
  * - POST /email/orden-simple- Enviar email de orden con link
  * - POST /email/informe     - Enviar informe técnico con PDF adjunto
- * 
+ *
  * VALIDACIÓN:
  * Todos los DTOs usan class-validator para validación automática
  * ============================================================================
@@ -30,10 +29,7 @@ import { EmailService, OrdenEmailData } from './email.service';
 @Controller('email')
 @ApiTags('Email')
 export class EmailController {
-  constructor(
-    private readonly emailService: EmailService,
-    private readonly pdfService: PdfService
-  ) { }
+  constructor(private readonly emailService: EmailService) {}
 
   /**
    * =========================================================================
@@ -43,7 +39,7 @@ export class EmailController {
   @Get('status')
   @ApiOperation({
     summary: 'Estado del servicio de email',
-    description: 'Verifica si el servicio de email está configurado correctamente'
+    description: 'Verifica si el servicio de email está configurado correctamente',
   })
   @ApiResponse({
     status: 200,
@@ -53,9 +49,9 @@ export class EmailController {
       properties: {
         configured: { type: 'boolean', example: true },
         provider: { type: 'string', example: 'Nodemailer (SMTP)' },
-        from: { type: 'string', example: 'mekanossas2@gmail.com' }
-      }
-    }
+        from: { type: 'string', example: 'mekanossas2@gmail.com' },
+      },
+    },
   })
   getStatus() {
     return this.emailService.checkConfiguration();
@@ -70,7 +66,7 @@ export class EmailController {
   @Get('debug')
   @ApiOperation({
     summary: 'Diagnóstico de variables SMTP',
-    description: 'Muestra el estado de las variables de entorno SMTP directamente'
+    description: 'Muestra el estado de las variables de entorno SMTP directamente',
   })
   getDebug() {
     const emailSmtpUser = process.env.EMAIL_SMTP_USER;
@@ -95,7 +91,9 @@ export class EmailController {
         EMAIL_FROM: process.env.EMAIL_FROM || '(not set)',
       },
       effective: {
-        user: effectiveUser ? `${effectiveUser.substring(0, 5)}...@${effectiveUser.split('@')[1] || '?'}` : '❌ NONE',
+        user: effectiveUser
+          ? `${effectiveUser.substring(0, 5)}...@${effectiveUser.split('@')[1] || '?'}`
+          : '❌ NONE',
         pass: effectivePass ? `✅ (${effectivePass.length} chars)` : '❌ NONE',
         willUseMock: !effectiveUser || !effectivePass,
       },
@@ -111,13 +109,13 @@ export class EmailController {
   @Post('test')
   @ApiOperation({
     summary: 'Enviar email de prueba',
-    description: 'Envía un email de prueba para verificar la configuración SMTP'
+    description: 'Envía un email de prueba para verificar la configuración SMTP',
   })
   @ApiBody({ type: EnviarTestEmailDto })
   @ApiResponse({
     status: 200,
     description: 'Email enviado',
-    type: EnviarEmailResponseDto
+    type: EnviarEmailResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Parámetros inválidos' })
   async sendTestEmail(@Body() dto: EnviarTestEmailDto): Promise<EnviarEmailResponseDto> {
@@ -132,13 +130,13 @@ export class EmailController {
   @Post('orden')
   @ApiOperation({
     summary: 'Enviar email de orden completada',
-    description: 'Envía email de notificación de orden completada con enlace al PDF'
+    description: 'Envía email de notificación de orden completada con enlace al PDF',
   })
   @ApiBody({ type: EnviarOrdenCompletadaDto })
   @ApiResponse({
     status: 200,
     description: 'Email enviado',
-    type: EnviarEmailResponseDto
+    type: EnviarEmailResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Parámetros inválidos' })
   async sendOrdenEmail(@Body() dto: EnviarOrdenCompletadaDto): Promise<EnviarEmailResponseDto> {
@@ -153,7 +151,7 @@ export class EmailController {
         dto.numeroOrden,
         dto.clienteEmail,
         dto.pdfUrl || '',
-        pdfBuffer
+        pdfBuffer,
       );
 
       return result;
@@ -171,13 +169,13 @@ export class EmailController {
   @Post('informe')
   @ApiOperation({
     summary: 'Enviar informe técnico con PDF adjunto',
-    description: 'Envía email con informe técnico detallado y PDF adjunto'
+    description: 'Envía email con informe técnico detallado y PDF adjunto',
   })
   @ApiBody({ type: EnviarInformeTecnicoDto })
   @ApiResponse({
     status: 200,
     description: 'Email enviado con PDF adjunto',
-    type: EnviarEmailResponseDto
+    type: EnviarEmailResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Parámetros inválidos' })
   async sendInformeTecnico(@Body() dto: EnviarInformeTecnicoDto): Promise<EnviarEmailResponseDto> {
@@ -193,13 +191,13 @@ export class EmailController {
         tipoMantenimiento: dto.tipoMantenimiento,
         fechaServicio: dto.fechaServicio,
         tecnicoNombre: dto.tecnicoNombre,
-        observaciones: dto.observaciones
+        observaciones: dto.observaciones,
       };
 
       const result = await this.emailService.sendInformeTecnicoEmail(
         emailData,
         dto.clienteEmail,
-        pdfBuffer
+        pdfBuffer,
       );
 
       return result;
@@ -217,19 +215,22 @@ export class EmailController {
   @Post('orden-simple')
   @ApiOperation({
     summary: 'Enviar email de orden con enlace a PDF (Legacy)',
-    description: 'Envía email de orden completada con enlace para descargar el PDF. Use POST /email/orden en su lugar.'
+    description:
+      'Envía email de orden completada con enlace para descargar el PDF. Use POST /email/orden en su lugar.',
   })
   @ApiBody({ type: EnviarOrdenCompletadaDto })
   @ApiResponse({
     status: 200,
     description: 'Email enviado',
-    type: EnviarEmailResponseDto
+    type: EnviarEmailResponseDto,
   })
-  async sendOrdenSimpleEmail(@Body() dto: EnviarOrdenCompletadaDto): Promise<EnviarEmailResponseDto> {
+  async sendOrdenSimpleEmail(
+    @Body() dto: EnviarOrdenCompletadaDto,
+  ): Promise<EnviarEmailResponseDto> {
     return this.emailService.sendOrdenCompletadaEmail(
       dto.numeroOrden,
       dto.clienteEmail,
-      dto.pdfUrl || ''
+      dto.pdfUrl || '',
     );
   }
 }

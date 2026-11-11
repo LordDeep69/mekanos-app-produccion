@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { getNextTableId } from '../common/utils/next-id.helper';
 import { PrismaService } from '../database/prisma.service';
 import { CreateRolesDto } from './dto/create-roles.dto';
 import { UpdateRolesDto } from './dto/update-roles.dto';
@@ -9,19 +10,20 @@ export class RolesService {
 
   async create(createDto: CreateRolesDto, userId: number) {
     // Validar unique constraint: codigo_rol
-    const existing = await this.prisma.roles.findUnique({
+    const existing = await this.prisma.roles.findFirst({
       where: { codigo_rol: createDto.codigo_rol },
     });
 
     if (existing) {
-      throw new Error(
-        `Rol con código ${createDto.codigo_rol} ya existe`,
-      );
+      throw new Error(`Rol con código ${createDto.codigo_rol} ya existe`);
     }
+
+    const nextId = await getNextTableId(this.prisma, 'roles', 'id_rol');
 
     return this.prisma.roles.create({
       data: {
         ...createDto,
+        id_rol: nextId,
         creado_por: userId,
         fecha_creacion: new Date(),
       },
@@ -65,7 +67,7 @@ export class RolesService {
         },
         usuarios_roles: {
           include: {
-            usuarios_usuarios_roles_id_usuarioTousuarios: {
+            usuarios: {
               select: {
                 id_usuario: true,
                 email: true,
@@ -90,14 +92,12 @@ export class RolesService {
 
     // Validar unique si se cambia codigo_rol
     if (updateDto.codigo_rol) {
-      const existing = await this.prisma.roles.findUnique({
+      const existing = await this.prisma.roles.findFirst({
         where: { codigo_rol: updateDto.codigo_rol },
       });
 
       if (existing && existing.id_rol !== id) {
-        throw new Error(
-          `Rol con código ${updateDto.codigo_rol} ya existe`,
-        );
+        throw new Error(`Rol con código ${updateDto.codigo_rol} ya existe`);
       }
     }
 

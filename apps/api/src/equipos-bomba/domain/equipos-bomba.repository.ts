@@ -3,10 +3,25 @@ import { equipos_bomba } from '@prisma/client';
 export interface CrearEquipoBombaData {
   id_equipo: number;
   marca_bomba: string;
-  tipo_bomba: 'CENTRIFUGA' | 'TURBINA_VERTICAL_POZO' | 'SUMERGIBLE' | 'PERIFERICA' | 'TURBINA' | 'DESPLAZAMIENTO_POSITIVO';
+  tipo_bomba:
+    | 'CENTRIFUGA'
+    | 'TURBINA_VERTICAL_POZO'
+    | 'SUMERGIBLE'
+    | 'PERIFERICA'
+    | 'TURBINA'
+    | 'DESPLAZAMIENTO_POSITIVO'
+    | 'HIDRO'
+    | 'TANQUE_A_TANQUE';
   modelo_bomba?: string;
   numero_serie_bomba?: string;
-  aplicacion_bomba?: 'AGUA_POTABLE' | 'AGUAS_RESIDUALES' | 'AGUAS_LLUVIAS' | 'CONTRAINCENDIOS' | 'INDUSTRIAL' | 'PISCINA' | 'RIEGO';
+  aplicacion_bomba?:
+    | 'AGUA_POTABLE'
+    | 'AGUAS_RESIDUALES'
+    | 'AGUAS_LLUVIAS'
+    | 'CONTRAINCENDIOS'
+    | 'INDUSTRIAL'
+    | 'PISCINA'
+    | 'RIEGO';
   diametro_aspiracion?: string;
   diametro_descarga?: string;
   caudal_maximo_m3h?: number;
@@ -53,10 +68,25 @@ export interface CrearEquipoBombaData {
 
 export interface ActualizarEquipoBombaData {
   marca_bomba?: string;
-  tipo_bomba?: 'CENTRIFUGA' | 'TURBINA_VERTICAL_POZO' | 'SUMERGIBLE' | 'PERIFERICA' | 'TURBINA' | 'DESPLAZAMIENTO_POSITIVO';
+  tipo_bomba?:
+    | 'CENTRIFUGA'
+    | 'TURBINA_VERTICAL_POZO'
+    | 'SUMERGIBLE'
+    | 'PERIFERICA'
+    | 'TURBINA'
+    | 'DESPLAZAMIENTO_POSITIVO'
+    | 'HIDRO'
+    | 'TANQUE_A_TANQUE';
   modelo_bomba?: string;
   numero_serie_bomba?: string;
-  aplicacion_bomba?: 'AGUA_POTABLE' | 'AGUAS_RESIDUALES' | 'AGUAS_LLUVIAS' | 'CONTRAINCENDIOS' | 'INDUSTRIAL' | 'PISCINA' | 'RIEGO';
+  aplicacion_bomba?:
+    | 'AGUA_POTABLE'
+    | 'AGUAS_RESIDUALES'
+    | 'AGUAS_LLUVIAS'
+    | 'CONTRAINCENDIOS'
+    | 'INDUSTRIAL'
+    | 'PISCINA'
+    | 'RIEGO';
   diametro_aspiracion?: string;
   diametro_descarga?: string;
   caudal_maximo_m3h?: number;
@@ -110,12 +140,22 @@ export interface EquiposBombaFilters {
   limit?: number;
 }
 
-export interface EquipoBombaEntity extends Omit<equipos_bomba, 
-  'caudal_maximo_m3h' | 'altura_manometrica_maxima_m' | 'altura_presion_trabajo_m' |
-  'potencia_hidraulica_kw' | 'eficiencia_porcentaje' | 'presion_encendido_psi' |
-  'presion_apagado_psi' | 'amperaje_contactor' | 'capacidad_tanques_litros' |
-  'presion_tanques_psi' | 'rango_manometro_min_psi' | 'rango_manometro_max_psi'
-> {
+export interface EquipoBombaEntity
+  extends Omit<
+    equipos_bomba,
+    | 'caudal_maximo_m3h'
+    | 'altura_manometrica_maxima_m'
+    | 'altura_presion_trabajo_m'
+    | 'potencia_hidraulica_kw'
+    | 'eficiencia_porcentaje'
+    | 'presion_encendido_psi'
+    | 'presion_apagado_psi'
+    | 'amperaje_contactor'
+    | 'capacidad_tanques_litros'
+    | 'presion_tanques_psi'
+    | 'rango_manometro_min_psi'
+    | 'rango_manometro_max_psi'
+  > {
   caudal_maximo_m3h?: number;
   altura_manometrica_maxima_m?: number;
   altura_presion_trabajo_m?: number;

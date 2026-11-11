@@ -14,7 +14,7 @@ import type {
   ClientesSummary,
   CreateClienteDto,
   UpdateClienteDto,
-  ClientePrincipalSelector
+  ClientePrincipalSelector,
 } from '@/types/clientes';
 
 const CLIENTES_BASE = '/clientes';
@@ -37,9 +37,7 @@ interface BackendClientesResponse {
 /**
  * Obtener lista de clientes con filtros y paginación
  */
-export async function getClientes(
-  params?: ClientesQueryParams
-): Promise<ClientesResponse> {
+export async function getClientes(params?: ClientesQueryParams): Promise<ClientesResponse> {
   const queryParams = new URLSearchParams();
 
   if (params?.tipo_cliente) {
@@ -64,9 +62,7 @@ export async function getClientes(
     queryParams.append('estructura', params.estructura);
   }
 
-  const url = queryParams.toString()
-    ? `${CLIENTES_BASE}?${queryParams.toString()}`
-    : CLIENTES_BASE;
+  const url = queryParams.toString() ? `${CLIENTES_BASE}?${queryParams.toString()}` : CLIENTES_BASE;
 
   const response = await apiClient.get<BackendClientesResponse | ClienteConPersona[]>(url);
 
@@ -82,7 +78,12 @@ export async function getClientes(
   }
 
   // Caso 2: Respuesta con data y total directos { data, total, summary }
-  if (response.data && typeof response.data === 'object' && 'data' in response.data && 'total' in response.data) {
+  if (
+    response.data &&
+    typeof response.data === 'object' &&
+    'data' in response.data &&
+    'total' in response.data
+  ) {
     return response.data as ClientesResponse;
   }
 
@@ -120,10 +121,7 @@ export async function createCliente(data: CreateClienteDto): Promise<Cliente> {
 /**
  * Actualizar cliente existente
  */
-export async function updateCliente(
-  id: number,
-  data: UpdateClienteDto
-): Promise<Cliente> {
+export async function updateCliente(id: number, data: UpdateClienteDto): Promise<Cliente> {
   const response = await apiClient.put<Cliente>(`${CLIENTES_BASE}/${id}`, data);
   return response.data;
 }
@@ -189,6 +187,7 @@ export interface TrazabilidadItem {
     id_equipo: number;
     codigo_equipo: string;
     nombre_equipo?: string;
+    nombre?: string;
     tipos_equipo?: {
       id_tipo_equipo: number;
       codigo_tipo: string;
@@ -231,17 +230,19 @@ export interface TrazabilidadItem {
     id_informe: number;
     numero_informe: string;
     fecha_generacion: string;
-    documentos_generados?: {
-      id_documento: number;
-      ruta_archivo?: string;
-      url_documento?: string;
-      tipo_documento: string;
-    } | Array<{
-      id_documento: number;
-      ruta_archivo?: string;
-      url_documento?: string;
-      tipo_documento: string;
-    }>;
+    documentos_generados?:
+      | {
+          id_documento: number;
+          ruta_archivo?: string;
+          url_documento?: string;
+          tipo_documento: string;
+        }
+      | Array<{
+          id_documento: number;
+          ruta_archivo?: string;
+          url_documento?: string;
+          tipo_documento: string;
+        }>;
   }>;
 }
 
@@ -264,7 +265,7 @@ export async function getTrazabilidadCliente(
     fechaDesde?: string;
     fechaHasta?: string;
     search?: string;
-  }
+  },
 ): Promise<TrazabilidadClienteResponse> {
   const queryParams = new URLSearchParams();
   if (params?.idEquipo) queryParams.append('idEquipo', String(params.idEquipo));
@@ -275,7 +276,9 @@ export async function getTrazabilidadCliente(
   if (params?.search) queryParams.append('search', params.search);
 
   const url = `${CLIENTES_BASE}/${id}/trazabilidad-servicios?${queryParams.toString()}`;
-  const response = await apiClient.get<{ success: boolean; data: TrazabilidadClienteResponse }>(url);
+  const response = await apiClient.get<{ success: boolean; data: TrazabilidadClienteResponse }>(
+    url,
+  );
   return response.data.data;
 }
 
@@ -283,14 +286,12 @@ export async function getTrazabilidadCliente(
  * ✅ MULTI-SEDE: Obtener clientes principales para selector "Es Sede de"
  * Retorna datos completos para auto-fill del formulario
  */
-export async function getClientesPrincipales(
-  search?: string
-): Promise<ClientePrincipalSelector[]> {
+export async function getClientesPrincipales(search?: string): Promise<ClientePrincipalSelector[]> {
   const params = search ? `?q=${encodeURIComponent(search)}` : '';
-  const response = await apiClient.get<{ success: boolean; data: ClientePrincipalSelector[] }>(
-    `${CLIENTES_BASE}/principales${params}`
-  );
-  return response.data?.data ?? response.data as any;
+  const response = await apiClient.get<
+    { success: boolean; data: ClientePrincipalSelector[] } | ClientePrincipalSelector[]
+  >(`${CLIENTES_BASE}/principales${params}`);
+  return Array.isArray(response.data) ? response.data : (response.data?.data ?? []);
 }
 
 /**
@@ -306,7 +307,7 @@ export async function getTrazabilidadPdfBlob(
     fechaHasta?: string;
     search?: string;
     preview?: boolean;
-  }
+  },
 ): Promise<{ blob: Blob; filename: string }> {
   const queryParams = new URLSearchParams();
   if (params?.idEquipo) queryParams.append('idEquipo', String(params.idEquipo));
@@ -329,10 +330,10 @@ export async function getTrazabilidadPdfBlob(
     }
   }
 
-  const blob = response.data instanceof Blob
-    ? response.data
-    : new Blob([response.data], { type: 'application/pdf' });
+  const blob =
+    response.data instanceof Blob
+      ? response.data
+      : new Blob([response.data], { type: 'application/pdf' });
 
   return { blob, filename };
 }
-

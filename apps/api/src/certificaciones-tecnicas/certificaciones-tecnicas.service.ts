@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { tipo_certificacion_enum } from '@prisma/client';
+import { getNextTableId } from '../common/utils/next-id.helper';
 import { PrismaService } from '../database/prisma.service';
 import { CreateCertificacionesTecnicasDto } from './dto/create-certificaciones-tecnicas.dto';
 import { UpdateCertificacionesTecnicasDto } from './dto/update-certificaciones-tecnicas.dto';
@@ -8,19 +9,14 @@ import { UpdateCertificacionesTecnicasDto } from './dto/update-certificaciones-t
 export class CertificacionesTecnicasService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(
-    createDto: CreateCertificacionesTecnicasDto,
-    userId: number,
-  ) {
+  async create(createDto: CreateCertificacionesTecnicasDto, userId: number) {
     // Validar que empleado existe
     const empleado = await this.prisma.empleados.findUnique({
       where: { id_empleado: createDto.id_empleado },
     });
 
     if (!empleado) {
-      throw new Error(
-        `Empleado con ID ${createDto.id_empleado} no existe`,
-      );
+      throw new Error(`Empleado con ID ${createDto.id_empleado} no existe`);
     }
 
     // Si es renovación, validar que existe certificación anterior
@@ -36,9 +32,16 @@ export class CertificacionesTecnicasService {
       }
     }
 
+    const nextId = await getNextTableId(
+      this.prisma,
+      'certificaciones_tecnicas',
+      'id_certificacion',
+    );
+
     return this.prisma.certificaciones_tecnicas.create({
       data: {
         ...createDto,
+        id_certificacion: nextId,
         tipo_certificacion: createDto.tipo_certificacion as unknown as tipo_certificacion_enum,
         registrado_por: userId,
         fecha_registro: new Date(),
@@ -60,18 +63,14 @@ export class CertificacionesTecnicasService {
     skip?: number;
     take?: number;
   }) {
-    const {
-      id_empleado,
-      tipo_certificacion,
-      vigente,
-      skip = 0,
-      take = 50,
-    } = params || {};
+    const { id_empleado, tipo_certificacion, vigente, skip = 0, take = 50 } = params || {};
 
     return this.prisma.certificaciones_tecnicas.findMany({
       where: {
         ...(id_empleado && { id_empleado }),
-        ...(tipo_certificacion && { tipo_certificacion: tipo_certificacion as unknown as tipo_certificacion_enum }),
+        ...(tipo_certificacion && {
+          tipo_certificacion: tipo_certificacion as unknown as tipo_certificacion_enum,
+        }),
         ...(vigente !== undefined && { vigente }),
       },
       include: {
@@ -88,18 +87,17 @@ export class CertificacionesTecnicasService {
   }
 
   async findOne(id: number) {
-    const certificacion =
-      await this.prisma.certificaciones_tecnicas.findUnique({
-        where: { id_certificacion: id },
-        include: {
-          empleados: {
-            include: {
-              persona: true,
-            },
+    const certificacion = await this.prisma.certificaciones_tecnicas.findUnique({
+      where: { id_certificacion: id },
+      include: {
+        empleados: {
+          include: {
+            persona: true,
           },
-          certificaciones_tecnicas: true, // Certificación anterior
         },
-      });
+        certificaciones_tecnicas: true, // Certificación anterior
+      },
+    });
 
     if (!certificacion) {
       throw new Error(`Certificación con ID ${id} no encontrada`);
@@ -108,18 +106,16 @@ export class CertificacionesTecnicasService {
     return certificacion;
   }
 
-  async update(
-    id: number,
-    updateDto: UpdateCertificacionesTecnicasDto,
-    _userId: number,
-  ) {
+  async update(id: number, updateDto: UpdateCertificacionesTecnicasDto, _userId: number) {
     await this.findOne(id);
 
     return this.prisma.certificaciones_tecnicas.update({
       where: { id_certificacion: id },
       data: {
         ...updateDto,
-        tipo_certificacion: updateDto.tipo_certificacion ? (updateDto.tipo_certificacion as unknown as tipo_certificacion_enum) : undefined,
+        tipo_certificacion: updateDto.tipo_certificacion
+          ? (updateDto.tipo_certificacion as unknown as tipo_certificacion_enum)
+          : undefined,
         // No hay campo modificado_por en certificaciones
       },
       include: {

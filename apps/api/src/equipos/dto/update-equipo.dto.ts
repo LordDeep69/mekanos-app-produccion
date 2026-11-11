@@ -8,7 +8,7 @@ import {
   IsString,
   Matches,
   MaxLength,
-  MinLength
+  MinLength,
 } from 'class-validator';
 
 /**
@@ -26,8 +26,8 @@ export class UpdateEquipoDto {
   @IsString({ message: 'codigo_equipo debe ser una cadena de texto' })
   @MinLength(1, { message: 'codigo_equipo no puede estar vacío' })
   @MaxLength(30, { message: 'codigo_equipo no puede exceder 30 caracteres' })
-  @Matches(/^[A-Z0-9\-]+$/, {
-    message: 'codigo_equipo debe contener solo letras mayúsculas, números y guiones'
+  @Matches(/^[A-Z0-9-]+$/, {
+    message: 'codigo_equipo debe contener solo letras mayúsculas, números y guiones',
   })
   codigo_equipo?: string;
 
@@ -69,13 +69,13 @@ export class UpdateEquipoDto {
 
   @IsOptional()
   @IsEnum(['OPERATIVO', 'STANDBY', 'INACTIVO', 'EN_REPARACION', 'FUERA_SERVICIO', 'BAJA'], {
-    message: 'estado_equipo debe ser un valor válido del enum'
+    message: 'estado_equipo debe ser un valor válido del enum',
   })
   estado_equipo?: string;
 
   @IsOptional()
   @IsEnum(['BAJA', 'MEDIA', 'ALTA', 'CRITICA'], {
-    message: 'criticidad debe ser un valor válido del enum'
+    message: 'criticidad debe ser un valor válido del enum',
   })
   criticidad?: string;
 
@@ -122,7 +122,7 @@ export class UpdateEquipoDto {
 
   @IsOptional()
   @IsEnum(['EXCELENTE', 'BUENO', 'REGULAR', 'MALO', 'NO_APLICA'], {
-    message: 'estado_pintura debe ser un valor válido'
+    message: 'estado_pintura debe ser un valor válido',
   })
   estado_pintura?: string;
 
@@ -136,7 +136,7 @@ export class UpdateEquipoDto {
 
   @IsOptional()
   @IsEnum(['SIN_CONTRATO', 'PREVENTIVO', 'INTEGRAL', 'POR_LLAMADA'], {
-    message: 'tipo_contrato debe ser un valor válido'
+    message: 'tipo_contrato debe ser un valor válido',
   })
   tipo_contrato?: string;
 
@@ -162,7 +162,7 @@ export class UpdateEquipoDto {
 
   @IsOptional()
   @IsEnum(['DIAS', 'HORAS', 'LO_QUE_OCURRA_PRIMERO'], {
-    message: 'criterio_intervalo_override debe ser un valor válido'
+    message: 'criterio_intervalo_override debe ser un valor válido',
   })
   criterio_intervalo_override?: string | null;
 

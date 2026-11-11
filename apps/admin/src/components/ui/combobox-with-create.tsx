@@ -3,13 +3,23 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Componente Reutilizable Combobox con Creación In-Context (Radix Dialog)
- * 
+ *
  * Permite búsqueda remota con debounce de marcas y creación al vuelo
  * sin recargar ni desmontar el árbol del formulario padre.
  */
 
-import React, { useState, useEffect, useRef, useTransition } from 'react';
-import { Check, ChevronsUpDown, Loader2, Plus, Search, Sparkles, X, Globe, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Check,
+  ChevronsUpDown,
+  Loader2,
+  Plus,
+  Search,
+  Sparkles,
+  X,
+  Globe,
+  ShieldCheck,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { comprasService } from '@/lib/api/compras.service';
@@ -49,9 +59,13 @@ export function ComboboxWithCreate({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Marca[]>([]);
-  const [selectedMarca, setSelectedMarca] = useState<Marca | null>(null);
+  const [selectedMarcaState, setSelectedMarca] = useState<Marca | null>(null);
+  const selectedMarca = value
+    ? selectedMarcaState?.id_marca === value
+      ? selectedMarcaState
+      : null
+    : null;
   const [isLoading, setIsLoading] = useState(false);
-  const [isPending, startTransition] = useTransition();
 
   // Estado del mini-modal in-context
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -66,11 +80,13 @@ export function ComboboxWithCreate({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchedMarcaIdRef = useRef<number | null>(null);
 
   // Cargar marca inicial si hay `value`
   useEffect(() => {
     let isMounted = true;
-    if (value && (!selectedMarca || selectedMarca.id_marca !== value)) {
+    if (value && fetchedMarcaIdRef.current !== value) {
+      fetchedMarcaIdRef.current = value;
       comprasService.getMarcas().then((marcas) => {
         if (!isMounted) return;
         const encontrada = marcas.find((m) => m.id_marca === value);
@@ -87,7 +103,7 @@ export function ComboboxWithCreate({
         }
       });
     } else if (!value) {
-      setSelectedMarca(null);
+      fetchedMarcaIdRef.current = null;
     }
     return () => {
       isMounted = false;
@@ -134,6 +150,7 @@ export function ComboboxWithCreate({
 
   // Seleccionar una marca
   const handleSelect = (marca: Marca) => {
+    fetchedMarcaIdRef.current = marca.id_marca;
     setSelectedMarca(marca);
     onChange(marca.id_marca, marca);
     setIsOpen(false);
@@ -143,6 +160,7 @@ export function ComboboxWithCreate({
   // Limpiar selección
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
+    fetchedMarcaIdRef.current = null;
     setSelectedMarca(null);
     onChange(null, null);
     setQuery('');
@@ -185,13 +203,19 @@ export function ComboboxWithCreate({
       });
 
       // Autoseleccionar sin recargar ni desmontar el formulario padre
+      fetchedMarcaIdRef.current = nuevaMarca.id_marca;
       setSelectedMarca(nuevaMarca);
       onChange(nuevaMarca.id_marca, nuevaMarca);
       setIsModalOpen(false);
       setQuery('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creando marca in-context:', error);
-      const msg = error?.response?.data?.message || error?.message || 'Error al registrar la marca';
+      const apiErr = error as {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      };
+      const msg =
+        apiErr?.response?.data?.message || apiErr?.message || 'Error al registrar la marca';
       toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
     } finally {
       setIsCreating(false);
@@ -199,7 +223,7 @@ export function ComboboxWithCreate({
   };
 
   const exactMatchExists = results.some(
-    (m) => m.nombre.toLowerCase().trim() === query.toLowerCase().trim()
+    (m) => m.nombre.toLowerCase().trim() === query.toLowerCase().trim(),
   );
 
   return (
@@ -210,6 +234,7 @@ export function ComboboxWithCreate({
         tabIndex={disabled ? -1 : 0}
         role="combobox"
         aria-expanded={isOpen}
+        aria-controls={`${id || 'combobox'}-listbox`}
         onClick={() => {
           if (!disabled) {
             setIsOpen(!isOpen);
@@ -226,16 +251,16 @@ export function ComboboxWithCreate({
         }}
         className={cn(
           'flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2',
-          disabled ? 'cursor-not-allowed opacity-50 bg-gray-50' : 'cursor-pointer hover:border-gray-400',
-          isOpen && 'border-blue-500 ring-1 ring-blue-500'
+          disabled
+            ? 'cursor-not-allowed opacity-50 bg-gray-50'
+            : 'cursor-pointer hover:border-gray-400',
+          isOpen && 'border-blue-500 ring-1 ring-blue-500',
         )}
       >
         <div className="flex items-center gap-2 overflow-hidden truncate">
           {selectedMarca ? (
             <div className="flex items-center gap-2 truncate">
-              <span className="font-semibold text-gray-900 truncate">
-                {selectedMarca.nombre}
-              </span>
+              <span className="font-semibold text-gray-900 truncate">{selectedMarca.nombre}</span>
               {selectedMarca.es_fabricante_oem && (
                 <Badge
                   variant="outline"
@@ -245,9 +270,7 @@ export function ComboboxWithCreate({
                 </Badge>
               )}
               {selectedMarca.pais_origen && (
-                <span className="text-[11px] text-gray-400">
-                  ({selectedMarca.pais_origen})
-                </span>
+                <span className="text-[11px] text-gray-400">({selectedMarca.pais_origen})</span>
               )}
             </div>
           ) : (
@@ -307,7 +330,7 @@ export function ComboboxWithCreate({
                         'flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition-colors',
                         isSelected
                           ? 'bg-blue-50 text-blue-700 font-semibold'
-                          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900',
                       )}
                     >
                       <div className="flex items-center gap-2 truncate">
@@ -321,9 +344,7 @@ export function ComboboxWithCreate({
                           </Badge>
                         )}
                         {marca.pais_origen && (
-                          <span className="text-[10px] text-gray-400">
-                            • {marca.pais_origen}
-                          </span>
+                          <span className="text-[10px] text-gray-400">• {marca.pais_origen}</span>
                         )}
                       </div>
                       {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
@@ -333,7 +354,7 @@ export function ComboboxWithCreate({
               </div>
             ) : !isLoading && query.trim() ? (
               <div className="py-3 px-2 text-center text-gray-500">
-                <p className="text-xs">No se encontró la marca "{query}"</p>
+                <p className="text-xs">No se encontró la marca &ldquo;{query}&rdquo;</p>
               </div>
             ) : (
               <div className="py-2 px-2 text-center text-gray-400 text-[11px]">
@@ -352,7 +373,9 @@ export function ComboboxWithCreate({
               >
                 <Plus className="h-3.5 w-3.5 text-blue-600" />
                 <span>
-                  + Crear marca <strong className="underline">"{query.trim().toUpperCase()}"</strong> al vuelo
+                  + Crear marca{' '}
+                  <strong className="underline">&ldquo;{query.trim().toUpperCase()}&rdquo;</strong>{' '}
+                  al vuelo
                 </span>
               </button>
             </div>
@@ -372,7 +395,8 @@ export function ComboboxWithCreate({
                 </DialogTitle>
               </div>
               <DialogDescription className="text-xs text-gray-500">
-                Registra la marca en el catálogo maestro sin interrumpir ni perder los datos del formulario actual.
+                Registra la marca en el catálogo maestro sin interrumpir ni perder los datos del
+                formulario actual.
               </DialogDescription>
             </DialogHeader>
 
@@ -397,16 +421,17 @@ export function ComboboxWithCreate({
 
               {/* País de origen */}
               <div className="space-y-1.5">
-                <Label htmlFor="marca-pais" className="font-medium text-gray-700 flex items-center gap-1">
+                <Label
+                  htmlFor="marca-pais"
+                  className="font-medium text-gray-700 flex items-center gap-1"
+                >
                   <Globe className="h-3 w-3 text-gray-400" />
                   País de Origen (Opcional)
                 </Label>
                 <Input
                   id="marca-pais"
                   value={modalForm.pais_origen || ''}
-                  onChange={(e) =>
-                    setModalForm({ ...modalForm, pais_origen: e.target.value })
-                  }
+                  onChange={(e) => setModalForm({ ...modalForm, pais_origen: e.target.value })}
                   placeholder="Ej: Alemania, Estados Unidos, Japón"
                   className="text-xs bg-white"
                 />
@@ -421,9 +446,7 @@ export function ComboboxWithCreate({
                   id="marca-web"
                   type="url"
                   value={modalForm.sitio_web || ''}
-                  onChange={(e) =>
-                    setModalForm({ ...modalForm, sitio_web: e.target.value })
-                  }
+                  onChange={(e) => setModalForm({ ...modalForm, sitio_web: e.target.value })}
                   placeholder="https://www.mann-filter.com"
                   className="text-xs bg-white font-mono"
                 />

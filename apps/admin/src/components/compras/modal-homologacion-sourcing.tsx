@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,8 @@ import {
   ArticuloMaestro,
   ProveedorCompleto,
   OrigenCosto,
+  HomologarArticuloPayload,
+  VincularProveedorPayload,
   getNombreProveedor,
 } from '@/types/compras.types';
 
@@ -125,13 +127,55 @@ export function ModalHomologacionSourcing({
   const [cargandoComponentes, setCargandoComponentes] = useState(false);
   const [busquedaComponente, setBusquedaComponente] = useState('');
   const [menuComponentesAbierto, setMenuComponentesAbierto] = useState(false);
-  const [componenteSeleccionado, setComponenteSeleccionado] = useState<ArticuloMaestro | null>(null);
+  const [componenteSeleccionado, setComponenteSeleccionado] = useState<ArticuloMaestro | null>(
+    null,
+  );
 
   const [listaProveedores, setListaProveedores] = useState<ProveedorCompleto[]>([]);
   const [cargandoProveedores, setCargandoProveedores] = useState(false);
   const [busquedaProveedor, setBusquedaProveedor] = useState('');
   const [menuProveedoresAbierto, setMenuProveedoresAbierto] = useState(false);
-  const [proveedorSeleccionado, setProveedorSeleccionado] = useState<ProveedorCompleto | null>(null);
+  const [proveedorSeleccionado, setProveedorSeleccionado] = useState<ProveedorCompleto | null>(
+    null,
+  );
+  const loadedComponentesRef = useRef(false);
+  const loadedProveedoresRef = useRef(false);
+
+  // Carga de catálogo de repuestos
+  const cargarArticulosMaestros = useCallback(async () => {
+    if (loadedComponentesRef.current) return;
+    try {
+      setCargandoComponentes(true);
+      const res = await comprasService.getArticulos({ limit: 300, activo: true });
+      const resTyped = res as
+        | { items?: ArticuloMaestro[]; data?: ArticuloMaestro[] }
+        | ArticuloMaestro[];
+      const items = Array.isArray(resTyped) ? resTyped : resTyped?.items || resTyped?.data || [];
+      setListaComponentes(items);
+      loadedComponentesRef.current = true;
+    } catch (e) {
+      console.error('Error al cargar catálogo de componentes:', e);
+      toast.error('No se pudo cargar la lista de repuestos del catálogo');
+    } finally {
+      setCargandoComponentes(false);
+    }
+  }, []);
+
+  // Carga de directorio de proveedores
+  const cargarProveedoresDirectorio = useCallback(async () => {
+    if (loadedProveedoresRef.current) return;
+    try {
+      setCargandoProveedores(true);
+      const res = await comprasService.getProveedoresDirectorio(1, 100);
+      setListaProveedores(res.data || []);
+      loadedProveedoresRef.current = true;
+    } catch (e) {
+      console.error('Error al cargar proveedores:', e);
+      toast.error('No se pudo cargar el directorio de proveedores');
+    } finally {
+      setCargandoProveedores(false);
+    }
+  }, []);
 
   // Carga inicial y reset de estado reactivo al abrir
   useEffect(() => {
@@ -192,38 +236,16 @@ export function ModalHomologacionSourcing({
         cargarProveedoresDirectorio();
       }
     }
-  }, [open, modo, origen, proveedorFijo, articuloFijo, datosIniciales]);
-
-  // Carga de catálogo de repuestos
-  const cargarArticulosMaestros = async () => {
-    if (listaComponentes.length > 0) return;
-    try {
-      setCargandoComponentes(true);
-      const res = await comprasService.getArticulos({ limit: 300, activo: true });
-      const items = (res as any)?.items || (res as any)?.data || (Array.isArray(res) ? res : []);
-      setListaComponentes(items);
-    } catch (e) {
-      console.error('Error al cargar catálogo de componentes:', e);
-      toast.error('No se pudo cargar la lista de repuestos del catálogo');
-    } finally {
-      setCargandoComponentes(false);
-    }
-  };
-
-  // Carga de directorio de proveedores
-  const cargarProveedoresDirectorio = async () => {
-    if (listaProveedores.length > 0) return;
-    try {
-      setCargandoProveedores(true);
-      const res = await comprasService.getProveedoresDirectorio(1, 100);
-      setListaProveedores(res.data || []);
-    } catch (e) {
-      console.error('Error al cargar proveedores:', e);
-      toast.error('No se pudo cargar el directorio de proveedores');
-    } finally {
-      setCargandoProveedores(false);
-    }
-  };
+  }, [
+    open,
+    modo,
+    origen,
+    proveedorFijo,
+    articuloFijo,
+    datosIniciales,
+    cargarArticulosMaestros,
+    cargarProveedoresDirectorio,
+  ]);
 
   // Filtro de artículos interactivo
   const componentesFiltrados = useMemo(() => {
@@ -234,7 +256,7 @@ export function ModalHomologacionSourcing({
         (c.descripcion_corta || '').toLowerCase().includes(q) ||
         (c.codigo_interno || '').toLowerCase().includes(q) ||
         (c.referencia_fabricante || '').toLowerCase().includes(q) ||
-        (c.marca || '').toLowerCase().includes(q)
+        (c.marca || '').toLowerCase().includes(q),
     );
   }, [listaComponentes, busquedaComponente]);
 
@@ -281,7 +303,7 @@ export function ModalHomologacionSourcing({
     const actual = Number(formData.costo_actual);
     if (anterior <= 0) return null;
     const diff = actual - anterior;
-    const pct = ((diff / anterior) * 100);
+    const pct = (diff / anterior) * 100;
     return {
       diff,
       pct: Math.round(pct * 100) / 100,
@@ -302,7 +324,8 @@ export function ModalHomologacionSourcing({
     }
     if (componenteSeleccionado) {
       return {
-        codigo: componenteSeleccionado.codigo_interno || `REF-${componenteSeleccionado.id_componente}`,
+        codigo:
+          componenteSeleccionado.codigo_interno || `REF-${componenteSeleccionado.id_componente}`,
         descripcion: componenteSeleccionado.descripcion_corta,
         oem: componenteSeleccionado.referencia_fabricante,
         marca: componenteSeleccionado.marcas?.nombre || componenteSeleccionado.marca,
@@ -329,7 +352,10 @@ export function ModalHomologacionSourcing({
     }
     if (proveedorSeleccionado) {
       return {
-        nombre: getNombreProveedor(proveedorSeleccionado.persona, proveedorSeleccionado.id_proveedor),
+        nombre: getNombreProveedor(
+          proveedorSeleccionado.persona,
+          proveedorSeleccionado.id_proveedor,
+        ),
         nit: proveedorSeleccionado.persona?.numero_identificacion,
       };
     }
@@ -370,7 +396,7 @@ export function ModalHomologacionSourcing({
       setSubmitting(true);
 
       if (modo === 'crear') {
-        const payload: any = {
+        const payload: HomologarArticuloPayload & VincularProveedorPayload = {
           id_componente: idComp,
           id_proveedor: idProv,
           referencia_proveedor: formData.referencia_proveedor.trim(),
@@ -419,9 +445,14 @@ export function ModalHomologacionSourcing({
 
       onOpenChange(false);
       onSuccess();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Error al guardar homologación:', e);
-      const msg = e?.response?.data?.message || e?.message || 'Error al procesar la homologación';
+      const apiErr = e as {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      };
+      const msg =
+        apiErr?.response?.data?.message || apiErr?.message || 'Error al procesar la homologación';
       toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
     } finally {
       setSubmitting(false);
@@ -491,7 +522,8 @@ export function ModalHomologacionSourcing({
                       {componenteSeleccionado ? (
                         <div className="truncate text-xs">
                           <strong className="text-slate-900 font-mono mr-2">
-                            {componenteSeleccionado.codigo_interno || `REF-${componenteSeleccionado.id_componente}`}
+                            {componenteSeleccionado.codigo_interno ||
+                              `REF-${componenteSeleccionado.id_componente}`}
                           </strong>
                           <span className="text-slate-700 font-medium">
                             {componenteSeleccionado.descripcion_corta}
@@ -537,7 +569,10 @@ export function ModalHomologacionSourcing({
                                       {c.codigo_interno || `REF-${c.id_componente}`}
                                     </span>
                                     {c.marcas?.nombre && (
-                                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-200">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] py-0 px-1.5 border-slate-200"
+                                      >
                                         {c.marcas.nombre}
                                       </Badge>
                                     )}
@@ -592,7 +627,10 @@ export function ModalHomologacionSourcing({
                       {proveedorSeleccionado ? (
                         <div className="truncate text-xs">
                           <strong className="text-slate-900 mr-2">
-                            {getNombreProveedor(proveedorSeleccionado.persona, proveedorSeleccionado.id_proveedor)}
+                            {getNombreProveedor(
+                              proveedorSeleccionado.persona,
+                              proveedorSeleccionado.id_proveedor,
+                            )}
                           </strong>
                           {proveedorSeleccionado.persona?.numero_identificacion && (
                             <span className="text-slate-500 font-mono text-[11px]">
@@ -646,7 +684,10 @@ export function ModalHomologacionSourcing({
                                       </span>
                                     )}
                                   </div>
-                                  <Badge variant="outline" className="text-[10px] border-slate-200 text-slate-600 shrink-0">
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] border-slate-200 text-slate-600 shrink-0"
+                                  >
                                     {p.categoria_proveedor}
                                   </Badge>
                                 </div>
@@ -674,12 +715,18 @@ export function ModalHomologacionSourcing({
                         {repuestoContexto.codigo}
                       </span>
                       {repuestoContexto.marca && (
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-200 bg-white">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] py-0 px-1.5 border-slate-200 bg-white"
+                        >
                           {repuestoContexto.marca}
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-slate-700 font-medium truncate" title={repuestoContexto.descripcion}>
+                    <p
+                      className="text-xs text-slate-700 font-medium truncate"
+                      title={repuestoContexto.descripcion ?? undefined}
+                    >
                       {repuestoContexto.descripcion}
                     </p>
                     {repuestoContexto.oem && (
@@ -695,7 +742,10 @@ export function ModalHomologacionSourcing({
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                       Fuente Comercial (Proveedor)
                     </span>
-                    <span className="font-bold text-xs text-slate-900 block truncate" title={proveedorContexto.nombre}>
+                    <span
+                      className="font-bold text-xs text-slate-900 block truncate"
+                      title={proveedorContexto.nombre}
+                    >
                       {proveedorContexto.nombre}
                     </span>
                     {proveedorContexto.nit && (
@@ -717,7 +767,9 @@ export function ModalHomologacionSourcing({
                     Identificación Comercial en Facturas del Proveedor
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-400">Datos con los que el proveedor factura</span>
+                <span className="text-[10px] text-slate-400">
+                  Datos con los que el proveedor factura
+                </span>
               </div>
 
               {/* Nombre según Proveedor con botón de copia rápida */}
@@ -839,7 +891,8 @@ export function ModalHomologacionSourcing({
                       Costo Pactado Anterior
                     </span>
                     <span className="font-mono font-bold text-xs text-slate-700">
-                      ${Number(datosIniciales.costo_anterior || 0).toLocaleString()} {formData.moneda}
+                      ${Number(datosIniciales.costo_anterior || 0).toLocaleString()}{' '}
+                      {formData.moneda}
                     </span>
                   </div>
 
@@ -856,7 +909,9 @@ export function ModalHomologacionSourcing({
                       ) : (
                         <TrendingDown className="h-3 w-3" />
                       )}
-                      {calculoVariacion.pct > 0 ? `+${calculoVariacion.pct}%` : `${calculoVariacion.pct}%`}
+                      {calculoVariacion.pct > 0
+                        ? `+${calculoVariacion.pct}%`
+                        : `${calculoVariacion.pct}%`}
                     </Badge>
                   )}
                 </div>
@@ -865,7 +920,9 @@ export function ModalHomologacionSourcing({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs font-bold text-slate-700">
-                    {modo === 'editar' ? 'Nuevo Costo Pactado ($ COP) *' : 'Costo Unitario Pactado ($ COP) *'}
+                    {modo === 'editar'
+                      ? 'Nuevo Costo Pactado ($ COP) *'
+                      : 'Costo Unitario Pactado ($ COP) *'}
                   </Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
@@ -908,9 +965,7 @@ export function ModalHomologacionSourcing({
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold text-slate-700">
-                    Pedido Mínimo (MOQ)
-                  </Label>
+                  <Label className="text-xs font-bold text-slate-700">Pedido Mínimo (MOQ)</Label>
                   <Input
                     type="number"
                     min={1}
@@ -959,11 +1014,15 @@ export function ModalHomologacionSourcing({
                   className="mt-0.5"
                 />
                 <div className="space-y-0.5">
-                  <Label htmlFor="switch-pref-sourcing" className="text-xs font-bold text-indigo-950 cursor-pointer">
+                  <Label
+                    htmlFor="switch-pref-sourcing"
+                    className="text-xs font-bold text-indigo-950 cursor-pointer"
+                  >
                     Establecer como Proveedor Preferente (Suministro Principal)
                   </Label>
                   <p className="text-[11px] text-indigo-700 leading-tight">
-                    Al generar órdenes de compra para este repuesto, este proveedor será la primera opción automática sugerida.
+                    Al generar órdenes de compra para este repuesto, este proveedor será la primera
+                    opción automática sugerida.
                   </p>
                 </div>
               </div>
@@ -992,7 +1051,9 @@ export function ModalHomologacionSourcing({
                       }
                       className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:outline-hidden"
                     >
-                      <option value="ACTUALIZACION_PROVEEDOR">Negociación / Tarifa Proveedor</option>
+                      <option value="ACTUALIZACION_PROVEEDOR">
+                        Negociación / Tarifa Proveedor
+                      </option>
                       <option value="RECEPCION_FACTURA">Recepción Factura de Compra</option>
                       <option value="ORDEN_COMPRA">Orden de Compra Aprobada</option>
                       <option value="AJUSTE_AUDITORIA">Ajuste de Auditoría</option>
@@ -1000,7 +1061,9 @@ export function ModalHomologacionSourcing({
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-bold text-slate-700">No. Factura / OC de Respaldo</Label>
+                    <Label className="text-xs font-bold text-slate-700">
+                      No. Factura / OC de Respaldo
+                    </Label>
                     <Input
                       placeholder="Ej: FAC-98214 o OC-2026-0042"
                       value={formData.numero_factura_oc}

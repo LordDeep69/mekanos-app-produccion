@@ -72,7 +72,7 @@ export class PrioridadOrden {
     const prioridadUpper = prioridad.toUpperCase();
     if (!Object.values(PrioridadOrdenEnum).includes(prioridadUpper as PrioridadOrdenEnum)) {
       throw new Error(
-        `Prioridad inválida: ${prioridad}. Prioridades válidas: ${Object.values(PrioridadOrdenEnum).join(', ')}`
+        `Prioridad inválida: ${prioridad}. Prioridades válidas: ${Object.values(PrioridadOrdenEnum).join(', ')}`,
       );
     }
     return new PrioridadOrden(prioridadUpper as PrioridadOrdenEnum);
@@ -82,8 +82,8 @@ export class PrioridadOrden {
     return this.value;
   }
 
-  equals(other: PrioridadOrden): boolean {
-    if (!other) return false;
+  equals(other?: PrioridadOrden | null): boolean {
+    if (other == null) return false;
     return this.value === other.value;
   }
 
@@ -154,6 +154,8 @@ export class PrioridadOrden {
    * Verifica si es prioridad crítica (URGENTE o EMERGENCIA)
    */
   esCritica(): boolean {
-    return this.value === PrioridadOrdenEnum.URGENTE || this.value === PrioridadOrdenEnum.EMERGENCIA;
+    return (
+      this.value === PrioridadOrdenEnum.URGENTE || this.value === PrioridadOrdenEnum.EMERGENCIA
+    );
   }
 }

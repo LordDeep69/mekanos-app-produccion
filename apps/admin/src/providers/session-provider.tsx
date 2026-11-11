@@ -1,7 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Session Provider para NextAuth.js
- * 
+ *
  * Este componente provee el contexto de sesión a toda la aplicación
  */
 
@@ -15,7 +15,7 @@ interface Props {
 
 export function SessionProvider({ children }: Props) {
   return (
-    <NextAuthSessionProvider refetchInterval={5 * 60}>
+    <NextAuthSessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={false}>
       {children}
     </NextAuthSessionProvider>
   );

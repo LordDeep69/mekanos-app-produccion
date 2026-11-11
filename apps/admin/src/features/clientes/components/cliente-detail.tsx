@@ -16,13 +16,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -39,33 +33,24 @@ import {
   BookOpen,
   Building2,
   Calendar,
-  Check,
-  CheckCircle2,
   Clock,
   Compass,
   Copy,
   CreditCard,
-  Droplet,
   ExternalLink,
   FilePlus,
-  FileText,
   Globe,
   History,
   Mail,
   MapPin,
   MessageSquare,
-  Navigation,
   Pencil,
-  Percent,
   Phone,
   Plus,
-  Send,
   ShieldAlert,
   User,
   UserCheck,
-  Users,
   Wrench,
-  Zap,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -121,7 +106,11 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
         <p className="text-red-600 text-sm mb-6">
           {(error as Error)?.message || 'No fue posible obtener la información del cliente'}
         </p>
-        <Button onClick={() => router.push('/clientes')} variant="outline" className="cursor-pointer">
+        <Button
+          onClick={() => router.push('/clientes')}
+          variant="outline"
+          className="cursor-pointer"
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver al listado de clientes
         </Button>
@@ -133,7 +122,11 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
     return (
       <div className="text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
         <p className="text-gray-500 mb-6 font-medium">Cliente no encontrado en la base de datos</p>
-        <Button onClick={() => router.push('/clientes')} variant="outline" className="cursor-pointer">
+        <Button
+          onClick={() => router.push('/clientes')}
+          variant="outline"
+          className="cursor-pointer"
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver al listado
         </Button>
@@ -142,13 +135,14 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
   }
 
   const persona = cliente.persona;
-  const nombreBase = persona?.tipo_persona === 'JURIDICA'
-    ? persona?.razon_social || persona?.nombre_comercial || 'Empresa Sin Nombre'
-    : persona?.nombre_completo || `${persona?.primer_nombre || ''} ${persona?.primer_apellido || ''}`.trim() || 'Cliente Sin Nombre';
-  
-  const nombreCliente = cliente.nombre_sede
-    ? `${nombreBase} - ${cliente.nombre_sede}`
-    : nombreBase;
+  const nombreBase =
+    persona?.tipo_persona === 'JURIDICA'
+      ? persona?.razon_social || persona?.nombre_comercial || 'Empresa Sin Nombre'
+      : persona?.nombre_completo ||
+        `${persona?.primer_nombre || ''} ${persona?.primer_apellido || ''}`.trim() ||
+        'Cliente Sin Nombre';
+
+  const nombreCliente = cliente.nombre_sede ? `${nombreBase} - ${cliente.nombre_sede}` : nombreBase;
 
   const esSede = !!cliente.nombre_sede && !!cliente.id_cliente_principal;
   const esPrincipal = !!cliente.es_cliente_principal;
@@ -202,24 +196,35 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
 
   const getInitials = (name: string): string => {
     if (!name) return 'CL';
-    const clean = name.replace(/^(EDIFICIO|CONJUNTO|HOTEL|EMPRESA|CLINICA|HOSPITAL)\s+/i, '').trim();
+    const clean = name
+      .replace(/^(EDIFICIO|CONJUNTO|HOTEL|EMPRESA|CLINICA|HOSPITAL)\s+/i, '')
+      .trim();
     const parts = (clean || name).trim().split(/\s+/).filter(Boolean);
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[1][0]).toUpperCase();
   };
 
   const totalEquipos = cliente.equipos?.length ?? 0;
-  const totalPlantas = cliente.total_equipos_plantas ?? cliente.equipos?.filter(e => (e as any).tipo === 'GENERADOR' || (e as any).id_tipo_equipo === 3).length ?? 0;
-  const totalBombas = cliente.total_equipos_bombas ?? cliente.equipos?.filter(e => (e as any).tipo === 'BOMBA').length ?? 0;
+  const totalPlantas =
+    cliente.total_equipos_plantas ??
+    cliente.equipos?.filter((e) => e.tipo === 'GENERADOR' || e.id_tipo_equipo === 3).length ??
+    0;
+  const totalBombas =
+    cliente.total_equipos_bombas ?? cliente.equipos?.filter((e) => e.tipo === 'BOMBA').length ?? 0;
 
   // Ubicación descriptiva y enlace de geolocalización satelital
-  const ubicacionDescriptiva = persona?.direccion_principal && !isMapsUrl(persona.direccion_principal)
-    ? persona.direccion_principal
-    : (persona?.direccion_principal && !persona.direccion_principal.startsWith('http') ? persona.direccion_principal : null);
+  const ubicacionDescriptiva =
+    persona?.direccion_principal && !isMapsUrl(persona.direccion_principal)
+      ? persona.direccion_principal
+      : persona?.direccion_principal && !persona.direccion_principal.startsWith('http')
+        ? persona.direccion_principal
+        : null;
 
-  const ubicacionUrl = (persona as any)?.url_ubicacion
-    ? (persona as any).url_ubicacion
-    : (isMapsUrl(persona?.direccion_principal) ? persona?.direccion_principal : null);
+  const ubicacionUrl = persona?.url_ubicacion
+    ? persona.url_ubicacion
+    : isMapsUrl(persona?.direccion_principal)
+      ? persona?.direccion_principal
+      : null;
 
   return (
     <div className="space-y-6">
@@ -262,21 +267,31 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
 
                   {/* Badges de clasificación de sede */}
                   {esSede && (
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-semibold text-xs">
+                    <Badge
+                      variant="outline"
+                      className="bg-blue-50 text-blue-700 border-blue-200 font-semibold text-xs"
+                    >
                       <Building2 className="h-3 w-3 mr-1" />
                       Sede Sucursal
                     </Badge>
                   )}
                   {esPrincipal && (
-                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 font-semibold text-xs">
+                    <Badge
+                      variant="outline"
+                      className="bg-purple-50 text-purple-700 border-purple-200 font-semibold text-xs"
+                    >
                       <Building2 className="h-3 w-3 mr-1" />
                       Corporativo Principal
                     </Badge>
                   )}
 
                   {/* Badge Tipo de Cliente */}
-                  <Badge variant="secondary" className="bg-gray-100 text-gray-700 font-semibold text-xs">
-                    {TIPO_CLIENTE_LABELS[cliente.tipo_cliente as TipoClienteEnum] || cliente.tipo_cliente}
+                  <Badge
+                    variant="secondary"
+                    className="bg-gray-100 text-gray-700 font-semibold text-xs"
+                  >
+                    {TIPO_CLIENTE_LABELS[cliente.tipo_cliente as TipoClienteEnum] ||
+                      cliente.tipo_cliente}
                   </Badge>
                 </div>
 
@@ -297,7 +312,8 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                       <span className="text-gray-300">•</span>
                       <span className="flex items-center gap-1">
                         <MapPin className="h-3 w-3 text-gray-400" />
-                        {persona.ciudad}{persona.departamento ? `, ${persona.departamento}` : ''}
+                        {persona.ciudad}
+                        {persona.departamento ? `, ${persona.departamento}` : ''}
                       </span>
                     </>
                   )}
@@ -394,7 +410,7 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
             </div>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-extrabold text-purple-900">
-                {(cliente as any).total_ordenes ?? 'Ver'}
+                {cliente.total_ordenes ?? 'Ver'}
               </span>
               <span className="text-[11px] text-purple-700 font-medium underline">
                 Trazabilidad 360°
@@ -417,7 +433,9 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                   : 'Contado (Sin Crédito)'}
               </p>
               <p className="text-[11px] text-emerald-700 font-medium">
-                {cliente.tiene_credito ? `${cliente.dias_credito ?? 0} días crédito` : 'Pago contraentrega'}
+                {cliente.tiene_credito
+                  ? `${cliente.dias_credito ?? 0} días crédito`
+                  : 'Pago contraentrega'}
                 {cliente.descuento_autorizado ? ` • Desc: ${cliente.descuento_autorizado}%` : ''}
               </p>
             </div>
@@ -434,7 +452,11 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
             <div className="mt-1">
               <p className="text-sm font-extrabold text-amber-900 truncate">
                 {cliente.fecha_proximo_servicio
-                  ? formatDateSafe(cliente.fecha_proximo_servicio, { day: 'numeric', month: 'short', year: 'numeric' })
+                  ? formatDateSafe(cliente.fecha_proximo_servicio, {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })
                   : 'Por agendar'}
               </p>
               <p className="text-[11px] text-amber-700 font-medium truncate">
@@ -448,18 +470,28 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
       </div>
 
       {/* ── PESTAÑAS PRINCIPALES ── */}
-      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="space-y-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={(val) => setActiveTab(val as 'general' | 'trazabilidad' | 'bitacora')}
+        className="space-y-4"
+      >
         <TabsList className="bg-gray-100 p-1 rounded-xl">
           <TabsTrigger value="general" className="rounded-lg font-bold text-xs cursor-pointer">
             <Building2 className="h-3.5 w-3.5 mr-1.5" />
             Visión General
           </TabsTrigger>
-          <TabsTrigger value="trazabilidad" className="rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1.5">
+          <TabsTrigger
+            value="trazabilidad"
+            className="rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1.5"
+          >
             <History className="h-3.5 w-3.5" />
             Historial de Servicios (Trazabilidad 360°)
           </TabsTrigger>
           {esPrincipal && (
-            <TabsTrigger value="bitacora" className="rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1.5">
+            <TabsTrigger
+              value="bitacora"
+              className="rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1.5"
+            >
               <BookOpen className="h-3.5 w-3.5" />
               Bitácora Mensual
             </TabsTrigger>
@@ -486,16 +518,26 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                     {/* Identificación */}
                     <div className="grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
                       <div>
-                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Tipo Documento</p>
-                        <p className="font-bold text-sm text-gray-800">{persona.tipo_identificacion}</p>
+                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                          Tipo Documento
+                        </p>
+                        <p className="font-bold text-sm text-gray-800">
+                          {persona.tipo_identificacion}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Número Documento</p>
+                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                          Número Documento
+                        </p>
                         <div className="flex items-center gap-1.5">
-                          <p className="font-mono font-bold text-sm text-gray-900">{persona.numero_identificacion}</p>
+                          <p className="font-mono font-bold text-sm text-gray-900">
+                            {persona.numero_identificacion}
+                          </p>
                           <button
                             type="button"
-                            onClick={() => copyText(persona.numero_identificacion, 'Número de documento')}
+                            onClick={() =>
+                              copyText(persona.numero_identificacion, 'Número de documento')
+                            }
                             className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 transition-colors"
                             title="Copiar documento"
                           >
@@ -510,25 +552,41 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                       {persona.tipo_persona === 'JURIDICA' && (
                         <>
                           <div>
-                            <span className="text-xs text-gray-500 font-medium block">Razón Social:</span>
-                            <span className="font-bold text-gray-900">{persona.razon_social || '-'}</span>
+                            <span className="text-xs text-gray-500 font-medium block">
+                              Razón Social:
+                            </span>
+                            <span className="font-bold text-gray-900">
+                              {persona.razon_social || '-'}
+                            </span>
                           </div>
                           {persona.nombre_comercial && (
                             <div>
-                              <span className="text-xs text-gray-500 font-medium block">Nombre Comercial:</span>
-                              <span className="font-semibold text-gray-800">{persona.nombre_comercial}</span>
+                              <span className="text-xs text-gray-500 font-medium block">
+                                Nombre Comercial:
+                              </span>
+                              <span className="font-semibold text-gray-800">
+                                {persona.nombre_comercial}
+                              </span>
                             </div>
                           )}
                           {persona.representante_legal && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-gray-100">
                               <div>
-                                <span className="text-xs text-gray-500 font-medium block">Representante Legal:</span>
-                                <span className="font-semibold text-gray-900">{persona.representante_legal}</span>
+                                <span className="text-xs text-gray-500 font-medium block">
+                                  Representante Legal:
+                                </span>
+                                <span className="font-semibold text-gray-900">
+                                  {persona.representante_legal}
+                                </span>
                               </div>
                               {persona.cedula_representante && (
                                 <div>
-                                  <span className="text-xs text-gray-500 font-medium block">Cédula Representante:</span>
-                                  <span className="font-mono font-medium text-gray-800">{persona.cedula_representante}</span>
+                                  <span className="text-xs text-gray-500 font-medium block">
+                                    Cédula Representante:
+                                  </span>
+                                  <span className="font-mono font-medium text-gray-800">
+                                    {persona.cedula_representante}
+                                  </span>
                                 </div>
                               )}
                             </div>
@@ -538,7 +596,9 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
 
                       {persona.tipo_persona === 'NATURAL' && (
                         <div>
-                          <span className="text-xs text-gray-500 font-medium block">Nombre Completo:</span>
+                          <span className="text-xs text-gray-500 font-medium block">
+                            Nombre Completo:
+                          </span>
                           <span className="font-bold text-gray-900">{nombreBase}</span>
                         </div>
                       )}
@@ -548,7 +608,9 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
 
                     {/* Canales de Contacto Directo */}
                     <div className="space-y-2.5">
-                      <p className="text-xs font-bold text-gray-700 uppercase tracking-wider">Canales de Contacto:</p>
+                      <p className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Canales de Contacto:
+                      </p>
 
                       {/* Celular con botón WhatsApp */}
                       {persona.celular && (
@@ -624,14 +686,14 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                       )}
 
                       {/* Correos adicionales */}
-                      {(cliente as any).emails_notificacion && (
+                      {cliente.emails_notificacion && (
                         <div className="p-2.5 bg-blue-50/50 rounded-xl border border-blue-100 space-y-1.5">
                           <p className="text-[11px] font-bold text-blue-900 flex items-center gap-1">
                             <Mail className="h-3 w-3 text-blue-600" />
                             Correos adicionales para informes y notificaciones:
                           </p>
                           <div className="flex flex-wrap gap-1.5">
-                            {(cliente as any).emails_notificacion
+                            {cliente.emails_notificacion
                               .split(';;')
                               .filter((e: string) => e.trim())
                               .map((email: string, idx: number) => (
@@ -738,7 +800,7 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                             </span>
                             <a
                               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                `${ubicacionDescriptiva}, ${persona.ciudad}, Colombia`
+                                `${ubicacionDescriptiva}, ${persona.ciudad}, Colombia`,
                               )}`}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -780,17 +842,27 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                 {/* Tipo de cliente y Periodicidad */}
                 <div className="grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
                   <div>
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Tipo de Cliente</p>
-                    <Badge variant="secondary" className="mt-1 font-bold text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
-                      {TIPO_CLIENTE_LABELS[cliente.tipo_cliente as TipoClienteEnum] || cliente.tipo_cliente}
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                      Tipo de Cliente
+                    </p>
+                    <Badge
+                      variant="secondary"
+                      className="mt-1 font-bold text-xs bg-indigo-50 text-indigo-700 border-indigo-200"
+                    >
+                      {TIPO_CLIENTE_LABELS[cliente.tipo_cliente as TipoClienteEnum] ||
+                        cliente.tipo_cliente}
                     </Badge>
                   </div>
                   <div>
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Periodicidad Mantenimiento</p>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                      Periodicidad Mantenimiento
+                    </p>
                     <p className="font-bold text-sm text-gray-900 mt-1 flex items-center gap-1.5">
                       <Clock className="h-3.5 w-3.5 text-indigo-500" />
                       {cliente.periodicidad_mantenimiento
-                        ? PERIODICIDAD_LABELS[cliente.periodicidad_mantenimiento as PeriodicidadMantenimientoEnum]
+                        ? PERIODICIDAD_LABELS[
+                            cliente.periodicidad_mantenimiento as PeriodicidadMantenimientoEnum
+                          ]
                         : 'Sin definir'}
                     </p>
                   </div>
@@ -824,7 +896,9 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                       )}
                     </div>
                   ) : (
-                    <p className="text-xs text-gray-500 italic pt-1">Sin asesor asignado actualmente</p>
+                    <p className="text-xs text-gray-500 italic pt-1">
+                      Sin asesor asignado actualmente
+                    </p>
                   )}
                 </div>
 
@@ -837,11 +911,15 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                   {cliente.firma_administrativa ? (
                     <div className="pt-1 space-y-1 text-sm">
                       <p className="font-bold text-gray-900">
-                        {cliente.firma_administrativa.nombre_de_firma || `Firma #${cliente.firma_administrativa.id_firma_administrativa}`}
+                        {cliente.firma_administrativa.nombre_de_firma ||
+                          `Firma #${cliente.firma_administrativa.id_firma_administrativa}`}
                       </p>
                       {cliente.firma_administrativa.representante_legal && (
                         <p className="text-xs text-gray-600">
-                          Contacto: <span className="font-semibold text-gray-800">{cliente.firma_administrativa.representante_legal}</span>
+                          Contacto:{' '}
+                          <span className="font-semibold text-gray-800">
+                            {cliente.firma_administrativa.representante_legal}
+                          </span>
                         </p>
                       )}
                       <div className="flex items-center gap-3 text-xs text-gray-600 pt-1">
@@ -866,7 +944,9 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-gray-500 italic pt-1">Sin firma administrativa (Cliente directo)</p>
+                    <p className="text-xs text-gray-500 italic pt-1">
+                      Sin firma administrativa (Cliente directo)
+                    </p>
                   )}
                 </div>
 
@@ -874,8 +954,12 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                 {cliente.cuenta_email && (
                   <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between text-xs">
                     <div>
-                      <span className="text-gray-400 font-bold block uppercase tracking-wider text-[10px]">Email Emisor para Informes:</span>
-                      <span className="font-mono text-gray-800 font-semibold">{cliente.cuenta_email.email}</span>
+                      <span className="text-gray-400 font-bold block uppercase tracking-wider text-[10px]">
+                        Email Emisor para Informes:
+                      </span>
+                      <span className="font-mono text-gray-800 font-semibold">
+                        {cliente.cuenta_email.email}
+                      </span>
                     </div>
                     <Badge variant="outline" className="text-[10px] text-gray-600 bg-white">
                       Remitente
@@ -887,16 +971,23 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
 
                 {/* Condiciones Financieras y Crédito */}
                 <div className="space-y-2.5">
-                  <p className="text-xs font-bold text-gray-700 uppercase tracking-wider">Condiciones Financieras y Crédito:</p>
+                  <p className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Condiciones Financieras y Crédito:
+                  </p>
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">
                       <span className="text-gray-600">Descuento autorizado:</span>
-                      <span className="font-extrabold text-gray-900">{cliente.descuento_autorizado ?? 0}%</span>
+                      <span className="font-extrabold text-gray-900">
+                        {cliente.descuento_autorizado ?? 0}%
+                      </span>
                     </div>
                     <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">
                       <span className="text-gray-600">Línea de crédito:</span>
-                      <Badge variant={cliente.tiene_credito ? 'default' : 'secondary'} className="font-bold text-[10px]">
+                      <Badge
+                        variant={cliente.tiene_credito ? 'default' : 'secondary'}
+                        className="font-bold text-[10px]"
+                      >
                         {cliente.tiene_credito ? 'Habilitado' : 'No'}
                       </Badge>
                     </div>
@@ -906,11 +997,15 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                     <div className="grid grid-cols-2 gap-2 p-3 bg-emerald-50/60 rounded-xl border border-emerald-100 text-xs">
                       <div>
                         <span className="text-emerald-700 font-medium block">Límite Aprobado:</span>
-                        <span className="font-extrabold text-sm text-emerald-900">{formatCurrency(cliente.limite_credito)}</span>
+                        <span className="font-extrabold text-sm text-emerald-900">
+                          {formatCurrency(cliente.limite_credito)}
+                        </span>
                       </div>
                       <div>
                         <span className="text-emerald-700 font-medium block">Días de Crédito:</span>
-                        <span className="font-extrabold text-sm text-emerald-900">{cliente.dias_credito ?? 0} días</span>
+                        <span className="font-extrabold text-sm text-emerald-900">
+                          {cliente.dias_credito ?? 0} días
+                        </span>
                       </div>
                     </div>
                   )}
@@ -930,19 +1025,27 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
 
                 {/* Ciclo de Vida y Fechas */}
                 <div className="space-y-2 text-xs">
-                  <p className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Cronograma de Servicios:</p>
+                  <p className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">
+                    Cronograma de Servicios:
+                  </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div className="p-2 bg-gray-50 rounded-lg border border-gray-100">
                       <span className="text-gray-400 block text-[10px]">Inicio Servicio:</span>
-                      <span className="font-semibold text-gray-800">{formatDate(cliente.fecha_inicio_servicio)}</span>
+                      <span className="font-semibold text-gray-800">
+                        {formatDate(cliente.fecha_inicio_servicio)}
+                      </span>
                     </div>
                     <div className="p-2 bg-gray-50 rounded-lg border border-gray-100">
                       <span className="text-gray-400 block text-[10px]">Último Servicio:</span>
-                      <span className="font-semibold text-gray-800">{formatDate(cliente.fecha_ultimo_servicio)}</span>
+                      <span className="font-semibold text-gray-800">
+                        {formatDate(cliente.fecha_ultimo_servicio)}
+                      </span>
                     </div>
                     <div className="p-2 bg-gray-50 rounded-lg border border-gray-100">
                       <span className="text-gray-400 block text-[10px]">Próximo Servicio:</span>
-                      <span className="font-semibold text-gray-800">{formatDate(cliente.fecha_proximo_servicio)}</span>
+                      <span className="font-semibold text-gray-800">
+                        {formatDate(cliente.fecha_proximo_servicio)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -950,7 +1053,7 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
             </Card>
 
             {/* TARJETA 3: REQUISITOS ESPECIALES DE SEGURIDAD (SST / ACCESO) Y OBSERVACIONES */}
-            {(cliente.requisitos_especiales || cliente.observaciones_servicio) ? (
+            {cliente.requisitos_especiales || cliente.observaciones_servicio ? (
               <Card className="md:col-span-2 border border-gray-200 shadow-sm overflow-hidden">
                 <CardHeader className="bg-gray-50/70 border-b border-gray-100 p-4 px-5">
                   <CardTitle className="text-base font-bold text-gray-900 flex items-center gap-2">
@@ -1017,7 +1120,7 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                 <CardContent className="p-5">
                   {cliente.sedes && cliente.sedes.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                      {cliente.sedes.map((sede: any) => {
+                      {cliente.sedes.map((sede) => {
                         const totalEq = sede.equipos?.length || 0;
                         const tieneMaps = Boolean(sede.persona?.url_ubicacion);
                         const direccion = sede.persona?.direccion_principal || sede.persona?.ciudad;
@@ -1051,7 +1154,7 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                                   {totalEq} {totalEq === 1 ? 'equipo' : 'equipos'}
                                 </span>
 
-                                {tieneMaps && (
+                                {tieneMaps && sede.persona?.url_ubicacion && (
                                   <a
                                     href={sede.persona.url_ubicacion}
                                     target="_blank"
@@ -1079,12 +1182,15 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                     <div className="text-center py-8 px-4 bg-gray-50/70 rounded-xl border border-dashed border-gray-200 space-y-2">
                       <Building2 className="h-8 w-8 text-gray-400 mx-auto" />
                       <p className="text-sm font-medium text-gray-700">
-                        Este cliente corporativo principal no tiene sedes o sucursales registradas aún.
+                        Este cliente corporativo principal no tiene sedes o sucursales registradas
+                        aún.
                       </p>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => router.push(`/clientes/nuevo?id_cliente_principal=${clienteId}`)}
+                        onClick={() =>
+                          router.push(`/clientes/nuevo?id_cliente_principal=${clienteId}`)
+                        }
                         className="mt-2 text-xs font-semibold text-purple-700 border-purple-200 hover:bg-purple-50"
                       >
                         <Plus className="h-3.5 w-3.5 mr-1" />
@@ -1122,10 +1228,7 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
         {/* ── TAB 3: BITÁCORA (Solo Principal) ── */}
         {esPrincipal && (
           <TabsContent value="bitacora" className="mt-4">
-            <BitacoraTab
-              clienteId={clienteId}
-              clienteNombre={nombreCliente || 'Cliente'}
-            />
+            <BitacoraTab clienteId={clienteId} clienteNombre={nombreCliente || 'Cliente'} />
           </TabsContent>
         )}
       </Tabs>

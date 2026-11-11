@@ -20,7 +20,7 @@ import {
   type ArquetipoEquipo,
 } from '@/features/catalogos-eam';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { cn, getApiErrorMessage } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   AlertCircle,
@@ -36,13 +36,10 @@ import {
   Factory,
   Loader2,
   PackageCheck,
-  Paintbrush,
   Settings,
-  ShieldCheck,
   Sparkles,
   Timer,
   Wind,
-  Wrench,
   Zap,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -54,7 +51,14 @@ import {
   useTiposEquipoSelector,
 } from '../hooks/use-equipos-form-data';
 import { useCrearEquipo } from '../lib/equipos.service';
-import type { CreateEquipoPayload, TipoEquipo } from '../types';
+import type {
+  CreateEquipoPayload,
+  Criticidad,
+  DatosEquipoBase,
+  EstadoEquipo,
+  EstadoPintura,
+  TipoContrato,
+} from '../types';
 import { ConfigParametros, ConfigParametrosEditor } from './ConfigParametrosEditor';
 import { DynamicModularSpecsEditor } from './DynamicModularSpecsEditor';
 import { EamSelect } from '@/components/ui/eam-select';
@@ -75,11 +79,14 @@ const optionalDate = z.preprocess((val) => {
 }, z.string().optional());
 
 const requiredNumber = (msg: string) =>
-  z.preprocess((val) => {
-    if (val === '' || val === null || val === undefined) return undefined;
-    const num = Number(val);
-    return Number.isNaN(num) ? undefined : num;
-  }, z.number({ message: msg }).min(1, msg));
+  z.preprocess(
+    (val) => {
+      if (val === '' || val === null || val === undefined) return undefined;
+      const num = Number(val);
+      return Number.isNaN(num) ? undefined : num;
+    },
+    z.number({ message: msg }).min(1, msg),
+  );
 
 const datosEquipoBaseSchema = z.object({
   codigo_equipo: z.string().min(1, 'Código de inventario requerido').max(50),
@@ -88,10 +95,7 @@ const datosEquipoBaseSchema = z.object({
   id_sede: optionalNumber,
   nombre_equipo: z.string().max(200).optional().or(z.literal('')),
   numero_serie_equipo: z.string().max(100).optional().or(z.literal('')),
-  ubicacion_texto: z
-    .string()
-    .min(3, 'Ubicación física requerida (mín. 3 caracteres)')
-    .max(1000),
+  ubicacion_texto: z.string().min(3, 'Ubicación física requerida (mín. 3 caracteres)').max(1000),
   estado_equipo: z.enum([
     'OPERATIVO',
     'STANDBY',
@@ -110,20 +114,14 @@ const datosEquipoBaseSchema = z.object({
   proveedor_garantia: z.string().optional(),
   horas_actuales: optionalNumber,
   fecha_ultima_lectura_horas: optionalDate,
-  estado_pintura: z
-    .enum(['EXCELENTE', 'BUENO', 'REGULAR', 'MALO', 'NO_APLICA'])
-    .optional(),
+  estado_pintura: z.enum(['EXCELENTE', 'BUENO', 'REGULAR', 'MALO', 'NO_APLICA']).optional(),
   requiere_pintura: z.boolean(),
-  tipo_contrato: z
-    .enum(['SIN_CONTRATO', 'PREVENTIVO', 'INTEGRAL', 'POR_LLAMADA'])
-    .optional(),
+  tipo_contrato: z.enum(['SIN_CONTRATO', 'PREVENTIVO', 'INTEGRAL', 'POR_LLAMADA']).optional(),
   intervalo_tipo_a_dias_override: optionalNumber,
   intervalo_tipo_a_horas_override: optionalNumber,
   intervalo_tipo_b_dias_override: optionalNumber,
   intervalo_tipo_b_horas_override: optionalNumber,
-  criterio_intervalo_override: z
-    .enum(['DIAS', 'HORAS', 'LO_QUE_OCURRA_PRIMERO'])
-    .optional(),
+  criterio_intervalo_override: z.enum(['DIAS', 'HORAS', 'LO_QUE_OCURRA_PRIMERO']).optional(),
   observaciones_generales: z.string().optional(),
   configuracion_especial: z.string().optional(),
 });
@@ -217,12 +215,16 @@ export function EquipoForm({
   const [vincularKitBom, setVincularKitBom] = useState<boolean>(true);
 
   // Estado de Especificaciones Modulares Dinámicas (Paso 3)
-  const [modulosValues, setModulosValues] = useState<Record<string, Record<string, any>>>({});
+  const [modulosValuesState, setModulosValues] = useState<Record<string, Record<string, unknown>>>(
+    {},
+  );
   const [origenAtributos, setOrigenAtributos] = useState<Record<string, 'MODELO' | 'CUSTOM'>>({});
   const [unidadesPersonalizadas, setUnidadesPersonalizadas] = useState<Record<string, string>>({});
 
-  // Estado de Planes Preventivos Heredados (Paso 2)
-  const [planesHeredados, setPlanesHeredados] = useState<PlanPreventivoHeredadoState[]>([]);
+  // Estado de Planes Preventivos Heredados por Arquetipo (Paso 2)
+  const [planesOverridesByArquetipo, setPlanesOverridesByArquetipo] = useState<
+    Record<number, PlanPreventivoHeredadoState[]>
+  >({});
 
   // Parámetros personalizados opcionales
   const [configParametros, setConfigParametros] = useState<ConfigParametros>({});
@@ -312,27 +314,26 @@ export function EquipoForm({
     ];
   }, [arquetiposHub]);
 
-  // Seleccionar el primer arquetipo por defecto cuando carga el Hub
-  useEffect(() => {
-    if (!selectedArquetipoId && arquetiposDisponibles.length > 0) {
-      const def =
-        arquetiposDisponibles.find((a) => a.codigo_tipo.toUpperCase().includes('GEN')) ||
-        arquetiposDisponibles[0];
-      setSelectedArquetipoId(def.id_tipo_equipo);
-      setTipoSeleccionado(def.codigo_tipo.toUpperCase());
-    }
-  }, [arquetiposDisponibles, selectedArquetipoId]);
+  const defaultArquetipo = useMemo(
+    () =>
+      arquetiposDisponibles.find((a) => a.codigo_tipo.toUpperCase().includes('GEN')) ||
+      arquetiposDisponibles[0] ||
+      null,
+    [arquetiposDisponibles],
+  );
 
   const selectedArquetipo = useMemo(
     () =>
-      arquetiposDisponibles.find((a) => a.id_tipo_equipo === selectedArquetipoId) ||
-      arquetiposDisponibles[0] ||
-      null,
-    [arquetiposDisponibles, selectedArquetipoId],
+      (selectedArquetipoId
+        ? arquetiposDisponibles.find((a) => a.id_tipo_equipo === selectedArquetipoId)
+        : null) || defaultArquetipo,
+    [arquetiposDisponibles, selectedArquetipoId, defaultArquetipo],
   );
 
   // Esquema modular y Modelos de Fábrica (OEM) del Tipo de Equipo seleccionado
-  const { data: esquemaArquetipo } = useArquetipoEsquemaEam(selectedArquetipo?.id_tipo_equipo || null);
+  const { data: esquemaArquetipo } = useArquetipoEsquemaEam(
+    selectedArquetipo?.id_tipo_equipo || null,
+  );
   const { data: modelosOem } = useModelosOemEam(selectedArquetipo?.id_tipo_equipo);
 
   const selectedModeloOem = useMemo(
@@ -414,14 +415,29 @@ export function EquipoForm({
       const cfg = getTipoVisualConfig(codeNorm);
       setValue('datosEquipo.ubicacion_texto', cfg.ubicacionDefecto);
     }
+  }, [selectedArquetipo, tiposEquipoLegacy, setValue, getValues]);
 
-    // Cargar Planes Preventivos Heredados desde el arquetipo
+  // Planes Preventivos Heredados desde el arquetipo (derivado sin setState-in-effect)
+  const planesBase = useMemo<PlanPreventivoHeredadoState[]>(() => {
+    if (!selectedArquetipo) return [];
     const planesRaw =
       selectedArquetipo.tipo_equipo_planes && selectedArquetipo.tipo_equipo_planes.length > 0
         ? selectedArquetipo.tipo_equipo_planes
         : esquemaArquetipo?.planes_mantenimiento || [];
 
-    const planesMapeados: PlanPreventivoHeredadoState[] = planesRaw.map((p: any) => ({
+    return (
+      planesRaw as Array<{
+        id_plan: number;
+        id_tipo_servicio: number;
+        nombre_plan?: string;
+        nombre_servicio?: string;
+        activo?: boolean;
+        frecuencia_dias?: number | string | null;
+        frecuencia_uso?: number | string | null;
+        criterio_intervalo?: string;
+        tipo_servicio?: { nombre_tipo?: string; codigo_tipo?: string };
+      }>
+    ).map((p) => ({
       id_plan: p.id_plan,
       id_tipo_servicio: p.id_tipo_servicio,
       nombre_plan:
@@ -434,37 +450,60 @@ export function EquipoForm({
         (p.criterio_intervalo as PlanPreventivoHeredadoState['criterio_intervalo']) ||
         'LO_QUE_OCURRA_PRIMERO',
     }));
-    setPlanesHeredados(planesMapeados);
-  }, [selectedArquetipo, esquemaArquetipo, tiposEquipoLegacy, setValue, getValues]);
+  }, [selectedArquetipo, esquemaArquetipo]);
 
-  // Inicializar valores por defecto del esquema cuando cambia el Tipo de Equipo (si no hay modelo OEM)
-  useEffect(() => {
-    if (!esquemaArquetipo || selectedModeloOemId) return;
+  const arquetipoKey = selectedArquetipo?.id_tipo_equipo ?? 0;
+  const planesHeredados = useMemo(
+    () => planesOverridesByArquetipo[arquetipoKey] ?? planesBase,
+    [planesOverridesByArquetipo, arquetipoKey, planesBase],
+  );
 
-    setModulosValues((prev) => {
-      const next = { ...prev };
-      for (const mod of esquemaArquetipo.modulos) {
-        if (!next[mod.codigo_modulo]) next[mod.codigo_modulo] = {};
-        for (const grp of mod.grupos) {
-          for (const attr of grp.atributos) {
-            if (
-              next[mod.codigo_modulo][attr.codigo_atributo] === undefined &&
-              attr.valor_defecto !== null &&
-              attr.valor_defecto !== undefined &&
-              attr.valor_defecto !== ''
-            ) {
-              const isNum =
-                attr.tipo_control.includes('NUMERICO') && !Number.isNaN(Number(attr.valor_defecto));
-              next[mod.codigo_modulo][attr.codigo_atributo] = isNum
-                ? Number(attr.valor_defecto)
-                : attr.valor_defecto;
-            }
+  const updatePlanesHeredados = useCallback(
+    (updater: (prev: PlanPreventivoHeredadoState[]) => PlanPreventivoHeredadoState[]) => {
+      setPlanesOverridesByArquetipo((prev) => ({
+        ...prev,
+        [arquetipoKey]: updater(prev[arquetipoKey] ?? planesBase),
+      }));
+    },
+    [arquetipoKey, planesBase],
+  );
+
+  // Valores por defecto del esquema cuando cambia el Tipo de Equipo (derivado sin setState-in-effect)
+  const defaultModulosValues = useMemo<Record<string, Record<string, unknown>>>(() => {
+    if (!esquemaArquetipo || selectedModeloOemId) return {};
+    const defaults: Record<string, Record<string, unknown>> = {};
+    for (const mod of esquemaArquetipo.modulos) {
+      const modObj: Record<string, unknown> = {};
+      for (const grp of mod.grupos) {
+        for (const attr of grp.atributos) {
+          if (
+            attr.valor_defecto !== null &&
+            attr.valor_defecto !== undefined &&
+            attr.valor_defecto !== ''
+          ) {
+            const isNum =
+              attr.tipo_control.includes('NUMERICO') && !Number.isNaN(Number(attr.valor_defecto));
+            modObj[attr.codigo_atributo] = isNum ? Number(attr.valor_defecto) : attr.valor_defecto;
           }
         }
       }
-      return next;
-    });
+      if (Object.keys(modObj).length > 0) {
+        defaults[mod.codigo_modulo] = modObj;
+      }
+    }
+    return defaults;
   }, [esquemaArquetipo, selectedModeloOemId]);
+
+  const modulosValues = useMemo<Record<string, Record<string, unknown>>>(() => {
+    const merged: Record<string, Record<string, unknown>> = {};
+    for (const [mod, attrs] of Object.entries(defaultModulosValues)) {
+      merged[mod] = { ...attrs };
+    }
+    for (const [mod, attrs] of Object.entries(modulosValuesState)) {
+      merged[mod] = { ...(merged[mod] || {}), ...attrs };
+    }
+    return merged;
+  }, [defaultModulosValues, modulosValuesState]);
 
   // Pre-llenar Ficha Técnica cuando el usuario selecciona un Modelo de Fábrica (OEM) en el Paso 1
   const handleSelectModeloOem = useCallback(
@@ -482,13 +521,13 @@ export function EquipoForm({
       const modelo = modelosOem?.find((m) => m.id_modelo_equipo === idMod);
       if (!modelo) return;
 
-      const specsBase = (modelo.especificaciones_base || {}) as Record<string, any>;
+      const specsBase = (modelo.especificaciones_base || {}) as Record<string, unknown>;
       const rawModulos =
         specsBase.modulos && typeof specsBase.modulos === 'object'
-          ? (specsBase.modulos as Record<string, Record<string, any>>)
+          ? (specsBase.modulos as Record<string, Record<string, unknown>>)
           : null;
 
-      const nuevosModulos: Record<string, Record<string, any>> = {};
+      const nuevosModulos: Record<string, Record<string, unknown>> = {};
       const nuevosOrigenes: Record<string, 'MODELO' | 'CUSTOM'> = {};
 
       if (rawModulos) {
@@ -535,8 +574,7 @@ export function EquipoForm({
       });
 
       if (!currentNombre || esNombreDeOtroModelo) {
-        const sugerido =
-          modelo.nombre_comercial || `${modelo.marca} ${modelo.modelo}`;
+        const sugerido = modelo.nombre_comercial || `${modelo.marca} ${modelo.modelo}`;
         setValue('datosEquipo.nombre_equipo', sugerido, { shouldDirty: true });
       }
 
@@ -551,8 +589,7 @@ export function EquipoForm({
   // Generador inteligente de Código de Inventario usando el prefijo del Tipo de Equipo
   const generarCodigoAutomatico = () => {
     const cfg = getTipoVisualConfig(selectedArquetipo?.codigo_tipo || tipoSeleccionado);
-    const prefijo =
-      selectedArquetipo?.codigo_corto?.toUpperCase() || cfg.prefijo || 'EQP';
+    const prefijo = selectedArquetipo?.codigo_corto?.toUpperCase() || cfg.prefijo || 'EQP';
 
     const clienteId = getValues('datosEquipo.id_cliente');
     let clientePrefijo = 'CLI';
@@ -583,7 +620,7 @@ export function EquipoForm({
     (
       codigoModulo: string,
       codigoAtributo: string,
-      nuevoValor: any,
+      nuevoValor: unknown,
       origen: 'MODELO' | 'CUSTOM' = 'CUSTOM',
     ) => {
       setModulosValues((prev) => ({
@@ -667,11 +704,12 @@ export function EquipoForm({
   // Submit final del Wizard (Frente 4.2: JSONB + Satélites + B-Tree + Kit BOM OEM)
   const handleFormSubmit = async (formData: EquipoFormData) => {
     // Sincronizar overrides de planes preventivos Tipo A / Tipo B hacia datosEquipo
-    const planA = planesHeredados.find(
-      (p) =>
-        p.activo &&
-        (p.codigo_servicio?.includes('PREV_A') || p.nombre_plan.toUpperCase().includes('TIPO A')),
-    ) || planesHeredados.find((p) => p.activo);
+    const planA =
+      planesHeredados.find(
+        (p) =>
+          p.activo &&
+          (p.codigo_servicio?.includes('PREV_A') || p.nombre_plan.toUpperCase().includes('TIPO A')),
+      ) || planesHeredados.find((p) => p.activo);
 
     const planB = planesHeredados.find(
       (p) =>
@@ -679,7 +717,7 @@ export function EquipoForm({
         (p.codigo_servicio?.includes('PREV_B') || p.nombre_plan.toUpperCase().includes('TIPO B')),
     );
 
-    const datosEquipoFinal = {
+    const datosEquipoFinal: DatosEquipoBase = {
       ...formData.datosEquipo,
       intervalo_tipo_a_dias_override:
         planA && planA.frecuencia_dias !== '' ? Number(planA.frecuencia_dias) : undefined,
@@ -689,12 +727,13 @@ export function EquipoForm({
         planB && planB.frecuencia_dias !== '' ? Number(planB.frecuencia_dias) : undefined,
       intervalo_tipo_b_horas_override:
         planB && planB.frecuencia_uso !== '' ? Number(planB.frecuencia_uso) : undefined,
-      criterio_intervalo_override: planA?.criterio_intervalo || undefined,
+      criterio_intervalo_override:
+        planA?.criterio_intervalo as DatosEquipoBase['criterio_intervalo_override'],
     };
 
     const payload: CreateEquipoPayload = {
       tipo: (selectedArquetipo?.codigo_tipo || tipoSeleccionado || 'GENERADOR').toUpperCase(),
-      datosEquipo: datosEquipoFinal as any,
+      datosEquipo: datosEquipoFinal,
       especificaciones: {
         _version: 1,
         modulos: modulosValues,
@@ -713,8 +752,7 @@ export function EquipoForm({
           criterio_intervalo: p.criterio_intervalo,
           activo: p.activo,
         })),
-      config_parametros:
-        Object.keys(configParametros).length > 0 ? configParametros : undefined,
+      config_parametros: Object.keys(configParametros).length > 0 ? configParametros : undefined,
     };
 
     try {
@@ -732,10 +770,8 @@ export function EquipoForm({
           variant: 'destructive',
         });
       }
-    } catch (error: any) {
-      const apiError = error?.response?.data?.message;
-      const detailed = Array.isArray(apiError) ? apiError.join('\n') : apiError;
-      let friendly = detailed || error?.message || 'Error inesperado al registrar equipo';
+    } catch (error: unknown) {
+      let friendly = getApiErrorMessage(error, 'Error inesperado al registrar equipo');
       if (friendly.includes('Ya existe un equipo con el código')) {
         friendly =
           'Este código de inventario ya está en uso. Haz clic en "✨ Generar" en el Paso 2 para asignar uno nuevo.';
@@ -749,7 +785,8 @@ export function EquipoForm({
   };
 
   const kitBomItems = selectedModeloOem?.modelos_equipo_bom || [];
-  const repuestosKitCount = kitBomItems.length || (selectedModeloOem as any)?._count?.modelos_equipo_bom || 0;
+  const repuestosKitCount =
+    kitBomItems.length || selectedModeloOem?._count?.modelos_equipo_bom || 0;
 
   return (
     <form
@@ -767,8 +804,10 @@ export function EquipoForm({
           </div>
           <ul className="space-y-1 text-xs font-semibold list-disc list-inside">
             {errors.datosEquipo &&
-              Object.entries(errors.datosEquipo).map(([k, v]: [string, any]) => (
-                <li key={k}>{v?.message || `Campo requerido: ${k}`}</li>
+              Object.entries(errors.datosEquipo).map(([k, v]) => (
+                <li key={k}>
+                  {(v as { message?: string } | undefined)?.message || `Campo requerido: ${k}`}
+                </li>
               ))}
           </ul>
         </div>
@@ -780,7 +819,10 @@ export function EquipoForm({
           {
             step: 1,
             title: '1. Tipo de Equipo y Plantilla OEM',
-            sub: selectedArquetipo?.nombre_canonico || selectedArquetipo?.nombre_tipo || 'Seleccionar clase',
+            sub:
+              selectedArquetipo?.nombre_canonico ||
+              selectedArquetipo?.nombre_tipo ||
+              'Seleccionar clase',
           },
           {
             step: 2,
@@ -832,9 +874,7 @@ export function EquipoForm({
                 >
                   {item.title}
                 </p>
-                <p className="text-[11px] text-slate-500 truncate hidden sm:block">
-                  {item.sub}
-                </p>
+                <p className="text-[11px] text-slate-500 truncate hidden sm:block">{item.sub}</p>
               </div>
             </button>
           );
@@ -852,7 +892,9 @@ export function EquipoForm({
                 1. Selecciona el Tipo de Equipo Industrial
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Las tarjetas se cargan dinámicamente desde el Catálogo de Equipos y Fichas Técnicas. Al elegir una clase, el sistema preparará sus partes, subsistemas y planes preventivos.
+                Las tarjetas se cargan dinámicamente desde el Catálogo de Equipos y Fichas Técnicas.
+                Al elegir una clase, el sistema preparará sus partes, subsistemas y planes
+                preventivos.
               </p>
             </div>
 
@@ -939,7 +981,9 @@ export function EquipoForm({
                       </span>
                     </h3>
                     <p className="text-xs text-indigo-800/80 mt-0.5">
-                      Si el equipo corresponde a un modelo comercial conocido, selecciónalo para pre-cargar automáticamente sus especificaciones técnicas y su Kit de Repuestos (BOM).
+                      Si el equipo corresponde a un modelo comercial conocido, selecciónalo para
+                      pre-cargar automáticamente sus especificaciones técnicas y su Kit de Repuestos
+                      (BOM).
                     </p>
                   </div>
                 </div>
@@ -948,7 +992,8 @@ export function EquipoForm({
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
                 <div className="md:col-span-6">
                   <label className="block text-xs font-bold text-indigo-950 mb-1.5">
-                    Plantilla de Modelo Comercial para {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
+                    Plantilla de Modelo Comercial para{' '}
+                    {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
                   </label>
                   <EamSelect
                     value={selectedModeloOemId ? String(selectedModeloOemId) : ''}
@@ -1067,7 +1112,8 @@ export function EquipoForm({
               </span>
               <div>
                 <p className="text-xs font-extrabold">
-                  Clase seleccionada: {selectedArquetipo?.nombre_canonico || selectedArquetipo?.nombre_tipo}
+                  Clase seleccionada:{' '}
+                  {selectedArquetipo?.nombre_canonico || selectedArquetipo?.nombre_tipo}
                 </p>
                 <p className="text-[11px] text-slate-300">
                   {selectedModeloOem
@@ -1096,7 +1142,8 @@ export function EquipoForm({
                   Identificación, Cliente y Ubicación Física
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Asigna el cliente propietario, el código único de inventario y la ubicación en sede.
+                  Asigna el cliente propietario, el código único de inventario y la ubicación en
+                  sede.
                 </p>
               </div>
             </div>
@@ -1174,7 +1221,9 @@ export function EquipoForm({
                             )}
                           >
                             <div className="font-semibold">{opt.label}</div>
-                            {opt.nit && <div className="text-[11px] text-slate-400">NIT: {opt.nit}</div>}
+                            {opt.nit && (
+                              <div className="text-[11px] text-slate-400">NIT: {opt.nit}</div>
+                            )}
                           </button>
                         ));
                       })()}
@@ -1266,7 +1315,9 @@ export function EquipoForm({
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">
                   Nombre o Alias del Equipo{' '}
-                  <span className="text-slate-400 font-normal">(se autogenera si se deja vacío)</span>
+                  <span className="text-slate-400 font-normal">
+                    (se autogenera si se deja vacío)
+                  </span>
                 </label>
                 <input
                   {...register('datosEquipo.nombre_equipo')}
@@ -1337,7 +1388,7 @@ export function EquipoForm({
                 <EamSelect
                   value={estadoEquipo || 'OPERATIVO'}
                   onChange={(val) =>
-                    setValue('datosEquipo.estado_equipo', val as any, {
+                    setValue('datosEquipo.estado_equipo', val as EstadoEquipo, {
                       shouldValidate: true,
                       shouldDirty: true,
                     })
@@ -1359,7 +1410,7 @@ export function EquipoForm({
                 <EamSelect
                   value={criticidad || 'MEDIA'}
                   onChange={(val) =>
-                    setValue('datosEquipo.criticidad', val as any, {
+                    setValue('datosEquipo.criticidad', val as Criticidad, {
                       shouldValidate: true,
                       shouldDirty: true,
                     })
@@ -1379,7 +1430,7 @@ export function EquipoForm({
                 <EamSelect
                   value={tipoContrato || 'SIN_CONTRATO'}
                   onChange={(val) =>
-                    setValue('datosEquipo.tipo_contrato', val as any, {
+                    setValue('datosEquipo.tipo_contrato', val as TipoContrato, {
                       shouldValidate: true,
                       shouldDirty: true,
                     })
@@ -1399,7 +1450,7 @@ export function EquipoForm({
                 <EamSelect
                   value={estadoPintura || 'BUENO'}
                   onChange={(val) =>
-                    setValue('datosEquipo.estado_pintura', val as any, {
+                    setValue('datosEquipo.estado_pintura', val as EstadoPintura, {
                       shouldValidate: true,
                       shouldDirty: true,
                     })
@@ -1485,7 +1536,8 @@ export function EquipoForm({
                     📅 Planes de Mantenimiento Preventivo Heredados
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Rutinas preventivas pre-cargadas automáticamente según el Tipo de Equipo. Puedes activar/desactivar o ajustar el intervalo para este activo en particular.
+                    Rutinas preventivas pre-cargadas automáticamente según el Tipo de Equipo. Puedes
+                    activar/desactivar o ajustar el intervalo para este activo en particular.
                   </p>
                 </div>
               </div>
@@ -1493,7 +1545,8 @@ export function EquipoForm({
 
             {planesHeredados.length === 0 ? (
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500">
-                Este tipo de equipo no tiene planes preventivos base configurados. Se utilizarán los intervalos estándar del contrato.
+                Este tipo de equipo no tiene planes preventivos base configurados. Se utilizarán los
+                intervalos estándar del contrato.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -1514,7 +1567,7 @@ export function EquipoForm({
                           checked={plan.activo}
                           onChange={(e) => {
                             const checked = e.target.checked;
-                            setPlanesHeredados((prev) =>
+                            updatePlanesHeredados((prev) =>
                               prev.map((p, i) => (i === idx ? { ...p, activo: checked } : p)),
                             );
                           }}
@@ -1541,7 +1594,7 @@ export function EquipoForm({
                             value={plan.frecuencia_dias}
                             onChange={(e) => {
                               const val = e.target.value === '' ? '' : Number(e.target.value);
-                              setPlanesHeredados((prev) =>
+                              updatePlanesHeredados((prev) =>
                                 prev.map((p, i) =>
                                   i === idx ? { ...p, frecuencia_dias: val } : p,
                                 ),
@@ -1560,10 +1613,8 @@ export function EquipoForm({
                             value={plan.frecuencia_uso}
                             onChange={(e) => {
                               const val = e.target.value === '' ? '' : Number(e.target.value);
-                              setPlanesHeredados((prev) =>
-                                prev.map((p, i) =>
-                                  i === idx ? { ...p, frecuencia_uso: val } : p,
-                                ),
+                              updatePlanesHeredados((prev) =>
+                                prev.map((p, i) => (i === idx ? { ...p, frecuencia_uso: val } : p)),
                               );
                             }}
                             className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold"
@@ -1578,7 +1629,7 @@ export function EquipoForm({
                             value={plan.criterio_intervalo}
                             onChange={(val) => {
                               const crit = val as PlanPreventivoHeredadoState['criterio_intervalo'];
-                              setPlanesHeredados((prev) =>
+                              updatePlanesHeredados((prev) =>
                                 prev.map((p, i) =>
                                   i === idx ? { ...p, criterio_intervalo: crit } : p,
                                 ),
@@ -1686,7 +1737,8 @@ export function EquipoForm({
                   <ChevronDown className="h-4 w-4" />
                 )}
                 <span>
-                  Configurar rangos personalizados de alerta para instrumentos de medición (Opcional)
+                  Configurar rangos personalizados de alerta para instrumentos de medición
+                  (Opcional)
                 </span>
               </button>
               {showParametrosAvanzados && (

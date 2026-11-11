@@ -1,8 +1,8 @@
 /**
  * MEKANOS S.A.S - Motor Universal de Activos EAM
- * 
+ *
  * Servicio Central de Catálogos EAM (CatalogosEamService)
- * 
+ *
  * Gobierna el metamodelo universal de 5 capas:
  * 1. Magnitudes físicas y conversión UoM
  * 2. Diccionario de atributos técnicos
@@ -23,7 +23,6 @@ import { PrismaService } from '../database/prisma.service';
 import { UomConversionService } from '../equipos/services/uom-conversion.service';
 import { BANCO_UNIVERSAL_QUDT } from './data/banco-qudt.data';
 import {
-  ActivarMagnitudBancoDto,
   AsignarAtributoModuloDto,
   ConvertirUomDto,
   CreateArquetipoDto,
@@ -52,7 +51,10 @@ import {
  * - 2 (BOMBA)     <-> 5 (BOM)
  * - 6 (MOTOR)     <-> 4 (MOT)
  */
-const PARES_CANONICOS: Record<number, { primarioId: number; aliasIds: number[]; nombreCanonico: string }> = {
+const PARES_CANONICOS: Record<
+  number,
+  { primarioId: number; aliasIds: number[]; nombreCanonico: string }
+> = {
   1: { primarioId: 1, aliasIds: [3], nombreCanonico: 'Generador Eléctrico / Planta de Emergencia' },
   3: { primarioId: 1, aliasIds: [3], nombreCanonico: 'Generador Eléctrico / Planta de Emergencia' },
   2: { primarioId: 2, aliasIds: [5], nombreCanonico: 'Bomba Hidráulica / Sistema de Bombeo' },
@@ -80,16 +82,34 @@ function resolverCategoriaHumana(t: { categoria?: any; metadata?: any }): string
   return MAPA_CATEGORIAS_HUMANAS[rawCat] || rawCat;
 }
 
-function mapearCategoriaDbEnum(catString?: string): 'ENERGIA' | 'HIDRAULICA' | 'CLIMATIZACION' | 'COMPRESION' | 'OTRO' {
+function mapearCategoriaDbEnum(
+  catString?: string,
+): 'ENERGIA' | 'HIDRAULICA' | 'CLIMATIZACION' | 'COMPRESION' | 'OTRO' {
   if (!catString) return 'OTRO';
   const c = catString.toUpperCase();
-  if (c.includes('ENERGIA') || c.includes('GENERACION') || c.includes('ELECTRICO') || c.includes('SUBESTACION') || c.includes('TRANSFORMACION')) {
+  if (
+    c.includes('ENERGIA') ||
+    c.includes('GENERACION') ||
+    c.includes('ELECTRICO') ||
+    c.includes('SUBESTACION') ||
+    c.includes('TRANSFORMACION')
+  ) {
     return 'ENERGIA';
   }
-  if (c.includes('HIDRAULICA') || c.includes('BOMBEO') || c.includes('PRESION') || c.includes('REDES')) {
+  if (
+    c.includes('HIDRAULICA') ||
+    c.includes('BOMBEO') ||
+    c.includes('PRESION') ||
+    c.includes('REDES')
+  ) {
     return 'HIDRAULICA';
   }
-  if (c.includes('CLIMATIZACION') || c.includes('REFRIGERACION') || c.includes('HVAC') || c.includes('CHILLER')) {
+  if (
+    c.includes('CLIMATIZACION') ||
+    c.includes('REFRIGERACION') ||
+    c.includes('HVAC') ||
+    c.includes('CHILLER')
+  ) {
     return 'CLIMATIZACION';
   }
   if (c.includes('COMPRESION') || c.includes('NEUMATICA') || c.includes('AIRE COMPRIMIDO')) {
@@ -133,14 +153,28 @@ export class CatalogosEamService implements OnModuleInit {
         this.prisma.catalogo_sistemas.findMany(),
       ]);
 
-      const LEGACY_PROTECTED_CODES = new Set(['GEN', 'GENERADOR', 'BOM', 'BOMBA', 'MOT', 'MOTOR', 'COMP', 'COMPRESOR']);
+      const LEGACY_PROTECTED_CODES = new Set([
+        'GEN',
+        'GENERADOR',
+        'BOM',
+        'BOMBA',
+        'MOT',
+        'MOTOR',
+        'COMP',
+        'COMPRESOR',
+      ]);
 
       for (const vinc of vinculos) {
         if (!vinc.modulo?.activo || !vinc.tipo_equipo?.activo) continue;
         const eqCode = vinc.tipo_equipo.codigo_tipo.trim().toUpperCase();
         if (LEGACY_PROTECTED_CODES.has(eqCode)) continue;
 
-        await this.ensureSistemaForModuloAndEquipo(vinc.modulo, eqCode, vinc.orden_visual ?? 1, sistemas);
+        await this.ensureSistemaForModuloAndEquipo(
+          vinc.modulo,
+          eqCode,
+          vinc.orden_visual ?? 1,
+          sistemas,
+        );
       }
     } catch {
       // Ignore in test mocks or partial environments
@@ -148,7 +182,14 @@ export class CatalogosEamService implements OnModuleInit {
   }
 
   private async ensureSistemaForModuloAndEquipo(
-    modulo: { id_modulo: number; codigo_modulo: string; nombre_modulo: string; descripcion?: string | null; icono?: string | null; color_ui?: string | null },
+    modulo: {
+      id_modulo: number;
+      codigo_modulo: string;
+      nombre_modulo: string;
+      descripcion?: string | null;
+      icono?: string | null;
+      color_ui?: string | null;
+    },
     eqCode: string,
     ordenVisual = 1,
     cachedSistemas?: any[],
@@ -171,7 +212,8 @@ export class CatalogosEamService implements OnModuleInit {
     if (!match) {
       match = sistemas.find((s) => {
         const aplica = (s.aplica_a || []).map((a: string) => a.toUpperCase());
-        const sameName = s.nombre_sistema.trim().toLowerCase() === modulo.nombre_modulo.trim().toLowerCase();
+        const sameName =
+          s.nombre_sistema.trim().toLowerCase() === modulo.nombre_modulo.trim().toLowerCase();
         if (sameName) return true;
         if (!aplica.includes(eqCode) || s.id_modulo != null) return false;
         const sysTokens = normTokens(s.nombre_sistema);
@@ -182,7 +224,9 @@ export class CatalogosEamService implements OnModuleInit {
 
     if (match) {
       const currentAplica: string[] = Array.isArray(match.aplica_a) ? match.aplica_a : [];
-      const nextAplica = Array.from(new Set([...currentAplica.map((c) => c.toUpperCase()), eqCode]));
+      const nextAplica = Array.from(
+        new Set([...currentAplica.map((c) => c.toUpperCase()), eqCode]),
+      );
       const needsUpdate =
         match.id_modulo !== modulo.id_modulo ||
         nextAplica.length !== currentAplica.length ||
@@ -203,12 +247,16 @@ export class CatalogosEamService implements OnModuleInit {
     }
 
     // 2. Crear nuevo registro en catalogo_sistemas
-    const rawCode = `SIS_${modulo.codigo_modulo.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`.slice(0, 50);
+    const rawCode = `SIS_${modulo.codigo_modulo.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`.slice(
+      0,
+      50,
+    );
     const created = await this.prisma.catalogo_sistemas.create({
       data: {
         codigo_sistema: rawCode,
         nombre_sistema: modulo.nombre_modulo.trim().slice(0, 100),
-        descripcion: modulo.descripcion || `Subsistema sincronizado desde parte EAM (${modulo.codigo_modulo})`,
+        descripcion:
+          modulo.descripcion || `Subsistema sincronizado desde parte EAM (${modulo.codigo_modulo})`,
         aplica_a: [eqCode],
         orden_visualizacion: ordenVisual,
         icono: modulo.icono || 'layers',
@@ -413,9 +461,9 @@ export class CatalogosEamService implements OnModuleInit {
   }
 
   async setActivoDisciplina(categoria: string, activo: boolean) {
-    const presetCodigos = BANCO_UNIVERSAL_QUDT
-      .filter((p) => p.categoria === categoria)
-      .map((p) => p.codigo_magnitud);
+    const presetCodigos = BANCO_UNIVERSAL_QUDT.filter((p) => p.categoria === categoria).map(
+      (p) => p.codigo_magnitud,
+    );
 
     if (presetCodigos.length === 0) {
       throw new NotFoundException(`No se encontraron magnitudes para la disciplina ${categoria}`);
@@ -451,8 +499,13 @@ export class CatalogosEamService implements OnModuleInit {
     await this.prisma.unidades_medida.updateMany({
       data: { activo: true },
     });
-    if (this.uomService) { await this.uomService.recargarDesdeBD(); }
-    return { ok: true, message: 'Todas las magnitudes y unidades han sido reactivadas exitosamente' };
+    if (this.uomService) {
+      await this.uomService.recargarDesdeBD();
+    }
+    return {
+      ok: true,
+      message: 'Todas las magnitudes y unidades han sido reactivadas exitosamente',
+    };
   }
 
   async getMagnitudes() {
@@ -638,10 +691,7 @@ export class CatalogosEamService implements OnModuleInit {
       include: {
         magnitud: true,
       },
-      orderBy: [
-        { es_unidad_base: 'desc' },
-        { nombre: 'asc' },
-      ],
+      orderBy: [{ es_unidad_base: 'desc' }, { nombre: 'asc' }],
     });
   }
 
@@ -738,7 +788,8 @@ export class CatalogosEamService implements OnModuleInit {
         : { disconnect: true };
     }
 
-    const esUnidadBase = dto.es_unidad_base !== undefined ? dto.es_unidad_base : unidad.es_unidad_base;
+    const esUnidadBase =
+      dto.es_unidad_base !== undefined ? dto.es_unidad_base : unidad.es_unidad_base;
 
     if (esUnidadBase) {
       data.factor_a = new Prisma.Decimal(1.0);
@@ -913,7 +964,11 @@ export class CatalogosEamService implements OnModuleInit {
       }
 
       // Fallback a motor estático UomConversionService
-      const valorDestino = this.uomService.convertir(dto.valor, dto.unidadOrigen, dto.unidadDestino);
+      const valorDestino = this.uomService.convertir(
+        dto.valor,
+        dto.unidadOrigen,
+        dto.unidadDestino,
+      );
       return {
         valorOriginal: dto.valor,
         unidadOrigen: dto.unidadOrigen,
@@ -1027,8 +1082,12 @@ export class CatalogosEamService implements OnModuleInit {
         id_magnitud: idMagnitud || null,
         unidad_defecto_codigo: dto.unidad_defecto_codigo?.trim().toUpperCase() || null,
         rol_semantico: dto.rol_semantico?.trim().toUpperCase() || 'ESTANDAR',
-        opciones_json: dto.opciones_json ? (dto.opciones_json as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
-        validacion_json: dto.validacion_json ? (dto.validacion_json as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+        opciones_json: dto.opciones_json
+          ? (dto.opciones_json as unknown as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        validacion_json: dto.validacion_json
+          ? (dto.validacion_json as unknown as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
         es_sistema: dto.es_sistema ?? false,
       },
     });
@@ -1048,14 +1107,21 @@ export class CatalogosEamService implements OnModuleInit {
     if (dto.descripcion !== undefined) data.descripcion = dto.descripcion?.trim() || null;
     if (dto.tipo_control !== undefined) data.tipo_control = dto.tipo_control.trim().toUpperCase();
     if (dto.id_magnitud !== undefined) {
-      data.magnitud = dto.id_magnitud ? { connect: { id_magnitud: dto.id_magnitud } } : { disconnect: true };
+      data.magnitud = dto.id_magnitud
+        ? { connect: { id_magnitud: dto.id_magnitud } }
+        : { disconnect: true };
     }
     if (dto.unidad_defecto_codigo !== undefined) {
-      data.unidad_defecto = dto.unidad_defecto_codigo ? { connect: { codigo: dto.unidad_defecto_codigo.toUpperCase() } } : { disconnect: true };
+      data.unidad_defecto = dto.unidad_defecto_codigo
+        ? { connect: { codigo: dto.unidad_defecto_codigo.toUpperCase() } }
+        : { disconnect: true };
     }
-    if (dto.rol_semantico !== undefined) data.rol_semantico = dto.rol_semantico.trim().toUpperCase();
-    if (dto.opciones_json !== undefined) data.opciones_json = dto.opciones_json as unknown as Prisma.InputJsonValue;
-    if (dto.validacion_json !== undefined) data.validacion_json = dto.validacion_json as unknown as Prisma.InputJsonValue;
+    if (dto.rol_semantico !== undefined)
+      data.rol_semantico = dto.rol_semantico.trim().toUpperCase();
+    if (dto.opciones_json !== undefined)
+      data.opciones_json = dto.opciones_json as unknown as Prisma.InputJsonValue;
+    if (dto.validacion_json !== undefined)
+      data.validacion_json = dto.validacion_json as unknown as Prisma.InputJsonValue;
     if (dto.activo !== undefined) data.activo = dto.activo;
 
     return this.prisma.atributos_tecnicos.update({
@@ -1121,10 +1187,7 @@ export class CatalogosEamService implements OnModuleInit {
               },
             },
           },
-          orderBy: [
-            { grupo_visual: 'asc' },
-            { orden_visual: 'asc' },
-          ],
+          orderBy: [{ grupo_visual: 'asc' }, { orden_visual: 'asc' }],
         },
         tipo_equipo_modulos: {
           include: {
@@ -1155,10 +1218,7 @@ export class CatalogosEamService implements OnModuleInit {
               },
             },
           },
-          orderBy: [
-            { grupo_visual: 'asc' },
-            { orden_visual: 'asc' },
-          ],
+          orderBy: [{ grupo_visual: 'asc' }, { orden_visual: 'asc' }],
         },
         tipo_equipo_modulos: {
           include: {
@@ -1269,7 +1329,9 @@ export class CatalogosEamService implements OnModuleInit {
           where: { id_modulo: mod.id_modulo },
           data: {
             nombre_sistema: dto.nombre_modulo.trim().slice(0, 100),
-            ...(dto.descripcion !== undefined ? { descripcion: dto.descripcion?.trim() || null } : {}),
+            ...(dto.descripcion !== undefined
+              ? { descripcion: dto.descripcion?.trim() || null }
+              : {}),
           },
         })
         .catch(() => {});
@@ -1485,8 +1547,8 @@ export class CatalogosEamService implements OnModuleInit {
           if (itemG) {
             totalEquipos += itemG._count?.equipos || 0;
             totalEquiposActivos += mapaActivos.has(idG)
-              ? (mapaActivos.get(idG) || 0)
-              : (itemG._count?.equipos || 0);
+              ? mapaActivos.get(idG) || 0
+              : itemG._count?.equipos || 0;
             totalModelos += itemG._count?.modelos_equipo || 0;
             codigosSincronizados.push(itemG.codigo_tipo);
           }
@@ -1497,8 +1559,7 @@ export class CatalogosEamService implements OnModuleInit {
           categoria: categoriaHumana,
           unidad_uso: t.unidad_uso || 'HORAS',
           etiqueta_contador:
-            t.etiqueta_contador ||
-            (t.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
+            t.etiqueta_contador || (t.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
           prefijo_codigo: t.prefijo_codigo || t.codigo_tipo,
           nombre_canonico: par.nombreCanonico,
           codigo_corto:
@@ -1517,8 +1578,8 @@ export class CatalogosEamService implements OnModuleInit {
         });
       } else {
         const activos = mapaActivos.has(t.id_tipo_equipo)
-          ? (mapaActivos.get(t.id_tipo_equipo) || 0)
-          : (t._count?.equipos || 0);
+          ? mapaActivos.get(t.id_tipo_equipo) || 0
+          : t._count?.equipos || 0;
         const nombreLimpio =
           t.codigo_tipo === 'COMP' ? 'Compresor de Aire Industrial' : t.nombre_tipo;
         resultado.push({
@@ -1526,8 +1587,7 @@ export class CatalogosEamService implements OnModuleInit {
           categoria: categoriaHumana,
           unidad_uso: t.unidad_uso || 'HORAS',
           etiqueta_contador:
-            t.etiqueta_contador ||
-            (t.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
+            t.etiqueta_contador || (t.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
           prefijo_codigo: t.prefijo_codigo || t.codigo_tipo,
           nombre_canonico: nombreLimpio,
           codigo_corto: t.codigo_tipo,
@@ -1583,8 +1643,7 @@ export class CatalogosEamService implements OnModuleInit {
       categoria: categoriaHumana,
       unidad_uso: t.unidad_uso || 'HORAS',
       etiqueta_contador:
-        t.etiqueta_contador ||
-        (t.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
+        t.etiqueta_contador || (t.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
       prefijo_codigo: t.prefijo_codigo || t.codigo_tipo,
       nombre_canonico: t.nombre_tipo,
       codigo_corto: t.codigo_tipo,
@@ -1602,7 +1661,10 @@ export class CatalogosEamService implements OnModuleInit {
 
     const categoriaEnum = mapearCategoriaDbEnum(dto.categoria);
     const prefijo = (dto.prefijo_codigo || codigo).trim().toUpperCase();
-    const macroCategoria = dto.categoria?.trim() || MAPA_CATEGORIAS_HUMANAS[categoriaEnum] || 'Otra Maquinaria Industrial';
+    const macroCategoria =
+      dto.categoria?.trim() ||
+      MAPA_CATEGORIAS_HUMANAS[categoriaEnum] ||
+      'Otra Maquinaria Industrial';
 
     return this.prisma.tipos_equipo.create({
       data: {
@@ -1744,10 +1806,7 @@ export class CatalogosEamService implements OnModuleInit {
                       },
                     },
                   },
-                  orderBy: [
-                    { grupo_visual: 'asc' },
-                    { orden_visual: 'asc' },
-                  ],
+                  orderBy: [{ grupo_visual: 'asc' }, { orden_visual: 'asc' }],
                 },
               },
             },
@@ -1793,12 +1852,13 @@ export class CatalogosEamService implements OnModuleInit {
           valor_defecto: ma.valor_defecto,
           magnitud: attr.magnitud?.codigo_magnitud || null,
           unidad_defecto: attr.unidad_defecto_codigo || null,
-          unidades_disponibles: attr.magnitud?.unidades_medida?.map((u) => ({
-            codigo: u.codigo,
-            nombre: u.nombre,
-            simbolo: u.simbolo,
-            es_base: u.es_unidad_base,
-          })) || [],
+          unidades_disponibles:
+            attr.magnitud?.unidades_medida?.map((u) => ({
+              codigo: u.codigo,
+              nombre: u.nombre,
+              simbolo: u.simbolo,
+              es_base: u.es_unidad_base,
+            })) || [],
           opciones: attr.opciones_json || [],
         });
       }
@@ -1887,8 +1947,13 @@ export class CatalogosEamService implements OnModuleInit {
       ])
         .then(([arq, mod]) => {
           if (arq && mod) {
-            return this.ensureSistemaForModuloAndEquipo(mod, arq.codigo_tipo.trim().toUpperCase(), 1);
+            return this.ensureSistemaForModuloAndEquipo(
+              mod,
+              arq.codigo_tipo.trim().toUpperCase(),
+              1,
+            );
           }
+          return null;
         })
         .catch(() => {});
     }
@@ -1923,16 +1988,24 @@ export class CatalogosEamService implements OnModuleInit {
           id_tipo_servicio: dto.id_tipo_servicio,
           nombre_plan: dto.nombre_plan.trim(),
           frecuencia_dias: dto.frecuencia_dias ?? 90,
-          frecuencia_uso: dto.frecuencia_uso !== undefined ? new Prisma.Decimal(dto.frecuencia_uso) : new Prisma.Decimal(250),
-          criterio_intervalo: dto.criterio_intervalo?.trim().toUpperCase() || 'LO_QUE_OCURRA_PRIMERO',
+          frecuencia_uso:
+            dto.frecuencia_uso !== undefined
+              ? new Prisma.Decimal(dto.frecuencia_uso)
+              : new Prisma.Decimal(250),
+          criterio_intervalo:
+            dto.criterio_intervalo?.trim().toUpperCase() || 'LO_QUE_OCURRA_PRIMERO',
           es_plan_por_defecto: dto.es_plan_por_defecto ?? true,
           activo: true,
         },
         update: {
           nombre_plan: dto.nombre_plan.trim(),
           frecuencia_dias: dto.frecuencia_dias ?? 90,
-          frecuencia_uso: dto.frecuencia_uso !== undefined ? new Prisma.Decimal(dto.frecuencia_uso) : new Prisma.Decimal(250),
-          criterio_intervalo: dto.criterio_intervalo?.trim().toUpperCase() || 'LO_QUE_OCURRA_PRIMERO',
+          frecuencia_uso:
+            dto.frecuencia_uso !== undefined
+              ? new Prisma.Decimal(dto.frecuencia_uso)
+              : new Prisma.Decimal(250),
+          criterio_intervalo:
+            dto.criterio_intervalo?.trim().toUpperCase() || 'LO_QUE_OCURRA_PRIMERO',
           es_plan_por_defecto: dto.es_plan_por_defecto ?? true,
           activo: true,
         },
@@ -1961,7 +2034,8 @@ export class CatalogosEamService implements OnModuleInit {
     if (dto.nombre_plan !== undefined) data.nombre_plan = dto.nombre_plan.trim();
     if (dto.frecuencia_dias !== undefined) data.frecuencia_dias = dto.frecuencia_dias;
     if (dto.frecuencia_uso !== undefined) {
-      data.frecuencia_uso = dto.frecuencia_uso !== null ? new Prisma.Decimal(dto.frecuencia_uso) : null;
+      data.frecuencia_uso =
+        dto.frecuencia_uso !== null ? new Prisma.Decimal(dto.frecuencia_uso) : null;
     }
     if (dto.criterio_intervalo !== undefined) {
       data.criterio_intervalo = dto.criterio_intervalo.trim().toUpperCase();
@@ -2000,7 +2074,7 @@ export class CatalogosEamService implements OnModuleInit {
     });
   }
 
-  async getTiposServicioEam(idTipoEquipo?: number) {
+  async getTiposServicioEam(_idTipoEquipo?: number) {
     const where: Prisma.tipos_servicioWhereInput = {
       activo: true,
       NOT: { codigo_tipo: { contains: 'TEST', mode: 'insensitive' } },
@@ -2087,7 +2161,6 @@ export class CatalogosEamService implements OnModuleInit {
     });
   }
 
-
   // ═══════════════════════════════════════════════════════════════════════════
   // 5. MODELOS DE EQUIPO OEM Y KITS BOM
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2114,10 +2187,7 @@ export class CatalogosEamService implements OnModuleInit {
           },
         },
       },
-      orderBy: [
-        { marca: 'asc' },
-        { modelo: 'asc' },
-      ],
+      orderBy: [{ marca: 'asc' }, { modelo: 'asc' }],
     });
   }
 
@@ -2159,7 +2229,8 @@ export class CatalogosEamService implements OnModuleInit {
         modelo: dto.modelo.trim().toUpperCase(),
         id_tipo_equipo: dto.id_tipo_equipo,
         nombre_comercial: dto.nombre_comercial?.trim() || null,
-        especificaciones_base: (dto.especificaciones_base || {}) as unknown as Prisma.InputJsonValue,
+        especificaciones_base: (dto.especificaciones_base ||
+          {}) as unknown as Prisma.InputJsonValue,
       },
     });
   }
@@ -2180,7 +2251,8 @@ export class CatalogosEamService implements OnModuleInit {
     if (dto.id_tipo_equipo !== undefined) {
       data.tipo_equipo = { connect: { id_tipo_equipo: dto.id_tipo_equipo } };
     }
-    if (dto.nombre_comercial !== undefined) data.nombre_comercial = dto.nombre_comercial?.trim() || null;
+    if (dto.nombre_comercial !== undefined)
+      data.nombre_comercial = dto.nombre_comercial?.trim() || null;
     if (dto.especificaciones_base !== undefined) {
       data.especificaciones_base = dto.especificaciones_base as unknown as Prisma.InputJsonValue;
     }

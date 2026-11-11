@@ -33,16 +33,18 @@ export class GetVersionesHandler implements IQueryHandler<GetVersionesQuery> {
       orderBy: { numero_version: 'desc' },
       skip,
       take,
-      include: {
-        usuarios: {
-          select: {
-            id_usuario: true,
-            username: true,
-            email: true,
-          },
-        },
-      },
     });
+
+    const creadorIds = Array.from(
+      new Set(versiones.map((v) => v.creada_por).filter((id): id is number => id !== null)),
+    );
+    const usuarios = creadorIds.length
+      ? await this.prisma.usuarios.findMany({
+          where: { id_usuario: { in: creadorIds } },
+          select: { id_usuario: true, username: true },
+        })
+      : [];
+    const usernameById = new Map(usuarios.map((u) => [u.id_usuario, u.username]));
 
     // Total versiones para paginación
     const total = await this.prisma.versiones_cotizacion.count({
@@ -62,10 +64,12 @@ export class GetVersionesHandler implements IQueryHandler<GetVersionesQuery> {
         resumen_cambios: v.resumen_cambios,
         subtotal: v.subtotal_version,
         total: v.total_version,
-        creada_por: v.usuarios?.username,
+        creada_por: v.creada_por ? usernameById.get(v.creada_por) : undefined,
         // Contar items sin incluir JSONB completo (performance)
         items_servicios_count: Array.isArray(v.items_servicios) ? v.items_servicios.length : 0,
-        items_componentes_count: Array.isArray(v.items_componentes) ? v.items_componentes.length : 0,
+        items_componentes_count: Array.isArray(v.items_componentes)
+          ? v.items_componentes.length
+          : 0,
       })),
       pagination: {
         total,

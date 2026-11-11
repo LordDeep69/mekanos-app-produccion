@@ -6,7 +6,7 @@ import { ConvertirPropuestaOrdenCommand } from './convertir-propuesta-orden.comm
 /**
  * ConvertirPropuestaOrdenHandler
  * FASE 4.9: Convierte propuesta aprobada en orden servicio automática
- * 
+ *
  * LÓGICA:
  * 1. Validar propuesta existe y cotización asociada está APROBADA_CLIENTE
  * 2. Validar propuesta no ha sido convertida antes
@@ -16,7 +16,9 @@ import { ConvertirPropuestaOrdenCommand } from './convertir-propuesta-orden.comm
  * 6. Actualizar propuesta marcando fecha conversión
  */
 @CommandHandler(ConvertirPropuestaOrdenCommand)
-export class ConvertirPropuestaOrdenHandler implements ICommandHandler<ConvertirPropuestaOrdenCommand> {
+export class ConvertirPropuestaOrdenHandler
+  implements ICommandHandler<ConvertirPropuestaOrdenCommand>
+{
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(command: ConvertirPropuestaOrdenCommand) {
@@ -26,20 +28,20 @@ export class ConvertirPropuestaOrdenHandler implements ICommandHandler<Convertir
     const propuesta = await this.prisma.propuestas_correctivo.findUnique({
       where: { id_propuesta: idPropuesta },
       include: {
-        orden_servicio: {
+        ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio: {
           include: {
-            cliente: {
+            clientes: {
               include: { persona: true },
             },
-            sede: true,
-            equipo: true,
+            sedes_cliente: true,
+            equipos: true,
           },
         },
-        cliente: {
+        clientes: {
           include: { persona: true },
         },
-        equipo: true,
-        estado: true,
+        equipos: true,
+        estados_cotizacion: true,
       },
     });
 
@@ -48,9 +50,9 @@ export class ConvertirPropuestaOrdenHandler implements ICommandHandler<Convertir
     }
 
     // PASO 2: Validar propuesta está APROBADA
-    if (propuesta.estado.nombre_estado !== 'APROBADA') {
+    if (propuesta.estados_cotizacion.nombre_estado !== 'APROBADA') {
       throw new BadRequestException(
-        `Solo se pueden convertir propuestas APROBADAS. Estado actual: ${propuesta.estado.nombre_estado}`,
+        `Solo se pueden convertir propuestas APROBADAS. Estado actual: ${propuesta.estados_cotizacion.nombre_estado}`,
       );
     }
 
@@ -93,6 +95,9 @@ export class ConvertirPropuestaOrdenHandler implements ICommandHandler<Convertir
 
     const numeroOrden = `OS-${year}-${consecutivo.toString().padStart(4, '0')}`;
 
+    const ordenOrigen =
+      propuesta.ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio;
+
     // PASO 6: Crear orden servicio + actualizar propuesta en transacción
     const result = await this.prisma.$transaction(async (prisma) => {
       // 6.1. Crear orden servicio desde propuesta
@@ -100,12 +105,12 @@ export class ConvertirPropuestaOrdenHandler implements ICommandHandler<Convertir
         data: {
           numero_orden: numeroOrden,
           id_cliente: propuesta.id_cliente,
-          id_sede: propuesta.orden_servicio.id_sede,
-          id_equipo: propuesta.id_equipo ?? propuesta.orden_servicio.id_equipo,
+          id_sede: ordenOrigen.id_sede,
+          id_equipo: propuesta.id_equipo ?? ordenOrigen.id_equipo,
           id_estado_actual: estadoProgramada.id_estado,
           descripcion_inicial: propuesta.solucion_propuesta,
           prioridad: propuesta.prioridad || 'NORMAL',
-          origen_solicitud: 'CORRECTIVO' as any,
+          origen_solicitud: 'INTERNO',
           requiere_firma_cliente: true,
           creado_por: convertidaPor,
           fecha_creacion: new Date(),
@@ -130,8 +135,9 @@ export class ConvertirPropuestaOrdenHandler implements ICommandHandler<Convertir
         id_orden_servicio: result.ordenServicio.id_orden_servicio,
         numero_orden: result.ordenServicio.numero_orden,
         estado: 'PROGRAMADA',
-        cliente: propuesta.cliente.persona.razon_social || propuesta.cliente.persona.nombre_completo,
-        equipo: propuesta.equipo?.nombre_equipo,
+        cliente:
+          propuesta.clientes.persona.razon_social || propuesta.clientes.persona.nombre_completo,
+        equipo: propuesta.equipos?.nombre_equipo,
       },
       propuesta: {
         id_propuesta: result.propuesta.id_propuesta,

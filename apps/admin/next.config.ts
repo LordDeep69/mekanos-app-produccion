@@ -1,8 +1,25 @@
-import type { NextConfig } from "next";
+import path from 'path';
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   // Optimización para Vercel
   output: 'standalone',
+
+  // Raíz explícita del monorepo para Turbopack en pnpm workspaces
+  turbopack: {
+    root: path.resolve(__dirname, '../..'),
+  },
+
+  // Optimización de imports de librerías pesadas / barriles en dev y build
+  experimental: {
+    optimizePackageImports: [
+      '@tanstack/react-query',
+      '@tiptap/react',
+      '@tiptap/starter-kit',
+      '@tiptap/extension-underline',
+      'zod',
+    ],
+  },
 
   // Configuración de imágenes
   images: {
@@ -70,10 +87,9 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Ignorar errores de TypeScript durante build (deploy rápido)
-  // Los errores son de compatibilidad de tipos entre zod v4 y react-hook-form
+  // Verificación estricta de TypeScript habilitada (0 errores TS)
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 };
 

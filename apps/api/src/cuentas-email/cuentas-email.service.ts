@@ -7,7 +7,7 @@ import { CreateCuentaEmailDto, UpdateCuentaEmailDto } from './dto';
 export class CuentasEmailService {
   private readonly logger = new Logger(CuentasEmailService.name);
 
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateCuentaEmailDto, userId: number) {
     this.logger.log(`Creando cuenta de email: ${dto.email}`);
@@ -28,7 +28,9 @@ export class CuentasEmailService {
     );
 
     if (!isValid) {
-      throw new BadRequestException('Las credenciales de Gmail API no son válidas. Verifica Client ID, Client Secret y Refresh Token.');
+      throw new BadRequestException(
+        'Las credenciales de Gmail API no son válidas. Verifica Client ID, Client Secret y Refresh Token.',
+      );
     }
 
     const cuenta = await this.prisma.cuentas_email.create({
@@ -188,7 +190,11 @@ export class CuentasEmailService {
     return { message: `Cuenta de email ${cuenta.email} eliminada correctamente` };
   }
 
-  async verificarCredenciales(clientId: string, clientSecret: string, refreshToken: string): Promise<boolean> {
+  async verificarCredenciales(
+    clientId: string,
+    clientSecret: string,
+    refreshToken: string,
+  ): Promise<boolean> {
     try {
       const OAuth2 = google.auth.OAuth2;
       const oauth2Client = new OAuth2(
@@ -201,7 +207,8 @@ export class CuentasEmailService {
       const { token } = await oauth2Client.getAccessToken();
       return !!token;
     } catch (error) {
-      this.logger.error(`❌ Error verificando credenciales: ${error.message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Error verificando credenciales: ${msg}`);
       return false;
     }
   }
@@ -228,9 +235,10 @@ export class CuentasEmailService {
         message: `Conexión exitosa. Email verificado: ${profile.data.emailAddress}`,
       };
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        message: `Error de conexión: ${error.message}`,
+        message: `Error de conexión: ${msg}`,
       };
     }
   }
@@ -249,7 +257,7 @@ export class CuentasEmailService {
     });
 
     // Mapear es_cuenta_principal a es_principal para el frontend
-    return cuentas.map(c => ({
+    return cuentas.map((c) => ({
       id_cuenta_email: c.id_cuenta_email,
       nombre: c.nombre,
       email: c.email,
@@ -259,7 +267,13 @@ export class CuentasEmailService {
 
   // Sanitizar cuenta para no exponer credenciales en respuestas
   private sanitizeCuenta(cuenta: any) {
-    const { gmail_client_id, gmail_client_secret, gmail_refresh_token, es_cuenta_principal, ...safe } = cuenta;
+    const {
+      gmail_client_id,
+      gmail_client_secret,
+      gmail_refresh_token,
+      es_cuenta_principal,
+      ...safe
+    } = cuenta;
     return {
       ...safe,
       es_principal: es_cuenta_principal, // Mapear al nombre esperado por el frontend

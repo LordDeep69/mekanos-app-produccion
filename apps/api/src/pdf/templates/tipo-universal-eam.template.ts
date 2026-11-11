@@ -1,11 +1,11 @@
 /**
  * MEKANOS S.A.S - Motor Universal de Activos EAM
- * 
+ *
  * Template Oficial: INFORME TÉCNICO DE MANTENIMIENTO UNIVERSAL EAM
- * 
- * Gobierna activos universales polimórficos (Compresores, Motores, Chiller HVAC, 
+ *
+ * Gobierna activos universales polimórficos (Compresores, Motores, Chiller HVAC,
  * Plantas de Emergencia, Sistemas de Bombeo y cualquier arquetipo futuro del Hub).
- * 
+ *
  * - Encabezado corporativo Mekanos con logo embebido base64
  * - Ficha Técnica Unificada del Cliente y Activo (Estándar Mekanos Base)
  * - Trazabilidad de caso / encadenamiento fractal de visitas
@@ -28,10 +28,7 @@ import {
   generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
 } from './mekanos-base.template';
-import {
-  EquipoSpecsReader,
-  DatosPlacaUniversal,
-} from '../../equipos/services/equipo-specs.reader';
+import { EquipoSpecsReader, DatosPlacaUniversal } from '../../equipos/services/equipo-specs.reader';
 
 /**
  * Optimiza URLs de Cloudinary para compresión y carga ultra-rápida en Puppeteer
@@ -62,17 +59,20 @@ export const esActividadMedicion = (act: any): boolean => {
   if (act?.idParametroMedicion != null) return true;
   if (act?.tipoActividad) return act.tipoActividad === 'MEDICION';
   const desc = (act.descripcion || '').toLowerCase();
-  
+
   // Excluir ajustes mecánicos de tensión en correas o bandas de transmisión
   if (desc.includes('banda') || desc.includes('correa')) {
     return false;
   }
-  
+
   // Excluir pruebas funcionales de verificación de switches o presostatos
-  if (desc.includes('presostato') && (desc.includes('verific') || desc.includes('revis') || desc.includes('prueba'))) {
+  if (
+    desc.includes('presostato') &&
+    (desc.includes('verific') || desc.includes('revis') || desc.includes('prueba'))
+  ) {
     return false;
   }
-  
+
   return (
     desc.includes('medición') ||
     desc.includes('medicion') ||
@@ -120,7 +120,12 @@ export const formatearLabelParametroUniversal = (descripcion: string): string =>
   if (d.includes('VOLTAJE') || d.includes('TENSIÓN') || d.includes('TENSION')) {
     return 'Voltaje de Alimentación';
   }
-  if (d.includes('AMPERAJE') || d.includes('CORRIENTE') || d.includes('CONSUMO ELÉCTRICO') || d.includes('CONSUMO ELECTRICO')) {
+  if (
+    d.includes('AMPERAJE') ||
+    d.includes('CORRIENTE') ||
+    d.includes('CONSUMO ELÉCTRICO') ||
+    d.includes('CONSUMO ELECTRICO')
+  ) {
     return 'Consumo Eléctrico / Amperaje';
   }
   if (d.includes('DELTA T') || d.includes('TEMPERATURA')) {
@@ -133,7 +138,7 @@ export const formatearLabelParametroUniversal = (descripcion: string): string =>
     return 'Presión de Aceite';
   }
 
-  let limpio = (descripcion || '')
+  const limpio = (descripcion || '')
     .replace(/^MEDICI[ÓO]N\s+DE\s+/i, '')
     .replace(/^VERIFICACI[ÓO]N\s+DE\s+/i, '')
     .replace(/^REVISI[ÓO]N\s+DE\s+/i, '')
@@ -144,7 +149,8 @@ export const formatearLabelParametroUniversal = (descripcion: string): string =>
 
 export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
   const esMultiEquipo =
-    Boolean(datos.esMultiEquipo) || (Boolean(datos.actividadesPorEquipo) && (datos.actividadesPorEquipo?.length || 0) > 1);
+    Boolean(datos.esMultiEquipo) ||
+    (Boolean(datos.actividadesPorEquipo) && (datos.actividadesPorEquipo?.length || 0) > 1);
 
   // 1. Resolver Placa Universal EAM
   const eq = datos.equipoDetalle || datos;
@@ -318,7 +324,8 @@ function generarChecklistUniversal(actividades: any[]): string {
     <div class="section-title">📋 PROTOCOLO DE INSPECCIÓN Y ACTIVIDADES PREVENTIVAS (${actividadesInspeccion.length} TAREAS)</div>
 
     ${Array.from(sistemasMap.entries())
-      .map(([sistema, items]) => `
+      .map(
+        ([sistema, items]) => `
       <div class="subsistema-block" style="margin-bottom: 12px; page-break-inside: avoid !important; break-inside: avoid !important;">
         <div style="background: #F1F5F9; color: #1E3A8A; font-size: 9.5px; font-weight: 800; padding: 6px 10px; border-radius: 4px; border-left: 4px solid #1D4ED8; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
           <span>⚙️ SUBSISTEMA: ${sistema}</span>
@@ -335,7 +342,10 @@ function generarChecklistUniversal(actividades: any[]): string {
           <tbody>
             ${items
               .map((act) => {
-                const resp = act.respuestaJson && typeof act.respuestaJson === 'object' ? act.respuestaJson : null;
+                const resp =
+                  act.respuestaJson && typeof act.respuestaJson === 'object'
+                    ? act.respuestaJson
+                    : null;
                 const estRaw = (
                   resp?.semaforo ||
                   (act as any).resultado ||
@@ -377,7 +387,8 @@ function generarChecklistUniversal(actividades: any[]): string {
                       : '');
 
                 const obsLimpia = (act.observaciones || '').trim();
-                const obsDisplay = obsLimpia && obsLimpia !== '--' && obsLimpia !== '-' ? obsLimpia : '';
+                const obsDisplay =
+                  obsLimpia && obsLimpia !== '--' && obsLimpia !== '-' ? obsLimpia : '';
 
                 return `
               <tr style="border-bottom: 1px solid #F1F5F9; page-break-inside: avoid !important; break-inside: avoid !important;">
@@ -398,7 +409,8 @@ function generarChecklistUniversal(actividades: any[]): string {
           </tbody>
         </table>
       </div>
-      `)
+      `,
+      )
       .join('')}
 
     <!-- SIMBOLOGÍA DE ESTADOS -->
@@ -415,13 +427,17 @@ function generarChecklistUniversal(actividades: any[]): string {
   `;
 }
 
-function generarMedicionesUniversal(datos: DatosOrdenPDF, placaUniversal?: DatosPlacaUniversal): string {
+function generarMedicionesUniversal(
+  datos: DatosOrdenPDF,
+  placaUniversal?: DatosPlacaUniversal,
+): string {
   const mediciones = datos.mediciones || [];
   const modulo = datos.datosModulo;
   const actividadesMedicion = (datos.actividades || []).filter((act) => esActividadMedicion(act));
 
   // 1. Extraer tarjetas de parámetros operativos
-  const itemsCards: Array<{ label: string; value: string; badge?: string; badgeColor?: string }> = [];
+  const itemsCards: Array<{ label: string; value: string; badge?: string; badgeColor?: string }> =
+    [];
 
   // A) Desde actividades de medición ejecutadas
   for (const act of actividadesMedicion) {
@@ -433,7 +449,9 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF, placaUniversal?: Datos
     const obs = (act.observaciones || '').trim();
     if (obs && !obs.startsWith('--')) {
       // Extraer si viene número tipo "TEMP: 80" -> "80 °C"
-      const matchNum = obs.match(/(?:temp|presion|voltaje|amperaje|amp|corriente)?[:\s]*([\d.,]+)\s*([a-zA-Z°/³]*)/i);
+      const matchNum = obs.match(
+        /(?:temp|presion|voltaje|amperaje|amp|corriente)?[:\s]*([\d.,]+)\s*([a-zA-Z°/³]*)/i,
+      );
       if (matchNum) {
         const unidad = matchNum[2] || deducirUnidadParametro(act.descripcion);
         valorTexto = `${matchNum[1]} ${unidad}`.trim();
@@ -495,32 +513,54 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF, placaUniversal?: Datos
         (uUso === 'CICLOS'
           ? 'Ciclos de Operación'
           : uUso === 'KM_ODO'
-          ? 'Odómetro de Operación'
-          : 'Horómetro de Operación');
-      const sufijoUso =
-        uUso === 'CICLOS'
-          ? 'ciclos'
-          : uUso === 'KM_ODO'
-          ? 'km'
-          : 'hrs';
+            ? 'Odómetro de Operación'
+            : 'Horómetro de Operación');
+      const sufijoUso = uUso === 'CICLOS' ? 'ciclos' : uUso === 'KM_ODO' ? 'km' : 'hrs';
       itemsCards.push({ label: labelUso, value: `${modulo.horasTrabajo} ${sufijoUso}` });
     }
-    if (modulo.voltaje != null && !itemsCards.some(i => i.label.toLowerCase().includes('voltaj'))) {
+    if (
+      modulo.voltaje != null &&
+      !itemsCards.some((i) => i.label.toLowerCase().includes('voltaj'))
+    ) {
       itemsCards.push({ label: 'Voltaje de Operación', value: `${modulo.voltaje} V` });
     }
-    if (modulo.corriente != null && !itemsCards.some(i => i.label.toLowerCase().includes('amperaj') || i.label.toLowerCase().includes('corrient'))) {
+    if (
+      modulo.corriente != null &&
+      !itemsCards.some(
+        (i) =>
+          i.label.toLowerCase().includes('amperaj') || i.label.toLowerCase().includes('corrient'),
+      )
+    ) {
       itemsCards.push({ label: 'Corriente / Amperaje', value: `${modulo.corriente} A` });
     }
-    if (modulo.rpm != null && !itemsCards.some(i => i.label.toLowerCase().includes('velocidad') || i.label.toLowerCase().includes('rpm'))) {
+    if (
+      modulo.rpm != null &&
+      !itemsCards.some(
+        (i) => i.label.toLowerCase().includes('velocidad') || i.label.toLowerCase().includes('rpm'),
+      )
+    ) {
       itemsCards.push({ label: 'Velocidad de Operación', value: `${modulo.rpm} RPM` });
     }
-    if (modulo.presionAceite != null && !itemsCards.some(i => i.label.toLowerCase().includes('presión de aceite') || i.label.toLowerCase().includes('presion de aceite'))) {
+    if (
+      modulo.presionAceite != null &&
+      !itemsCards.some(
+        (i) =>
+          i.label.toLowerCase().includes('presión de aceite') ||
+          i.label.toLowerCase().includes('presion de aceite'),
+      )
+    ) {
       itemsCards.push({ label: 'Presión de Aceite', value: `${modulo.presionAceite} PSI` });
     }
-    if (modulo.temperaturaRefrigerante != null && !itemsCards.some(i => i.label.toLowerCase().includes('temperatura'))) {
+    if (
+      modulo.temperaturaRefrigerante != null &&
+      !itemsCards.some((i) => i.label.toLowerCase().includes('temperatura'))
+    ) {
       itemsCards.push({ label: 'Temperatura', value: `${modulo.temperaturaRefrigerante} °C` });
     }
-    if (modulo.frecuencia != null && !itemsCards.some(i => i.label.toLowerCase().includes('frecuencia'))) {
+    if (
+      modulo.frecuencia != null &&
+      !itemsCards.some((i) => i.label.toLowerCase().includes('frecuencia'))
+    ) {
       itemsCards.push({ label: 'Frecuencia', value: `${modulo.frecuencia} Hz` });
     }
   }
@@ -614,10 +654,7 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF, placaUniversal?: Datos
   `;
 }
 
-function generarEvidenciasUniversal(
-  evidencias: any[],
-  _lotesGaleria?: LoteGaleriaPDF[],
-): string {
+function generarEvidenciasUniversal(evidencias: any[], _lotesGaleria?: LoteGaleriaPDF[]): string {
   if (!evidencias || evidencias.length === 0) return '';
 
   const grupos: Record<string, Array<{ url: string; caption: string; idLote?: number }>> = {
@@ -637,7 +674,8 @@ function generarEvidenciasUniversal(
     let fase = 'GENERAL';
     if (upper.includes('ANTES') || upper.includes('INICIAL')) fase = 'ANTES';
     else if (upper.includes('DURANTE') || upper.includes('PROCESO')) fase = 'DURANTE';
-    else if (upper.includes('DESPUES') || upper.includes('DESPUÉS') || upper.includes('FINAL')) fase = 'DESPUES';
+    else if (upper.includes('DESPUES') || upper.includes('DESPUÉS') || upper.includes('FINAL'))
+      fase = 'DESPUES';
 
     grupos[fase].push({
       url: optimizarUrlCloudinary(rawUrl),
@@ -697,7 +735,8 @@ function generarEvidenciasMultiEquipo(
     <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO - MULTI-EQUIPOS</div>
     ${evidenciasPorEquipo
       .map((g) => {
-        const nom = g.equipo.nombreSistema || g.equipo.nombreEquipo || `Equipo ${g.equipo.ordenSecuencia}`;
+        const nom =
+          g.equipo.nombreSistema || g.equipo.nombreEquipo || `Equipo ${g.equipo.ordenSecuencia}`;
         return `
         <div style="margin-bottom: 10px; border: 1.5px solid #CBD5E1; border-radius: 6px; overflow: hidden;">
           <div style="background: #1E293B; color: #FFFFFF; padding: 6px 10px; font-size: 9.5px; font-weight: bold;">
@@ -713,7 +752,10 @@ function generarEvidenciasMultiEquipo(
 }
 
 function generarObservacionesUniversal(datos: DatosOrdenPDF): string {
-  const obs = datos.observaciones || datos.observaciones_tecnico || 'Servicio ejecutado a satisfacción sin novedades extraordinarias.';
+  const obs =
+    datos.observaciones ||
+    datos.observaciones_tecnico ||
+    'Servicio ejecutado a satisfacción sin novedades extraordinarias.';
 
   return `
   <div class="section" style="page-break-inside: avoid;">

@@ -1,10 +1,10 @@
 /**
  * SEEDS DATOS DEMO - CLIENTES Y EMPLEADOS
- * 
+ *
  * Autor: GitHub Copilot
  * Fecha: 14 Nov 2025
  * Propósito: Datos mínimos para testing Cotizaciones
- * 
+ *
  * Ejecución: node seed-clientes-demo.js
  */
 
@@ -19,7 +19,7 @@ async function main() {
   // 1. PERSONAS BASE
   // ============================================
   console.log('📋 Creando personas...');
-  
+
   await prisma.personas.upsert({
     where: { id_persona: 1 },
     update: {},
@@ -103,15 +103,13 @@ async function main() {
     create: {
       id_cliente: 1,
       id_persona: 1,
-      razon_social: 'HOTEL CARIBE S.A.S.',
-      nit: '900123456-1',
-      sector_economico: 'HOTELERIA',
-      tipo_cliente: 'CORPORATIVO',
-      calificacion_crediticia: 'A',
+      codigo_cliente: 'CLI-001',
+      tipo_cliente: 'HOTELERO',
+      tiene_credito: true,
       dias_credito: 30,
       limite_credito: 50000000,
-      descuento_general_porcentaje: 5,
-      activo: true,
+      descuento_autorizado: 5,
+      cliente_activo: true,
       creado_por: 1,
     },
   });
@@ -122,15 +120,13 @@ async function main() {
     create: {
       id_cliente: 2,
       id_persona: 2,
-      razon_social: 'CLINICA BOCAGRANDE LTDA',
-      nit: '800987654-3',
-      sector_economico: 'SALUD',
-      tipo_cliente: 'CORPORATIVO',
-      calificacion_crediticia: 'A+',
+      codigo_cliente: 'CLI-002',
+      tipo_cliente: 'HOSPITALARIO',
+      tiene_credito: true,
       dias_credito: 60,
       limite_credito: 100000000,
-      descuento_general_porcentaje: 10,
-      activo: true,
+      descuento_autorizado: 10,
+      cliente_activo: true,
       creado_por: 1,
     },
   });
@@ -149,11 +145,10 @@ async function main() {
       id_sede: 1,
       id_cliente: 1,
       nombre_sede: 'Sede Principal - Hotel Caribe',
-      direccion: 'Carrera 1 # 2-87, Bocagrande',
-      ciudad: 'Cartagena',
-      departamento: 'Bolívar',
-      telefono: '6651234',
-      es_sede_principal: true,
+      direccion_sede: 'Carrera 1 # 2-87, Bocagrande',
+      ciudad_sede: 'Cartagena',
+      departamento_sede: 'Bolívar',
+      telefono_sede: '6651234',
       activo: true,
       creado_por: 1,
     },
@@ -166,11 +161,10 @@ async function main() {
       id_sede: 2,
       id_cliente: 2,
       nombre_sede: 'Clínica Bocagrande - Torre A',
-      direccion: 'Avenida San Martín # 7-123',
-      ciudad: 'Cartagena',
-      departamento: 'Bolívar',
-      telefono: '6659876',
-      es_sede_principal: true,
+      direccion_sede: 'Avenida San Martín # 7-123',
+      ciudad_sede: 'Cartagena',
+      departamento_sede: 'Bolívar',
+      telefono_sede: '6659876',
       activo: true,
       creado_por: 1,
     },
@@ -193,9 +187,10 @@ async function main() {
       cargo: 'ASESOR_COMERCIAL',
       tipo_contrato: 'INDEFINIDO',
       fecha_ingreso: new Date('2020-01-15'),
-      salario_base: 2500000,
-      disponible_campo: false,
-      activo: true,
+      contacto_emergencia: 'Familiar MEKANOS',
+      telefono_emergencia: '3000000001',
+      es_asesor: true,
+      empleado_activo: true,
       creado_por: 1,
     },
   });
@@ -207,12 +202,13 @@ async function main() {
       id_empleado: 2,
       id_persona: 4,
       codigo_empleado: 'MEK-002',
-      cargo: 'TECNICO_ELECTRICO',
+      cargo: 'TECNICO_SENIOR',
       tipo_contrato: 'INDEFINIDO',
       fecha_ingreso: new Date('2019-06-01'),
-      salario_base: 3000000,
-      disponible_campo: true,
-      activo: true,
+      contacto_emergencia: 'Familiar MEKANOS',
+      telefono_emergencia: '3000000002',
+      es_tecnico: true,
+      empleado_activo: true,
       creado_por: 1,
     },
   });
@@ -229,9 +225,12 @@ async function main() {
     update: {},
     create: {
       id_tipo_equipo: 1,
-      nombre: 'GENERADOR_ELECTRICO',
+      codigo_tipo: 'GEN',
+      nombre_tipo: 'GENERADOR_ELECTRICO',
       categoria: 'ENERGIA',
-      requiere_especificaciones: true,
+      formato_ficha_tecnica: 'GEN_FICHA',
+      tiene_motor: true,
+      tiene_generador: true,
     },
   });
 
@@ -240,9 +239,11 @@ async function main() {
     update: {},
     create: {
       id_tipo_equipo: 2,
-      nombre: 'MOTOBOMBA',
-      categoria: 'HIDRAULICO',
-      requiere_especificaciones: true,
+      codigo_tipo: 'BOMBA',
+      nombre_tipo: 'MOTOBOMBA',
+      categoria: 'HIDRAULICA',
+      formato_ficha_tecnica: 'BOMBA_FICHA',
+      tiene_bomba: true,
     },
   });
 
@@ -261,15 +262,11 @@ async function main() {
       id_cliente: 1,
       id_sede: 1,
       id_tipo_equipo: 1,
-      codigo_interno: 'GEN-HC-001',
-      marca: 'CATERPILLAR',
-      modelo: 'C18',
-      numero_serie: 'CAT12345XYZ',
-      capacidad_nominal: 500,
-      unidad_medida: 'kVA',
-      anio_fabricacion: 2018,
-      ubicacion_fisica: 'Cuarto máquinas sótano 1',
-      estado_operativo: 'OPERATIVO',
+      codigo_equipo: 'GEN-HC-001',
+      nombre_equipo: 'Generador CATERPILLAR C18 500kVA',
+      numero_serie_equipo: 'CAT12345XYZ',
+      ubicacion_texto: 'Cuarto máquinas sótano 1',
+      estado_equipo: 'OPERATIVO',
       activo: true,
       creado_por: 1,
     },
@@ -283,15 +280,11 @@ async function main() {
       id_cliente: 2,
       id_sede: 2,
       id_tipo_equipo: 2,
-      codigo_interno: 'BMB-CB-001',
-      marca: 'FLOWSERVE',
-      modelo: 'D-3000',
-      numero_serie: 'FLS98765ABC',
-      capacidad_nominal: 3000,
-      unidad_medida: 'GPM',
-      anio_fabricacion: 2020,
-      ubicacion_fisica: 'Tanque principal agua',
-      estado_operativo: 'OPERATIVO',
+      codigo_equipo: 'BMB-CB-001',
+      nombre_equipo: 'Motobomba FLOWSERVE D-3000',
+      numero_serie_equipo: 'FLS98765ABC',
+      ubicacion_texto: 'Tanque principal agua',
+      estado_equipo: 'OPERATIVO',
       activo: true,
       creado_por: 1,
     },
@@ -319,10 +312,12 @@ async function main() {
       update: {},
       create: {
         id_estado: estado.id,
-        nombre: estado.nombre,
+        codigo_estado: estado.nombre,
+        nombre_estado: estado.nombre,
         color_hex: estado.color,
         permite_edicion: estado.edicion,
-        requiere_aprobacion: estado.aprobacion,
+        requiere_aprobacion_interna: estado.aprobacion,
+        orden_visualizacion: estado.id,
       },
     });
   }

@@ -16,124 +16,124 @@
  */
 
 const TIPO_EQUIPO_LABEL: Record<string, string> = {
-    GENERADOR: 'PLANTA',
-    PLANTA: 'PLANTA',
-    MOTOR: 'PLANTA',
-    BOMBA: 'BOMBA',
+  GENERADOR: 'PLANTA',
+  PLANTA: 'PLANTA',
+  MOTOR: 'PLANTA',
+  BOMBA: 'BOMBA',
 };
 
 const TIPO_SERVICIO_TEXTO: Record<string, string> = {
-    PREVENTIVO_A: 'MANTENIMIENTO PREVENTIVO TIPO A',
-    PREVENTIVO_B: 'MANTENIMIENTO PREVENTIVO TIPO B',
-    PREVENTIVO_TIPO_A: 'MANTENIMIENTO PREVENTIVO TIPO A',
-    PREVENTIVO_TIPO_B: 'MANTENIMIENTO PREVENTIVO TIPO B',
-    CORRECTIVO: 'CORRECTIVO',
+  PREVENTIVO_A: 'MANTENIMIENTO PREVENTIVO TIPO A',
+  PREVENTIVO_B: 'MANTENIMIENTO PREVENTIVO TIPO B',
+  PREVENTIVO_TIPO_A: 'MANTENIMIENTO PREVENTIVO TIPO A',
+  PREVENTIVO_TIPO_B: 'MANTENIMIENTO PREVENTIVO TIPO B',
+  CORRECTIVO: 'CORRECTIVO',
 };
 
 /** Meses en español, mayúsculas, índice 0 = enero. */
 const MESES_ES = [
-    'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
-    'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE',
+  'ENERO',
+  'FEBRERO',
+  'MARZO',
+  'ABRIL',
+  'MAYO',
+  'JUNIO',
+  'JULIO',
+  'AGOSTO',
+  'SEPTIEMBRE',
+  'OCTUBRE',
+  'NOVIEMBRE',
+  'DICIEMBRE',
 ] as const;
 
 export interface InformeFilenameInput {
-    fechaServicio?: Date | string | null;
-    codigoTipoServicio?: string | null;
-    nombreTipoServicio?: string | null;
-    codigoTipoEquipo?: string | null;
-    nombreTipoEquipo?: string | null;
-    nombreCliente?: string | null;
-    /** Nombre propio del equipo (ej: "GEN-001", "Bomba Principal"). Se incluye tras el cliente. */
-    nombreEquipo?: string | null;
-    numeroOrden?: string | null;
+  fechaServicio?: Date | string | null;
+  codigoTipoServicio?: string | null;
+  nombreTipoServicio?: string | null;
+  codigoTipoEquipo?: string | null;
+  nombreTipoEquipo?: string | null;
+  nombreCliente?: string | null;
+  /** Nombre propio del equipo (ej: "GEN-001", "Bomba Principal"). Se incluye tras el cliente. */
+  nombreEquipo?: string | null;
+  numeroOrden?: string | null;
 }
 
 export function buildInformeFilename(input: InformeFilenameInput): string {
-    const fecha = parseFechaSegura(input.fechaServicio) || new Date();
-    const dd = String(fecha.getDate()).padStart(2, '0');
-    const mm = String(fecha.getMonth() + 1).padStart(2, '0');
-    const yy = String(fecha.getFullYear() % 100).padStart(2, '0');
-    const yyyy = String(fecha.getFullYear());
-    const mesNombre = MESES_ES[fecha.getMonth()];
+  const fecha = parseFechaSegura(input.fechaServicio) || new Date();
+  const dd = String(fecha.getDate()).padStart(2, '0');
+  const mm = String(fecha.getMonth() + 1).padStart(2, '0');
+  const yy = String(fecha.getFullYear() % 100).padStart(2, '0');
+  const yyyy = String(fecha.getFullYear());
+  const mesNombre = MESES_ES[fecha.getMonth()];
 
-    const servicio = resolverTextoServicio(
-        input.codigoTipoServicio,
-        input.nombreTipoServicio,
-    );
-    const equipo = resolverTextoEquipo(
-        input.codigoTipoEquipo,
-        input.nombreTipoEquipo,
-    );
-    const cliente = sanitizar(
-        (input.nombreCliente || input.numeroOrden || 'CLIENTE').toUpperCase(),
-    );
+  const servicio = resolverTextoServicio(input.codigoTipoServicio, input.nombreTipoServicio);
+  const equipo = resolverTextoEquipo(input.codigoTipoEquipo, input.nombreTipoEquipo);
+  const cliente = sanitizar((input.nombreCliente || input.numeroOrden || 'CLIENTE').toUpperCase());
 
-    const servicioEquipo = equipo
-        ? `${servicio} ${equipo}`.replace(/\s+/g, ' ').trim()
-        : servicio;
+  const servicioEquipo = equipo ? `${servicio} ${equipo}`.replace(/\s+/g, ' ').trim() : servicio;
 
-    const equipoNombre = input.nombreEquipo
-        ? sanitizar(input.nombreEquipo.toUpperCase())
-        : '';
+  const equipoNombre = input.nombreEquipo ? sanitizar(input.nombreEquipo.toUpperCase()) : '';
 
-    const base = equipoNombre
-        ? `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${equipoNombre} - ${mesNombre} ${yyyy}`
-        : `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${mesNombre} ${yyyy}`;
-    return `${truncar(base, 180)}.pdf`;
+  const base = equipoNombre
+    ? `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${equipoNombre} - ${mesNombre} ${yyyy}`
+    : `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${mesNombre} ${yyyy}`;
+  return `${truncar(base, 180)}.pdf`;
 }
 
 function parseFechaSegura(v: Date | string | null | undefined): Date | null {
-    if (!v) return null;
-    if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
-    const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) {
-        return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    }
-    const d = new Date(v);
-    return isNaN(d.getTime()) ? null : d;
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function resolverTextoServicio(
-    codigo: string | null | undefined,
-    nombre: string | null | undefined,
+  codigo: string | null | undefined,
+  nombre: string | null | undefined,
 ): string {
-    if (codigo) {
-        const key = codigo.toUpperCase().trim().replace(/\s+/g, '_');
-        if (TIPO_SERVICIO_TEXTO[key]) return TIPO_SERVICIO_TEXTO[key];
-    }
-    if (nombre) {
-        const upper = sanitizar(nombre).toUpperCase().trim();
-        if (/PREVENTIVO[^A-Z]*A\b/.test(upper)) return 'MANTENIMIENTO PREVENTIVO TIPO A';
-        if (/PREVENTIVO[^A-Z]*B\b/.test(upper)) return 'MANTENIMIENTO PREVENTIVO TIPO B';
-        if (/CORRECTIVO/.test(upper)) return 'CORRECTIVO';
-        return upper;
-    }
-    return 'SERVICIO';
+  if (codigo) {
+    const key = codigo.toUpperCase().trim().replace(/\s+/g, '_');
+    if (TIPO_SERVICIO_TEXTO[key]) return TIPO_SERVICIO_TEXTO[key];
+  }
+  if (nombre) {
+    const upper = sanitizar(nombre).toUpperCase().trim();
+    if (/PREVENTIVO[^A-Z]*A\b/.test(upper)) return 'MANTENIMIENTO PREVENTIVO TIPO A';
+    if (/PREVENTIVO[^A-Z]*B\b/.test(upper)) return 'MANTENIMIENTO PREVENTIVO TIPO B';
+    if (/CORRECTIVO/.test(upper)) return 'CORRECTIVO';
+    return upper;
+  }
+  return 'SERVICIO';
 }
 
 function resolverTextoEquipo(
-    codigo: string | null | undefined,
-    nombre: string | null | undefined,
+  codigo: string | null | undefined,
+  nombre: string | null | undefined,
 ): string {
-    const candidato = sanitizar((codigo || nombre || '')).toUpperCase().trim();
-    if (!candidato) return '';
-    for (const key of Object.keys(TIPO_EQUIPO_LABEL)) {
-        if (candidato.includes(key)) return TIPO_EQUIPO_LABEL[key];
-    }
-    return candidato;
+  const candidato = sanitizar(codigo || nombre || '')
+    .toUpperCase()
+    .trim();
+  if (!candidato) return '';
+  for (const key of Object.keys(TIPO_EQUIPO_LABEL)) {
+    if (candidato.includes(key)) return TIPO_EQUIPO_LABEL[key];
+  }
+  return candidato;
 }
 
 function sanitizar(s: string): string {
-    return s
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        // eslint-disable-next-line no-control-regex
-        .replace(/[\\/:*?"<>|\x00-\x1f]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function truncar(s: string, max: number): string {
-    return s.length <= max ? s : s.slice(0, max).trim();
+  return s.length <= max ? s : s.slice(0, max).trim();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -150,32 +150,42 @@ function truncar(s: string, max: number): string {
  * atributo `download` es ignorado por seguridad. El proxy backend evita
  * eso al ser mismo origen y agregar Content-Disposition.
  */
+import type { AxiosRequestConfig } from 'axios';
+
+type PdfBlobClient = {
+  get: (url: string, config?: AxiosRequestConfig) => Promise<{ data: BlobPart; request?: unknown }>;
+};
+
+type PdfPostClient = {
+  post: (url: string, data?: unknown) => Promise<{ data: unknown }>;
+};
+
 export async function descargarInformeAutenticado(
-    apiClient: { get: (url: string, config?: any) => Promise<{ data: any }> },
-    idDocumento: number,
-    filenameCanonico: string,
+  apiClient: PdfBlobClient,
+  idDocumento: number,
+  filenameCanonico: string,
 ): Promise<void> {
-    const response = await apiClient.get(
-        `/informes/documento/${idDocumento}/descargar`,
-        { responseType: 'blob' },
-    );
+  const response = await apiClient.get(`/informes/documento/${idDocumento}/descargar`, {
+    responseType: 'blob',
+  });
 
-    const blob = response.data instanceof Blob
-        ? response.data
-        : new Blob([response.data], { type: 'application/pdf' });
+  const blob =
+    response.data instanceof Blob
+      ? response.data
+      : new Blob([response.data], { type: 'application/pdf' });
 
-    const objectUrl = URL.createObjectURL(blob);
-    try {
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.download = filenameCanonico;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-    } finally {
-        // Liberar memoria después de un tick
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    }
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filenameCanonico;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    // Liberar memoria después de un tick
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
 }
 
 /**
@@ -185,22 +195,22 @@ export async function descargarInformeAutenticado(
  * ✅ FIX 06-MAY-2026: Streaming inline en lugar de blob para respuesta instantánea.
  */
 export async function previsualizarInformeAutenticado(
-    apiClient: { get: (url: string, config?: any) => Promise<{ data: any; request?: any }> },
-    idDocumento: number,
+  apiClient: PdfBlobClient,
+  idDocumento: number,
 ): Promise<void> {
-    const response = await apiClient.get(
-        `/informes/documento/${idDocumento}/preview`,
-        { responseType: 'blob' },
-    );
+  const response = await apiClient.get(`/informes/documento/${idDocumento}/preview`, {
+    responseType: 'blob',
+  });
 
-    const blob = response.data instanceof Blob
-        ? response.data
-        : new Blob([response.data], { type: 'application/pdf' });
+  const blob =
+    response.data instanceof Blob
+      ? response.data
+      : new Blob([response.data], { type: 'application/pdf' });
 
-    const objectUrl = URL.createObjectURL(blob);
-    window.open(objectUrl, '_blank');
-    // Liberar memoria después de un tiempo (la nueva pestaña mantiene la referencia)
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+  const objectUrl = URL.createObjectURL(blob);
+  window.open(objectUrl, '_blank');
+  // Liberar memoria después de un tiempo (la nueva pestaña mantiene la referencia)
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
 }
 
 /**
@@ -209,79 +219,79 @@ export async function previsualizarInformeAutenticado(
  * la descarga en la base de datos e iniciando la descarga con el nombre canónico.
  */
 export async function descargarInformePorOrdenAutenticado(
-    apiClient: { get: (url: string, config?: any) => Promise<{ data: any }> },
-    idOrden: number,
-    filenameCanonico?: string,
+  apiClient: PdfBlobClient,
+  idOrden: number,
+  filenameCanonico?: string,
 ): Promise<void> {
-    const response = await apiClient.get(
-        `/informes/orden/${idOrden}/descargar`,
-        { responseType: 'blob' },
-    );
+  const response = await apiClient.get(`/informes/orden/${idOrden}/descargar`, {
+    responseType: 'blob',
+  });
 
-    const blob = response.data instanceof Blob
-        ? response.data
-        : new Blob([response.data], { type: 'application/pdf' });
+  const blob =
+    response.data instanceof Blob
+      ? response.data
+      : new Blob([response.data], { type: 'application/pdf' });
 
-    const objectUrl = URL.createObjectURL(blob);
-    try {
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        if (filenameCanonico) {
-            link.download = filenameCanonico;
-        }
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-    } finally {
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    if (filenameCanonico) {
+      link.download = filenameCanonico;
     }
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
 }
 
 /**
  * Previsualiza el informe PDF de una orden directamente por ID de orden.
  */
 export async function previsualizarInformePorOrdenAutenticado(
-    apiClient: { get: (url: string, config?: any) => Promise<{ data: any; request?: any }> },
-    idOrden: number,
+  apiClient: PdfBlobClient,
+  idOrden: number,
 ): Promise<void> {
-    const response = await apiClient.get(
-        `/informes/orden/${idOrden}/preview`,
-        { responseType: 'blob' },
-    );
+  const response = await apiClient.get(`/informes/orden/${idOrden}/preview`, {
+    responseType: 'blob',
+  });
 
-    const blob = response.data instanceof Blob
-        ? response.data
-        : new Blob([response.data], { type: 'application/pdf' });
+  const blob =
+    response.data instanceof Blob
+      ? response.data
+      : new Blob([response.data], { type: 'application/pdf' });
 
-    const objectUrl = URL.createObjectURL(blob);
-    window.open(objectUrl, '_blank');
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+  const objectUrl = URL.createObjectURL(blob);
+  window.open(objectUrl, '_blank');
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
 }
 
 /**
  * Registra explícitamente una descarga en la base de datos para una orden.
  */
 export async function registrarDescargaInformePorOrden(
-    apiClient: { post: (url: string, data?: any) => Promise<{ data: any }> },
-    idOrden: number,
+  apiClient: PdfPostClient,
+  idOrden: number,
 ): Promise<void> {
-    try {
-        await apiClient.post(`/informes/orden/${idOrden}/registrar-descarga`);
-    } catch (err) {
-        console.warn(`[Descarga] No se pudo registrar descarga por orden ${idOrden}:`, err);
-    }
+  try {
+    await apiClient.post(`/informes/orden/${idOrden}/registrar-descarga`);
+  } catch (err) {
+    console.warn(`[Descarga] No se pudo registrar descarga por orden ${idOrden}:`, err);
+  }
 }
 
 /**
  * Registra explícitamente una descarga en la base de datos para un documento.
  */
 export async function registrarDescargaInforme(
-    apiClient: { post: (url: string, data?: any) => Promise<{ data: any }> },
-    idDocumento: number,
+  apiClient: PdfPostClient,
+  idDocumento: number,
 ): Promise<void> {
-    try {
-        await apiClient.post(`/informes/documento/${idDocumento}/registrar-descarga`);
-    } catch (err) {
-        console.warn(`[Descarga] No se pudo registrar descarga para doc ${idDocumento}:`, err);
-    }
+  try {
+    await apiClient.post(`/informes/documento/${idDocumento}/registrar-descarga`);
+  } catch (err) {
+    console.warn(`[Descarga] No se pudo registrar descarga para doc ${idDocumento}:`, err);
+  }
 }

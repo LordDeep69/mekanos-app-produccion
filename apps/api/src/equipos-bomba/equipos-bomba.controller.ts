@@ -1,18 +1,17 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ActualizarEquipoBombaCommand } from './application/commands/actualizar-equipo-bomba.command';
@@ -33,10 +32,7 @@ export class EquiposBombaController {
   ) {}
 
   @Post()
-  async create(
-    @Body() dto: CreateEquipoBombaDto,
-    @CurrentUser('id') userId: number,
-  ) {
+  async create(@Body() dto: CreateEquipoBombaDto, @CurrentUser('id') userId: number) {
     const command = new CrearEquipoBombaCommand({ ...dto, creado_por: userId });
     return this.commandBus.execute(command);
   }
@@ -54,12 +50,13 @@ export class EquiposBombaController {
       marca_bomba,
       tipo_bomba,
       aplicacion_bomba,
-      tiene_variador_frecuencia: tiene_variador_frecuencia !== undefined ? tiene_variador_frecuencia === 'true' : undefined,
+      tiene_variador_frecuencia:
+        tiene_variador_frecuencia !== undefined ? tiene_variador_frecuencia === 'true' : undefined,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 50,
     });
     const result = await this.queryBus.execute(query);
-    
+
     // Formato consistente con equipos.controller
     return {
       success: true,
@@ -68,8 +65,8 @@ export class EquiposBombaController {
         total: result.total,
         page: query.filters.page || 1,
         limit: query.filters.limit || 50,
-        totalPages: Math.ceil(result.total / (query.filters.limit || 50))
-      }
+        totalPages: Math.ceil(result.total / (query.filters.limit || 50)),
+      },
     };
   }
 
@@ -80,10 +77,7 @@ export class EquiposBombaController {
   }
 
   @Put(':id')
-  async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateEquipoBombaDto,
-  ) {
+  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEquipoBombaDto) {
     const command = new ActualizarEquipoBombaCommand(id, dto);
     return this.commandBus.execute(command);
   }

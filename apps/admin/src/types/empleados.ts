@@ -1,7 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Tipos para el módulo de Empleados/Técnicos
- * 
+ *
  * Backend: empleados.controller.ts
  */
 
@@ -71,11 +71,29 @@ export interface Empleado {
   modificado_por?: number;
   fecha_modificacion?: string;
   persona?: PersonaEmpleado;
+  usuario?: EmpleadoUsuarioInfo | null;
+}
+
+export interface EmpleadoUsuarioInfo {
+  id_usuario: number;
+  username?: string;
+  email?: string;
+  estado?: string;
+  debe_cambiar_password?: boolean;
+  usuarios_roles?: Array<{
+    id_rol: number;
+    roles?: {
+      id_rol: number;
+      codigo_rol?: string;
+      nombre_rol: string;
+    };
+  }>;
 }
 
 // Empleado con datos de persona incluidos
 export interface EmpleadoConPersona extends Empleado {
   persona: PersonaEmpleado;
+  usuario?: EmpleadoUsuarioInfo | null;
 }
 
 // Parámetros de consulta

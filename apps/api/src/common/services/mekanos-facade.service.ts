@@ -2,17 +2,17 @@
  * ============================================================================
  * MEKANOS FACADE SERVICE - Fachada Unificada de Servicios
  * ============================================================================
- * 
+ *
  * Este servicio encapsula TODOS los servicios principales de MEKANOS
  * para ofrecer una API simple y consistente desde cualquier parte del sistema.
- * 
+ *
  * VENTAJAS:
  * 1. No preocuparse por nombres de campos - solo pasar los datos necesarios
  * 2. Validación automática de parámetros
  * 3. Tipado fuerte con TypeScript
  * 4. Un solo punto de inyección para múltiples servicios
  * 5. Manejo de errores centralizado
- * 
+ *
  * SERVICIOS ENCAPSULADOS:
  * - NumeracionService: Generación de códigos automáticos
  * - PdfService: Generación de PDFs profesionales
@@ -20,7 +20,7 @@
  * - CloudinaryService: Subida de imágenes a CDN
  * - R2StorageService: Almacenamiento de archivos en la nube
  * - SyncService: Sincronización móvil offline-first
- * 
+ *
  * @author MEKANOS S.A.S - Sistema de Gestión
  * @version 2.0.0
  * @since 2025-11-27
@@ -216,7 +216,7 @@ export class MekanosFacadeService implements OnModuleInit {
   private _r2StorageService: any = null;
   private _prisma: any = null;
 
-  constructor(private readonly moduleRef: ModuleRef) { }
+  constructor(private readonly moduleRef: ModuleRef) {}
 
   async onModuleInit() {
     this.logger.log('🚀 MekanosFacadeService inicializado - Fachada unificada lista');
@@ -304,12 +304,12 @@ export class MekanosFacadeService implements OnModuleInit {
 
   /**
    * Genera un número secuencial único para cualquier tipo de documento
-   * 
+   *
    * @example
    * // Generar número de orden de servicio
    * const resultado = await facade.generarNumero('ORDEN_SERVICIO');
    * console.log(resultado.codigo); // 'ORD-2025-00001'
-   * 
+   *
    * @example
    * // Generar número de cotización
    * const resultado = await facade.generarNumero('COTIZACION');
@@ -324,17 +324,17 @@ export class MekanosFacadeService implements OnModuleInit {
 
       // Mapear tipo amigable a enum interno
       const tipoMap: Record<TipoDocumento, string> = {
-        'ORDEN_SERVICIO': 'ORD',
-        'COTIZACION': 'COT',
-        'INFORME': 'INF',
-        'CONTRATO': 'CONT',
-        'REMISION': 'REM',
-        'ORDEN_COMPRA': 'OC',
-        'FACTURA': 'FAC',
-        'RECEPCION': 'REC',
+        ORDEN_SERVICIO: 'ORD',
+        COTIZACION: 'COT',
+        INFORME: 'INF',
+        CONTRATO: 'CONT',
+        REMISION: 'REM',
+        ORDEN_COMPRA: 'OC',
+        FACTURA: 'FAC',
+        RECEPCION: 'REC',
       };
 
-      const result = await service.generateNumber(tipoMap[tipo]);
+      const result = await service.generateNextNumber(tipoMap[tipo]);
 
       return {
         success: true,
@@ -343,8 +343,9 @@ export class MekanosFacadeService implements OnModuleInit {
         anio: result.year,
       };
     } catch (error) {
-      this.logger.error(`Error generando número ${tipo}: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error generando número ${tipo}: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -354,7 +355,7 @@ export class MekanosFacadeService implements OnModuleInit {
 
   /**
    * Genera un PDF profesional de una orden de servicio
-   * 
+   *
    * @example
    * // Generar PDF de orden tipo A
    * const resultado = await facade.generarPdfOrden({ idOrden: 123 });
@@ -362,7 +363,7 @@ export class MekanosFacadeService implements OnModuleInit {
    *   console.log('PDF generado:', resultado.filename);
    *   // resultado.buffer contiene el PDF
    * }
-   * 
+   *
    * @example
    * // Generar y guardar en la nube automáticamente
    * const resultado = await facade.generarPdfOrden({
@@ -431,8 +432,9 @@ export class MekanosFacadeService implements OnModuleInit {
         url,
       };
     } catch (error) {
-      this.logger.error(`Error generando PDF: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error generando PDF: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -489,7 +491,7 @@ export class MekanosFacadeService implements OnModuleInit {
 
   /**
    * Envía un email con template profesional MEKANOS
-   * 
+   *
    * @example
    * // Enviar notificación de orden completada
    * const resultado = await facade.enviarEmail({
@@ -498,7 +500,7 @@ export class MekanosFacadeService implements OnModuleInit {
    *   template: 'ORDEN_COMPLETADA',
    *   datos: { numeroOrden: 'ORD-2025-00001' }
    * });
-   * 
+   *
    * @example
    * // Enviar email personalizado con adjunto
    * const resultado = await facade.enviarEmail({
@@ -532,7 +534,7 @@ export class MekanosFacadeService implements OnModuleInit {
           input.datos.numeroOrden,
           typeof input.para === 'string' ? input.para : input.para[0],
           input.datos.pdfUrl || '',
-          input.adjuntos?.[0]?.contenido
+          input.adjuntos?.[0]?.contenido,
         );
         return result;
       } else {
@@ -541,7 +543,7 @@ export class MekanosFacadeService implements OnModuleInit {
       }
 
       // Mapear adjuntos al formato del servicio
-      const attachments = input.adjuntos?.map(adj => ({
+      const attachments = input.adjuntos?.map((adj) => ({
         filename: adj.nombre,
         content: adj.contenido,
         contentType: adj.tipo || 'application/octet-stream',
@@ -558,8 +560,9 @@ export class MekanosFacadeService implements OnModuleInit {
 
       return result;
     } catch (error) {
-      this.logger.error(`Error enviando email: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error enviando email: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -610,7 +613,7 @@ export class MekanosFacadeService implements OnModuleInit {
   private formatearCampo(campo: string): string {
     return campo
       .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, str => str.toUpperCase())
+      .replace(/^./, (str) => str.toUpperCase())
       .replace(/_/g, ' ');
   }
 
@@ -620,7 +623,7 @@ export class MekanosFacadeService implements OnModuleInit {
 
   /**
    * Sube una imagen a Cloudinary CDN
-   * 
+   *
    * @example
    * // Subir evidencia fotográfica
    * const resultado = await facade.subirImagen({
@@ -647,8 +650,9 @@ export class MekanosFacadeService implements OnModuleInit {
         alto: result.height,
       };
     } catch (error) {
-      this.logger.error(`Error subiendo imagen: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error subiendo imagen: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -658,7 +662,7 @@ export class MekanosFacadeService implements OnModuleInit {
 
   /**
    * Sube un PDF a Cloudflare R2
-   * 
+   *
    * @example
    * // Subir PDF de orden
    * const resultado = await facade.subirPdf({
@@ -675,9 +679,7 @@ export class MekanosFacadeService implements OnModuleInit {
         return { success: false, error: 'R2StorageService no disponible' };
       }
 
-      const filename = input.carpeta
-        ? `${input.carpeta}/${input.nombre}`
-        : input.nombre;
+      const filename = input.carpeta ? `${input.carpeta}/${input.nombre}` : input.nombre;
 
       const url = await r2Service.uploadPDF(input.pdf, filename);
 
@@ -686,8 +688,9 @@ export class MekanosFacadeService implements OnModuleInit {
         url,
       };
     } catch (error) {
-      this.logger.error(`Error subiendo PDF: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error subiendo PDF: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -697,7 +700,7 @@ export class MekanosFacadeService implements OnModuleInit {
 
   /**
    * Cambia el estado de una orden siguiendo el workflow FSM
-   * 
+   *
    * @example
    * // Marcar orden como completada
    * const resultado = await facade.cambiarEstadoOrden({
@@ -741,7 +744,10 @@ export class MekanosFacadeService implements OnModuleInit {
       try {
         validarTransicion(estadoActual, input.nuevoEstado);
       } catch (e) {
-        return { success: false, error: e.message };
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : String(e),
+        };
       }
 
       // Obtener nuevo estado
@@ -773,7 +779,7 @@ export class MekanosFacadeService implements OnModuleInit {
       // Ejecutar transacción
       await prisma.$transaction([
         prisma.ordenes_servicio.update({
-          where: { id: idOrden },
+          where: { id_orden_servicio: orden.id_orden_servicio },
           data: updateData,
         }),
         prisma.historial_estados_orden.create({
@@ -797,8 +803,9 @@ export class MekanosFacadeService implements OnModuleInit {
         estadoNuevo: input.nuevoEstado,
       };
     } catch (error) {
-      this.logger.error(`Error cambiando estado: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error cambiando estado: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -830,7 +837,7 @@ export class MekanosFacadeService implements OnModuleInit {
   /**
    * Genera un PDF de orden, lo sube a la nube y envía por email
    * Todo en una sola llamada
-   * 
+   *
    * @example
    * const resultado = await facade.generarYEnviarOrdenCompleta({
    *   idOrden: 123,
@@ -870,11 +877,15 @@ export class MekanosFacadeService implements OnModuleInit {
           numeroOrden: pdfResult.filename?.replace('MEKANOS_', '').replace('.pdf', ''),
           pdfUrl: pdfResult.url,
         },
-        adjuntos: pdfResult.buffer ? [{
-          nombre: pdfResult.filename!,
-          contenido: pdfResult.buffer,
-          tipo: 'application/pdf',
-        }] : undefined,
+        adjuntos: pdfResult.buffer
+          ? [
+              {
+                nombre: pdfResult.filename!,
+                contenido: pdfResult.buffer,
+                tipo: 'application/pdf',
+              },
+            ]
+          : undefined,
         copia: input.copiaEmails,
       });
 
@@ -882,7 +893,7 @@ export class MekanosFacadeService implements OnModuleInit {
         return {
           success: false,
           pdfUrl: pdfResult.url,
-          error: `PDF generado pero error enviando email: ${emailResult.error}`
+          error: `PDF generado pero error enviando email: ${emailResult.error}`,
         };
       }
 
@@ -892,8 +903,9 @@ export class MekanosFacadeService implements OnModuleInit {
         emailMessageId: emailResult.messageId,
       };
     } catch (error) {
-      this.logger.error(`Error en generarYEnviarOrdenCompleta: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error en generarYEnviarOrdenCompleta: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 }

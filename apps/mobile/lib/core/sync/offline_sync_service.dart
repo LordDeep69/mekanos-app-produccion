@@ -1117,8 +1117,8 @@ class OfflineSyncService {
         _progressNotifier.completarPaso(SyncStep.evidencias);
         _progressNotifier.avanzar(SyncStep.firmas);
         _progressNotifier.completarPaso(SyncStep.firmas);
-        _progressNotifier.avanzar(SyncStep.actualizando_estado);
-        _progressNotifier.completarPaso(SyncStep.actualizando_estado);
+        _progressNotifier.avanzar(SyncStep.actualizandoEstado);
+        _progressNotifier.completarPaso(SyncStep.actualizandoEstado);
 
         Map<String, dynamic>? datos;
         if (response.data is Map) {

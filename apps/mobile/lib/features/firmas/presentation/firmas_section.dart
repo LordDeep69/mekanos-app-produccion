@@ -224,12 +224,12 @@ class _FirmasSectionState extends ConsumerState<FirmasSection> {
               width: 60,
               height: 60,
               decoration: BoxDecoration(
-                color: tieneFirma ? Colors.white : colorBase.withOpacity(0.1),
+                color: tieneFirma ? Colors.white : colorBase.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: tieneFirma
                       ? Colors.green.shade200
-                      : colorBase.withOpacity(0.3),
+                      : colorBase.withValues(alpha: 0.3),
                 ),
               ),
               child: tieneFirma && firma.rutaLocal.isNotEmpty
@@ -238,7 +238,7 @@ class _FirmasSectionState extends ConsumerState<FirmasSection> {
                       child: Image.file(
                         File(firma.rutaLocal),
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => Icon(
+                        errorBuilder: (_, _, _) => Icon(
                           Icons.draw,
                           color: Colors.green.shade700,
                           size: 28,

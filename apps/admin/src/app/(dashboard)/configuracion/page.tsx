@@ -7,8 +7,6 @@ import {
   CheckCircle2,
   ClipboardList,
   Cpu,
-  Gauge,
-  Layers,
   ListTodo,
   Mail,
   Settings2,
@@ -21,14 +19,16 @@ export default function ConfiguracionPage() {
   const modulosCat = [
     {
       title: 'Tipos de Servicio y Protocolos',
-      description: 'Intervenciones preventivas, correctivas y constructor rápido de checklists y telemetría.',
+      description:
+        'Intervenciones preventivas, correctivas y constructor rápido de checklists y telemetría.',
       href: '/configuracion/catalogos/tipos-servicio',
       icon: Activity,
       color: 'text-blue-600 bg-blue-50 border-blue-100',
     },
     {
       title: 'Banco Universal de Actividades',
-      description: 'Diccionario maestro reutilizable de tareas de inspección y mediciones con propagación en cascada.',
+      description:
+        'Diccionario maestro reutilizable de tareas de inspección y mediciones con propagación en cascada.',
       href: '/configuracion/catalogos/actividades',
       icon: ClipboardList,
       color: 'text-amber-600 bg-amber-50 border-amber-100',
@@ -84,7 +84,8 @@ export default function ConfiguracionPage() {
                 Centro de Configuración del Sistema
               </h1>
               <p className="text-sm text-slate-500">
-                Administra los equipos maestros, fichas técnicas, catálogos operativos y parámetros corporativos
+                Administra los equipos maestros, fichas técnicas, catálogos operativos y parámetros
+                corporativos
               </p>
             </div>
           </div>
@@ -104,10 +105,12 @@ export default function ConfiguracionPage() {
               Catálogo de Equipos Maestros, Partes, Campos Técnicos y Modelos de Fábrica
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Configura los <strong>Tipos de Equipo</strong> (464 activos operativos), las plantillas de{' '}
-              <strong>Modelos de Fábrica y sus Kits de Repuestos (BOM)</strong>, las{' '}
-              <strong>Partes y Subsistemas</strong>, el <strong>Catálogo de 145 Campos Técnicos</strong> y las{' '}
-              <strong>Unidades de Medida</strong> con simulador interactivo de formulario y placa PDF.
+              Configura los <strong>Tipos de Equipo</strong> (464 activos operativos), las
+              plantillas de <strong>Modelos de Fábrica y sus Kits de Repuestos (BOM)</strong>, las{' '}
+              <strong>Partes y Subsistemas</strong>, el{' '}
+              <strong>Catálogo de 145 Campos Técnicos</strong> y las{' '}
+              <strong>Unidades de Medida</strong> con simulador interactivo de formulario y placa
+              PDF.
             </p>
           </div>
           <div className="shrink-0">
@@ -137,7 +140,9 @@ export default function ConfiguracionPage() {
                 className="group bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col justify-between gap-4"
               >
                 <div className="flex items-start gap-4">
-                  <div className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${item.color}`}>
+                  <div
+                    className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${item.color}`}
+                  >
                     <Icon className="h-5 w-5" />
                   </div>
                   <div className="space-y-1 min-w-0">

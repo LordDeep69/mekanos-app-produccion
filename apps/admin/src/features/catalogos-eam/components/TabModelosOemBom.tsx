@@ -2,7 +2,6 @@
 
 import {
   AlertTriangle,
-  Boxes,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -23,10 +22,11 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DynamicModularSpecsEditor } from '@/features/equipos/components/DynamicModularSpecsEditor';
 import {
+  ArquetipoEquipo,
   AtributoTecnico,
   EamSelect,
   MarcaCombobox,
@@ -60,8 +60,14 @@ export function sugerirCodigoModelo(
   modelosExistentes: ModeloEquipoOem[],
   currentId?: number | null,
 ): string {
-  const mClean = marca.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const modClean = modelo.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const mClean = marca
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  const modClean = modelo
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
   if (!mClean && !modClean) return '';
 
   const base = `MOD-${mClean || 'OEM'}-${modClean || 'STD'}`;
@@ -88,7 +94,7 @@ export function sugerirDescripcionModelo(
   idTipoEquipo: string | number,
   marca: string,
   modelo: string,
-  arquetiposList: any[],
+  arquetiposList: ArquetipoEquipo[],
 ): string {
   const arq = arquetiposList.find((a) => String(a.id_tipo_equipo) === String(idTipoEquipo));
   const nombreTipo = arq ? (arq.nombre_canonico || arq.nombre_tipo || '').trim() : '';
@@ -140,7 +146,7 @@ export function TabModelosOemBom() {
     return map;
   }, [todosModulos]);
 
-  const [selectedModeloId, setSelectedModeloId] = useState<number | null>(null);
+  const [selectedModeloIdRaw, setSelectedModeloId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const modelosFiltrados = useMemo(() => {
@@ -156,6 +162,8 @@ export function TabModelosOemBom() {
     });
   }, [modelos, searchQuery]);
 
+  const selectedModeloId = selectedModeloIdRaw ?? modelos[0]?.id_modelo_equipo ?? null;
+
   const selectedModelo = useMemo(() => {
     return modelos.find((m) => m.id_modelo_equipo === selectedModeloId) || null;
   }, [modelos, selectedModeloId]);
@@ -164,15 +172,8 @@ export function TabModelosOemBom() {
     return modelosFiltrados.filter((m) => m.id_modelo_equipo !== selectedModeloId);
   }, [modelosFiltrados, selectedModeloId]);
 
-  useEffect(() => {
-    if (!selectedModeloId && modelos.length > 0) {
-      setSelectedModeloId(modelos[0].id_modelo_equipo);
-    }
-  }, [modelos, selectedModeloId]);
-
-  const { data: modeloDetalle, isLoading: loadingDetalle } = useModeloOemDetalleEam(
-    selectedModeloId,
-  );
+  const { data: modeloDetalle, isLoading: loadingDetalle } =
+    useModeloOemDetalleEam(selectedModeloId);
 
   const createModMut = useCreateModeloOemEam();
   const updateModMut = useUpdateModeloOemEam();
@@ -193,13 +194,15 @@ export function TabModelosOemBom() {
   const [isAutoCodigo, setIsAutoCodigo] = useState(true);
   const [isAutoNombre, setIsAutoNombre] = useState(true);
   const [showSpecsInCreate, setShowSpecsInCreate] = useState(false);
-  const [createSpecsModulos, setCreateSpecsModulos] = useState<Record<string, Record<string, any>>>({});
+  const [createSpecsModulos, setCreateSpecsModulos] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
   const [createSpecsUnidades, setCreateSpecsUnidades] = useState<Record<string, string>>({});
 
   // Modal Dedicado de Edición Visual de Especificaciones Técnicas de Fábrica
   const [showSpecsModal, setShowSpecsModal] = useState(false);
   const [editingSpecsModelo, setEditingSpecsModelo] = useState<ModeloEquipoOem | null>(null);
-  const [specsModulos, setSpecsModulos] = useState<Record<string, Record<string, any>>>({});
+  const [specsModulos, setSpecsModulos] = useState<Record<string, Record<string, unknown>>>({});
   const [specsUnidades, setSpecsUnidades] = useState<Record<string, string>>({});
   const [showJsonAvanzado, setShowJsonAvanzado] = useState(false);
 
@@ -218,10 +221,20 @@ export function TabModelosOemBom() {
     const nuevaMarca = val.toUpperCase();
     const oldMarca = modeloForm.marca;
     const nuevoCodigo = isAutoCodigo
-      ? sugerirCodigoModelo(nuevaMarca, modeloForm.modelo, todosLosModelos.length > 0 ? todosLosModelos : modelos, editingModelo?.id_modelo_equipo)
+      ? sugerirCodigoModelo(
+          nuevaMarca,
+          modeloForm.modelo,
+          todosLosModelos.length > 0 ? todosLosModelos : modelos,
+          editingModelo?.id_modelo_equipo,
+        )
       : modeloForm.codigo_modelo;
     const nuevoNombre = isAutoNombre
-      ? sugerirDescripcionModelo(modeloForm.id_tipo_equipo, nuevaMarca, modeloForm.modelo, arquetipos)
+      ? sugerirDescripcionModelo(
+          modeloForm.id_tipo_equipo,
+          nuevaMarca,
+          modeloForm.modelo,
+          arquetipos,
+        )
       : modeloForm.nombre_comercial;
 
     setModeloForm((prev) => ({
@@ -255,10 +268,20 @@ export function TabModelosOemBom() {
     const nuevoModelo = val;
     const oldModelo = modeloForm.modelo;
     const nuevoCodigo = isAutoCodigo
-      ? sugerirCodigoModelo(modeloForm.marca, nuevoModelo, todosLosModelos.length > 0 ? todosLosModelos : modelos, editingModelo?.id_modelo_equipo)
+      ? sugerirCodigoModelo(
+          modeloForm.marca,
+          nuevoModelo,
+          todosLosModelos.length > 0 ? todosLosModelos : modelos,
+          editingModelo?.id_modelo_equipo,
+        )
       : modeloForm.codigo_modelo;
     const nuevoNombre = isAutoNombre
-      ? sugerirDescripcionModelo(modeloForm.id_tipo_equipo, modeloForm.marca, nuevoModelo, arquetipos)
+      ? sugerirDescripcionModelo(
+          modeloForm.id_tipo_equipo,
+          modeloForm.marca,
+          nuevoModelo,
+          arquetipos,
+        )
       : modeloForm.nombre_comercial;
 
     setModeloForm((prev) => ({
@@ -316,7 +339,10 @@ export function TabModelosOemBom() {
    * - label: Nombre Humano del Campo ("Capacidad de Aceite del Cárter")
    * - formattedValue: Valor con su unidad o etiqueta de opción ("23 L", "Turbocargado Postenfriado")
    */
-  const formatSpecHuman = (key: string, rawVal: any): { label: string; formattedValue: string } => {
+  const formatSpecHuman = (
+    key: string,
+    rawVal: unknown,
+  ): { label: string; formattedValue: string } => {
     const attr = atributoByCodeMap.get(key);
     const label = attr?.nombre_atributo || humanizeFallbackKey(key);
 
@@ -380,14 +406,21 @@ export function TabModelosOemBom() {
     setIsAutoCodigo(false);
     setIsAutoNombre(false);
     setShowSpecsInCreate(false);
-    setCreateSpecsModulos((m.especificaciones_base as any)?.modulos || {});
-    setCreateSpecsUnidades((m.especificaciones_base as any)?.unidades || {});
+    const base = (m.especificaciones_base || {}) as {
+      modulos?: Record<string, Record<string, unknown>>;
+      unidades?: Record<string, string>;
+    };
+    setCreateSpecsModulos(base.modulos || {});
+    setCreateSpecsUnidades(base.unidades || {});
     setShowModeloModal(true);
   };
 
   const openEditSpecsModal = (m: ModeloEquipoOem) => {
     setEditingSpecsModelo(m);
-    const base = (m.especificaciones_base as any) || {};
+    const base = (m.especificaciones_base || {}) as {
+      modulos?: Record<string, Record<string, unknown>>;
+      unidades?: Record<string, string>;
+    };
     setSpecsModulos(base.modulos || {});
     setSpecsUnidades(base.unidades || {});
     setShowJsonAvanzado(false);
@@ -398,13 +431,20 @@ export function TabModelosOemBom() {
     e.preventDefault();
 
     if (isCodigoDuplicado) {
-      toast.error('El código de referencia de plantilla ya existe en otro modelo. Elige uno diferente.');
+      toast.error(
+        'El código de referencia de plantilla ya existe en otro modelo. Elige uno diferente.',
+      );
       return;
     }
 
     const codFinal =
       modeloForm.codigo_modelo.trim().toUpperCase() ||
-      sugerirCodigoModelo(modeloForm.marca, modeloForm.modelo, modelos, editingModelo?.id_modelo_equipo);
+      sugerirCodigoModelo(
+        modeloForm.marca,
+        modeloForm.modelo,
+        modelos,
+        editingModelo?.id_modelo_equipo,
+      );
 
     if (!codFinal) {
       toast.error('El código de referencia es requerido');
@@ -557,7 +597,9 @@ export function TabModelosOemBom() {
           {searchQuery.trim() && (
             <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
               <span>
-                Mostrando <strong className="text-blue-600 font-bold">{modelosFiltrados.length}</strong> de {modelos.length} modelos
+                Mostrando{' '}
+                <strong className="text-blue-600 font-bold">{modelosFiltrados.length}</strong> de{' '}
+                {modelos.length} modelos
               </span>
               <button
                 type="button"
@@ -651,8 +693,8 @@ export function TabModelosOemBom() {
               {otrosModelos.length > 0
                 ? `Otros Modelos (${otrosModelos.length})`
                 : selectedModelo
-                ? 'Otros Modelos (0)'
-                : 'Todos los Modelos'}
+                  ? 'Otros Modelos (0)'
+                  : 'Todos los Modelos'}
             </div>
 
             {modelosFiltrados.length === 0 ? (
@@ -725,11 +767,7 @@ export function TabModelosOemBom() {
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            if (
-                              window.confirm(
-                                `¿Desactivar el modelo "${m.marca} ${m.modelo}"?`,
-                              )
-                            ) {
+                            if (window.confirm(`¿Desactivar el modelo "${m.marca} ${m.modelo}"?`)) {
                               await deleteModMut.mutateAsync(m.id_modelo_equipo);
                             }
                           }}
@@ -768,12 +806,13 @@ export function TabModelosOemBom() {
                     <h4 className="text-base font-bold text-slate-900">
                       Kit de Repuestos y Consumibles Sugeridos (BOM)
                     </h4>
-                    {modeloDetalle.modelos_equipo_bom && modeloDetalle.modelos_equipo_bom.length > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
-                        {modeloDetalle.modelos_equipo_bom.length}{' '}
-                        {modeloDetalle.modelos_equipo_bom.length === 1 ? 'repuesto' : 'repuestos'}
-                      </span>
-                    )}
+                    {modeloDetalle.modelos_equipo_bom &&
+                      modeloDetalle.modelos_equipo_bom.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                          {modeloDetalle.modelos_equipo_bom.length}{' '}
+                          {modeloDetalle.modelos_equipo_bom.length === 1 ? 'repuesto' : 'repuestos'}
+                        </span>
+                      )}
                   </div>
                   <p className="text-xs text-slate-500">
                     Artículos reales del inventario sugeridos para el mantenimiento de{' '}
@@ -814,11 +853,21 @@ export function TabModelosOemBom() {
                       <table className="w-full text-left border-collapse">
                         <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
                           <tr className="text-[11px] font-bold text-slate-500 uppercase">
-                            <th className="py-3 px-4 bg-slate-50/95 backdrop-blur-xs">Repuesto / Insumo de Inventario</th>
-                            <th className="py-3 px-4 bg-slate-50/95 backdrop-blur-xs">Función en el Equipo</th>
-                            <th className="py-3 px-4 text-center bg-slate-50/95 backdrop-blur-xs">Cant. Sugerida</th>
-                            <th className="py-3 px-4 bg-slate-50/95 backdrop-blur-xs">Notas de Uso</th>
-                            <th className="py-3 px-4 text-right bg-slate-50/95 backdrop-blur-xs">Quitar</th>
+                            <th className="py-3 px-4 bg-slate-50/95 backdrop-blur-xs">
+                              Repuesto / Insumo de Inventario
+                            </th>
+                            <th className="py-3 px-4 bg-slate-50/95 backdrop-blur-xs">
+                              Función en el Equipo
+                            </th>
+                            <th className="py-3 px-4 text-center bg-slate-50/95 backdrop-blur-xs">
+                              Cant. Sugerida
+                            </th>
+                            <th className="py-3 px-4 bg-slate-50/95 backdrop-blur-xs">
+                              Notas de Uso
+                            </th>
+                            <th className="py-3 px-4 text-right bg-slate-50/95 backdrop-blur-xs">
+                              Quitar
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-sm">
@@ -860,9 +909,7 @@ export function TabModelosOemBom() {
                                 <td className="py-3.5 px-4 text-center font-bold text-slate-900">
                                   {Number(item.cantidad_sugerida)}{' '}
                                   <span className="text-xs font-semibold text-slate-500">
-                                    {comp?.codigo_unidad_medida ||
-                                      comp?.unidad_medida ||
-                                      'UND'}
+                                    {comp?.codigo_unidad_medida || comp?.unidad_medida || 'UND'}
                                   </span>
                                 </td>
                                 <td className="py-3.5 px-4 text-xs text-slate-600">
@@ -873,9 +920,7 @@ export function TabModelosOemBom() {
                                     type="button"
                                     onClick={async () => {
                                       if (
-                                        window.confirm(
-                                          '¿Retirar este repuesto del kit del modelo?',
-                                        )
+                                        window.confirm('¿Retirar este repuesto del kit del modelo?')
                                       ) {
                                         await removeBomMut.mutateAsync({
                                           idModelo: modeloDetalle.id_modelo_equipo,
@@ -897,7 +942,11 @@ export function TabModelosOemBom() {
                     {modeloDetalle.modelos_equipo_bom.length > 3 && (
                       <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 px-1">
                         <span>
-                          Mostrando <strong className="text-slate-600 font-semibold">{modeloDetalle.modelos_equipo_bom.length}</strong> repuestos en este kit
+                          Mostrando{' '}
+                          <strong className="text-slate-600 font-semibold">
+                            {modeloDetalle.modelos_equipo_bom.length}
+                          </strong>{' '}
+                          repuestos en este kit
                         </span>
                         <span className="flex items-center gap-1 text-slate-500 font-medium">
                           ↕ Desplaza verticalmente para ver todos los repuestos
@@ -919,7 +968,8 @@ export function TabModelosOemBom() {
                       Especificaciones Técnicas por Defecto del Modelo
                     </h4>
                     <p className="text-xs text-slate-500">
-                      Datos de fábrica que se pre-llenan automáticamente al registrar un equipo de este modelo
+                      Datos de fábrica que se pre-llenan automáticamente al registrar un equipo de
+                      este modelo
                     </p>
                   </div>
                 </div>
@@ -934,28 +984,35 @@ export function TabModelosOemBom() {
               </div>
 
               <div className="p-5 space-y-5">
-                {Object.keys((modeloDetalle.especificaciones_base as any)?.modulos || {}).length === 0 ? (
-                  <div className="p-8 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-3">
-                    <Sliders className="h-8 w-8 text-slate-300 mx-auto" />
-                    <div className="text-xs text-slate-600 font-medium">
-                      Este modelo aún no tiene especificaciones técnicas de fábrica preconfiguradas.
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openEditSpecsModal(modeloDetalle)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>Configurar Valores de Fábrica</span>
-                    </button>
-                  </div>
-                ) : (
-                  Object.entries(
-                    (modeloDetalle.especificaciones_base as any)?.modulos || {},
-                  ).map(([modCode, attrsObj]: [string, any]) => {
+                {(() => {
+                  const modulosDetalle =
+                    (
+                      modeloDetalle.especificaciones_base as
+                        | { modulos?: Record<string, Record<string, unknown>> }
+                        | undefined
+                    )?.modulos || {};
+                  if (Object.keys(modulosDetalle).length === 0) {
+                    return (
+                      <div className="p-8 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-3">
+                        <Sliders className="h-8 w-8 text-slate-300 mx-auto" />
+                        <div className="text-xs text-slate-600 font-medium">
+                          Este modelo aún no tiene especificaciones técnicas de fábrica
+                          preconfiguradas.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openEditSpecsModal(modeloDetalle)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Configurar Valores de Fábrica</span>
+                        </button>
+                      </div>
+                    );
+                  }
+                  return Object.entries(modulosDetalle).map(([modCode, attrsObj]) => {
                     const nombreModuloHumano =
-                      moduloNameMap.get(modCode) ||
-                      getModuloBadgeInfo(modCode).fullName;
+                      moduloNameMap.get(modCode) || getModuloBadgeInfo(modCode).fullName;
                     const modBadge = getModuloBadgeInfo(modCode, nombreModuloHumano);
                     const entries = Object.entries(attrsObj || {});
 
@@ -998,8 +1055,8 @@ export function TabModelosOemBom() {
                         </div>
                       </div>
                     );
-                  })
-                )}
+                  });
+                })()}
               </div>
             </div>
           </>
@@ -1018,7 +1075,9 @@ export function TabModelosOemBom() {
                 </div>
                 <div>
                   <h4 className="text-base font-bold text-slate-900">
-                    {editingModelo ? 'Editar Datos del Modelo de Fábrica' : 'Crear Nuevo Modelo de Fábrica'}
+                    {editingModelo
+                      ? 'Editar Datos del Modelo de Fábrica'
+                      : 'Crear Nuevo Modelo de Fábrica'}
                   </h4>
                   <p className="text-xs text-slate-500">
                     {editingModelo
@@ -1089,7 +1148,9 @@ export function TabModelosOemBom() {
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                     <span>Nombre Comercial del Modelo *</span>
-                    <span className="text-[10px] font-normal text-slate-500">(Nombre oficial / Alias del activo)</span>
+                    <span className="text-[10px] font-normal text-slate-500">
+                      (Nombre oficial / Alias del activo)
+                    </span>
                   </label>
                   {isAutoNombre ? (
                     <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -1128,7 +1189,8 @@ export function TabModelosOemBom() {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Nombre descriptivo con el que se identificará este modelo en catálogos y que se heredará al registrar equipos en campo.
+                  Nombre descriptivo con el que se identificará este modelo en catálogos y que se
+                  heredará al registrar equipos en campo.
                 </p>
               </div>
 
@@ -1137,7 +1199,9 @@ export function TabModelosOemBom() {
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <span>Código de Referencia de Plantilla *</span>
-                    <span className="text-[10px] font-semibold text-slate-500">(Nomenclatura EAM)</span>
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      (Nomenclatura EAM)
+                    </span>
                   </label>
                   <div className="flex items-center gap-2">
                     {isAutoCodigo ? (
@@ -1207,7 +1271,10 @@ export function TabModelosOemBom() {
                 {isCodigoDuplicado ? (
                   <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    <span>Este código ya está en uso por otro modelo. Modifícalo o pulsa "Generar inteligente".</span>
+                    <span>
+                      Este código ya está en uso por otro modelo. Modifícalo o pulsa &ldquo;Generar
+                      inteligente&rdquo;.
+                    </span>
                   </div>
                 ) : modeloForm.codigo_modelo ? (
                   <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
@@ -1239,7 +1306,8 @@ export function TabModelosOemBom() {
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          Pre-configura los valores técnicos estándar de fábrica (ej: Capacidad 20 TR, Gas R410A). Se heredarán al crear equipos.
+                          Pre-configura los valores técnicos estándar de fábrica (ej: Capacidad 20
+                          TR, Gas R410A). Se heredarán al crear equipos.
                         </p>
                       </div>
                     </div>
@@ -1340,7 +1408,8 @@ export function TabModelosOemBom() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h4 className="text-base font-bold text-slate-900">
-                      Especificaciones de Fábrica: {editingSpecsModelo.marca} {editingSpecsModelo.modelo}
+                      Especificaciones de Fábrica: {editingSpecsModelo.marca}{' '}
+                      {editingSpecsModelo.modelo}
                     </h4>
                     {editingSpecsModelo.tipo_equipo && (
                       <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-bold">
@@ -1349,7 +1418,8 @@ export function TabModelosOemBom() {
                     )}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Configura los valores predeterminados de cada parte. Se heredarán automáticamente al registrar equipos de este modelo.
+                    Configura los valores predeterminados de cada parte. Se heredarán
+                    automáticamente al registrar equipos de este modelo.
                   </p>
                 </div>
               </div>
@@ -1409,11 +1479,19 @@ export function TabModelosOemBom() {
                   className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Code2 className="h-3.5 w-3.5" />
-                  <span>{showJsonAvanzado ? 'Ocultar JSON técnico' : 'Ver JSON técnico generado (Avanzado)'}</span>
+                  <span>
+                    {showJsonAvanzado
+                      ? 'Ocultar JSON técnico'
+                      : 'Ver JSON técnico generado (Avanzado)'}
+                  </span>
                 </button>
                 {showJsonAvanzado && (
                   <pre className="mt-2 p-3 rounded-xl bg-slate-900 text-emerald-300 font-mono text-[11px] overflow-x-auto max-h-40">
-                    {JSON.stringify({ _version: 1, modulos: specsModulos, unidades: specsUnidades }, null, 2)}
+                    {JSON.stringify(
+                      { _version: 1, modulos: specsModulos, unidades: specsUnidades },
+                      null,
+                      2,
+                    )}
                   </pre>
                 )}
               </div>
@@ -1518,9 +1596,7 @@ export function TabModelosOemBom() {
                     min="0.01"
                     required
                     value={bomForm.cantidad_sugerida}
-                    onChange={(e) =>
-                      setBomForm({ ...bomForm, cantidad_sugerida: e.target.value })
-                    }
+                    onChange={(e) => setBomForm({ ...bomForm, cantidad_sugerida: e.target.value })}
                     className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm"
                   />
                 </div>

@@ -1,7 +1,11 @@
 export interface IOrdenesCompraRepository {
   crearOrdenCompra(data: CrearOrdenCompraData): Promise<OrdenCompraResult>;
   enviarOrdenCompra(idOrdenCompra: number, userId: number): Promise<OrdenCompraResult>;
-  cancelarOrdenCompra(idOrdenCompra: number, motivo: string, userId: number): Promise<OrdenCompraResult>;
+  cancelarOrdenCompra(
+    idOrdenCompra: number,
+    motivo: string,
+    userId: number,
+  ): Promise<OrdenCompraResult>;
   findAll(filters: OrdenesCompraFilters): Promise<OrdenesCompraPaginatedResult>;
   findById(idOrdenCompra: number): Promise<OrdenCompraResult>;
   getOrdenesActivasProveedor(idProveedor: number): Promise<OrdenCompraResult[]>;
@@ -132,7 +136,7 @@ export interface OrdenesCompraResumenKpis {
 export interface ArticuloSourcingResult {
   id_componente: number;
   codigo_interno: string | null;
-  descripcion_corta: string;
+  descripcion_corta: string | null;
   referencia_fabricante: string;
   referencia_proveedor: string | null;
   nombre_segun_proveedor?: string | null;
@@ -155,4 +159,3 @@ export interface CostoComponenteResult {
   tiempo_entrega_dias: number | null;
   es_pactado: boolean;
 }
-

@@ -3,7 +3,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Selector de Unidades de Medida Normalizadas (UnidadesMedidaSelect)
- * 
+ *
  * Componente Premium Combobox / Popover:
  * - Búsqueda rápida por nombre o símbolo ISO (ej: und, gal, litro, kg, m).
  * - Agrupación estructurada por tipo de magnitud física con badges e iconos.
@@ -12,16 +12,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import {
-  Check,
-  ChevronsUpDown,
-  Loader2,
-  Search,
-  Scale,
-  Ruler,
-  Boxes,
-  X,
-} from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Search, X } from 'lucide-react';
 
 import { comprasService } from '@/lib/api/compras.service';
 import { TipoMagnitud, UnidadMedida } from '@/types/compras.types';
@@ -40,10 +31,7 @@ export interface UnidadesMedidaSelectProps {
 }
 
 // Metadatos visuales de magnitudes
-const MAGNITUD_CONFIG: Record<
-  TipoMagnitud,
-  { label: string; icon: string; badgeColor: string }
-> = {
+const MAGNITUD_CONFIG: Record<TipoMagnitud, { label: string; icon: string; badgeColor: string }> = {
   CANTIDAD: {
     label: 'Conteo / Piezas',
     icon: '🔢',
@@ -88,6 +76,12 @@ export function UnidadesMedidaSelect({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const initValueRef = useRef(value);
+  const initDefaultToUndRef = useRef(defaultToUnd);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   // Cargar catálogo de unidades de medida
   useEffect(() => {
@@ -99,10 +93,10 @@ export function UnidadesMedidaSelect({
         if (isMounted) {
           setUnidades(data);
           // Si no hay valor y defaultToUnd está activo, seleccionar UND por defecto
-          if (!value && defaultToUnd) {
+          if (!initValueRef.current && initDefaultToUndRef.current) {
             const und = data.find((u) => (u.codigo || u.codigo_unidad) === 'UND');
             if (und) {
-              onChange('UND', und);
+              onChangeRef.current('UND', und);
             }
           }
         }
@@ -123,10 +117,7 @@ export function UnidadesMedidaSelect({
     if (!value) return null;
     return (
       unidades.find(
-        (u) =>
-          u.codigo === value ||
-          u.codigo_unidad === value ||
-          u.codigo === value.toUpperCase()
+        (u) => u.codigo === value || u.codigo_unidad === value || u.codigo === value.toUpperCase(),
       ) || null
     );
   }, [unidades, value]);
@@ -148,8 +139,7 @@ export function UnidadesMedidaSelect({
   const filteredUnidades = useMemo(() => {
     const q = search.toLowerCase().trim();
     return unidades.filter((u) => {
-      const matchMagnitud =
-        filtroMagnitud === 'TODAS' || u.tipo_magnitud === filtroMagnitud;
+      const matchMagnitud = filtroMagnitud === 'TODAS' || u.tipo_magnitud === filtroMagnitud;
       const matchTexto =
         !q ||
         u.nombre.toLowerCase().includes(q) ||
@@ -161,13 +151,7 @@ export function UnidadesMedidaSelect({
 
   // Agrupación por magnitud para la lista renderizada
   const agrupadas = useMemo(() => {
-    const orden: TipoMagnitud[] = [
-      'CANTIDAD',
-      'VOLUMEN',
-      'LONGITUD',
-      'MASA',
-      'CONJUNTO',
-    ];
+    const orden: TipoMagnitud[] = ['CANTIDAD', 'VOLUMEN', 'LONGITUD', 'MASA', 'CONJUNTO'];
 
     const map = new Map<TipoMagnitud, UnidadMedida[]>();
     for (const m of orden) {
@@ -212,6 +196,7 @@ export function UnidadesMedidaSelect({
         tabIndex={disabled ? -1 : 0}
         role="combobox"
         aria-expanded={isOpen}
+        aria-controls={`${id || 'unidades-medida'}-listbox`}
         onClick={() => {
           if (!disabled) {
             setIsOpen(!isOpen);
@@ -231,16 +216,14 @@ export function UnidadesMedidaSelect({
           disabled
             ? 'cursor-not-allowed opacity-50 bg-gray-50'
             : 'cursor-pointer hover:border-gray-400',
-          isOpen && 'border-blue-500 ring-1 ring-blue-500'
+          isOpen && 'border-blue-500 ring-1 ring-blue-500',
         )}
       >
         <div className="flex items-center gap-2 overflow-hidden truncate">
           {selectedUnidad ? (
             <div className="flex items-center gap-2 truncate">
               <span className="text-sm">{magMeta?.icon}</span>
-              <span className="font-semibold text-gray-900 truncate">
-                {selectedUnidad.nombre}
-              </span>
+              <span className="font-semibold text-gray-900 truncate">{selectedUnidad.nombre}</span>
               <Badge
                 variant="outline"
                 className="font-mono text-[10px] px-1.5 py-0 bg-blue-50/70 border-blue-200 text-blue-700 font-bold"
@@ -248,9 +231,7 @@ export function UnidadesMedidaSelect({
                 {selectedUnidad.simbolo}
               </Badge>
               {selectedUnidad.permite_decimales && (
-                <span className="text-[10px] text-gray-400 font-mono hidden sm:inline">
-                  (dec)
-                </span>
+                <span className="text-[10px] text-gray-400 font-mono hidden sm:inline">(dec)</span>
               )}
             </div>
           ) : (
@@ -302,7 +283,7 @@ export function UnidadesMedidaSelect({
                   'px-2 py-0.5 rounded-full border transition-colors',
                   filtroMagnitud === 'TODAS'
                     ? 'bg-blue-600 text-white border-blue-600 font-bold'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100',
                 )}
               >
                 Todas
@@ -319,7 +300,7 @@ export function UnidadesMedidaSelect({
                       'px-2 py-0.5 rounded-full border transition-colors flex items-center gap-1',
                       active
                         ? 'bg-blue-600 text-white border-blue-600 font-bold'
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100',
                     )}
                   >
                     <span>{conf.icon}</span>
@@ -360,8 +341,7 @@ export function UnidadesMedidaSelect({
                         {items.map((u) => {
                           const cod = u.codigo || u.codigo_unidad;
                           const isSelected =
-                            selectedUnidad?.codigo === cod ||
-                            selectedUnidad?.codigo_unidad === cod;
+                            selectedUnidad?.codigo === cod || selectedUnidad?.codigo_unidad === cod;
 
                           return (
                             <button
@@ -372,7 +352,7 @@ export function UnidadesMedidaSelect({
                                 'w-full flex items-center justify-between rounded-md py-1.5 px-2.5 transition-colors text-left group',
                                 isSelected
                                   ? 'bg-blue-50 text-blue-900 font-semibold'
-                                  : 'hover:bg-gray-100 text-gray-700'
+                                  : 'hover:bg-gray-100 text-gray-700',
                               )}
                             >
                               <div className="flex items-center gap-2 truncate">
@@ -382,7 +362,7 @@ export function UnidadesMedidaSelect({
                                     'font-mono text-[10px] px-1.5 py-0 font-bold',
                                     isSelected
                                       ? 'bg-blue-600 text-white border-blue-600'
-                                      : 'bg-gray-100 text-gray-800 border-gray-200 group-hover:bg-white'
+                                      : 'bg-gray-100 text-gray-800 border-gray-200 group-hover:bg-white',
                                   )}
                                 >
                                   {u.simbolo}
@@ -394,9 +374,7 @@ export function UnidadesMedidaSelect({
                                 <span className="text-[10px] text-gray-400 font-mono">
                                   {u.permite_decimales ? 'Decimales' : 'Entero'}
                                 </span>
-                                {isSelected && (
-                                  <Check className="h-4 w-4 text-blue-600 shrink-0" />
-                                )}
+                                {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
                               </div>
                             </button>
                           );
@@ -408,7 +386,7 @@ export function UnidadesMedidaSelect({
               </div>
             ) : (
               <div className="py-6 text-center text-gray-500 text-xs">
-                No se encontraron unidades para "{search}"
+                No se encontraron unidades para &ldquo;{search}&rdquo;
               </div>
             )}
           </div>

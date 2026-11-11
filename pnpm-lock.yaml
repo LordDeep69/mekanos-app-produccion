@@ -344,6 +344,9 @@ importers:
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.24
+      '@types/nodemailer':
+        specifier: ^8.0.2
+        version: 8.0.2
       '@types/passport-jwt':
         specifier: ^4.0.1
         version: 4.0.1
@@ -5767,6 +5770,12 @@ packages:
     dependencies:
       undici-types: 6.21.0
     dev: false
+
+  /@types/nodemailer@8.0.2:
+    resolution: {integrity: sha512-c7M5ox8p0nEOfbJ2E9Qcmt8/QCu/VzsiAhzBiZbvky2PhKZDHpKB3sQHBM5MEZNkCfBOaS6S9//AGPRTNB7IaA==}
+    dependencies:
+      '@types/node': 20.19.24
+    dev: true
 
   /@types/normalize-package-data@2.4.4:
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}

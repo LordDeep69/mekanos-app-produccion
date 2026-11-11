@@ -380,78 +380,83 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                   const Divider(height: 1),
                   const SizedBox(height: 8),
 
-                  // Opción 12H AM/PM
-                  RadioListTile<bool>(
-                    value: false,
+                  // Opciones 12H AM/PM y 24H agrupadas con RadioGroup (Flutter 3.32+)
+                  RadioGroup<bool>(
                     groupValue: es24h,
                     onChanged: (v) {
-                      ref
-                          .read(formatoHora24Provider.notifier)
-                          .setFormato(false);
+                      if (v != null) {
+                        ref
+                            .read(formatoHora24Provider.notifier)
+                            .setFormato(v);
+                      }
                     },
-                    title: const Text(
-                      '12 Horas (AM / PM)',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: const Text(
-                      'Ej: 02:30 p.m. — Reloj simple con selector AM/PM',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    secondary: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'AM\nPM',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal,
-                          height: 1.2,
+                    child: Column(
+                      children: [
+                        // Opción 12H AM/PM
+                        RadioListTile<bool>(
+                          value: false,
+                          title: const Text(
+                            '12 Horas (AM / PM)',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: const Text(
+                            'Ej: 02:30 p.m. — Reloj simple con selector AM/PM',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          secondary: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'AM\nPM',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal,
+                                height: 1.2,
+                              ),
+                            ),
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
                         ),
-                      ),
-                    ),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
 
-                  const Divider(height: 16),
+                        const Divider(height: 16),
 
-                  // Opción 24H
-                  RadioListTile<bool>(
-                    value: true,
-                    groupValue: es24h,
-                    onChanged: (v) {
-                      ref.read(formatoHora24Provider.notifier).setFormato(true);
-                    },
-                    title: const Text(
-                      '24 Horas',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: const Text(
-                      'Ej: 14:30 — Reloj con doble anillo (0-23)',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    secondary: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        '24H',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal,
+                        // Opción 24H
+                        RadioListTile<bool>(
+                          value: true,
+                          title: const Text(
+                            '24 Horas',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: const Text(
+                            'Ej: 14:30 — Reloj con doble anillo (0-23)',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          secondary: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              '24H',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal,
+                              ),
+                            ),
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
                         ),
-                      ),
+                      ],
                     ),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
                   ),
                 ],
               ),

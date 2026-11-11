@@ -23,19 +23,23 @@ export class GetVersionDetalleHandler implements IQueryHandler<GetVersionDetalle
             numero_cotizacion: true,
           },
         },
-        usuarios: {
-          select: {
-            id_usuario: true,
-            username: true,
-            email: true,
-          },
-        },
       },
     });
 
     if (!version) {
       throw new NotFoundException(`Versión ${idVersion} no encontrada`);
     }
+
+    const usuarioCreador = version.creada_por
+      ? await this.prisma.usuarios.findUnique({
+          where: { id_usuario: version.creada_por },
+          select: {
+            id_usuario: true,
+            username: true,
+            email: true,
+          },
+        })
+      : null;
 
     return {
       id_version: version.id_version,
@@ -45,7 +49,7 @@ export class GetVersionDetalleHandler implements IQueryHandler<GetVersionDetalle
       subtotal: version.subtotal_version,
       total: version.total_version,
       resumen_cambios: version.resumen_cambios,
-      creada_por: version.usuarios,
+      creada_por: usuarioCreador,
       cotizacion: version.cotizaciones,
       // JSONB completo (datos pesados - solo en detalle)
       datos_cotizacion: version.datos_cotizacion,

@@ -24,7 +24,7 @@ export class ProcesarAprobacionHandler implements ICommandHandler<ProcesarAproba
     const aprobacion = await this.prisma.aprobaciones_cotizacion.findUnique({
       where: { id_aprobacion: command.idAprobacion },
       include: {
-        cotizacion: {
+        cotizaciones: {
           select: {
             id_cotizacion: true,
             numero_cotizacion: true,
@@ -40,9 +40,7 @@ export class ProcesarAprobacionHandler implements ICommandHandler<ProcesarAproba
     }
 
     if (aprobacion.estado_aprobacion !== 'PENDIENTE') {
-      throw new BadRequestException(
-        `Aprobación ya procesada: ${aprobacion.estado_aprobacion}`
-      );
+      throw new BadRequestException(`Aprobación ya procesada: ${aprobacion.estado_aprobacion}`);
     }
 
     // 2. TODO Fase 7: Validar usuario tiene nivel jerárquico suficiente
@@ -61,7 +59,7 @@ export class ProcesarAprobacionHandler implements ICommandHandler<ProcesarAproba
         observaciones_aprobador: command.observacionesAprobador,
       },
       include: {
-        cotizacion: true,
+        cotizaciones: true,
       },
     });
 

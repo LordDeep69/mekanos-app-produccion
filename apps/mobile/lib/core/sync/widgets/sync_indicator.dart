@@ -122,7 +122,7 @@ class SyncIndicator extends ConsumerWidget {
   Color _getStatusColor(SyncStatus status, ThemeData theme) {
     switch (status) {
       case SyncStatus.idle:
-        return theme.colorScheme.onSurface.withOpacity(0.6);
+        return theme.colorScheme.onSurface.withValues(alpha: 0.6);
       case SyncStatus.syncing:
         return theme.colorScheme.primary;
       case SyncStatus.success:
@@ -135,13 +135,13 @@ class SyncIndicator extends ConsumerWidget {
   Color _getBackgroundColor(SyncStatus status, ThemeData theme) {
     switch (status) {
       case SyncStatus.idle:
-        return theme.colorScheme.surfaceContainerHighest.withOpacity(0.5);
+        return theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5);
       case SyncStatus.syncing:
-        return theme.colorScheme.primaryContainer.withOpacity(0.3);
+        return theme.colorScheme.primaryContainer.withValues(alpha: 0.3);
       case SyncStatus.success:
-        return Colors.green.withOpacity(0.1);
+        return Colors.green.withValues(alpha: 0.1);
       case SyncStatus.error:
-        return theme.colorScheme.errorContainer.withOpacity(0.3);
+        return theme.colorScheme.errorContainer.withValues(alpha: 0.3);
     }
   }
 }
@@ -282,7 +282,7 @@ class SyncStatusCard extends ConsumerWidget {
                         Text(
                           'Última sync: ${syncState.lastSyncText}',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                         ),
                     ],

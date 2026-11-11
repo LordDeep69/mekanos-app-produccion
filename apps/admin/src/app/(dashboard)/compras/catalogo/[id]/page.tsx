@@ -3,7 +3,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Ficha 360° del Recurso / Artículo Maestro (Abastecimiento y Catálogo)
- * 
+ *
  * Interfaz Prémium basada en Vistas Contextuales con estados de URL (?tab=...)
  * Dividida en 4 Pestañas Funcionales:
  * 1. Ficha Técnica & Identidad
@@ -12,67 +12,54 @@
  * 4. Existencias y Bodega (Kardex)
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import {
   Activity,
   ArrowLeft,
-  ArrowUpRight,
   Boxes,
   Building2,
-  Calendar,
-  Check,
   CheckCircle2,
   ChevronRight,
-  Clock,
-  Copy,
-  DollarSign,
   Edit,
   ExternalLink,
-  FileSpreadsheet,
   FileText,
-  Globe,
   HardHat,
   History,
   Layers,
-  Package,
   Plus,
   RefreshCw,
   Scale,
   ShieldCheck,
-  Sparkles,
   Star,
-  Tag,
   Trash2,
   TrendingDown,
   TrendingUp,
   Truck,
-  User,
   Wrench,
-  X,
   AlertTriangle,
 } from 'lucide-react';
 
 import { comprasService } from '@/lib/api/compras.service';
+import { getApiErrorMessage } from '@/lib/utils';
 import {
   ArticuloMaestro,
   ArticuloProveedor,
+  CreateArticuloMaestroPayload,
   HistorialCostoCompra,
-  OrigenCosto,
+  KardexMovimientoItem,
   getNombreProveedor,
 } from '@/types/compras.types';
-import { ModalHomologacionSourcing } from '@/components/compras/modal-homologacion-sourcing';
+import {
+  ModalHomologacionSourcing,
+  type ModalHomologacionSourcingProps,
+} from '@/components/compras/modal-homologacion-sourcing';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
-import { ComboboxWithCreate } from '@/components/ui/combobox-with-create';
 import {
   Dialog,
   DialogContent,
@@ -95,8 +82,7 @@ export default function FichaArticulo360Page() {
   const [articulo, setArticulo] = useState<ArticuloMaestro | null>(null);
   const [fuentes, setFuentes] = useState<ArticuloProveedor[]>([]);
   const [historial, setHistorial] = useState<HistorialCostoCompra[]>([]);
-  const [proveedoresCatalogo, setProveedoresCatalogo] = useState<any[]>([]);
-  const [movimientosKardex, setMovimientosKardex] = useState<any[]>([]);
+  const [movimientosKardex, setMovimientosKardex] = useState<KardexMovimientoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -109,40 +95,44 @@ export default function FichaArticulo360Page() {
   // Modal Atómico Unificado de Homologación Sourcing
   const [modalHomologacionOpen, setModalHomologacionOpen] = useState(false);
   const [modalHomologacionModo, setModalHomologacionModo] = useState<'crear' | 'editar'>('crear');
-  const [datosEdicionHomologacion, setDatosEdicionHomologacion] = useState<any>(null);
+  const [datosEdicionHomologacion, setDatosEdicionHomologacion] = useState<
+    ModalHomologacionSourcingProps['datosIniciales'] | null
+  >(null);
 
   // Cargar datos del artículo
-  const cargarDatos = async (showToast = false) => {
-    if (!idComponente || isNaN(idComponente)) return;
-    try {
-      if (showToast) setRefreshing(true);
-      const [artRes, fuentesRes, histRes, provsRes, kardexRes] = await Promise.all([
-        comprasService.getArticuloById(idComponente),
-        comprasService.getFuentesSuministro(idComponente),
-        comprasService.getHistorialCostos(idComponente),
-        comprasService.getProveedores(),
-        comprasService.getKardexComponente(idComponente),
-      ]);
+  const cargarDatos = useCallback(
+    async (showToast = false) => {
+      if (!idComponente || isNaN(idComponente)) return;
+      try {
+        if (showToast) setRefreshing(true);
+        const [artRes, fuentesRes, histRes, , kardexRes] = await Promise.all([
+          comprasService.getArticuloById(idComponente),
+          comprasService.getFuentesSuministro(idComponente),
+          comprasService.getHistorialCostos(idComponente),
+          comprasService.getProveedores(),
+          comprasService.getKardexComponente(idComponente),
+        ]);
 
-      setArticulo(artRes);
-      setFuentes(fuentesRes || []);
-      setHistorial(histRes || []);
-      setProveedoresCatalogo(provsRes || []);
-      setMovimientosKardex(kardexRes || []);
+        setArticulo(artRes);
+        setFuentes(fuentesRes || []);
+        setHistorial(histRes || []);
+        setMovimientosKardex(kardexRes || []);
 
-      if (showToast) toast.success('Datos actualizados');
-    } catch (error: any) {
-      console.error('Error al cargar ficha del artículo:', error);
-      toast.error('No se pudo cargar la información del artículo');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+        if (showToast) toast.success('Datos actualizados');
+      } catch (error: unknown) {
+        console.error('Error al cargar ficha del artículo:', error);
+        toast.error('No se pudo cargar la información del artículo');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [idComponente],
+  );
 
   useEffect(() => {
     cargarDatos();
-  }, [idComponente]);
+  }, [cargarDatos]);
 
   // Manejar cambio de pestaña y reflejar en URL
   const handleTabChange = (value: string) => {
@@ -156,7 +146,7 @@ export default function FichaArticulo360Page() {
       toast.loading('Actualizando recurso maestro...', { id: 'edit-articulo' });
 
       // Sanitizar payload: NUNCA enviar stock_actual en update (regla inmutable Zero-Trust)
-      const payload: any = {
+      const payload: Partial<CreateArticuloMaestroPayload> = {
         id_categoria: values.id_categoria ? Number(values.id_categoria) : undefined,
         codigo_interno: values.codigo_interno || undefined,
         referencia_fabricante: values.referencia_fabricante,
@@ -188,7 +178,8 @@ export default function FichaArticulo360Page() {
             ? Number(values.precio_venta)
             : null,
         margen_utilidad_porcentaje:
-          values.margen_utilidad_porcentaje !== null && values.margen_utilidad_porcentaje !== undefined
+          values.margen_utilidad_porcentaje !== null &&
+          values.margen_utilidad_porcentaje !== undefined
             ? Number(values.margen_utilidad_porcentaje)
             : null,
         moneda: values.moneda || 'COP',
@@ -200,12 +191,11 @@ export default function FichaArticulo360Page() {
       toast.success('Recurso maestro actualizado con éxito', { id: 'edit-articulo' });
       setModalEditarOpen(false);
       cargarDatos(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error al actualizar artículo:', error);
-      const msg = error?.response?.data?.message || error?.message || 'Error al actualizar el recurso.';
       toast.error('No se pudo actualizar el artículo', {
         id: 'edit-articulo',
-        description: Array.isArray(msg) ? msg.join(', ') : msg,
+        description: getApiErrorMessage(error, 'Error al actualizar el recurso.'),
       });
     } finally {
       setIsSubmittingEdit(false);
@@ -224,15 +214,16 @@ export default function FichaArticulo360Page() {
       } else {
         toast.loading('Reactivando recurso maestro...', { id: 'toggle-estado' });
         await comprasService.reactivarArticulo(idComponente);
-        toast.success('Recurso reactivado con éxito en el catálogo operativo', { id: 'toggle-estado' });
+        toast.success('Recurso reactivado con éxito en el catálogo operativo', {
+          id: 'toggle-estado',
+        });
       }
       cargarDatos(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error al modificar estado del artículo:', error);
-      const msg = error?.response?.data?.message || error?.message || 'Operación denegada por integridad.';
       toast.error('Guarda de Integridad Bloqueó la Acción', {
         id: 'toggle-estado',
-        description: Array.isArray(msg) ? msg.join(', ') : msg,
+        description: getApiErrorMessage(error, 'Operación denegada por integridad.'),
         duration: 5000,
       });
     } finally {
@@ -276,7 +267,7 @@ export default function FichaArticulo360Page() {
       await comprasService.desvincularProveedor(idComponente, idProveedor);
       toast.success('Proveedor desvinculado');
       cargarDatos();
-    } catch (e: any) {
+    } catch {
       toast.error('No se pudo desvincular el proveedor');
     }
   };
@@ -385,9 +376,12 @@ export default function FichaArticulo360Page() {
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
             <div>
-              <p className="font-bold text-red-800">Recurso Desactivado / Archivado en Catálogo Maestro</p>
+              <p className="font-bold text-red-800">
+                Recurso Desactivado / Archivado en Catálogo Maestro
+              </p>
               <p className="text-red-700">
-                Este artículo se encuentra bloqueado para cotizaciones y nuevas órdenes de compra. Su histórico contable y Kardex se mantienen inmutables.
+                Este artículo se encuentra bloqueado para cotizaciones y nuevas órdenes de compra.
+                Su histórico contable y Kardex se mantienen inmutables.
               </p>
             </div>
           </div>
@@ -414,16 +408,20 @@ export default function FichaArticulo360Page() {
                 articulo.destino_articulo === 'INSUMO_SERVICIO'
                   ? 'bg-blue-100 text-blue-800 border-blue-200'
                   : articulo.destino_articulo === 'HERRAMIENTA_ACTIVO'
-                  ? 'bg-amber-100 text-amber-800 border-amber-300'
-                  : articulo.destino_articulo === 'REPUESTO_CORRECTIVO'
-                  ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
-                  : articulo.destino_articulo === 'DOTACION_EPP'
-                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                  : 'bg-purple-100 text-purple-800 border-purple-200'
+                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                    : articulo.destino_articulo === 'REPUESTO_CORRECTIVO'
+                      ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                      : articulo.destino_articulo === 'DOTACION_EPP'
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                        : 'bg-purple-100 text-purple-800 border-purple-200'
               }
             >
-              {articulo.destino_articulo === 'INSUMO_SERVICIO' && <Wrench className="mr-1 h-3 w-3" />}
-              {articulo.destino_articulo === 'HERRAMIENTA_ACTIVO' && <ShieldCheck className="mr-1 h-3 w-3" />}
+              {articulo.destino_articulo === 'INSUMO_SERVICIO' && (
+                <Wrench className="mr-1 h-3 w-3" />
+              )}
+              {articulo.destino_articulo === 'HERRAMIENTA_ACTIVO' && (
+                <ShieldCheck className="mr-1 h-3 w-3" />
+              )}
               {articulo.destino_articulo === 'DOTACION_EPP' && <HardHat className="mr-1 h-3 w-3" />}
               {articulo.destino_articulo.replace('_', ' ')}
             </Badge>
@@ -440,14 +438,19 @@ export default function FichaArticulo360Page() {
               </Badge>
             )}
             {articulo.requiere_serializacion && (
-              <Badge variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 text-[11px]">
+              <Badge
+                variant="outline"
+                className="border-amber-300 text-amber-800 bg-amber-50 text-[11px]"
+              >
                 Serializado
               </Badge>
             )}
             {articulo.activo ? (
               <Badge className="bg-emerald-600 text-white text-[11px]">Activo</Badge>
             ) : (
-              <Badge variant="destructive" className="text-[11px]">Inactivo</Badge>
+              <Badge variant="destructive" className="text-[11px]">
+                Inactivo
+              </Badge>
             )}
           </div>
 
@@ -457,23 +460,32 @@ export default function FichaArticulo360Page() {
             </h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-gray-500">
               <span>
-                Ref. Fabricante: <strong className="font-mono text-gray-800">{articulo.referencia_fabricante}</strong>
+                Ref. Fabricante:{' '}
+                <strong className="font-mono text-gray-800">
+                  {articulo.referencia_fabricante}
+                </strong>
               </span>
               {articulo.codigo_interno && (
                 <span>
-                  SKU Interno: <strong className="font-mono text-blue-700">{articulo.codigo_interno}</strong>
+                  SKU Interno:{' '}
+                  <strong className="font-mono text-blue-700">{articulo.codigo_interno}</strong>
                 </span>
               )}
               {articulo.marcas ? (
                 <span className="flex items-center gap-1.5">
                   Marca: <strong className="text-gray-900">{articulo.marcas.nombre}</strong>
                   {articulo.marcas.es_fabricante_oem && (
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 font-semibold">
+                    <Badge
+                      variant="outline"
+                      className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 font-semibold"
+                    >
                       OEM
                     </Badge>
                   )}
                   {articulo.marcas.pais_origen && (
-                    <span className="text-[11px] text-gray-400">({articulo.marcas.pais_origen})</span>
+                    <span className="text-[11px] text-gray-400">
+                      ({articulo.marcas.pais_origen})
+                    </span>
                   )}
                 </span>
               ) : articulo.marca ? (
@@ -482,9 +494,17 @@ export default function FichaArticulo360Page() {
                 </span>
               ) : null}
               <span className="flex items-center gap-1.5">
-                Categoría: <strong className="text-gray-900">{articulo.categorias_componente?.nombre || articulo.tipos_componente?.nombre_componente || 'General'}</strong>
+                Categoría:{' '}
+                <strong className="text-gray-900">
+                  {articulo.categorias_componente?.nombre ||
+                    articulo.tipos_componente?.nombre_componente ||
+                    'General'}
+                </strong>
                 {articulo.categorias_componente?.ruta_jerarquica && (
-                  <Badge variant="outline" className="text-[10px] text-gray-600 bg-gray-50 border-gray-200 font-mono">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] text-gray-600 bg-gray-50 border-gray-200 font-mono"
+                  >
                     {articulo.categorias_componente.ruta_jerarquica}
                   </Badge>
                 )}
@@ -497,9 +517,17 @@ export default function FichaArticulo360Page() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 w-full pt-4 mt-4 border-t border-slate-100">
           {/* Costo Preferido */}
           <div className="rounded-xl border border-gray-200/90 bg-gray-50/70 p-3.5 text-left transition-all hover:bg-gray-50">
-            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Costo Adquisición</span>
-            <p className="mt-1 font-mono text-xl font-bold text-gray-900 truncate" title={`$${Number(proveedorPreferido?.costo_actual || articulo.precio_compra || 0).toLocaleString()}`}>
-              ${Number(proveedorPreferido?.costo_actual || articulo.precio_compra || 0).toLocaleString()}
+            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">
+              Costo Adquisición
+            </span>
+            <p
+              className="mt-1 font-mono text-xl font-bold text-gray-900 truncate"
+              title={`$${Number(proveedorPreferido?.costo_actual || articulo.precio_compra || 0).toLocaleString()}`}
+            >
+              $
+              {Number(
+                proveedorPreferido?.costo_actual || articulo.precio_compra || 0,
+              ).toLocaleString()}
             </p>
             <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
               {proveedorPreferido ? 'Prov. preferido' : 'Costo base'}
@@ -508,32 +536,46 @@ export default function FichaArticulo360Page() {
 
           {/* Precio Venta / Margen */}
           <div className="rounded-xl border border-blue-200/70 bg-blue-50/40 p-3.5 text-left transition-all hover:bg-blue-50/70">
-            <span className="text-[11px] font-semibold text-blue-800 uppercase tracking-wider block">Precio Venta Sug.</span>
-            <p className="mt-1 font-mono text-xl font-bold text-blue-700 truncate" title={`$${Number(articulo.precio_venta || 0).toLocaleString()}`}>
+            <span className="text-[11px] font-semibold text-blue-800 uppercase tracking-wider block">
+              Precio Venta Sug.
+            </span>
+            <p
+              className="mt-1 font-mono text-xl font-bold text-blue-700 truncate"
+              title={`$${Number(articulo.precio_venta || 0).toLocaleString()}`}
+            >
               ${Number(articulo.precio_venta || 0).toLocaleString()}
             </p>
             <span className="text-[11px] text-blue-600 font-medium block mt-0.5">
-              {articulo.margen_utilidad_porcentaje ? `${articulo.margen_utilidad_porcentaje}% margen comercial` : 'Sin margen definido'}
+              {articulo.margen_utilidad_porcentaje
+                ? `${articulo.margen_utilidad_porcentaje}% margen comercial`
+                : 'Sin margen definido'}
             </span>
           </div>
 
           {/* Stock Actual */}
           <div className="rounded-xl border border-gray-200/90 bg-gray-50/70 p-3.5 text-left transition-all hover:bg-gray-50">
-            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Stock en Bodega</span>
+            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">
+              Stock en Bodega
+            </span>
             <p className="mt-1 font-mono text-xl font-bold text-gray-900">
-              {articulo.stock_actual} <span className="text-xs font-medium text-gray-500">{articulo.unidad_medida}</span>
+              {articulo.stock_actual}{' '}
+              <span className="text-xs font-medium text-gray-500">{articulo.unidad_medida}</span>
             </p>
-            <span className="text-[11px] text-gray-400 font-medium block mt-0.5">Stock mín: {articulo.stock_minimo}</span>
+            <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
+              Stock mín: {articulo.stock_minimo}
+            </span>
           </div>
 
           {/* Fuentes Suministro */}
           <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/40 p-3.5 text-left transition-all hover:bg-indigo-50/70">
-            <span className="text-[11px] font-semibold text-indigo-800 uppercase tracking-wider block">Fuentes Suministro</span>
-            <p className="mt-1 font-mono text-xl font-bold text-indigo-700">
-              {fuentes.length}
-            </p>
+            <span className="text-[11px] font-semibold text-indigo-800 uppercase tracking-wider block">
+              Fuentes Suministro
+            </span>
+            <p className="mt-1 font-mono text-xl font-bold text-indigo-700">{fuentes.length}</p>
             <span className="text-[11px] text-indigo-600 font-medium block mt-0.5">
-              {fuentes.length === 1 ? '1 proveedor homologado' : `${fuentes.length} proveedores homologados`}
+              {fuentes.length === 1
+                ? '1 proveedor homologado'
+                : `${fuentes.length} proveedores homologados`}
             </span>
           </div>
         </div>
@@ -606,7 +648,9 @@ export default function FichaArticulo360Page() {
                   <div className="col-span-2 sm:col-span-1">
                     <span className="text-xs text-gray-400">Categoría Taxonómica</span>
                     <p className="font-semibold text-sm text-gray-900">
-                      {articulo.categorias_componente?.nombre || articulo.tipos_componente?.nombre_componente || 'N/A'}
+                      {articulo.categorias_componente?.nombre ||
+                        articulo.tipos_componente?.nombre_componente ||
+                        'N/A'}
                     </p>
                     {articulo.categorias_componente?.ruta_jerarquica && (
                       <p className="text-[11px] text-gray-500 font-mono mt-0.5">
@@ -618,18 +662,27 @@ export default function FichaArticulo360Page() {
                     <span className="text-xs text-gray-400">Marca del Fabricante</span>
                     {articulo.marcas ? (
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="font-semibold text-sm text-gray-900">{articulo.marcas.nombre}</span>
+                        <span className="font-semibold text-sm text-gray-900">
+                          {articulo.marcas.nombre}
+                        </span>
                         {articulo.marcas.es_fabricante_oem && (
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1 py-0 font-semibold">
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1 py-0 font-semibold"
+                          >
                             OEM
                           </Badge>
                         )}
                         {articulo.marcas.pais_origen && (
-                          <span className="text-[10px] text-gray-400">({articulo.marcas.pais_origen})</span>
+                          <span className="text-[10px] text-gray-400">
+                            ({articulo.marcas.pais_origen})
+                          </span>
                         )}
                       </div>
                     ) : (
-                      <p className="font-semibold text-sm text-gray-900">{articulo.marca || 'N/A'}</p>
+                      <p className="font-semibold text-sm text-gray-900">
+                        {articulo.marca || 'N/A'}
+                      </p>
                     )}
                   </div>
                   <div>
@@ -642,7 +695,9 @@ export default function FichaArticulo360Page() {
                   </div>
                   <div>
                     <span className="text-xs text-gray-400">Clase Comercial</span>
-                    <p className="font-semibold text-sm text-gray-900">{articulo.tipo_comercial || 'ORIGINAL'}</p>
+                    <p className="font-semibold text-sm text-gray-900">
+                      {articulo.tipo_comercial || 'ORIGINAL'}
+                    </p>
                   </div>
                   <div>
                     <span className="text-xs text-gray-400">Moneda Base</span>
@@ -722,19 +777,28 @@ export default function FichaArticulo360Page() {
                 <CardContent className="pt-4 space-y-3 text-xs">
                   <div className="flex items-center justify-between py-1 border-b border-gray-100">
                     <span className="text-gray-600">Aprovisionable por Compras:</span>
-                    <Badge variant={articulo.es_comprable ? 'default' : 'secondary'} className="text-[10px]">
+                    <Badge
+                      variant={articulo.es_comprable ? 'default' : 'secondary'}
+                      className="text-[10px]"
+                    >
                       {articulo.es_comprable ? 'Habilitado' : 'Deshabilitado'}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-gray-100">
                     <span className="text-gray-600">Maneja Stock en Bodega:</span>
-                    <Badge variant={articulo.es_inventariable ? 'default' : 'secondary'} className="text-[10px]">
+                    <Badge
+                      variant={articulo.es_inventariable ? 'default' : 'secondary'}
+                      className="text-[10px]"
+                    >
                       {articulo.es_inventariable ? 'Sí (Kardex)' : 'No'}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between py-1">
                     <span className="text-gray-600">Facturable a Clientes:</span>
-                    <Badge variant={articulo.es_facturable ? 'default' : 'secondary'} className="text-[10px]">
+                    <Badge
+                      variant={articulo.es_facturable ? 'default' : 'secondary'}
+                      className="text-[10px]"
+                    >
                       {articulo.es_facturable ? 'Sí (OT / Servicio)' : 'No (Uso interno)'}
                     </Badge>
                   </div>
@@ -757,7 +821,8 @@ export default function FichaArticulo360Page() {
                     Matriz de Referencias Cruzadas (Cross-Referencing)
                   </CardTitle>
                   <CardDescription className="text-xs text-gray-500">
-                    Proveedores que comercializan este artículo, con sus códigos específicos, costos negociados y condiciones de entrega.
+                    Proveedores que comercializan este artículo, con sus códigos específicos, costos
+                    negociados y condiciones de entrega.
                   </CardDescription>
                 </div>
 
@@ -783,7 +848,8 @@ export default function FichaArticulo360Page() {
                     No hay proveedores vinculados a este artículo
                   </p>
                   <p className="text-xs text-gray-500 max-w-md mx-auto">
-                    Vincula el primer proveedor para activar la matriz de compras, comparar costos y llevar trazabilidad histórica.
+                    Vincula el primer proveedor para activar la matriz de compras, comparar costos y
+                    llevar trazabilidad histórica.
                   </p>
                   <Button
                     id="btn-homologar-primer-proveedor"
@@ -821,10 +887,17 @@ export default function FichaArticulo360Page() {
                         const nit = provPersona?.numero_identificacion;
 
                         return (
-                          <tr key={`${f.id_componente}-${f.id_proveedor}`} className="hover:bg-gray-50/60 transition-colors">
+                          <tr
+                            key={`${f.id_componente}-${f.id_proveedor}`}
+                            className="hover:bg-gray-50/60 transition-colors"
+                          >
                             <td className="py-3 px-4">
                               <div className="font-bold text-gray-900">{nombreProveedor}</div>
-                              {nit && <span className="text-[10px] text-gray-400 font-mono">NIT: {nit}</span>}
+                              {nit && (
+                                <span className="text-[10px] text-gray-400 font-mono">
+                                  NIT: {nit}
+                                </span>
+                              )}
                             </td>
 
                             <td className="py-3 px-4">
@@ -832,7 +905,10 @@ export default function FichaArticulo360Page() {
                                 {f.referencia_proveedor}
                               </span>
                               {f.nombre_segun_proveedor && (
-                                <p className="text-[11px] text-slate-500 italic mt-0.5 max-w-[220px] truncate" title={f.nombre_segun_proveedor}>
+                                <p
+                                  className="text-[11px] text-slate-500 italic mt-0.5 max-w-[220px] truncate"
+                                  title={f.nombre_segun_proveedor}
+                                >
                                   &ldquo;{f.nombre_segun_proveedor}&rdquo;
                                 </p>
                               )}
@@ -841,7 +917,9 @@ export default function FichaArticulo360Page() {
                             <td className="py-3 px-4 text-gray-700">
                               {f.marcas ? (
                                 <div className="flex items-center gap-1.5">
-                                  <span className="font-semibold text-gray-900">{f.marcas.nombre}</span>
+                                  <span className="font-semibold text-gray-900">
+                                    {f.marcas.nombre}
+                                  </span>
                                   {f.marcas.es_fabricante_oem && (
                                     <Badge
                                       variant="outline"
@@ -865,12 +943,17 @@ export default function FichaArticulo360Page() {
                             </td>
 
                             <td className="py-3 px-4 text-center text-gray-600">
-                              {f.cantidad_minima_compra ? `${f.cantidad_minima_compra} uds` : '1 ud'}
+                              {f.cantidad_minima_compra
+                                ? `${f.cantidad_minima_compra} uds`
+                                : '1 ud'}
                             </td>
 
                             <td className="py-3 px-4 text-center">
                               {f.escalas_precios && f.escalas_precios.length > 0 ? (
-                                <Badge variant="outline" className="text-[10px] border-indigo-200 text-indigo-700">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] border-indigo-200 text-indigo-700"
+                                >
                                   {f.escalas_precios.length} niveles
                                 </Badge>
                               ) : (
@@ -904,14 +987,19 @@ export default function FichaArticulo360Page() {
                                       costo_actual: Number(f.costo_actual || 0),
                                       costo_anterior: Number(f.costo_actual || 0),
                                       tiempo_entrega_dias: f.tiempo_entrega_dias || 1,
-                                      cantidad_minima_compra: f.cantidad_minima_compra ? Number(f.cantidad_minima_compra) : 1,
+                                      cantidad_minima_compra: f.cantidad_minima_compra
+                                        ? Number(f.cantidad_minima_compra)
+                                        : 1,
                                       url_producto_proveedor: f.url_producto_proveedor || '',
                                       es_proveedor_preferido: Boolean(f.es_proveedor_preferido),
                                       observaciones: f.notas || '',
                                       moneda: f.moneda || 'COP',
-                                      nombre_articulo: articulo?.descripcion_corta,
-                                      codigo_articulo: articulo?.codigo_interno || `REF-${articulo?.id_componente}`,
-                                      ref_oem_articulo: articulo?.referencia_fabricante || undefined,
+                                      nombre_articulo: articulo?.descripcion_corta ?? undefined,
+                                      codigo_articulo:
+                                        articulo?.codigo_interno ||
+                                        `REF-${articulo?.id_componente}`,
+                                      ref_oem_articulo:
+                                        articulo?.referencia_fabricante || undefined,
                                       nombre_proveedor: nombreProveedor,
                                       nit_proveedor: nit || undefined,
                                     });
@@ -1007,7 +1095,8 @@ export default function FichaArticulo360Page() {
             <CardContent className="pt-6">
               {historial.length <= 1 ? (
                 <div className="py-8 text-center text-xs text-gray-400">
-                  Se requiere al menos 2 registros en la bitácora para proyectar la curva temporal de costos.
+                  Se requiere al menos 2 registros en la bitácora para proyectar la curva temporal
+                  de costos.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1015,12 +1104,15 @@ export default function FichaArticulo360Page() {
                     {historial
                       .slice()
                       .reverse()
-                      .map((h, i) => {
+                      .map((h) => {
                         const val = Number(h.costo_unitario);
                         const min = metricasCostos.min || 1;
                         const max = metricasCostos.max || 1;
                         const range = max - min || 1;
-                        const heightPct = Math.max(15, Math.min(100, ((val - min) / range) * 85 + 15));
+                        const heightPct = Math.max(
+                          15,
+                          Math.min(100, ((val - min) / range) * 85 + 15),
+                        );
                         const fecha = new Date(h.fecha_registro).toLocaleDateString(undefined, {
                           month: 'short',
                           day: 'numeric',
@@ -1038,7 +1130,9 @@ export default function FichaArticulo360Page() {
                               style={{ height: `${heightPct}%` }}
                               className="w-full max-w-[36px] bg-gradient-to-t from-blue-600 to-indigo-500 rounded-t-md hover:from-blue-700 hover:to-indigo-600 transition-all shadow-sm"
                             />
-                            <span className="text-[10px] text-gray-500 mt-2 font-mono">{fecha}</span>
+                            <span className="text-[10px] text-gray-500 mt-2 font-mono">
+                              {fecha}
+                            </span>
                           </div>
                         );
                       })}
@@ -1056,7 +1150,8 @@ export default function FichaArticulo360Page() {
                 Bitácora Inmutable de Cambios de Costo
               </CardTitle>
               <CardDescription className="text-xs text-gray-500">
-                Registro permanente de cada alza, cotización o recepción de factura para auditorías contables.
+                Registro permanente de cada alza, cotización o recepción de factura para auditorías
+                contables.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -1083,14 +1178,15 @@ export default function FichaArticulo360Page() {
                         (h.id_proveedor ? `Proveedor #${h.id_proveedor}` : 'Ajuste Interno');
 
                       return (
-                        <tr key={h.id_historial_costo} className="hover:bg-gray-50/60 transition-colors">
+                        <tr
+                          key={h.id_historial_costo}
+                          className="hover:bg-gray-50/60 transition-colors"
+                        >
                           <td className="py-3 px-4 font-mono text-gray-600 text-[11px] whitespace-nowrap">
                             {new Date(h.fecha_registro).toLocaleString()}
                           </td>
 
-                          <td className="py-3 px-4 font-semibold text-gray-800">
-                            {nombreProv}
-                          </td>
+                          <td className="py-3 px-4 font-semibold text-gray-800">{nombreProv}</td>
 
                           <td className="py-3 px-4 text-right font-mono font-bold text-gray-900 text-xs">
                             ${Number(h.costo_unitario).toLocaleString()} {h.moneda}
@@ -1104,8 +1200,8 @@ export default function FichaArticulo360Page() {
                                   variacion > 0
                                     ? 'border-red-300 text-red-700 bg-red-50'
                                     : variacion < 0
-                                    ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
-                                    : 'border-gray-200 text-gray-500'
+                                      ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
+                                      : 'border-gray-200 text-gray-500'
                                 }`}
                               >
                                 {variacion > 0 ? `+${variacion}%` : `${variacion}%`}
@@ -1129,7 +1225,10 @@ export default function FichaArticulo360Page() {
                             {h.usuarios?.username || 'Sistema'}
                           </td>
 
-                          <td className="py-3 px-4 text-gray-500 max-w-xs truncate" title={h.observaciones || ''}>
+                          <td
+                            className="py-3 px-4 text-gray-500 max-w-xs truncate"
+                            title={h.observaciones || ''}
+                          >
                             {h.observaciones || '-'}
                           </td>
                         </tr>
@@ -1160,15 +1259,15 @@ export default function FichaArticulo360Page() {
                       articulo.stock_actual <= 0
                         ? 'bg-red-100 text-red-800 border-red-200'
                         : articulo.stock_actual <= articulo.stock_minimo
-                        ? 'bg-amber-100 text-amber-800 border-amber-200'
-                        : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                          ? 'bg-amber-100 text-amber-800 border-amber-200'
+                          : 'bg-emerald-100 text-emerald-800 border-emerald-200'
                     }`}
                   >
                     {articulo.stock_actual <= 0
                       ? 'Sin Existencias'
                       : articulo.stock_actual <= articulo.stock_minimo
-                      ? 'Bajo Mínimo'
-                      : 'Stock Saludable'}
+                        ? 'Bajo Mínimo'
+                        : 'Stock Saludable'}
                   </Badge>
                 </CardTitle>
                 <CardDescription className="text-xs text-gray-500">
@@ -1179,14 +1278,20 @@ export default function FichaArticulo360Page() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Stock Actual en Bodega:</span>
                   <span className="font-mono text-2xl font-extrabold text-gray-900">
-                    {articulo.stock_actual} <span className="text-sm font-normal text-gray-500">{articulo.unidad_medida}</span>
+                    {articulo.stock_actual}{' '}
+                    <span className="text-sm font-normal text-gray-500">
+                      {articulo.unidad_medida}
+                    </span>
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Punto de Reorden / Stock Mínimo:</span>
                   <span className="font-mono text-base font-bold text-gray-700">
-                    {articulo.stock_minimo} <span className="text-xs font-normal text-gray-500">{articulo.unidad_medida}</span>
+                    {articulo.stock_minimo}{' '}
+                    <span className="text-xs font-normal text-gray-500">
+                      {articulo.unidad_medida}
+                    </span>
                   </span>
                 </div>
 
@@ -1212,27 +1317,35 @@ export default function FichaArticulo360Page() {
                           Math.min(
                             100,
                             (articulo.stock_minimo || 0) > 0
-                              ? ((articulo.stock_actual || 0) / ((articulo.stock_minimo || 1) * 2)) * 100
+                              ? ((articulo.stock_actual || 0) /
+                                  ((articulo.stock_minimo || 1) * 2)) *
+                                  100
                               : (articulo.stock_actual || 0) > 0
-                              ? 100
-                              : 0
-                          )
+                                ? 100
+                                : 0,
+                          ),
                         )}%`,
                       }}
                       className={`h-full rounded-full transition-all ${
                         articulo.stock_actual <= 0
                           ? 'bg-red-500'
                           : articulo.stock_actual <= articulo.stock_minimo
-                          ? 'bg-amber-500'
-                          : 'bg-emerald-500'
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500'
                       }`}
                     />
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-                  <span className="text-[11px] text-gray-400">Total movimientos: {movimientosKardex.length}</span>
-                  <Button asChild size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs">
+                  <span className="text-[11px] text-gray-400">
+                    Total movimientos: {movimientosKardex.length}
+                  </span>
+                  <Button
+                    asChild
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                  >
                     <Link href={`/inventario/${idComponente}`}>
                       <Boxes className="mr-1.5 h-3.5 w-3.5" />
                       Ir al Módulo de Kardex
@@ -1250,22 +1363,38 @@ export default function FichaArticulo360Page() {
                   Almacén y Ubicación de Almacenamiento
                 </CardTitle>
                 <CardDescription className="text-xs text-gray-500">
-                  Ubicación física identificada a través de las operaciones de Kardex y lotes activos.
+                  Ubicación física identificada a través de las operaciones de Kardex y lotes
+                  activos.
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-4 text-xs text-gray-600">
                 {(() => {
-                  const bodegasMap = new Map<number, { id_ubicacion: number; codigo: string; nombre: string; stock: number; lotesCount: number }>();
-                  const lotes = (articulo as any)?.lotes_componentes || [];
+                  const bodegasMap = new Map<
+                    number,
+                    {
+                      id_ubicacion: number;
+                      codigo: string;
+                      nombre: string;
+                      stock: number;
+                      lotesCount: number;
+                    }
+                  >();
+                  const lotes = articulo?.lotes_componentes || [];
 
-                  lotes.forEach((lote: any) => {
+                  lotes.forEach((lote) => {
                     const ub = lote.movimientos_inventario?.[0]?.ubicaciones_bodega;
                     const idUb = ub?.id_ubicacion || 1;
                     const cod = ub?.codigo_ubicacion || 'BOD-CENTRAL';
                     const nom = ub?.zona || 'Bodega Central Taller';
                     const cant = Number(lote.cantidad_actual || 0);
 
-                    const prev = bodegasMap.get(idUb) || { id_ubicacion: idUb, codigo: cod, nombre: nom, stock: 0, lotesCount: 0 };
+                    const prev = bodegasMap.get(idUb) || {
+                      id_ubicacion: idUb,
+                      codigo: cod,
+                      nombre: nom,
+                      stock: 0,
+                      lotesCount: 0,
+                    };
                     prev.stock += cant;
                     prev.lotesCount += 1;
                     bodegasMap.set(idUb, prev);
@@ -1313,14 +1442,20 @@ export default function FichaArticulo360Page() {
                                 <Building2 className="h-4 w-4 text-blue-600" />
                                 <span className="font-bold text-gray-900 text-sm">{b.nombre}</span>
                               </div>
-                              <Badge variant="outline" className="font-mono text-[11px] bg-blue-50 text-blue-700 border-blue-200">
+                              <Badge
+                                variant="outline"
+                                className="font-mono text-[11px] bg-blue-50 text-blue-700 border-blue-200"
+                              >
                                 {b.codigo}
                               </Badge>
                             </div>
                             <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-[11px]">
                               <span className="text-gray-500">Saldo Físico Disponible:</span>
                               <span className="font-mono font-bold text-gray-900 text-sm">
-                                {b.stock} <span className="text-xs font-normal text-gray-500">{articulo?.unidad_medida || 'UND'}</span>
+                                {b.stock}{' '}
+                                <span className="text-xs font-normal text-gray-500">
+                                  {articulo?.unidad_medida || 'UND'}
+                                </span>
                               </span>
                             </div>
                             {b.lotesCount > 0 && (
@@ -1345,19 +1480,25 @@ export default function FichaArticulo360Page() {
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-gray-700">Estado de Ubicación:</span>
-                        <Badge variant="outline" className="border-gray-300 text-gray-700 bg-white text-[10px]">
+                        <Badge
+                          variant="outline"
+                          className="border-gray-300 text-gray-700 bg-white text-[10px]"
+                        >
                           Sin existencias activas
                         </Badge>
                       </div>
                       <p className="text-[11px] text-gray-400 pt-1 border-t border-gray-100">
-                        Para ingresar existencias a una bodega, registre una nueva Orden de Compra o un movimiento de Entrada física en inventario.
+                        Para ingresar existencias a una bodega, registre una nueva Orden de Compra o
+                        un movimiento de Entrada física en inventario.
                       </p>
                     </div>
                   );
                 })()}
 
                 <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 text-[11px] text-blue-800">
-                  🔒 <strong>Gobernanza de Existencias:</strong> Las modificaciones físicas de stock están restringidas a movimientos auditados con justificación documental obligatoria.
+                  🔒 <strong>Gobernanza de Existencias:</strong> Las modificaciones físicas de stock
+                  están restringidas a movimientos auditados con justificación documental
+                  obligatoria.
                 </div>
               </CardContent>
             </Card>
@@ -1373,7 +1514,8 @@ export default function FichaArticulo360Page() {
                     Lotes Físicos Activos en Almacén
                   </CardTitle>
                   <CardDescription className="text-xs text-gray-500">
-                    Trazabilidad por lote físico, existencias disponibles y vencimientos sincronizados con WMS.
+                    Trazabilidad por lote físico, existencias disponibles y vencimientos
+                    sincronizados con WMS.
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" asChild className="text-xs h-8">
@@ -1385,10 +1527,12 @@ export default function FichaArticulo360Page() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {((articulo as any)?.lotes_componentes || []).length === 0 ? (
+              {(articulo?.lotes_componentes || []).length === 0 ? (
                 <div className="p-6 text-center space-y-2">
                   <Layers className="h-8 w-8 mx-auto text-gray-300" />
-                  <p className="text-xs font-semibold text-gray-700">Sin Lotes Activos con Existencias</p>
+                  <p className="text-xs font-semibold text-gray-700">
+                    Sin Lotes Activos con Existencias
+                  </p>
                   <p className="text-[11px] text-gray-400 max-w-sm mx-auto">
                     No hay lotes con disponibilidad física actualmente en bodega para este artículo.
                   </p>
@@ -1408,25 +1552,39 @@ export default function FichaArticulo360Page() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {((articulo as any).lotes_componentes || []).map((lote: any) => {
+                      {(articulo.lotes_componentes || []).map((lote) => {
                         const ub = lote.movimientos_inventario?.[0]?.ubicaciones_bodega;
                         return (
                           <tr key={lote.id_lote} className="hover:bg-gray-50/60">
-                            <td className="py-2.5 px-4 font-mono font-bold text-gray-900">{lote.codigo_lote}</td>
+                            <td className="py-2.5 px-4 font-mono font-bold text-gray-900">
+                              {lote.codigo_lote}
+                            </td>
                             <td className="py-2.5 px-4 font-medium text-gray-700">
-                              {ub?.codigo_ubicacion || 'BOD-CENTRAL'} {ub?.zona ? `(${ub.zona})` : ''}
+                              {ub?.codigo_ubicacion || 'BOD-CENTRAL'}{' '}
+                              {ub?.zona ? `(${ub.zona})` : ''}
                             </td>
                             <td className="py-2.5 px-4 text-center">
-                              <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200 font-bold text-[11px]">
+                              <Badge
+                                variant="outline"
+                                className="bg-emerald-50 text-emerald-800 border-emerald-200 font-bold text-[11px]"
+                              >
                                 {lote.cantidad_actual} {articulo.unidad_medida}
                               </Badge>
                             </td>
-                            <td className="py-2.5 px-4 text-center text-gray-500 font-mono">{lote.cantidad_inicial}</td>
+                            <td className="py-2.5 px-4 text-center text-gray-500 font-mono">
+                              {lote.cantidad_inicial}
+                            </td>
                             <td className="py-2.5 px-4 text-gray-600 text-[11px]">
-                              {lote.fecha_ingreso ? new Date(lote.fecha_ingreso).toLocaleDateString() : '--'}
+                              {lote.fecha_ingreso
+                                ? new Date(lote.fecha_ingreso).toLocaleDateString()
+                                : '--'}
                             </td>
                             <td className="py-2.5 px-4 text-[11px]">
-                              {lote.fecha_vencimiento ? new Date(lote.fecha_vencimiento).toLocaleDateString() : <span className="text-gray-400 italic">No aplica</span>}
+                              {lote.fecha_vencimiento ? (
+                                new Date(lote.fecha_vencimiento).toLocaleDateString()
+                              ) : (
+                                <span className="text-gray-400 italic">No aplica</span>
+                              )}
                             </td>
                             <td className="py-2.5 px-4 text-center">
                               <Badge className="text-[10px] bg-emerald-100 text-emerald-800 border-emerald-200">
@@ -1453,7 +1611,8 @@ export default function FichaArticulo360Page() {
                     Trazabilidad Inmutable de Kardex (Movimientos Auditados)
                   </CardTitle>
                   <CardDescription className="text-xs text-gray-500">
-                    Historial cronológico de entradas, salidas, traslados y aperturas registradas en la base de datos.
+                    Historial cronológico de entradas, salidas, traslados y aperturas registradas en
+                    la base de datos.
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" asChild className="text-xs h-8">
@@ -1468,9 +1627,13 @@ export default function FichaArticulo360Page() {
               {movimientosKardex.length === 0 ? (
                 <div className="p-8 text-center space-y-3">
                   <Boxes className="h-10 w-10 mx-auto text-gray-300" />
-                  <p className="text-sm font-semibold text-gray-700">Sin Movimientos de Inventario Registrados</p>
+                  <p className="text-sm font-semibold text-gray-700">
+                    Sin Movimientos de Inventario Registrados
+                  </p>
                   <p className="text-xs text-gray-500 max-w-md mx-auto">
-                    Este recurso aún no tiene entradas ni salidas en Kardex. Las existencias se actualizarán automáticamente al recepcionar compras o ejecutar movimientos de almacén.
+                    Este recurso aún no tiene entradas ni salidas en Kardex. Las existencias se
+                    actualizarán automáticamente al recepcionar compras o ejecutar movimientos de
+                    almacén.
                   </p>
                 </div>
               ) : (
@@ -1489,13 +1652,16 @@ export default function FichaArticulo360Page() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 font-normal">
-                      {movimientosKardex.map((m: any) => {
+                      {movimientosKardex.map((m) => {
                         const esEntrada = m.tipo_movimiento === 'ENTRADA';
                         const esSalida = m.tipo_movimiento === 'SALIDA';
-                        const cantidadNum = Math.abs(parseFloat(m.cantidad || 0));
+                        const cantidadNum = Math.abs(parseFloat(String(m.cantidad || 0)));
 
                         return (
-                          <tr key={m.id_movimiento} className="hover:bg-gray-50/60 transition-colors">
+                          <tr
+                            key={m.id_movimiento}
+                            className="hover:bg-gray-50/60 transition-colors"
+                          >
                             <td className="py-3 px-4 font-mono text-gray-600 text-[11px] whitespace-nowrap">
                               {new Date(m.fecha_movimiento).toLocaleString()}
                             </td>
@@ -1506,8 +1672,8 @@ export default function FichaArticulo360Page() {
                                   esEntrada
                                     ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                                     : esSalida
-                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
-                                    : 'bg-blue-100 text-blue-800 border-blue-200'
+                                      ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                      : 'bg-blue-100 text-blue-800 border-blue-200'
                                 }`}
                               >
                                 {m.tipo_movimiento}
@@ -1515,7 +1681,10 @@ export default function FichaArticulo360Page() {
                             </td>
 
                             <td className="py-3 px-4">
-                              <Badge variant="outline" className="text-[10px] font-mono text-gray-700 bg-gray-50">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-mono text-gray-700 bg-gray-50"
+                              >
                                 {m.origen_movimiento?.replace('_', ' ') || 'MOVIMIENTO'}
                               </Badge>
                             </td>
@@ -1535,11 +1704,16 @@ export default function FichaArticulo360Page() {
                             <td className="py-3 px-4 text-gray-700">
                               {m.ubicaciones_bodega ? (
                                 <span className="font-medium text-slate-800 text-xs">
-                                  <span className="font-mono text-slate-500 font-semibold mr-1">[{m.ubicaciones_bodega.codigo_ubicacion}]</span>
-                                  {m.ubicaciones_bodega.zona || m.ubicaciones_bodega.codigo_ubicacion}
+                                  <span className="font-mono text-slate-500 font-semibold mr-1">
+                                    [{m.ubicaciones_bodega.codigo_ubicacion}]
+                                  </span>
+                                  {m.ubicaciones_bodega.zona ||
+                                    m.ubicaciones_bodega.codigo_ubicacion}
                                 </span>
                               ) : (
-                                <span className="text-slate-400 italic text-xs">Bodega Central Taller</span>
+                                <span className="text-slate-400 italic text-xs">
+                                  Bodega Central Taller
+                                </span>
                               )}
                             </td>
 
@@ -1550,7 +1724,10 @@ export default function FichaArticulo360Page() {
                                 '-'}
                             </td>
 
-                            <td className="py-3 px-4 text-gray-600 max-w-xs truncate" title={m.justificacion || m.observaciones || ''}>
+                            <td
+                              className="py-3 px-4 text-gray-600 max-w-xs truncate"
+                              title={m.justificacion || m.observaciones || ''}
+                            >
                               {m.justificacion || m.observaciones || '-'}
                             </td>
                           </tr>
@@ -1568,7 +1745,7 @@ export default function FichaArticulo360Page() {
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* MODAL: HOMOLOGAR PROVEEDOR EN MATRIZ DE SOURCING (ENTERPRISE SM:MAX-W-XL) */}
-            {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* MODAL ATÓMICO UNIFICADO: HOMOLOGACIÓN Y SOURCING */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {articulo && (
@@ -1585,7 +1762,7 @@ export default function FichaArticulo360Page() {
             marca: articulo.marca || articulo.marcas?.nombre || undefined,
             precio_base: Number(articulo.precio_compra || 0),
           }}
-          datosIniciales={datosEdicionHomologacion}
+          datosIniciales={datosEdicionHomologacion ?? undefined}
           onSuccess={() => cargarDatos(true)}
         />
       )}
@@ -1601,7 +1778,8 @@ export default function FichaArticulo360Page() {
               Editar Recurso Maestro: {articulo.codigo_interno || articulo.referencia_fabricante}
             </DialogTitle>
             <DialogDescription className="text-xs text-gray-500">
-              Actualiza la taxonomía, parámetros técnicos y política de precios. El stock físico está protegido por Kardex y no es editable directamente.
+              Actualiza la taxonomía, parámetros técnicos y política de precios. El stock físico
+              está protegido por Kardex y no es editable directamente.
             </DialogDescription>
           </DialogHeader>
 
@@ -1630,7 +1808,10 @@ export default function FichaArticulo360Page() {
             <DialogDescription className="text-xs text-gray-600 space-y-2 pt-2">
               <p>
                 ¿Confirmas que deseas archivar y desactivar el recurso{' '}
-                <strong className="text-gray-900">{articulo.descripcion_corta || articulo.referencia_fabricante}</strong>?
+                <strong className="text-gray-900">
+                  {articulo.descripcion_corta || articulo.referencia_fabricante}
+                </strong>
+                ?
               </p>
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-800 space-y-1">
                 <p className="font-bold flex items-center gap-1.5">
@@ -1638,7 +1819,10 @@ export default function FichaArticulo360Page() {
                   Guarda de Integridad Contable (Zero-Trust):
                 </p>
                 <p>
-                  El sistema validará que este recurso tenga <strong>0 existencias físicas en almacén</strong> (Stock actual: {articulo.stock_actual} {articulo.unidad_medida}) y que no cuente con órdenes de compra activas en tránsito.
+                  El sistema validará que este recurso tenga{' '}
+                  <strong>0 existencias físicas en almacén</strong> (Stock actual:{' '}
+                  {articulo.stock_actual} {articulo.unidad_medida}) y que no cuente con órdenes de
+                  compra activas en tránsito.
                 </p>
               </div>
             </DialogDescription>

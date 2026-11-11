@@ -14,12 +14,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiParam,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -76,7 +71,7 @@ export class UpdateLoteGaleriaDto {
 @Controller('galeria-lotes')
 @UseGuards(JwtAuthGuard)
 export class GaleriaLotesController {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Crear lote de galería
@@ -84,10 +79,7 @@ export class GaleriaLotesController {
    */
   @Post()
   @ApiOperation({ summary: 'Crear lote de galería de fotos generales' })
-  async crearLote(
-    @Body() dto: CreateLoteGaleriaDto,
-    @UserId() userId: number,
-  ) {
+  async crearLote(@Body() dto: CreateLoteGaleriaDto, @UserId() userId: number) {
     // Validar orden
     const orden = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: dto.idOrdenServicio },
@@ -135,9 +127,7 @@ export class GaleriaLotesController {
   @Get('orden/:ordenId')
   @ApiOperation({ summary: 'Listar lotes de galería por orden' })
   @ApiParam({ name: 'ordenId', type: Number })
-  async listarPorOrden(
-    @Param('ordenId', ParseIntPipe) ordenId: number,
-  ) {
+  async listarPorOrden(@Param('ordenId', ParseIntPipe) ordenId: number) {
     // ✅ FIX: Sin include _count — la relación evidencias⇄lotes no está declarada
     // en el schema de Prisma (solo existe la FK física en la BD). El conteo se
     // hace aparte con groupBy sobre el campo escalar id_lote_galeria.
@@ -178,10 +168,7 @@ export class GaleriaLotesController {
   @Put(':id')
   @ApiOperation({ summary: 'Renombrar lote de galería' })
   @ApiParam({ name: 'id', type: Number })
-  async renombrarLote(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateLoteGaleriaDto,
-  ) {
+  async renombrarLote(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLoteGaleriaDto) {
     const lote = await this.prisma.lotes_galeria.findUnique({
       where: { id_lote_galeria: id },
     });
@@ -216,10 +203,7 @@ export class GaleriaLotesController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Eliminar lote (sus fotos vuelven al grupo estándar)' })
   @ApiParam({ name: 'id', type: Number })
-  async eliminarLote(
-    @Param('id', ParseIntPipe) id: number,
-    @UserId() userId: number,
-  ) {
+  async eliminarLote(@Param('id', ParseIntPipe) id: number, @UserId() _userId: number) {
     const lote = await this.prisma.lotes_galeria.findUnique({
       where: { id_lote_galeria: id },
     });
@@ -243,10 +227,7 @@ export class GaleriaLotesController {
   @Patch(':id/orden')
   @ApiOperation({ summary: 'Cambiar posición del lote' })
   @ApiParam({ name: 'id', type: Number })
-  async reordenarLote(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: { ordenLote: number },
-  ) {
+  async reordenarLote(@Param('id', ParseIntPipe) id: number, @Body() dto: { ordenLote: number }) {
     const lote = await this.prisma.lotes_galeria.findUnique({
       where: { id_lote_galeria: id },
     });

@@ -20,10 +20,10 @@ import { SolicitarAprobacionCommand } from './solicitar-aprobacion.command';
 export class SolicitarAprobacionHandler implements ICommandHandler<SolicitarAprobacionCommand> {
   // Umbrales aprobación configurables (TODO Fase 7: mover a tabla config)
   private static readonly UMBRALES = {
-    SUPERVISOR_TOTAL: 5000000,      // $5M COP
-    GERENTE_TOTAL: 15000000,        // $15M COP
-    SUPERVISOR_DESCUENTO: 15.0,     // 15%
-    GERENTE_DESCUENTO: 25.0,        // 25%
+    SUPERVISOR_TOTAL: 5000000, // $5M COP
+    GERENTE_TOTAL: 15000000, // $15M COP
+    SUPERVISOR_DESCUENTO: 15.0, // 15%
+    GERENTE_DESCUENTO: 25.0, // 25%
   };
 
   constructor(
@@ -42,7 +42,7 @@ export class SolicitarAprobacionHandler implements ICommandHandler<SolicitarApro
     // 2. Validar estado BORRADOR (id_estado = 1)
     if (cotizacion.id_estado !== 1) {
       throw new BadRequestException(
-        `Solo cotizaciones BORRADOR pueden solicitar aprobación. Estado actual: ${cotizacion.id_estado}`
+        `Solo cotizaciones BORRADOR pueden solicitar aprobación. Estado actual: ${cotizacion.id_estado}`,
       );
     }
 
@@ -82,7 +82,7 @@ export class SolicitarAprobacionHandler implements ICommandHandler<SolicitarApro
         },
       },
       include: {
-        cotizacion: {
+        cotizaciones: {
           select: {
             numero_cotizacion: true,
             total_cotizacion: true,
@@ -112,7 +112,7 @@ export class SolicitarAprobacionHandler implements ICommandHandler<SolicitarApro
    */
   private determinarNivelAprobacion(
     total: number,
-    descuento: number
+    descuento: number,
   ): { nivel: string; razon: string } {
     const { SUPERVISOR_TOTAL, GERENTE_TOTAL, SUPERVISOR_DESCUENTO, GERENTE_DESCUENTO } =
       SolicitarAprobacionHandler.UMBRALES;

@@ -1,12 +1,13 @@
 import { PrismaService } from '@mekanos/database';
 import { NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { getNextTableId } from '../../../common/utils/next-id.helper';
 import { CreateVersionCommand } from './create-version.command';
 
 /**
  * CreateVersionHandler
  * FASE 4.8: Crea snapshot completo cotización (datos + items)
- * 
+ *
  * Funcionalidad:
  * 1. Valida cotización existe
  * 2. Serializa datos cotización → JSONB
@@ -28,12 +29,12 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
     const cotizacion = await this.prisma.cotizaciones.findUnique({
       where: { id_cotizacion: idCotizacion },
       include: {
-        estado: true,
-        cliente: {
+        estados_cotizacion: true,
+        clientes: {
           include: { persona: true },
         },
-        sede: true,
-        equipo: true,
+        sedes_cliente: true,
+        equipos: true,
       },
     });
 
@@ -47,7 +48,7 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
     const itemsServicios = await this.prisma.items_cotizacion_servicios.findMany({
       where: { id_cotizacion: idCotizacion },
       include: {
-        servicio: true,
+        catalogo_servicios: true,
       },
     });
 
@@ -70,9 +71,8 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       take: 1,
     });
 
-    const numeroVersion = versionesExistentes.length > 0 
-      ? versionesExistentes[0].numero_version + 1
-      : 1;
+    const numeroVersion =
+      versionesExistentes.length > 0 ? versionesExistentes[0].numero_version + 1 : 1;
 
     // ========================================
     // 5. SERIALIZAR DATOS COTIZACIÓN
@@ -82,13 +82,13 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       fecha_cotizacion: cotizacion.fecha_cotizacion,
       fecha_vencimiento: cotizacion.fecha_vencimiento,
       asunto: cotizacion.asunto,
-      estado: cotizacion.estado?.nombre_estado,
+      estado: cotizacion.estados_cotizacion?.nombre_estado,
       cliente: {
-        razon_social: cotizacion.cliente?.persona?.razon_social,
-        nombre_completo: cotizacion.cliente?.persona?.nombre_completo,
+        razon_social: cotizacion.clientes?.persona?.razon_social,
+        nombre_completo: cotizacion.clientes?.persona?.nombre_completo,
       },
-      sede: cotizacion.sede?.nombre_sede,
-      equipo: cotizacion.equipo?.nombre_equipo,
+      sede: cotizacion.sedes_cliente?.nombre_sede,
+      equipo: cotizacion.equipos?.nombre_equipo,
       descripcion_general: cotizacion.descripcion_general,
       alcance_trabajo: cotizacion.alcance_trabajo,
       exclusiones: cotizacion.exclusiones,
@@ -111,8 +111,8 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
     // ========================================
     const serviciosSnapshot = itemsServicios.map((item) => ({
       id_item: item.id_item_servicio,
-      servicio: item.servicio?.nombre_servicio,
-      descripcion: item.descripcion_personalizada || item.servicio?.descripcion,
+      servicio: item.catalogo_servicios?.nombre_servicio,
+      descripcion: item.descripcion_personalizada || item.catalogo_servicios?.descripcion,
       cantidad: item.cantidad,
       unidad: item.unidad,
       precio_unitario: item.precio_unitario,
@@ -142,8 +142,10 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
     // ========================================
     // 8. CREAR VERSIÓN
     // ========================================
+    const idVersion = await getNextTableId(this.prisma, 'versiones_cotizacion', 'id_version');
     const version = await this.prisma.versiones_cotizacion.create({
       data: {
+        id_version: idVersion,
         id_cotizacion: idCotizacion,
         numero_version: numeroVersion,
         datos_cotizacion: datosCotizacion as any, // JSONB
@@ -171,7 +173,7 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       cotizacion: {
         id_cotizacion: cotizacion.id_cotizacion,
         numero_cotizacion: cotizacion.numero_cotizacion,
-        estado: cotizacion.estado?.nombre_estado,
+        estado: cotizacion.estados_cotizacion?.nombre_estado,
       },
     };
   }

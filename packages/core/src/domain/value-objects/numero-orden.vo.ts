@@ -18,7 +18,7 @@ export class NumeroOrden {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    const correlativo = String((ultimoNumero || 0) + 1).padStart(4, '0');
+    const correlativo = String((ultimoNumero ?? 0) + 1).padStart(4, '0');
     const numero = `OS-${year}${month}-${correlativo}`;
     return new NumeroOrden(numero);
   }
@@ -35,11 +35,9 @@ export class NumeroOrden {
   private validate(value: string): void {
     // Formato: OS-YYYYMM-NNNN
     const regex = /^OS-\d{6}-\d{4}$/;
-    
+
     if (!regex.test(value)) {
-      throw new Error(
-        `NumeroOrden debe tener formato OS-YYYYMM-NNNN (ejemplo: OS-202411-0001)`
-      );
+      throw new Error(`NumeroOrden debe tener formato OS-YYYYMM-NNNN (ejemplo: OS-202411-0001)`);
     }
 
     // Validar año-mes
@@ -66,8 +64,8 @@ export class NumeroOrden {
     return this.value;
   }
 
-  equals(other: NumeroOrden): boolean {
-    if (!other) return false;
+  equals(other?: NumeroOrden | null): boolean {
+    if (other == null) return false;
     return this.value === other.value;
   }
 

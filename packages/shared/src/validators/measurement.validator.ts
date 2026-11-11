@@ -3,19 +3,15 @@
  * Combina validación de rangos, alertas y recomendaciones
  */
 
+import { calculateDeviation, DEFAULT_RANGES, determineAlertLevel } from './alert-level.validator';
 import {
-    calculateDeviation,
-    DEFAULT_RANGES,
-    determineAlertLevel,
-} from './alert-level.validator';
-import {
-    AlertLevel,
-    MeasurementCategory,
-    MeasurementUnit,
-    MeasurementValidationResult,
-    RangeDefinition,
-    UnitConversionResult,
-    ValidateMeasurementOptions,
+  AlertLevel,
+  MeasurementCategory,
+  MeasurementUnit,
+  MeasurementValidationResult,
+  RangeDefinition,
+  UnitConversionResult,
+  ValidateMeasurementOptions,
 } from './types';
 
 // Re-export para uso externo
@@ -143,10 +139,7 @@ const RECOMMENDED_ACTIONS: Record<string, Record<AlertLevel, string[]>> = {
   },
   [MeasurementCategory.NIVEL]: {
     [AlertLevel.NORMAL]: [],
-    [AlertLevel.WARNING]: [
-      'Programar reposición de fluido',
-      'Verificar fugas',
-    ],
+    [AlertLevel.WARNING]: ['Programar reposición de fluido', 'Verificar fugas'],
     [AlertLevel.CRITICAL]: [
       'DETENER EQUIPO - Nivel crítico',
       'Reponer fluido inmediatamente',
@@ -164,14 +157,16 @@ const RECOMMENDED_ACTIONS: Record<string, Record<AlertLevel, string[]>> = {
  * Valida una medición industrial y retorna resultado completo
  */
 export function validateMeasurement(
-  options: ValidateMeasurementOptions
+  options: ValidateMeasurementOptions,
 ): MeasurementValidationResult {
   // Normalizar nombre de parámetro
   const parametroKey = options.parametro.toUpperCase().replace(/\s+/g, '_');
-  
+
   // Obtener rango (personalizado o predeterminado)
-  const rango = options.rangoPersonalizado ?? DEFAULT_RANGES[parametroKey];
-  
+  const rango =
+    options.rangoPersonalizado ??
+    (DEFAULT_RANGES as Partial<Record<string, RangeDefinition>>)[parametroKey];
+
   if (!rango) {
     return {
       isValid: false,
@@ -186,13 +181,13 @@ export function validateMeasurement(
 
   // Determinar nivel de alerta
   const alertLevel = determineAlertLevel(options.valor, rango);
-  
+
   // Calcular desviación
   const desviacion = calculateDeviation(options.valor, rango);
-  
+
   // Generar mensaje
   const mensaje = generateMessage(options.valor, rango, alertLevel);
-  
+
   // Obtener acciones recomendadas
   const acciones = RECOMMENDED_ACTIONS[rango.categoria]?.[alertLevel] ?? [];
 
@@ -218,30 +213,26 @@ export function validateMeasurement(
 /**
  * Genera mensaje descriptivo según el nivel de alerta
  */
-function generateMessage(
-  valor: number,
-  rango: RangeDefinition,
-  alertLevel: AlertLevel
-): string {
+function generateMessage(valor: number, rango: RangeDefinition, alertLevel: AlertLevel): string {
   // Posición se puede usar para logging adicional si es necesario
   // const position = getRangePosition(valor, rango);
-  
+
   switch (alertLevel) {
     case AlertLevel.NORMAL:
       return `${rango.parametro}: ${valor} ${rango.unidad} - Dentro del rango normal (${rango.minNormal}-${rango.maxNormal} ${rango.unidad})`;
-    
+
     case AlertLevel.WARNING:
       if (valor < rango.minNormal) {
         return `⚠️ ${rango.parametro}: ${valor} ${rango.unidad} - BAJO el rango normal. Rango esperado: ${rango.minNormal}-${rango.maxNormal} ${rango.unidad}`;
       }
       return `⚠️ ${rango.parametro}: ${valor} ${rango.unidad} - SOBRE el rango normal. Rango esperado: ${rango.minNormal}-${rango.maxNormal} ${rango.unidad}`;
-    
+
     case AlertLevel.CRITICAL:
       if (valor < (rango.minCritical ?? rango.minNormal)) {
         return `🚨 CRÍTICO - ${rango.parametro}: ${valor} ${rango.unidad} - MUY BAJO. ¡REQUIERE ACCIÓN INMEDIATA!`;
       }
       return `🚨 CRÍTICO - ${rango.parametro}: ${valor} ${rango.unidad} - MUY ALTO. ¡REQUIERE ACCIÓN INMEDIATA!`;
-    
+
     default:
       return `${rango.parametro}: ${valor} ${rango.unidad}`;
   }
@@ -251,9 +242,9 @@ function generateMessage(
  * Valida múltiples mediciones a la vez
  */
 export function validateMultipleMeasurements(
-  measurements: ValidateMeasurementOptions[]
+  measurements: ValidateMeasurementOptions[],
 ): MeasurementValidationResult[] {
-  return measurements.map(m => validateMeasurement(m));
+  return measurements.map((m) => validateMeasurement(m));
 }
 
 /**
@@ -298,7 +289,7 @@ export function getMeasurementsSummary(results: MeasurementValidationResult[]): 
 export function convertUnit(
   valor: number,
   unidadOrigen: MeasurementUnit | string,
-  unidadDestino: MeasurementUnit | string
+  unidadDestino: MeasurementUnit | string,
 ): UnitConversionResult | null {
   if (unidadOrigen === unidadDestino) {
     return {
@@ -311,17 +302,23 @@ export function convertUnit(
   }
 
   const factor = CONVERSION_FACTORS[unidadOrigen]?.[unidadDestino];
-  
+
   if (factor === undefined) {
     return null; // Conversión no soportada
   }
 
   // Manejar casos especiales de temperatura con offset
   let valorConvertido = valor * factor;
-  
-  if (unidadOrigen === MeasurementUnit.CELSIUS && unidadDestino === MeasurementUnit.FAHRENHEIT) {
+
+  if (
+    String(unidadOrigen) === String(MeasurementUnit.CELSIUS) &&
+    String(unidadDestino) === String(MeasurementUnit.FAHRENHEIT)
+  ) {
     valorConvertido = valor * 1.8 + 32;
-  } else if (unidadOrigen === MeasurementUnit.CELSIUS && unidadDestino === MeasurementUnit.KELVIN) {
+  } else if (
+    String(unidadOrigen) === String(MeasurementUnit.CELSIUS) &&
+    String(unidadDestino) === String(MeasurementUnit.KELVIN)
+  ) {
     valorConvertido = valor + 273.15;
   }
 
@@ -339,7 +336,7 @@ export function convertUnit(
  */
 export function detectTrend(
   valores: number[],
-  umbralCambio: number = 10
+  umbralCambio: number = 10,
 ): 'ESTABLE' | 'ASCENDENTE' | 'DESCENDENTE' | 'ERRATICO' {
   if (valores.length < 3) return 'ESTABLE';
 
@@ -384,8 +381,9 @@ export function calculateMeasurementStats(valores: number[]): {
   const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
   const minimo = Math.min(...valores);
   const maximo = Math.max(...valores);
-  
-  const varianza = valores.reduce((acc, val) => acc + Math.pow(val - promedio, 2), 0) / valores.length;
+
+  const varianza =
+    valores.reduce((acc, val) => acc + Math.pow(val - promedio, 2), 0) / valores.length;
   const desviacionEstandar = Math.sqrt(varianza);
 
   return {

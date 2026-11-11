@@ -2,12 +2,12 @@ import { PrismaService } from '@mekanos/database';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import {
-    ActualizarLoteData,
-    CrearLoteData,
-    FiltrosLote,
-    ILotesComponentesRepository,
-    LoteComponente,
-    LotesPaginados,
+  ActualizarLoteData,
+  CrearLoteData,
+  FiltrosLote,
+  ILotesComponentesRepository,
+  LoteComponente,
+  LotesPaginados,
 } from '../interfaces/lotes-componentes.repository.interface';
 
 @Injectable()
@@ -16,14 +16,12 @@ export class PrismaLotesComponentesRepository implements ILotesComponentesReposi
 
   async crear(data: CrearLoteData): Promise<LoteComponente> {
     // Validar código único
-    const existente = await this.prisma.lotes_componentes.findUnique({
+    const existente = await this.prisma.lotes_componentes.findFirst({
       where: { codigo_lote: data.codigo_lote },
     });
 
     if (existente) {
-      throw new ConflictException(
-        `Ya existe un lote con código ${data.codigo_lote}`,
-      );
+      throw new ConflictException(`Ya existe un lote con código ${data.codigo_lote}`);
     }
 
     // Validar que el componente existe
@@ -66,14 +64,12 @@ export class PrismaLotesComponentesRepository implements ILotesComponentesReposi
 
     // Si cambia código, validar que no exista otro
     if (data.codigo_lote && data.codigo_lote !== lote.codigo_lote) {
-      const existente = await this.prisma.lotes_componentes.findUnique({
+      const existente = await this.prisma.lotes_componentes.findFirst({
         where: { codigo_lote: data.codigo_lote },
       });
 
       if (existente) {
-        throw new ConflictException(
-          `Ya existe un lote con código ${data.codigo_lote}`,
-        );
+        throw new ConflictException(`Ya existe un lote con código ${data.codigo_lote}`);
       }
     }
 

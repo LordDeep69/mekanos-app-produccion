@@ -22,7 +22,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Plus, Pencil, Trash2, CheckCircle, XCircle, TestTube, Mail, Star } from 'lucide-react';
+import {
+  Loader2,
+  Plus,
+  Pencil,
+  Trash2,
+  CheckCircle,
+  XCircle,
+  TestTube,
+  Mail,
+  Star,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import {
   getCuentasEmail,
@@ -53,8 +63,9 @@ export function CuentasEmailTable() {
       setDeleteDialogOpen(false);
       setCuentaToDelete(null);
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Error al eliminar la cuenta');
+    onError: (error: unknown) => {
+      const apiErr = error as { response?: { data?: { message?: string } } };
+      toast.error(apiErr.response?.data?.message || 'Error al eliminar la cuenta');
     },
   });
 
@@ -68,8 +79,9 @@ export function CuentasEmailTable() {
       }
       setTestingId(null);
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Error al probar la conexión');
+    onError: (error: unknown) => {
+      const apiErr = error as { response?: { data?: { message?: string } } };
+      toast.error(apiErr.response?.data?.message || 'Error al probar la conexión');
       setTestingId(null);
     },
   });
@@ -196,11 +208,7 @@ export function CuentasEmailTable() {
                           <TestTube className="h-4 w-4" />
                         )}
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(cuenta)}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(cuenta)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
@@ -238,14 +246,12 @@ export function CuentasEmailTable() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => cuentaToDelete && deleteMutation.mutate(cuentaToDelete.id_cuenta_email)}
+              onClick={() =>
+                cuentaToDelete && deleteMutation.mutate(cuentaToDelete.id_cuenta_email)
+              }
               className="bg-red-600 hover:bg-red-700"
             >
-              {deleteMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                'Eliminar'
-              )}
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Eliminar'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

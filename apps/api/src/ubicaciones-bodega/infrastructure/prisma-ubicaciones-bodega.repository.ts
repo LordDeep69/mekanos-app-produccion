@@ -1,12 +1,12 @@
 import { PrismaService } from '@mekanos/database';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import {
-    ActualizarUbicacionData,
-    CrearUbicacionData,
-    FiltrosUbicacion,
-    IUbicacionesBodegaRepository,
-    UbicacionBodega,
-    UbicacionesPaginadas,
+  ActualizarUbicacionData,
+  CrearUbicacionData,
+  FiltrosUbicacion,
+  IUbicacionesBodegaRepository,
+  UbicacionBodega,
+  UbicacionesPaginadas,
 } from '../interfaces/ubicaciones-bodega.repository.interface';
 
 @Injectable()
@@ -15,14 +15,12 @@ export class PrismaUbicacionesBodegaRepository implements IUbicacionesBodegaRepo
 
   async crear(data: CrearUbicacionData): Promise<UbicacionBodega> {
     // Validar código único
-    const existente = await this.prisma.ubicaciones_bodega.findUnique({
+    const existente = await this.prisma.ubicaciones_bodega.findFirst({
       where: { codigo_ubicacion: data.codigo_ubicacion },
     });
 
     if (existente) {
-      throw new ConflictException(
-        `Ya existe una ubicación con código ${data.codigo_ubicacion}`,
-      );
+      throw new ConflictException(`Ya existe una ubicación con código ${data.codigo_ubicacion}`);
     }
 
     return this.prisma.ubicaciones_bodega.create({
@@ -37,10 +35,7 @@ export class PrismaUbicacionesBodegaRepository implements IUbicacionesBodegaRepo
     });
   }
 
-  async actualizar(
-    id: number,
-    data: ActualizarUbicacionData,
-  ): Promise<UbicacionBodega> {
+  async actualizar(id: number, data: ActualizarUbicacionData): Promise<UbicacionBodega> {
     // Verificar que existe
     const ubicacion = await this.prisma.ubicaciones_bodega.findUnique({
       where: { id_ubicacion: id },
@@ -52,14 +47,12 @@ export class PrismaUbicacionesBodegaRepository implements IUbicacionesBodegaRepo
 
     // Si cambia código, validar que no exista otro con ese código
     if (data.codigo_ubicacion && data.codigo_ubicacion !== ubicacion.codigo_ubicacion) {
-      const existente = await this.prisma.ubicaciones_bodega.findUnique({
+      const existente = await this.prisma.ubicaciones_bodega.findFirst({
         where: { codigo_ubicacion: data.codigo_ubicacion },
       });
 
       if (existente) {
-        throw new ConflictException(
-          `Ya existe una ubicación con código ${data.codigo_ubicacion}`,
-        );
+        throw new ConflictException(`Ya existe una ubicación con código ${data.codigo_ubicacion}`);
       }
     }
 
@@ -134,7 +127,7 @@ export class PrismaUbicacionesBodegaRepository implements IUbicacionesBodegaRepo
   }
 
   async findByCodigo(codigo: string): Promise<UbicacionBodega | null> {
-    return this.prisma.ubicaciones_bodega.findUnique({
+    return this.prisma.ubicaciones_bodega.findFirst({
       where: { codigo_ubicacion: codigo },
     });
   }

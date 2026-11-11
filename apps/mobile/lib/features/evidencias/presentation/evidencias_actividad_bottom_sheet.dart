@@ -65,15 +65,15 @@ class _EvidenciasActividadBottomSheetState
     try {
       _evidenciasAntes = await service.getEvidenciasByActividadYTipo(
         widget.idActividad,
-        TipoEvidencia.ANTES,
+        TipoEvidencia.antes,
       );
       _evidenciasDurante = await service.getEvidenciasByActividadYTipo(
         widget.idActividad,
-        TipoEvidencia.DURANTE,
+        TipoEvidencia.durante,
       );
       _evidenciasDespues = await service.getEvidenciasByActividadYTipo(
         widget.idActividad,
-        TipoEvidencia.DESPUES,
+        TipoEvidencia.despues,
       );
     } catch (e) {
       debugPrint('❌ Error cargando evidencias: $e');
@@ -387,17 +387,17 @@ class _EvidenciasActividadBottomSheetState
                     children: [
                       _buildGaleriaTab(
                         _evidenciasAntes,
-                        TipoEvidencia.ANTES,
+                        TipoEvidencia.antes,
                         Colors.amber,
                       ),
                       _buildGaleriaTab(
                         _evidenciasDurante,
-                        TipoEvidencia.DURANTE,
+                        TipoEvidencia.durante,
                         Colors.blue,
                       ),
                       _buildGaleriaTab(
                         _evidenciasDespues,
-                        TipoEvidencia.DESPUES,
+                        TipoEvidencia.despues,
                         Colors.green,
                       ),
                     ],
@@ -452,7 +452,7 @@ class _EvidenciasActividadBottomSheetState
             child: ElevatedButton.icon(
               onPressed: () => _agregarFoto(tipo),
               icon: const Icon(Icons.camera_alt),
-              label: Text('Agregar foto ${tipo.name}'),
+              label: Text('Agregar foto ${tipo.codigo}'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: color,
                 foregroundColor: Colors.white,
@@ -479,7 +479,7 @@ class _EvidenciasActividadBottomSheetState
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Sin fotos ${tipo.name}',
+                        'Sin fotos ${tipo.codigo}',
                         style: TextStyle(
                           color: Colors.grey.shade400,
                           fontSize: 14,
@@ -498,7 +498,7 @@ class _EvidenciasActividadBottomSheetState
                   itemCount: evidencias.length,
                   itemBuilder: (context, index) {
                     final evidencia = evidencias[index];
-                    return _buildFotoCard(evidencia, color, evidencias, tipo.name);
+                    return _buildFotoCard(evidencia, color, evidencias, tipo.codigo);
                   },
                 ),
         ),

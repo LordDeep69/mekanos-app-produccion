@@ -191,7 +191,7 @@ class SyncStatusChip extends ConsumerWidget {
     return asyncInfo.when(
       data: (info) => _buildChip(context, info),
       loading: () => _buildLoadingChip(),
-      error: (_, __) => _buildErrorChip(),
+      error: (_, _) => _buildErrorChip(),
     );
   }
 
@@ -285,7 +285,7 @@ class SyncStatusCard extends ConsumerWidget {
     return asyncInfo.when(
       data: (info) => _buildCard(context, info),
       loading: () => _buildLoadingCard(),
-      error: (_, __) => _buildErrorCard(),
+      error: (_, _) => _buildErrorCard(),
     );
   }
 

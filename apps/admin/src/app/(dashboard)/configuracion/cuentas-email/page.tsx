@@ -76,8 +76,9 @@ export default function CuentasEmailPage() {
       setDeleteDialogOpen(false);
       setCuentaToDelete(null);
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'Error al eliminar la cuenta');
+    onError: (err: unknown) => {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      toast.error(apiErr.response?.data?.message || 'Error al eliminar la cuenta');
     },
   });
 
@@ -91,8 +92,9 @@ export default function CuentasEmailPage() {
       }
       setTestingId(null);
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'Error al probar la conexión');
+    onError: (err: unknown) => {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      toast.error(apiErr.response?.data?.message || 'Error al probar la conexión');
       setTestingId(null);
     },
   });
@@ -166,9 +168,7 @@ export default function CuentasEmailPage() {
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Error</AlertTitle>
-              <AlertDescription>
-                No se pudieron cargar las cuentas de email
-              </AlertDescription>
+              <AlertDescription>No se pudieron cargar las cuentas de email</AlertDescription>
             </Alert>
           ) : cuentas.length === 0 ? (
             <div className="text-center py-12">
@@ -280,7 +280,9 @@ export default function CuentasEmailPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => cuentaToDelete && deleteMutation.mutate(cuentaToDelete.id_cuenta_email)}
+              onClick={() =>
+                cuentaToDelete && deleteMutation.mutate(cuentaToDelete.id_cuenta_email)
+              }
               className="bg-red-600 hover:bg-red-700"
             >
               {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -43,7 +43,6 @@ import {
   Fuel,
   Gauge,
   History,
-  Layers,
   Loader2,
   MapPin,
   PackageCheck,
@@ -51,7 +50,6 @@ import {
   Plus,
   RefreshCw,
   Settings,
-  Shield,
   Timer,
   Snowflake,
   Wind,
@@ -96,7 +94,11 @@ function TipoBadge({ tipo }: { tipo: string }) {
       label: 'Aire Acondicionado / Chiller',
     },
   };
-  const { icon: Icon, color, label } = config[tipo] || {
+  const {
+    icon: Icon,
+    color,
+    label,
+  } = config[tipo] || {
     icon: Zap,
     color: 'bg-slate-100 text-slate-800 border-slate-200',
     label: tipo,
@@ -145,10 +147,30 @@ function EstadoBadge({ estado }: { estado: string }) {
 
 function CriticidadBadge({ criticidad }: { criticidad: string }) {
   const config: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-    BAJA: { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200', dot: 'bg-blue-500' },
-    MEDIA: { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', dot: 'bg-amber-500' },
-    ALTA: { bg: 'bg-orange-50', text: 'text-orange-800', border: 'border-orange-200', dot: 'bg-orange-500' },
-    CRITICA: { bg: 'bg-rose-50', text: 'text-rose-800', border: 'border-rose-200', dot: 'bg-rose-600' },
+    BAJA: {
+      bg: 'bg-slate-50',
+      text: 'text-slate-700',
+      border: 'border-slate-200',
+      dot: 'bg-blue-500',
+    },
+    MEDIA: {
+      bg: 'bg-amber-50',
+      text: 'text-amber-800',
+      border: 'border-amber-200',
+      dot: 'bg-amber-500',
+    },
+    ALTA: {
+      bg: 'bg-orange-50',
+      text: 'text-orange-800',
+      border: 'border-orange-200',
+      dot: 'bg-orange-500',
+    },
+    CRITICA: {
+      bg: 'bg-rose-50',
+      text: 'text-rose-800',
+      border: 'border-rose-200',
+      dot: 'bg-rose-600',
+    },
   };
   const { bg, text, border, dot } = config[criticidad] || config.MEDIA;
   return (
@@ -199,11 +221,23 @@ function DataRow({ label, value }: { label: string; value: React.ReactNode }) {
 // MODAL: CAMBIAR ESTADO
 // ═══════════════════════════════════════════════════════════════════════════════
 const ESTADOS_EQUIPO = [
-  { value: 'OPERATIVO', label: 'Operativo', color: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+  {
+    value: 'OPERATIVO',
+    label: 'Operativo',
+    color: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  },
   { value: 'STANDBY', label: 'Standby', color: 'bg-blue-50 text-blue-800 border-blue-200' },
   { value: 'INACTIVO', label: 'Inactivo', color: 'bg-slate-100 text-slate-600 border-slate-200' },
-  { value: 'EN_REPARACION', label: 'En Reparación', color: 'bg-amber-50 text-amber-800 border-amber-200' },
-  { value: 'FUERA_SERVICIO', label: 'Fuera de Servicio', color: 'bg-rose-50 text-rose-800 border-rose-200' },
+  {
+    value: 'EN_REPARACION',
+    label: 'En Reparación',
+    color: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  {
+    value: 'FUERA_SERVICIO',
+    label: 'Fuera de Servicio',
+    color: 'bg-rose-50 text-rose-800 border-rose-200',
+  },
   { value: 'BAJA', label: 'Baja', color: 'bg-slate-200 text-slate-600 border-slate-300' },
 ];
 
@@ -450,307 +484,12 @@ function ModalRegistrarLectura({
           </div>
           {registrarLectura.isError && (
             <p className="text-xs text-rose-600 text-center">
-              Error: {(registrarLectura.error as Error)?.message || 'No se pudo registrar la lectura'}
+              Error:{' '}
+              {(registrarLectura.error as Error)?.message || 'No se pudo registrar la lectura'}
             </p>
           )}
         </form>
       </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// FICHAS TÉCNICAS ESPECÍFICAS POR TIPO DE EQUIPO
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function FichaTecnicaGenerador({ datos, motor }: { datos: any; motor: any }) {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <InfoCard title="Datos del Generador" icon={Zap}>
-        <DataRow label="Marca" value={datos?.marca_generador} />
-        <DataRow label="Modelo" value={datos?.modelo_generador} />
-        <DataRow label="Serie" value={datos?.numero_serie_generador} />
-        <DataRow label="Potencia kVA" value={datos?.potencia_kva ? `${datos.potencia_kva} kVA` : null} />
-        <DataRow label="Potencia kW" value={datos?.potencia_kw ? `${datos.potencia_kw} kW` : null} />
-        <DataRow label="Factor Potencia" value={datos?.factor_potencia ? `${datos.factor_potencia} cos φ` : null} />
-        <DataRow label="Voltaje Salida" value={datos?.voltaje_salida} />
-        <DataRow
-          label="Amperaje Nominal"
-          value={datos?.amperaje_nominal_salida ? `${datos.amperaje_nominal_salida} A` : null}
-        />
-        <DataRow
-          label="Fases"
-          value={
-            datos?.numero_fases === 1
-              ? 'Monofásico'
-              : datos?.numero_fases === 3
-                ? 'Trifásico'
-                : datos?.numero_fases
-          }
-        />
-        <DataRow label="Frecuencia" value={datos?.frecuencia_hz ? `${datos.frecuencia_hz} Hz` : null} />
-        <DataRow label="Tipo Conexión" value={datos?.tipo_conexion} />
-        <DataRow label="Año Fabricación" value={datos?.a_o_fabricacion} />
-      </InfoCard>
-
-      <InfoCard title="Alternador & Regulación (AVR)" icon={Gauge}>
-        <DataRow label="Marca Alternador" value={datos?.marca_alternador} />
-        <DataRow label="Modelo Alternador" value={datos?.modelo_alternador} />
-        <DataRow label="Serie Alternador" value={datos?.numero_serie_alternador} />
-        <DataRow label="Clase Aislamiento" value={datos?.clase_aislamiento} />
-        <DataRow label="Grado Protección IP" value={datos?.grado_proteccion_ip} />
-        <DataRow label="Tiene AVR" value={datos?.tiene_avr ? 'Sí' : 'No'} />
-        {datos?.tiene_avr && (
-          <>
-            <DataRow label="Marca AVR" value={datos?.marca_avr} />
-            <DataRow label="Modelo AVR" value={datos?.modelo_avr} />
-            <DataRow label="Referencia AVR" value={datos?.referencia_avr} />
-          </>
-        )}
-      </InfoCard>
-
-      {motor && (
-        <InfoCard title="Motor Primario (Combustión / Impulsor)" icon={Fuel}>
-          <DataRow label="Tipo Motor" value={motor.tipo_motor} />
-          <DataRow label="Marca" value={motor.marca_motor} />
-          <DataRow label="Modelo" value={motor.modelo_motor} />
-          <DataRow label="Serie" value={motor.numero_serie_motor} />
-          <DataRow label="Potencia HP" value={motor.potencia_hp ? `${motor.potencia_hp} HP` : null} />
-          <DataRow label="Potencia kW" value={motor.potencia_kw ? `${motor.potencia_kw} kW` : null} />
-          <DataRow label="RPM" value={motor.velocidad_nominal_rpm ? `${motor.velocidad_nominal_rpm} RPM` : null} />
-          <DataRow label="Combustible" value={motor.tipo_combustible} />
-          <DataRow label="Cilindros" value={motor.numero_cilindros} />
-          <DataRow label="Cilindrada (cc)" value={motor.cilindrada_cc} />
-          <DataRow
-            label="Voltaje Arranque"
-            value={motor.voltaje_arranque_vdc ? `${motor.voltaje_arranque_vdc} VDC` : null}
-          />
-          <DataRow
-            label="Amperaje Arranque"
-            value={motor.amperaje_arranque ? `${motor.amperaje_arranque} CCA` : null}
-          />
-          <DataRow label="Tipo Arranque" value={motor.tipo_arranque} />
-          <DataRow label="Turbocargador" value={motor.tiene_turbocargador ? 'Sí' : 'No'} />
-          <DataRow
-            label="Capacidad Aceite"
-            value={motor.capacidad_aceite_litros ? `${motor.capacidad_aceite_litros} L` : null}
-          />
-          <DataRow
-            label="Capacidad Refrigerante"
-            value={motor.capacidad_refrigerante_litros ? `${motor.capacidad_refrigerante_litros} L` : null}
-          />
-          <DataRow label="Tipo Aceite" value={motor.tipo_aceite} />
-          <DataRow label="Tipo Refrigerante" value={motor.tipo_refrigerante} />
-          <DataRow label="Baterías" value={motor.numero_baterias} />
-          <DataRow label="Referencia Batería" value={motor.referencia_bateria} />
-          <DataRow
-            label="Capacidad Batería"
-            value={motor.capacidad_bateria_ah ? `${motor.capacidad_bateria_ah} Ah` : null}
-          />
-          <DataRow label="Tiene Radiador" value={motor.tiene_radiador ? 'Sí' : 'No'} />
-          {motor.tiene_radiador && (
-            <>
-              <DataRow
-                label="Dimensiones Radiador"
-                value={
-                  motor.radiador_alto_cm || motor.radiador_ancho_cm
-                    ? `${motor.radiador_alto_cm || '—'} × ${motor.radiador_ancho_cm || '—'} × ${motor.radiador_espesor_cm || '—'} cm`
-                    : null
-                }
-              />
-            </>
-          )}
-          <DataRow label="Cargador Batería" value={motor.tiene_cargador_bateria ? 'Sí' : 'No'} />
-          {motor.tiene_cargador_bateria && (
-            <>
-              <DataRow label="Marca / Modelo Cargador" value={`${motor.marca_cargador || ''} ${motor.modelo_cargador || ''}`.trim() || null} />
-              <DataRow
-                label="Amperaje Cargador"
-                value={motor.amperaje_cargador ? `${motor.amperaje_cargador} A` : null}
-              />
-            </>
-          )}
-          <DataRow label="Observaciones Motor" value={motor.observaciones} />
-        </InfoCard>
-      )}
-
-      <InfoCard title="Control, Tanques y Transferencia" icon={Settings}>
-        <DataRow label="Módulo Control" value={datos?.tiene_modulo_control ? 'Sí' : 'No'} />
-        {datos?.tiene_modulo_control && (
-          <>
-            <DataRow label="Marca Módulo" value={datos?.marca_modulo_control} />
-            <DataRow label="Modelo Módulo" value={datos?.modelo_modulo_control} />
-          </>
-        )}
-        <DataRow label="Arranque Automático" value={datos?.tiene_arranque_automatico ? 'Sí' : 'No'} />
-        <DataRow
-          label="Tanque Principal"
-          value={
-            datos?.capacidad_tanque_principal_litros ? `${datos.capacidad_tanque_principal_litros} L` : null
-          }
-        />
-        <DataRow
-          label="Tanque Auxiliar"
-          value={datos?.tiene_tanque_auxiliar ? `${datos.capacidad_tanque_auxiliar_litros || '—'} L` : 'No'}
-        />
-        <DataRow label="Cabina Insonorizada" value={datos?.tiene_cabina_insonorizada ? 'Sí' : 'No'} />
-        <DataRow
-          label="Transferencia Automática"
-          value={datos?.tiene_transferencia_automatica ? 'Sí' : 'No'}
-        />
-        {datos?.tiene_transferencia_automatica && (
-          <>
-            <DataRow label="Tipo Transferencia" value={datos?.tipo_transferencia} />
-            <DataRow label="Ubicación Transferencia" value={datos?.ubicacion_transferencia} />
-          </>
-        )}
-        <DataRow label="Calibre Cable Potencia" value={datos?.calibre_cable_potencia} />
-        <DataRow
-          label="Longitud Cable"
-          value={datos?.longitud_cable_potencia_m ? `${datos.longitud_cable_potencia_m} m` : null}
-        />
-        <DataRow label="Observaciones Generador" value={datos?.observaciones} />
-      </InfoCard>
-    </div>
-  );
-}
-
-function FichaTecnicaBomba({ datos, motor }: { datos: any; motor: any }) {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <InfoCard title="Datos Hidráulicos de la Bomba" icon={Droplets}>
-        <DataRow label="Marca" value={datos?.marca_bomba} />
-        <DataRow label="Modelo" value={datos?.modelo_bomba} />
-        <DataRow label="Serie" value={datos?.numero_serie_bomba} />
-        <DataRow label="Tipo Bomba" value={datos?.tipo_bomba} />
-        <DataRow label="Aplicación" value={datos?.aplicacion_bomba} />
-        <DataRow label="Año Fabricación" value={datos?.a_o_fabricacion} />
-        <DataRow label="Caudal Máximo" value={datos?.caudal_maximo_m3h ? `${datos.caudal_maximo_m3h} m³/h` : null} />
-        <DataRow
-          label="Altura Manométrica Máx"
-          value={datos?.altura_manometrica_maxima_m ? `${datos.altura_manometrica_maxima_m} m` : null}
-        />
-        <DataRow
-          label="Altura Presión Trabajo"
-          value={datos?.altura_presion_trabajo_m ? `${datos.altura_presion_trabajo_m} m` : null}
-        />
-        <DataRow
-          label="Potencia Hidráulica"
-          value={datos?.potencia_hidraulica_kw ? `${datos.potencia_hidraulica_kw} kW` : null}
-        />
-        <DataRow label="Eficiencia" value={datos?.eficiencia_porcentaje ? `${datos.eficiencia_porcentaje}%` : null} />
-        <DataRow label="Diámetro Succión" value={datos?.diametro_aspiracion} />
-        <DataRow label="Diámetro Descarga" value={datos?.diametro_descarga} />
-        <DataRow label="Sello Mecánico" value={datos?.referencia_sello_mecanico} />
-        <DataRow
-          label="Bombas en Sistema"
-          value={`${datos?.numero_bomba_en_sistema || 1} de ${datos?.numero_total_bombas_sistema || 1}`}
-        />
-        <DataRow label="Observaciones Bomba" value={datos?.observaciones} />
-      </InfoCard>
-
-      <InfoCard title="Presiones y Tablero de Control" icon={Gauge}>
-        <DataRow label="Panel de Control" value={datos?.tiene_panel_control ? 'Sí' : 'No'} />
-        {datos?.tiene_panel_control && (
-          <>
-            <DataRow label="Marca Panel" value={datos?.marca_panel_control} />
-            <DataRow label="Modelo Panel" value={datos?.modelo_panel_control} />
-          </>
-        )}
-        <DataRow label="Presostato" value={datos?.tiene_presostato ? 'Sí' : 'No'} />
-        {datos?.tiene_presostato && (
-          <>
-            <DataRow label="Marca Presostato" value={datos?.marca_presostato} />
-            <DataRow label="Modelo Presostato" value={datos?.modelo_presostato} />
-            <DataRow
-              label="Presión Encendido"
-              value={datos?.presion_encendido_psi ? `${datos.presion_encendido_psi} PSI` : null}
-            />
-            <DataRow
-              label="Presión Apagado"
-              value={datos?.presion_apagado_psi ? `${datos.presion_apagado_psi} PSI` : null}
-            />
-          </>
-        )}
-        <DataRow label="Variador de Frecuencia" value={datos?.tiene_variador_frecuencia ? 'Sí' : 'No'} />
-        {datos?.tiene_variador_frecuencia && (
-          <>
-            <DataRow label="Marca VFD" value={datos?.marca_variador} />
-            <DataRow label="Modelo VFD" value={datos?.modelo_variador} />
-          </>
-        )}
-        <DataRow label="Arrancador Suave" value={datos?.tiene_arrancador_suave ? 'Sí' : 'No'} />
-        <DataRow label="Contactor Externo" value={datos?.tiene_contactor_externo ? 'Sí' : 'No'} />
-        {datos?.tiene_contactor_externo && (
-          <>
-            <DataRow label="Marca Contactor" value={datos?.marca_contactor} />
-            <DataRow
-              label="Amperaje Contactor"
-              value={datos?.amperaje_contactor ? `${datos.amperaje_contactor} A` : null}
-            />
-          </>
-        )}
-      </InfoCard>
-
-      <InfoCard title="Sistema Hidroneumático & Válvulas" icon={Settings}>
-        <DataRow label="Tanques Hidroneumáticos" value={datos?.tiene_tanques_hidroneumaticos ? 'Sí' : 'No'} />
-        {datos?.tiene_tanques_hidroneumaticos && (
-          <>
-            <DataRow label="Cantidad Tanques" value={datos?.cantidad_tanques} />
-            <DataRow
-              label="Capacidad Tanques"
-              value={datos?.capacidad_tanques_litros ? `${datos.capacidad_tanques_litros} L` : null}
-            />
-            <DataRow
-              label="Presión Tanques"
-              value={datos?.presion_tanques_psi ? `${datos.presion_tanques_psi} PSI` : null}
-            />
-          </>
-        )}
-        <DataRow label="Manómetro" value={datos?.tiene_manometro ? 'Sí' : 'No'} />
-        {datos?.tiene_manometro && (
-          <>
-            <DataRow
-              label="Rango Manómetro"
-              value={`${datos?.rango_manometro_min_psi || 0} - ${datos?.rango_manometro_max_psi || '—'} PSI`}
-            />
-          </>
-        )}
-        <DataRow label="Protección de Nivel" value={datos?.tiene_proteccion_nivel ? 'Sí' : 'No'} />
-        <DataRow label="Válvula de Purga" value={datos?.tiene_valvula_purga ? 'Sí' : 'No'} />
-        <DataRow label="Válvula de Cebado" value={datos?.tiene_valvula_cebado ? 'Sí' : 'No'} />
-        <DataRow label="Válvula de Cheque" value={datos?.tiene_valvula_cheque ? 'Sí' : 'No'} />
-        <DataRow label="Válvula de Pie" value={datos?.tiene_valvula_pie ? 'Sí' : 'No'} />
-      </InfoCard>
-
-      {motor && (
-        <InfoCard title="Motor Impulsor" icon={Zap}>
-          <DataRow label="Tipo Motor" value={motor.tipo_motor} />
-          <DataRow label="Marca" value={motor.marca_motor} />
-          <DataRow label="Modelo" value={motor.modelo_motor} />
-          <DataRow label="Serie" value={motor.numero_serie_motor} />
-          <DataRow label="Potencia HP" value={motor.potencia_hp ? `${motor.potencia_hp} HP` : null} />
-          <DataRow label="Potencia kW" value={motor.potencia_kw ? `${motor.potencia_kw} kW` : null} />
-          <DataRow label="RPM" value={motor.velocidad_nominal_rpm ? `${motor.velocidad_nominal_rpm} RPM` : null} />
-          <DataRow label="Voltaje" value={motor.voltaje_operacion_vac} />
-          <DataRow
-            label="Fases"
-            value={
-              motor.numero_fases === 'MONOFASICO'
-                ? 'Monofásico'
-                : motor.numero_fases === 'TRIFASICO'
-                  ? 'Trifásico'
-                  : motor.numero_fases
-            }
-          />
-          <DataRow label="Frecuencia" value={motor.frecuencia_hz ? `${motor.frecuencia_hz} Hz` : null} />
-          <DataRow label="Amperaje Nominal" value={motor.amperaje_nominal ? `${motor.amperaje_nominal} A` : null} />
-          <DataRow label="Factor Potencia" value={motor.factor_potencia ? `${motor.factor_potencia} cos φ` : null} />
-          <DataRow label="Clase Aislamiento" value={motor.clase_aislamiento} />
-          <DataRow label="Grado Protección IP" value={motor.grado_proteccion_ip} />
-          <DataRow label="Observaciones Motor" value={motor.observaciones} />
-        </InfoCard>
-      )}
     </div>
   );
 }
@@ -779,16 +518,22 @@ export default function EquipoDetallePage() {
   } = useFichaLogisticaEquipo(id);
 
   const equipo = data?.data;
+  const specsRoot = equipo?.especificaciones as
+    | {
+        modulos?: Record<string, Record<string, string | number | boolean | null | undefined>>;
+        unidades_personalizadas?: Record<string, string>;
+      }
+    | undefined;
 
   // Cálculos de KPIs en vivo (Top-level hook para cumplir estrictamente con las Reglas de Hooks de React)
   const kpiDestacado = useMemo(() => {
-    if (!equipo) return null;
-    const specs = ((equipo.especificaciones as any)?.modulos || {}) as Record<string, Record<string, any>>;
+    if (!specsRoot) return null;
+    const specs = specsRoot.modulos || {};
     for (const mod of Object.values(specs)) {
       if (!mod || typeof mod !== 'object') continue;
       if (mod.capacidad_de_enfriamiento || mod.capacidad_enfriamiento) {
         const val = mod.capacidad_de_enfriamiento ?? mod.capacidad_enfriamiento;
-        const uom = (equipo.especificaciones as any)?.unidades_personalizadas?.capacidad_de_enfriamiento || 'TR';
+        const uom = specsRoot.unidades_personalizadas?.capacidad_de_enfriamiento || 'TR';
         return `${val} ${uom}`;
       }
       if (mod.potencia_kva) return `${mod.potencia_kva} kVA`;
@@ -798,7 +543,7 @@ export default function EquipoDetallePage() {
       if (mod.caudal_aire_cfm) return `${mod.caudal_aire_cfm} CFM`;
     }
     return null;
-  }, [equipo?.especificaciones]);
+  }, [specsRoot]);
 
   if (isLoading) {
     return (
@@ -832,25 +577,39 @@ export default function EquipoDetallePage() {
     );
   }
 
-  const datosEspecificos = (equipo.datos_especificos || {}) as Record<string, any>;
-  const motor = (datosEspecificos?.motor || null) as Record<string, any> | null;
+  const datosEspecificos = (equipo.datos_especificos || {}) as Record<string, unknown>;
+  const motor = (datosEspecificos?.motor || null) as Record<
+    string,
+    string | number | boolean | null | undefined
+  > | null;
 
+  const tipoObj =
+    typeof equipo.tipo_equipo === 'object' && equipo.tipo_equipo !== null
+      ? (equipo.tipo_equipo as { codigo_tipo?: string; nombre_tipo?: string })
+      : null;
   const rawTipoEquipo =
     equipo.tipos_equipo?.codigo_tipo ||
-    (typeof equipo.tipo_equipo === 'object' && equipo.tipo_equipo !== null
-      ? (equipo.tipo_equipo as any).codigo_tipo || (equipo.tipo_equipo as any).nombre_tipo
+    (tipoObj
+      ? tipoObj.codigo_tipo || tipoObj.nombre_tipo
       : typeof equipo.tipo_equipo === 'string'
-      ? equipo.tipo_equipo
-      : '') ||
+        ? equipo.tipo_equipo
+        : '') ||
     '';
   const tipoEquipoCode = String(rawTipoEquipo).toUpperCase();
-  const modulosSpecs = ((equipo.especificaciones as any)?.modulos || {}) as Record<string, any>;
+  const modulosSpecs = equipo.especificaciones?.modulos || {};
   const tieneModuloCombustion = Boolean(modulosSpecs.motor_combustion);
-  const esGenerador = tipoEquipoCode === 'GEN' || tipoEquipoCode === 'GENERADOR' || Boolean(equipo.tipos_equipo?.es_generador);
+  const esGenerador =
+    tipoEquipoCode === 'GEN' ||
+    tipoEquipoCode === 'GENERADOR' ||
+    Boolean(equipo.tipos_equipo?.es_generador);
   const combustible = String(motor?.tipo_combustible || '').toUpperCase();
-  const esCombustibleDieselOGas = combustible === 'DIESEL' || combustible === 'GASOLINA' || combustible === 'GAS';
+  const esCombustibleDieselOGas =
+    combustible === 'DIESEL' || combustible === 'GASOLINA' || combustible === 'GAS';
   const tieneAceiteReal = Boolean(motor?.capacidad_aceite_litros || motor?.tipo_aceite);
-  const tieneMotorCombustion = tieneModuloCombustion || esGenerador || (motor && (esCombustibleDieselOGas || tieneAceiteReal) && combustible !== 'ELECTRICO');
+  const tieneMotorCombustion =
+    tieneModuloCombustion ||
+    esGenerador ||
+    (motor && (esCombustibleDieselOGas || tieneAceiteReal) && combustible !== 'ELECTRICO');
 
   // Cálculos de KPIs en vivo (Filosofía de Referenciación Zero-Stress)
   const horasActualesNum = Number(equipo.horas_actuales || 0);
@@ -866,7 +625,9 @@ export default function EquipoDetallePage() {
   const ultimaOrden = fichaLogistica?.ordenes?.[0] || null;
 
   // Conversión Litros -> Galones para ayuda logística inmediata
-  const aceiteLitros = motor?.capacidad_aceite_litros ? Number(motor.capacidad_aceite_litros) : null;
+  const aceiteLitros = motor?.capacidad_aceite_litros
+    ? Number(motor.capacidad_aceite_litros)
+    : null;
   const aceiteGalones = aceiteLitros ? (aceiteLitros / 3.78541).toFixed(1) : null;
   const refrigLitros = motor?.capacidad_refrigerante_litros
     ? Number(motor.capacidad_refrigerante_litros)
@@ -921,7 +682,9 @@ export default function EquipoDetallePage() {
                     <ExternalLink className="h-3 w-3" />
                   </Link>
                 ) : (
-                  <strong className="text-slate-700">{equipo.cliente?.nombre || 'Sin cliente'}</strong>
+                  <strong className="text-slate-700">
+                    {equipo.cliente?.nombre || 'Sin cliente'}
+                  </strong>
                 )}
               </span>
               <span>•</span>
@@ -1047,32 +810,36 @@ export default function EquipoDetallePage() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Kit de Repuestos (BOM)
             </span>
-            <div className={cn(
-              'p-1.5 rounded-lg border',
-              totalBom === 0
-                ? 'bg-slate-100 text-slate-600 border-slate-200'
-                : bomBajoPedido === 0
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : 'bg-blue-50 text-blue-700 border-blue-200'
-            )}>
+            <div
+              className={cn(
+                'p-1.5 rounded-lg border',
+                totalBom === 0
+                  ? 'bg-slate-100 text-slate-600 border-slate-200'
+                  : bomBajoPedido === 0
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200',
+              )}
+            >
               <Boxes className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-black text-slate-900">{totalBom}</span>
-            <span className={cn(
-              'text-xs font-bold px-2 py-0.5 rounded border whitespace-nowrap',
-              totalBom === 0
-                ? 'bg-slate-100 text-slate-600 border-slate-200'
-                : bomAlternativos > 0
-                ? 'bg-blue-50 text-blue-800 border-blue-200'
-                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-            )}>
+            <span
+              className={cn(
+                'text-xs font-bold px-2 py-0.5 rounded border whitespace-nowrap',
+                totalBom === 0
+                  ? 'bg-slate-100 text-slate-600 border-slate-200'
+                  : bomAlternativos > 0
+                    ? 'bg-blue-50 text-blue-800 border-blue-200'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200',
+              )}
+            >
               {totalBom === 0
                 ? 'Sin referencias'
                 : bomAlternativos > 0
-                ? `${bomTitulares} Titular${bomTitulares === 1 ? '' : 'es'} • ${bomAlternativos} Homólogo${bomAlternativos === 1 ? '' : 's'}`
-                : `${totalBom} Referencia${totalBom === 1 ? '' : 's'} Homologada${totalBom === 1 ? '' : 's'}`}
+                  ? `${bomTitulares} Titular${bomTitulares === 1 ? '' : 'es'} • ${bomAlternativos} Homólogo${bomAlternativos === 1 ? '' : 's'}`
+                  : `${totalBom} Referencia${totalBom === 1 ? '' : 's'} Homologada${totalBom === 1 ? '' : 's'}`}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1 truncate">
@@ -1229,7 +996,8 @@ export default function EquipoDetallePage() {
                     )}
                   </p>
                   <p className="text-xs text-slate-600 mt-0.5">
-                    Viscosidad: <strong className="text-slate-900">{motor.tipo_aceite || '15W40'}</strong>
+                    Viscosidad:{' '}
+                    <strong className="text-slate-900">{motor.tipo_aceite || '15W40'}</strong>
                   </p>
                 </div>
 
@@ -1247,7 +1015,10 @@ export default function EquipoDetallePage() {
                     )}
                   </p>
                   <p className="text-xs text-slate-600 mt-0.5">
-                    Tipo: <strong className="text-slate-900">{motor.tipo_refrigerante || 'ELC 50/50'}</strong>
+                    Tipo:{' '}
+                    <strong className="text-slate-900">
+                      {motor.tipo_refrigerante || 'ELC 50/50'}
+                    </strong>
                   </p>
                 </div>
 
@@ -1261,7 +1032,8 @@ export default function EquipoDetallePage() {
                     {motor.voltaje_arranque_vdc ? `${motor.voltaje_arranque_vdc} VDC` : '12/24 VDC'}
                   </p>
                   <p className="text-xs text-slate-600 mt-0.5">
-                    Ref: <strong className="text-slate-900">{motor.referencia_bateria || 'N/A'}</strong>
+                    Ref:{' '}
+                    <strong className="text-slate-900">{motor.referencia_bateria || 'N/A'}</strong>
                     {motor.capacidad_bateria_ah ? ` (${motor.capacidad_bateria_ah} Ah)` : ''}
                   </p>
                 </div>
@@ -1277,7 +1049,9 @@ export default function EquipoDetallePage() {
                   <p className="text-xs text-slate-600 mt-0.5">
                     {motor.tipo_combustible || 'DIESEL'} •{' '}
                     <strong className="text-slate-900">
-                      {motor.velocidad_nominal_rpm ? `${motor.velocidad_nominal_rpm} RPM` : '1800 RPM'}
+                      {motor.velocidad_nominal_rpm
+                        ? `${motor.velocidad_nominal_rpm} RPM`
+                        : '1800 RPM'}
                     </strong>
                   </p>
                 </div>
@@ -1334,7 +1108,8 @@ export default function EquipoDetallePage() {
                 value={
                   equipo.en_garantia ? (
                     <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
-                      <CheckCircle className="h-3.5 w-3.5" /> Sí ({equipo.proveedor_garantia || 'Vigente'})
+                      <CheckCircle className="h-3.5 w-3.5" /> Sí (
+                      {equipo.proveedor_garantia || 'Vigente'})
                     </span>
                   ) : (
                     'No'
@@ -1392,10 +1167,17 @@ export default function EquipoDetallePage() {
                   <h4 className="font-bold text-sm text-rose-800">Equipo dado de baja</h4>
                   {equipo.fecha_baja && (
                     <p className="text-xs text-rose-600 mt-1">
-                      Fecha: {formatDateSafe(equipo.fecha_baja, { day: '2-digit', month: 'short', year: 'numeric' })}
+                      Fecha:{' '}
+                      {formatDateSafe(equipo.fecha_baja, {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
                     </p>
                   )}
-                  {equipo.motivo_baja && <p className="text-xs text-rose-700 mt-1">{equipo.motivo_baja}</p>}
+                  {equipo.motivo_baja && (
+                    <p className="text-xs text-rose-700 mt-1">{equipo.motivo_baja}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1412,7 +1194,9 @@ export default function EquipoDetallePage() {
               <div className="space-y-3">
                 {equipo.criticidad_justificacion && (
                   <div>
-                    <h4 className="text-xs font-bold text-slate-700 mb-1">Justificación de Criticidad</h4>
+                    <h4 className="text-xs font-bold text-slate-700 mb-1">
+                      Justificación de Criticidad
+                    </h4>
                     <p className="text-xs text-slate-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">
                       {equipo.criticidad_justificacion}
                     </p>
@@ -1420,7 +1204,9 @@ export default function EquipoDetallePage() {
                 )}
                 {equipo.observaciones_generales && (
                   <div>
-                    <h4 className="text-xs font-bold text-slate-700 mb-1">Observaciones Generales</h4>
+                    <h4 className="text-xs font-bold text-slate-700 mb-1">
+                      Observaciones Generales
+                    </h4>
                     <p className="text-xs text-slate-700 bg-slate-50 border border-slate-200 p-3 rounded-lg whitespace-pre-wrap">
                       {equipo.observaciones_generales}
                     </p>
@@ -1428,7 +1214,9 @@ export default function EquipoDetallePage() {
                 )}
                 {equipo.configuracion_especial && (
                   <div>
-                    <h4 className="text-xs font-bold text-slate-700 mb-1">Configuración Especial</h4>
+                    <h4 className="text-xs font-bold text-slate-700 mb-1">
+                      Configuración Especial
+                    </h4>
                     <p className="text-xs text-slate-700 bg-blue-50 border border-blue-200 p-3 rounded-lg whitespace-pre-wrap">
                       {equipo.configuracion_especial}
                     </p>
@@ -1443,7 +1231,7 @@ export default function EquipoDetallePage() {
             <InfoCard title="Últimas Lecturas de Horómetro" icon={Clock}>
               {equipo.lecturas_horometro && equipo.lecturas_horometro.length > 0 ? (
                 <div className="space-y-1.5">
-                  {equipo.lecturas_horometro.map((lectura: any, idx: number) => (
+                  {equipo.lecturas_horometro.map((lectura, idx: number) => (
                     <div
                       key={idx}
                       className="flex justify-between items-center py-1.5 border-b border-slate-100 last:border-0"
@@ -1471,13 +1259,15 @@ export default function EquipoDetallePage() {
             <InfoCard title="Historial de Cambios de Estado" icon={History}>
               {equipo.historial_estados && equipo.historial_estados.length > 0 ? (
                 <div className="space-y-1.5">
-                  {equipo.historial_estados.map((estado: any, idx: number) => (
+                  {equipo.historial_estados.map((estado, idx: number) => (
                     <div
                       key={idx}
                       className="flex justify-between items-center py-1.5 border-b border-slate-100 last:border-0"
                     >
                       <div>
-                        <span className="text-xs font-bold text-slate-900">{estado.estado_nuevo}</span>
+                        <span className="text-xs font-bold text-slate-900">
+                          {estado.estado_nuevo}
+                        </span>
                         {estado.motivo_cambio && (
                           <p className="text-[11px] text-slate-500">{estado.motivo_cambio}</p>
                         )}
@@ -1528,7 +1318,8 @@ export default function EquipoDetallePage() {
                   Órdenes de Servicio Ejecutadas y Programadas ({totalOrdenes})
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Trazabilidad directa entre el activo {equipo.codigo_equipo}, sus visitas técnicas y el costo total imputado
+                  Trazabilidad directa entre el activo {equipo.codigo_equipo}, sus visitas técnicas
+                  y el costo total imputado
                 </p>
               </div>
               <Link
@@ -1566,7 +1357,10 @@ export default function EquipoDetallePage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {fichaLogistica.ordenes.map((ot) => (
-                      <tr key={ot.id_orden_servicio} className="hover:bg-slate-50/80 transition-colors">
+                      <tr
+                        key={ot.id_orden_servicio}
+                        className="hover:bg-slate-50/80 transition-colors"
+                      >
                         <td className="px-4 py-3 whitespace-nowrap">
                           <Link
                             href={`/ordenes/${ot.id_orden_servicio}`}
@@ -1584,11 +1378,14 @@ export default function EquipoDetallePage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                          {formatDateSafe(ot.fecha_fin_real || ot.fecha_programada || ot.fecha_creacion, {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
+                          {formatDateSafe(
+                            ot.fecha_fin_real || ot.fecha_programada || ot.fecha_creacion,
+                            {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            },
+                          )}
                         </td>
                         <td className="px-4 py-3 text-slate-700">
                           {ot.tecnico || <span className="text-slate-400 italic">Sin asignar</span>}

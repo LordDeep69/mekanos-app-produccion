@@ -24,24 +24,12 @@ import {
   parseOpcionesSeguras,
   useArquetipoEsquemaEam,
   useArquetiposEam,
+  type OpcionJsonItem,
 } from '@/features/catalogos-eam';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
-import {
-  CheckCircle2,
-  Cpu,
-  Edit3,
-  Factory,
-  Gauge,
-  Layers,
-  Loader2,
-  Save,
-  Scale,
-  Sparkles,
-  Star,
-  X,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { cn, getApiErrorMessage } from '@/lib/utils';
+import { Cpu, Edit3, Factory, Gauge, Layers, Loader2, Save, Star, X } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 import { useActualizarDatosEspecificos } from '../lib/equipos.service';
 import type { EquipoDetalle } from '../types';
 import { DynamicModularSpecsEditor } from './DynamicModularSpecsEditor';
@@ -96,16 +84,13 @@ function formatEquivalenciaAutomatica(
   return null;
 }
 
-export function FichaTecnicaPolimorficaEam({
-  equipo,
-  onUpdated,
-}: FichaTecnicaPolimorficaEamProps) {
+export function FichaTecnicaPolimorficaEam({ equipo, onUpdated }: FichaTecnicaPolimorficaEamProps) {
   const { toast } = useToast();
   const { data: arquetipos } = useArquetiposEam();
   const actualizarEspecificos = useActualizarDatosEspecificos();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editModulos, setEditModulos] = useState<Record<string, Record<string, any>>>({});
+  const [editModulos, setEditModulos] = useState<Record<string, Record<string, unknown>>>({});
   const [editOrigenes, setEditOrigenes] = useState<Record<string, 'MODELO' | 'CUSTOM'>>({});
   const [editUnidades, setEditUnidades] = useState<Record<string, string>>({});
 
@@ -116,8 +101,17 @@ export function FichaTecnicaPolimorficaEam({
       return directId;
     }
     if (arquetipos && equipo.tipo) {
-      const rawTipo = typeof equipo.tipo === 'string' ? equipo.tipo : ((equipo.tipo as any)?.codigo_tipo || (equipo.tipo as any)?.nombre_tipo || (equipo.tipo as any)?.nombre || '');
-      const norm = String(rawTipo || '').toUpperCase().trim();
+      const tipoObj =
+        typeof equipo.tipo === 'object' && equipo.tipo !== null
+          ? (equipo.tipo as { codigo_tipo?: string; nombre_tipo?: string; nombre?: string })
+          : null;
+      const rawTipo =
+        typeof equipo.tipo === 'string'
+          ? equipo.tipo
+          : tipoObj?.codigo_tipo || tipoObj?.nombre_tipo || tipoObj?.nombre || '';
+      const norm = String(rawTipo || '')
+        .toUpperCase()
+        .trim();
       const match = arquetipos.find(
         (a) =>
           a.codigo_tipo?.toUpperCase() === norm ||
@@ -133,7 +127,7 @@ export function FichaTecnicaPolimorficaEam({
 
   // Consolidar valores de todos los módulos desde especificaciones JSONB + datos_especificos + motor
   const modulosConsolidados = useMemo(() => {
-    const result: Record<string, Record<string, any>> = {};
+    const result: Record<string, Record<string, unknown>> = {};
     const specsMods = equipo.especificaciones?.modulos;
     if (specsMods && typeof specsMods === 'object') {
       for (const [mCode, mVals] of Object.entries(specsMods)) {
@@ -144,12 +138,11 @@ export function FichaTecnicaPolimorficaEam({
     }
 
     // Fallback para campos en datos_especificos o motor si algún módulo aún no estaba en JSONB
-    const de = (equipo.datos_especificos || {}) as Record<string, any>;
-    const mot = (equipo.motor || de.motor || null) as Record<string, any> | null;
+    const de = (equipo.datos_especificos || {}) as Record<string, unknown>;
+    const mot = (equipo.motor || de.motor || null) as Record<string, unknown> | null;
 
     if (mot) {
-      const targetMod =
-        mot.tipo_motor === 'ELECTRICO' ? 'motor_electrico' : 'motor_combustion';
+      const targetMod = mot.tipo_motor === 'ELECTRICO' ? 'motor_electrico' : 'motor_combustion';
       result[targetMod] = {
         ...mot,
         potencia_motor_hp: mot.potencia_hp,
@@ -182,7 +175,7 @@ export function FichaTecnicaPolimorficaEam({
 
   // Mapa plano de todos los valores para búsqueda rápida
   const valoresPlanos = useMemo(() => {
-    const flat: Record<string, any> = {};
+    const flat: Record<string, unknown> = {};
     for (const vals of Object.values(modulosConsolidados)) {
       if (vals && typeof vals === 'object') {
         for (const [k, v] of Object.entries(vals)) {
@@ -254,9 +247,19 @@ export function FichaTecnicaPolimorficaEam({
     const candidatosFallback: Array<{ code: string; label: string; unit?: string; mod: string }> = [
       { code: 'potencia_kva', label: 'Potencia Aparente', unit: 'kVA', mod: 'Generador' },
       { code: 'potencia_kw', label: 'Potencia Activa', unit: 'kW', mod: 'Generador' },
-      { code: 'potencia_hp_electrico', label: 'Potencia Motor Eléctrico', unit: 'HP', mod: 'Motor Eléctrico' },
+      {
+        code: 'potencia_hp_electrico',
+        label: 'Potencia Motor Eléctrico',
+        unit: 'HP',
+        mod: 'Motor Eléctrico',
+      },
       { code: 'potencia_motor_hp', label: 'Potencia Motor', unit: 'HP', mod: 'Motor' },
-      { code: 'presion_maxima_psi', label: 'Presión Máxima', unit: 'PSI', mod: 'Compresor / Bomba' },
+      {
+        code: 'presion_maxima_psi',
+        label: 'Presión Máxima',
+        unit: 'PSI',
+        mod: 'Compresor / Bomba',
+      },
       { code: 'caudal_aire_cfm', label: 'Caudal de Aire', unit: 'CFM', mod: 'Compresor' },
       { code: 'caudal_maximo_m3h', label: 'Caudal Máximo', unit: 'm³/h', mod: 'Bomba' },
       { code: 'altura_manometrica_max_m', label: 'Altura Manométrica', unit: 'm', mod: 'Bomba' },
@@ -299,7 +302,7 @@ export function FichaTecnicaPolimorficaEam({
     (
       codigoModulo: string,
       codigoAtributo: string,
-      nuevoValor: any,
+      nuevoValor: unknown,
       origen: 'MODELO' | 'CUSTOM' = 'CUSTOM',
     ) => {
       setEditModulos((prev) => ({
@@ -342,7 +345,8 @@ export function FichaTecnicaPolimorficaEam({
         }));
       }
     },
-  []);
+    [],
+  );
 
   const handleSaveQuickEdit = async () => {
     try {
@@ -364,10 +368,10 @@ export function FichaTecnicaPolimorficaEam({
       });
       setIsEditModalOpen(false);
       if (onUpdated) onUpdated();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: '❌ Error al actualizar especificaciones',
-        description: error?.message || 'Intenta nuevamente',
+        description: getApiErrorMessage(error, 'Intenta nuevamente'),
         variant: 'destructive',
       });
     }
@@ -381,7 +385,7 @@ export function FichaTecnicaPolimorficaEam({
       tipo_control: string;
       unidad_defecto?: string | null;
       unidades_disponibles?: Array<{ codigo: string; simbolo: string }>;
-      opciones?: any[];
+      opciones?: OpcionJsonItem[];
     },
   ) => {
     if (!isMeaningfulValue(rawVal)) {
@@ -406,16 +410,12 @@ export function FichaTecnicaPolimorficaEam({
 
     if (attr?.opciones && attr.opciones.length > 0) {
       const parsedOps = parseOpcionesSeguras(attr.opciones);
-      const match = parsedOps.find(
-        (o) => o.value.toUpperCase() === String(rawVal).toUpperCase(),
-      );
+      const match = parsedOps.find((o) => o.value.toUpperCase() === String(rawVal).toUpperCase());
       if (match) return <span className="font-bold text-slate-900">{match.label}</span>;
     }
 
-    const uCode =
-      (attr ? unidadesActuales[attr.codigo_atributo] || attr.unidad_defecto : '') || '';
-    const uSimbolo =
-      attr?.unidades_disponibles?.find((u) => u.codigo === uCode)?.simbolo || uCode;
+    const uCode = (attr ? unidadesActuales[attr.codigo_atributo] || attr.unidad_defecto : '') || '';
+    const uSimbolo = attr?.unidades_disponibles?.find((u) => u.codigo === uCode)?.simbolo || uCode;
     const equiv = formatEquivalenciaAutomatica(rawVal, uCode, attr?.codigo_atributo);
 
     return (
@@ -445,7 +445,15 @@ export function FichaTecnicaPolimorficaEam({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">
-                  Placa de Especificaciones de Ingeniería ({equipo.tipo_equipo?.nombre_tipo || (typeof equipo.tipo === 'string' ? equipo.tipo : ((equipo.tipo as any)?.nombre_tipo || (equipo.tipo as any)?.nombre || 'Equipo'))})
+                  Placa de Especificaciones de Ingeniería (
+                  {equipo.tipo_equipo?.nombre_tipo ||
+                    (typeof equipo.tipo === 'string'
+                      ? equipo.tipo
+                      : (typeof equipo.tipo === 'object' && equipo.tipo !== null
+                          ? (equipo.tipo as { nombre_tipo?: string; nombre?: string })
+                              .nombre_tipo || (equipo.tipo as { nombre?: string }).nombre
+                          : null) || 'Equipo')}
+                  )
                 </h2>
                 {equipo.modelo_oem && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
@@ -455,7 +463,8 @@ export function FichaTecnicaPolimorficaEam({
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Ficha técnica modular unificada con equivalencias automáticas de unidades e indicadores de placa.
+                Ficha técnica modular unificada con equivalencias automáticas de unidades e
+                indicadores de placa.
               </p>
             </div>
           </div>
@@ -551,12 +560,14 @@ export function FichaTecnicaPolimorficaEam({
                 {/* Secciones (grupo_visual) dentro del Subsistema */}
                 <div className="p-4 space-y-4 flex-1">
                   {mod.grupos.map((grupo) => {
-                    const getEffectiveValue = (attrItem: typeof grupo.atributos[0]) => {
-                      let val = valoresMod[attrItem.codigo_atributo] ?? valoresPlanos[attrItem.codigo_atributo];
+                    const getEffectiveValue = (attrItem: (typeof grupo.atributos)[0]) => {
+                      let val =
+                        valoresMod[attrItem.codigo_atributo] ??
+                        valoresPlanos[attrItem.codigo_atributo];
                       if (!isMeaningfulValue(val)) {
                         const code = attrItem.codigo_atributo.toLowerCase();
                         if (code.includes('serie') || code.includes('serial')) {
-                          val = (equipo as any).numero_serie_equipo || equipo.numero_serie || null;
+                          val = equipo.numero_serie_equipo || equipo.numero_serie || null;
                         } else if (code === 'marca' || code === 'marca_equipo') {
                           val = equipo.marca || null;
                         } else if (code === 'modelo' || code === 'modelo_equipo') {
@@ -652,10 +663,7 @@ export function FichaTecnicaPolimorficaEam({
                 </div>
                 <div className="p-4 divide-y divide-slate-100">
                   {entries.map(([k, v]) => (
-                    <div
-                      key={k}
-                      className="flex items-center justify-between py-1.5 gap-3 text-xs"
-                    >
+                    <div key={k} className="flex items-center justify-between py-1.5 gap-3 text-xs">
                       <span className="text-slate-600">{humanizeFallbackKey(k)}</span>
                       <div className="text-right">
                         {renderValorAtributo(v, {
@@ -691,7 +699,8 @@ export function FichaTecnicaPolimorficaEam({
                       Editar Especificaciones Técnicas ({equipo.codigo_equipo})
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Los cambios actualizan en vivo la ficha técnica, los subsistemas y el índice de búsqueda rápida.
+                      Los cambios actualizan en vivo la ficha técnica, los subsistemas y el índice
+                      de búsqueda rápida.
                     </p>
                   </div>
                 </div>

@@ -99,6 +99,7 @@ export interface Cliente {
   requisitos_especiales?: string | null;
   // ✅ 24-FEB-2026: Multi-email - Correos adicionales separados por ';;'
   emails_notificacion?: string | null;
+  id_cuenta_email_remitente?: number | null;
   creado_por?: number | null;
   fecha_creacion?: string | null;
   modificado_por?: number | null;
@@ -128,7 +129,7 @@ export interface Cliente {
       telefono_principal?: string | null;
       email_principal?: string | null;
     };
-    equipos?: any[];
+    equipos?: Array<Record<string, unknown>>;
   }>;
 }
 
@@ -169,6 +170,12 @@ export interface ClienteConPersona extends Cliente {
   tiene_bombas?: boolean;
   total_equipos_plantas?: number;
   total_equipos_bombas?: number;
+  equipos?: Array<{
+    id_equipo?: number;
+    tipo?: string;
+    id_tipo_equipo?: number;
+    [key: string]: unknown;
+  }>;
 }
 
 // ===== DTOs =====
@@ -255,13 +262,15 @@ export interface CreateClienteDto {
   tiene_acceso_portal?: boolean;
   observaciones_servicio?: string;
   requisitos_especiales?: string;
+  id_firma_administrativa?: number;
+  id_asesor_asignado?: number;
   // ✅ 24-FEB-2026: Multi-email
-  emails_notificacion?: string;
+  emails_notificacion?: string | null;
   // ✅ MULTI-SEDE (09-Feb-2026)
   es_cliente_principal?: boolean;
-  id_cliente_principal?: number;
-  nombre_sede?: string;
-  id_cuenta_email_remitente?: number;
+  id_cliente_principal?: number | null;
+  nombre_sede?: string | null;
+  id_cuenta_email_remitente?: number | null;
 }
 
 /**
@@ -291,7 +300,9 @@ export interface ClientePrincipalSelector {
 /**
  * DTO para actualizar cliente
  */
-export type UpdateClienteDto = Partial<Omit<CreateClienteDto, 'id_persona'>>;
+export type UpdateClienteDto = Partial<Omit<CreateClienteDto, 'id_persona' | 'persona'>> & {
+  persona?: Partial<CreatePersonaNestedDto>;
+};
 
 /**
  * DTO para crear cliente con persona nueva (formulario combinado)

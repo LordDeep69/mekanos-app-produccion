@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
-  NotFoundException
+  NotFoundException,
 } from '@nestjs/common';
 import { crearMetadataObservacionesCierre } from '../ordenes/domain/observaciones-cierre-audit';
 import { validarTransicion } from '../ordenes/domain/workflow-estados';
@@ -17,20 +17,16 @@ import {
   SyncParametroMedicionDto,
   SyncPendienteCatalogoDto,
 } from './dto/sync-response.dto';
-import {
-  SyncBatchUploadDto,
-  SyncMedicionDto,
-  SyncOrdenDto,
-} from './dto/sync-upload-orden.dto';
+import { SyncBatchUploadDto, SyncMedicionDto, SyncOrdenDto } from './dto/sync-upload-orden.dto';
 import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
 
 /**
  * Servicio de Sincronización Móvil - FASE 2.3
- * 
+ *
  * Implementa estrategia offline-first:
  * 1. POST /sync/ordenes - Batch upload desde móvil
  * 2. GET /sync/download/:tecnicoId - Download datos para trabajo offline
- * 
+ *
  * Características:
  * - Procesamiento transaccional por orden
  * - Detección de conflictos por versión
@@ -41,9 +37,7 @@ import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-  ) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * UPLOAD: Sincronizar batch de órdenes desde móvil
@@ -103,10 +97,7 @@ export class SyncService {
   /**
    * Procesar una orden individual en transacción
    */
-  private async syncSingleOrden(
-    dto: SyncOrdenDto,
-    tecnicoId: number,
-  ): Promise<SyncOrdenResultDto> {
+  private async syncSingleOrden(dto: SyncOrdenDto, tecnicoId: number): Promise<SyncOrdenResultDto> {
     return await this.prisma.$transaction(async (tx) => {
       // 1. Obtener orden actual del servidor
       const ordenServidor = await tx.ordenes_servicio.findUnique({
@@ -178,9 +169,7 @@ export class SyncService {
         });
 
         if (!nuevoEstadoDB) {
-          throw new BadRequestException(
-            `Estado ${dto.cambioEstado.nuevoEstado} no existe`,
-          );
+          throw new BadRequestException(`Estado ${dto.cambioEstado.nuevoEstado} no existe`);
         }
 
         // Construir datos de actualización según el estado
@@ -235,9 +224,7 @@ export class SyncService {
                     anterior: ordenServidor.observaciones_cierre,
                     nueva: dto.cambioEstado.observaciones,
                     extra: {
-                      evento: esResubidaSync
-                        ? 'RESUBIDA_TECNICO'
-                        : 'FINALIZACION_TECNICO',
+                      evento: esResubidaSync ? 'RESUBIDA_TECNICO' : 'FINALIZACION_TECNICO',
                     },
                   }) as any)
                 : undefined,
@@ -304,7 +291,9 @@ export class SyncService {
                 fecha_ejecucion: actividadDto.horaInicio
                   ? new Date(actividadDto.horaInicio)
                   : undefined,
-                ...(parsedRespuestaJson !== undefined ? { respuesta_json: parsedRespuestaJson } : {}),
+                ...(parsedRespuestaJson !== undefined
+                  ? { respuesta_json: parsedRespuestaJson }
+                  : {}),
               },
             });
             actividadesMapping.push({
@@ -319,11 +308,11 @@ export class SyncService {
                 id_actividad_catalogo: actividadDto.idActividadCatalogo,
                 estado: actividadDto.estadoActividad as any,
                 observaciones: actividadDto.observaciones,
-                fecha_ejecucion: actividadDto.horaInicio
-                  ? new Date(actividadDto.horaInicio)
-                  : null,
+                fecha_ejecucion: actividadDto.horaInicio ? new Date(actividadDto.horaInicio) : null,
                 ejecutada_por: tecnicoId,
-                ...(parsedRespuestaJson !== undefined ? { respuesta_json: parsedRespuestaJson } : {}),
+                ...(parsedRespuestaJson !== undefined
+                  ? { respuesta_json: parsedRespuestaJson }
+                  : {}),
               },
             });
             actividadesMapping.push({
@@ -432,12 +421,16 @@ export class SyncService {
     });
 
     // ✅ Sincronización proactiva de horómetro en equipos
-    if (parametro && (
-      parametro.codigo_parametro?.toUpperCase().includes('HORO') ||
-      parametro.nombre_parametro?.toLowerCase().includes('hora') ||
-      parametro.nombre_parametro?.toLowerCase().includes('horo')
-    )) {
-      const horasVal = dto.valorNumerico != null ? Number(dto.valorNumerico) : parseFloat(String(dto.valorTexto || ''));
+    if (
+      parametro &&
+      (parametro.codigo_parametro?.toUpperCase().includes('HORO') ||
+        parametro.nombre_parametro?.toLowerCase().includes('hora') ||
+        parametro.nombre_parametro?.toLowerCase().includes('horo'))
+    ) {
+      const horasVal =
+        dto.valorNumerico != null
+          ? Number(dto.valorNumerico)
+          : parseFloat(String(dto.valorTexto || ''));
       if (!isNaN(horasVal) && horasVal > 0) {
         try {
           const ord = await tx.ordenes_servicio.findUnique({
@@ -471,7 +464,7 @@ export class SyncService {
 
   /**
    * DOWNLOAD: Obtener datos para trabajo offline del técnico
-   * 
+   *
    * @param tecnicoId - ID del técnico
    * @param since - Fecha para sync delta (solo cambios desde esta fecha)
    * @param includeCatalogs - Incluir catálogos completos (true en sync completo)
@@ -482,7 +475,9 @@ export class SyncService {
     includeCatalogs: boolean = true,
   ): Promise<SyncDownloadResponseDto> {
     const syncType = since ? 'DELTA' : 'COMPLETO';
-    this.logger.log(`[Sync] Download ${syncType} para técnico ${tecnicoId}${since ? ` desde ${since.toISOString()}` : ''}`);
+    this.logger.log(
+      `[Sync] Download ${syncType} para técnico ${tecnicoId}${since ? ` desde ${since.toISOString()}` : ''}`,
+    );
 
     // ========================================================================
     // 🔬 DIAGNÓSTICO PROFUNDO: Verificar problema de zona horaria
@@ -510,7 +505,9 @@ export class SyncService {
       this.logger.log(`[🔬 DIAGNÓSTICO] Top 3 órdenes más recientes del técnico ${tecnicoId}:`);
       for (const o of ordenesRecientes) {
         const fm = o.fecha_modificacion;
-        this.logger.log(`   - Orden ${o.numero_orden} (ID: ${o.id_orden_servicio}, Estado: ${o.id_estado_actual})`);
+        this.logger.log(
+          `   - Orden ${o.numero_orden} (ID: ${o.id_orden_servicio}, Estado: ${o.id_estado_actual})`,
+        );
         this.logger.log(`     fecha_modificacion: ${fm ? fm.toISOString() : 'NULL'}`);
         if (fm && since) {
           const diff = fm.getTime() - since.getTime();
@@ -530,7 +527,9 @@ export class SyncService {
       // cuando se usa `timestamp without time zone` + objetos Date de JavaScript
       // ========================================================================
       const sinceIsoString = since.toISOString();
-      this.logger.log(`[Sync Delta] Consultando órdenes modificadas y eliminadas desde ${sinceIsoString}`);
+      this.logger.log(
+        `[Sync Delta] Consultando órdenes modificadas y eliminadas desde ${sinceIsoString}`,
+      );
 
       // 1. Consultar órdenes modificadas SIN filtrar por es_estado_final
       // (así viajan órdenes que pasaron a COMPLETADA o CANCELADA en Admin Portal)
@@ -549,15 +548,19 @@ export class SyncService {
           WHERE (id_tecnico_asignado = ${tecnicoId} OR id_tecnico_asignado IS NULL)
             AND fecha_eliminacion >= ${sinceIsoString}::timestamp
         `;
-        ordenesEliminadasIds = eliminadasRaw.map(e => e.id_orden_servicio);
+        ordenesEliminadasIds = eliminadasRaw.map((e) => e.id_orden_servicio);
         if (ordenesEliminadasIds.length > 0) {
-          this.logger.log(`[Sync Delta] Encontradas ${ordenesEliminadasIds.length} órdenes eliminadas para técnico ${tecnicoId}`);
+          this.logger.log(
+            `[Sync Delta] Encontradas ${ordenesEliminadasIds.length} órdenes eliminadas para técnico ${tecnicoId}`,
+          );
         }
       } catch (errTomb) {
         this.logger.warn(`[Sync Delta] Error consultando ordenes_eliminadas:`, errTomb);
       }
 
-      this.logger.log(`[🔬 DIAGNÓSTICO] Query raw encontró ${ordenesModificadas.length} órdenes modificadas y ${ordenesEliminadasIds.length} eliminadas`);
+      this.logger.log(
+        `[🔬 DIAGNÓSTICO] Query raw encontró ${ordenesModificadas.length} órdenes modificadas y ${ordenesEliminadasIds.length} eliminadas`,
+      );
 
       if (ordenesModificadas.length === 0) {
         // No hay órdenes modificadas.
@@ -582,7 +585,9 @@ export class SyncService {
         }));
 
         if (includeCatalogs) {
-          this.logger.log('[Sync Delta] includeCatalogs=true → enviando catálogos completos sin órdenes');
+          this.logger.log(
+            '[Sync Delta] includeCatalogs=true → enviando catálogos completos sin órdenes',
+          );
 
           const parametros = await this.prisma.parametros_medicion.findMany({
             where: { activo: true },
@@ -618,12 +623,8 @@ export class SyncService {
               nombreParametro: p.nombre_parametro,
               unidadMedida: p.unidad_medida,
               tipoDato: p.tipo_dato || 'NUMERICO',
-              valorMinimoNormal: p.valor_minimo_normal
-                ? Number(p.valor_minimo_normal)
-                : undefined,
-              valorMaximoNormal: p.valor_maximo_normal
-                ? Number(p.valor_maximo_normal)
-                : undefined,
+              valorMinimoNormal: p.valor_minimo_normal ? Number(p.valor_minimo_normal) : undefined,
+              valorMaximoNormal: p.valor_maximo_normal ? Number(p.valor_maximo_normal) : undefined,
               valorMinimoCritico: p.valor_minimo_critico
                 ? Number(p.valor_minimo_critico)
                 : undefined,
@@ -648,10 +649,10 @@ export class SyncService {
               idParametroMedicion: a.id_parametro_medicion ?? undefined,
               idTipoServicio: a.id_tipo_servicio ?? undefined,
               sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
-        naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
-        tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
-        configInputJson: a.config_input_json ?? undefined,
-        rolSemantico: a.rol_semantico ?? undefined,
+              naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
+              tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
+              configInputJson: a.config_input_json ?? undefined,
+              rolSemantico: a.rol_semantico ?? undefined,
             })),
             estadosOrden: estados.map((e) => ({
               id: e.id_estado,
@@ -704,10 +705,10 @@ export class SyncService {
             idParametroMedicion: a.id_parametro_medicion ?? undefined,
             idTipoServicio: a.id_tipo_servicio ?? undefined,
             sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
-        naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
-        tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
-        configInputJson: a.config_input_json ?? undefined,
-        rolSemantico: a.rol_semantico ?? undefined,
+            naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
+            tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
+            configInputJson: a.config_input_json ?? undefined,
+            rolSemantico: a.rol_semantico ?? undefined,
           })),
           estadosOrden: [],
           tiposServicio: tiposServicioDelta.map((t) => ({
@@ -721,7 +722,7 @@ export class SyncService {
       }
 
       // Usar los IDs encontrados para el filtro
-      const ordenesIds = ordenesModificadas.map(o => o.id_orden_servicio);
+      const ordenesIds = ordenesModificadas.map((o) => o.id_orden_servicio);
       this.logger.log(`[🔬 DIAGNÓSTICO] IDs de órdenes modificadas: ${ordenesIds.join(', ')}`);
 
       baseFilter = {
@@ -755,8 +756,10 @@ export class SyncService {
           where: baseFilter,
           select: { id_orden_servicio: true },
         });
-        idsOrdenesValidas = validasRaw.map(v => v.id_orden_servicio);
-        this.logger.log(`[Sync Full] ${idsOrdenesValidas.length} órdenes válidas asignadas al técnico ${tecnicoId}`);
+        idsOrdenesValidas = validasRaw.map((v) => v.id_orden_servicio);
+        this.logger.log(
+          `[Sync Full] ${idsOrdenesValidas.length} órdenes válidas asignadas al técnico ${tecnicoId}`,
+        );
       } catch (errValidas) {
         this.logger.warn('[Sync Full] Error obteniendo idsOrdenesValidas:', errValidas);
       }
@@ -842,7 +845,9 @@ export class SyncService {
       take: LIMITE_ORDENES_MOBILE,
     });
 
-    this.logger.log(`[Sync] Ordenes obtenidas: ${ordenes.length} (limite: ${LIMITE_ORDENES_MOBILE})`);
+    this.logger.log(
+      `[Sync] Ordenes obtenidas: ${ordenes.length} (limite: ${LIMITE_ORDENES_MOBILE})`,
+    );
 
     // 2. Obtener documentos PDF para las órdenes completadas
     const ordenesIds = ordenes.map((o) => o.id_orden_servicio);
@@ -932,7 +937,10 @@ export class SyncService {
           actividadesMalasMap.set(ordenId, (actividadesMalasMap.get(ordenId) || 0) + count);
           break;
         case 'C':
-          actividadesCorregidasMap.set(ordenId, (actividadesCorregidasMap.get(ordenId) || 0) + count);
+          actividadesCorregidasMap.set(
+            ordenId,
+            (actividadesCorregidasMap.get(ordenId) || 0) + count,
+          );
           break;
         case 'NA':
           actividadesNAMap.set(ordenId, (actividadesNAMap.get(ordenId) || 0) + count);
@@ -975,11 +983,17 @@ export class SyncService {
         const maxCritico = param.valor_maximo_critico?.toNumber();
 
         // Verificar si está fuera de rango crítico
-        if ((minCritico !== undefined && valor < minCritico) || (maxCritico !== undefined && valor > maxCritico)) {
+        if (
+          (minCritico !== undefined && valor < minCritico) ||
+          (maxCritico !== undefined && valor > maxCritico)
+        ) {
           estado = 'CRITICO';
         }
         // Verificar si está fuera de rango normal (advertencia)
-        else if ((minNormal !== undefined && valor < minNormal) || (maxNormal !== undefined && valor > maxNormal)) {
+        else if (
+          (minNormal !== undefined && valor < minNormal) ||
+          (maxNormal !== undefined && valor > maxNormal)
+        ) {
           estado = 'ADVERTENCIA';
         }
       }
@@ -997,7 +1011,9 @@ export class SyncService {
       }
     }
 
-    this.logger.log(`[Sync] Estadísticas: ${actividadesMap.size} órdenes con actividades, ${evidenciasMap.size} con evidencias, ${firmasMap.size} con firmas`);
+    this.logger.log(
+      `[Sync] Estadísticas: ${actividadesMap.size} órdenes con actividades, ${evidenciasMap.size} con evidencias, ${firmasMap.size} con firmas`,
+    );
 
     // 3. Mapear a DTO de descarga
     const ordenesDownload: SyncOrdenDownloadDto[] = ordenes.map((o) => ({
@@ -1009,8 +1025,7 @@ export class SyncService {
       nombreEstado: o.estados_orden?.nombre_estado || '',
       esEstadoFinal: o.estados_orden?.es_estado_final || false,
       permiteEdicionTecnico:
-        o.estados_orden?.codigo_estado === 'COMPLETADA' &&
-        o.edicion_tecnico_habilitada === true,
+        o.estados_orden?.codigo_estado === 'COMPLETADA' && o.edicion_tecnico_habilitada === true,
       fechaProgramada: o.fecha_programada?.toISOString(),
       prioridad: o.prioridad as string,
       idCliente: o.id_cliente,
@@ -1051,7 +1066,9 @@ export class SyncService {
         codigoServicio: d.catalogo_servicios?.codigo_servicio || '',
         nombreServicio: d.catalogo_servicios?.nombre_servicio || '',
         categoria: d.catalogo_servicios?.categoria || '',
-        duracionEstimadaHoras: d.catalogo_servicios?.duracion_estimada_horas ? Number(d.catalogo_servicios.duracion_estimada_horas) : undefined,
+        duracionEstimadaHoras: d.catalogo_servicios?.duracion_estimada_horas
+          ? Number(d.catalogo_servicios.duracion_estimada_horas)
+          : undefined,
       })),
       // ✅ FIX: Incluir URL del PDF desde documentos_generados (consulta directa)
       urlPdf: documentosMap.get(o.id_orden_servicio) || undefined,
@@ -1063,28 +1080,30 @@ export class SyncService {
       // Por eso getHours() devuelve +5 horas. Restamos 5 para obtener hora Colombia.
       horaEntrada: o.fecha_inicio_real
         ? (() => {
-          const h = o.fecha_inicio_real.getHours();
-          const m = o.fecha_inicio_real.getMinutes();
-          // Ajustar a Colombia UTC-5 (restar 5 horas al UTC)
-          let horaCol = h - 5;
-          if (horaCol < 0) horaCol += 24;
-          return `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        })()
+            const h = o.fecha_inicio_real.getHours();
+            const m = o.fecha_inicio_real.getMinutes();
+            // Ajustar a Colombia UTC-5 (restar 5 horas al UTC)
+            let horaCol = h - 5;
+            if (horaCol < 0) horaCol += 24;
+            return `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+          })()
         : undefined,
       horaSalida: o.fecha_fin_real
         ? (() => {
-          const h = o.fecha_fin_real.getHours();
-          const m = o.fecha_fin_real.getMinutes();
-          // Ajustar a Colombia UTC-5 (restar 5 horas al UTC)
-          let horaCol = h - 5;
-          if (horaCol < 0) horaCol += 24;
-          return `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        })()
+            const h = o.fecha_fin_real.getHours();
+            const m = o.fecha_fin_real.getMinutes();
+            // Ajustar a Colombia UTC-5 (restar 5 horas al UTC)
+            let horaCol = h - 5;
+            if (horaCol < 0) horaCol += 24;
+            return `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+          })()
         : undefined,
       duracionMinutos: o.duracion_minutos || undefined,
       // ✅ FIX: Incluir estadísticas de la orden (consulta directa, más confiable)
       // totalActividades incluye actividades + mediciones para coincidir con el móvil
-      totalActividades: (actividadesMap.get(o.id_orden_servicio) || 0) + (medicionesMap.get(o.id_orden_servicio) || 0),
+      totalActividades:
+        (actividadesMap.get(o.id_orden_servicio) || 0) +
+        (medicionesMap.get(o.id_orden_servicio) || 0),
       totalMediciones: medicionesMap.get(o.id_orden_servicio) || 0,
       totalEvidencias: evidenciasMap.get(o.id_orden_servicio) || 0,
       totalFirmas: firmasMap.get(o.id_orden_servicio) || 0,
@@ -1099,30 +1118,35 @@ export class SyncService {
       medicionesCriticas: medicionesCriticasMap.get(o.id_orden_servicio) || 0,
       // ✅ Multi-Equipos: Mapear equipos asociados (vacío = orden tradicional 1 equipo)
       ordenesEquipos: (() => {
-        const mapped = o.ordenes_equipos?.map((oe, idx) => ({
-          idOrdenEquipo: oe.id_orden_equipo,
-          idOrdenServicio: oe.id_orden_servicio,
-          idEquipo: oe.id_equipo,
-          ordenSecuencia: oe.orden_secuencia,
-          nombreSistema: oe.nombre_sistema || undefined,
-          estado: oe.estado || 'PENDIENTE',
-          fechaInicio: oe.fecha_inicio?.toISOString(),
-          fechaFin: oe.fecha_fin?.toISOString(),
-          observaciones: oe.observaciones || undefined,
-          codigoEquipo: oe.equipos?.codigo_equipo || '',
-          nombreEquipo: oe.equipos?.nombre_equipo || '',
-          ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
-          // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026)
-          configParametros: oe.equipos?.config_parametros || undefined,
-        })) || [];
+        const mapped =
+          o.ordenes_equipos?.map((oe) => ({
+            idOrdenEquipo: oe.id_orden_equipo,
+            idOrdenServicio: oe.id_orden_servicio,
+            idEquipo: oe.id_equipo,
+            ordenSecuencia: oe.orden_secuencia,
+            nombreSistema: oe.nombre_sistema || undefined,
+            estado: oe.estado || 'PENDIENTE',
+            fechaInicio: oe.fecha_inicio?.toISOString(),
+            fechaFin: oe.fecha_fin?.toISOString(),
+            observaciones: oe.observaciones || undefined,
+            codigoEquipo: oe.equipos?.codigo_equipo || '',
+            nombreEquipo: oe.equipos?.nombre_equipo || '',
+            ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026)
+            configParametros: oe.equipos?.config_parametros || undefined,
+          })) || [];
         // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos tienen el mismo valor
         if (mapped.length > 1) {
-          const secuencias = mapped.map(m => m.ordenSecuencia);
-          const todasIguales = secuencias.every(s => s === secuencias[0]);
+          const secuencias = mapped.map((m) => m.ordenSecuencia);
+          const todasIguales = secuencias.every((s) => s === secuencias[0]);
           if (todasIguales) {
-            mapped.forEach((m, idx) => { m.ordenSecuencia = idx + 1; });
+            mapped.forEach((m, idx) => {
+              m.ordenSecuencia = idx + 1;
+            });
           }
-          this.logger.log(`[🔧 MULTI-EQUIPO] Orden ${o.numero_orden} (ID ${o.id_orden_servicio}) tiene ${mapped.length} equipos`);
+          this.logger.log(
+            `[🔧 MULTI-EQUIPO] Orden ${o.numero_orden} (ID ${o.id_orden_servicio}) tiene ${mapped.length} equipos`,
+          );
         }
         return mapped;
       })(),
@@ -1135,8 +1159,14 @@ export class SyncService {
     // =========================================================================
     let parametrosDownload: SyncParametroMedicionDto[] = [];
     let actividadesDownload: SyncActividadCatalogoDto[] = [];
-    let estadosDownload: { id: number; codigo: string; nombre: string; esEstadoFinal: boolean }[] = [];
-    let tiposServicioDownload: { id: number; codigo: string; nombre: string; descripcion?: string }[] = [];
+    let estadosDownload: { id: number; codigo: string; nombre: string; esEstadoFinal: boolean }[] =
+      [];
+    let tiposServicioDownload: {
+      id: number;
+      codigo: string;
+      nombre: string;
+      descripcion?: string;
+    }[] = [];
     let pendientesDownload: SyncPendienteCatalogoDto[] = [];
 
     if (includeCatalogs) {
@@ -1154,18 +1184,10 @@ export class SyncService {
         nombreParametro: p.nombre_parametro,
         unidadMedida: p.unidad_medida,
         tipoDato: p.tipo_dato || 'NUMERICO',
-        valorMinimoNormal: p.valor_minimo_normal
-          ? Number(p.valor_minimo_normal)
-          : undefined,
-        valorMaximoNormal: p.valor_maximo_normal
-          ? Number(p.valor_maximo_normal)
-          : undefined,
-        valorMinimoCritico: p.valor_minimo_critico
-          ? Number(p.valor_minimo_critico)
-          : undefined,
-        valorMaximoCritico: p.valor_maximo_critico
-          ? Number(p.valor_maximo_critico)
-          : undefined,
+        valorMinimoNormal: p.valor_minimo_normal ? Number(p.valor_minimo_normal) : undefined,
+        valorMaximoNormal: p.valor_maximo_normal ? Number(p.valor_maximo_normal) : undefined,
+        valorMinimoCritico: p.valor_minimo_critico ? Number(p.valor_minimo_critico) : undefined,
+        valorMaximoCritico: p.valor_maximo_critico ? Number(p.valor_maximo_critico) : undefined,
         valorIdeal: p.valor_ideal ? Number(p.valor_ideal) : undefined,
         esCriticoSeguridad: p.es_critico_seguridad || false,
         esObligatorio: p.es_obligatorio || false,
@@ -1223,9 +1245,10 @@ export class SyncService {
         nombre: t.nombre_tipo,
         descripcion: t.descripcion ?? undefined,
       }));
-
     } else {
-      this.logger.log('[Sync Delta] Incluyendo catálogo de actividades y tipos de servicio para consistencia');
+      this.logger.log(
+        '[Sync Delta] Incluyendo catálogo de actividades y tipos de servicio para consistencia',
+      );
       const [actividades, tiposServicio] = await Promise.all([
         this.prisma.catalogo_actividades.findMany({
           where: { activo: true },
@@ -1283,7 +1306,9 @@ export class SyncService {
     }));
 
     // Log resumen de sync
-    this.logger.log(`[Sync] Resultado: ${ordenesDownload.length} órdenes, ${parametrosDownload.length} params, ${actividadesDownload.length} actividades, ${pendientesDownload.length} pendientes`);
+    this.logger.log(
+      `[Sync] Resultado: ${ordenesDownload.length} órdenes, ${parametrosDownload.length} params, ${actividadesDownload.length} actividades, ${pendientesDownload.length} pendientes`,
+    );
 
     return {
       serverTimestamp: new Date().toISOString(),
@@ -1362,16 +1387,14 @@ export class SyncService {
         (user?.esAdmin || esTecnicoAsignado) &&
         estadoCodigo === 'COMPLETADA' &&
         orden.edicion_tecnico_habilitada === true,
-      fechaModificacion:
-        orden.fecha_modificacion?.toISOString() ||
-        new Date().toISOString(),
+      fechaModificacion: orden.fecha_modificacion?.toISOString() || new Date().toISOString(),
     };
   }
 
   /**
    * Obtiene resúmenes compactos de órdenes para comparación inteligente.
    * El móvil usa estos resúmenes para detectar diferencias con su BD local.
-   * 
+   *
    * @param tecnicoId - ID del técnico
    * @param limit - Número máximo de órdenes (default 500)
    */
@@ -1388,9 +1411,7 @@ export class SyncService {
     // habilitación/revocación actualiza fecha_modificacion, por lo que la
     // decisión administrativa siempre entra en esa ventana.
     // ========================================================================
-    this.logger.log(
-      `[🧠 COMPARE] Activas + COMPLETADAS recientes para técnico ${tecnicoId}`,
-    );
+    this.logger.log(`[🧠 COMPARE] Activas + COMPLETADAS recientes para técnico ${tecnicoId}`);
 
     const ordenSelect = {
       id_orden_servicio: true,
@@ -1449,18 +1470,14 @@ export class SyncService {
     ]);
 
     // Deduplicación defensiva (un estado no puede ser activo y COMPLETADA a la vez)
-    const idsActivos = new Set(
-      ordenesActivas.map((o) => o.id_orden_servicio),
-    );
+    const idsActivos = new Set(ordenesActivas.map((o) => o.id_orden_servicio));
     const ordenes = [
       ...ordenesActivas,
-      ...ordenesCompletadas.filter(
-        (o) => !idsActivos.has(o.id_orden_servicio),
-      ),
+      ...ordenesCompletadas.filter((o) => !idsActivos.has(o.id_orden_servicio)),
     ];
 
     // Obtener los IDs de órdenes para buscar PDFs
-    const ordenIds = ordenes.map(o => o.id_orden_servicio);
+    const ordenIds = ordenes.map((o) => o.id_orden_servicio);
 
     // Buscar PDFs directamente en documentos_generados por id_referencia
     // (el documento se guarda con id_referencia = idOrden en finalizacion-orden.service.ts)
@@ -1498,8 +1515,7 @@ export class SyncService {
         esEstadoFinal: o.estados_orden?.es_estado_final || false,
         // ✅ 19-OCT-2026: Solo COMPLETADA + autorización vigente habilita edición.
         permiteEdicionTecnico:
-          o.estados_orden?.codigo_estado === 'COMPLETADA' &&
-          o.edicion_tecnico_habilitada === true,
+          o.estados_orden?.codigo_estado === 'COMPLETADA' && o.edicion_tecnico_habilitada === true,
         idCliente: o.id_cliente || 1,
         id_cliente: o.id_cliente || 1, // Alias snake_case
         // ✅ FIX 09-FEB-2026: Priorizar nombre_sede del cliente-sede
@@ -1596,10 +1612,7 @@ export class SyncService {
       orden.estados_orden?.codigo_estado === 'COMPLETADA' &&
       orden.edicion_tecnico_habilitada === true;
 
-    if (
-      orden.estados_orden?.es_estado_final &&
-      !esCompletadaConAutorizacion
-    ) {
+    if (orden.estados_orden?.es_estado_final && !esCompletadaConAutorizacion) {
       this.logger.warn(
         `[🔐 POLÍTICA] Orden ${ordenId} final (${orden.estados_orden?.codigo_estado}) sin autorización de edición - NO se envía al móvil`,
       );
@@ -1617,16 +1630,27 @@ export class SyncService {
       _count: { id_actividad_ejecutada: true },
     });
 
-    let actividadesBuenas = 0, actividadesMalas = 0, actividadesCorregidas = 0, actividadesNA = 0;
+    let actividadesBuenas = 0,
+      actividadesMalas = 0,
+      actividadesCorregidas = 0,
+      actividadesNA = 0;
     let totalActividades = 0;
     for (const stat of actividadesStats) {
       const count = stat._count.id_actividad_ejecutada;
       totalActividades += count;
       switch (stat.estado) {
-        case 'B': actividadesBuenas = count; break;
-        case 'M': actividadesMalas = count; break;
-        case 'C': actividadesCorregidas = count; break;
-        case 'NA': actividadesNA = count; break;
+        case 'B':
+          actividadesBuenas = count;
+          break;
+        case 'M':
+          actividadesMalas = count;
+          break;
+        case 'C':
+          actividadesCorregidas = count;
+          break;
+        case 'NA':
+          actividadesNA = count;
+          break;
       }
     }
 
@@ -1636,7 +1660,9 @@ export class SyncService {
       include: { parametros_medicion: true },
     });
 
-    let medicionesNormales = 0, medicionesAdvertencia = 0, medicionesCriticas = 0;
+    let medicionesNormales = 0,
+      medicionesAdvertencia = 0,
+      medicionesCriticas = 0;
     for (const m of mediciones) {
       const valor = m.valor_numerico?.toNumber() || 0;
       const param = m.parametros_medicion;
@@ -1646,9 +1672,15 @@ export class SyncService {
         const maxCrit = param.valor_maximo_critico?.toNumber();
         const minNorm = param.valor_minimo_normal?.toNumber();
         const maxNorm = param.valor_maximo_normal?.toNumber();
-        if ((minCrit !== undefined && valor < minCrit) || (maxCrit !== undefined && valor > maxCrit)) {
+        if (
+          (minCrit !== undefined && valor < minCrit) ||
+          (maxCrit !== undefined && valor > maxCrit)
+        ) {
           estado = 'CRITICO';
-        } else if ((minNorm !== undefined && valor < minNorm) || (maxNorm !== undefined && valor > maxNorm)) {
+        } else if (
+          (minNorm !== undefined && valor < minNorm) ||
+          (maxNorm !== undefined && valor > maxNorm)
+        ) {
           estado = 'ADVERTENCIA';
         }
       }
@@ -1715,7 +1747,12 @@ export class SyncService {
       prioridad: orden.prioridad || 'NORMAL',
       idCliente: orden.id_cliente,
       // ✅ FIX 09-FEB-2026: Priorizar nombre_sede del cliente-sede
-      nombreCliente: (orden.clientes as any)?.nombre_sede || orden.clientes?.persona?.nombre_comercial || orden.clientes?.persona?.nombre_completo || orden.clientes?.persona?.razon_social || 'Cliente',
+      nombreCliente:
+        (orden.clientes as any)?.nombre_sede ||
+        orden.clientes?.persona?.nombre_comercial ||
+        orden.clientes?.persona?.nombre_completo ||
+        orden.clientes?.persona?.razon_social ||
+        'Cliente',
       nombreComercial: orden.clientes?.persona?.nombre_comercial || undefined,
       nombreCompleto: orden.clientes?.persona?.nombre_completo || undefined,
       razonSocial: orden.clientes?.persona?.razon_social || undefined,
@@ -1727,11 +1764,12 @@ export class SyncService {
       nombreEquipo: orden.equipos?.nombre_equipo || 'Equipo',
       marcaEquipo: orden.equipos ? EquipoSpecsReader.getMarca(orden.equipos) : undefined,
       modeloEquipo: orden.equipos ? EquipoSpecsReader.getModelo(orden.equipos) : undefined,
-      serieEquipo: orden.equipos ? EquipoSpecsReader.getSerie(orden.equipos) : (orden.equipos?.numero_serie_equipo ?? undefined),
+      serieEquipo: orden.equipos ? EquipoSpecsReader.getSerie(orden.equipos) : undefined,
       tipoEquipo: orden.equipos ? EquipoSpecsReader.getCategoriaCanonica(orden.equipos) : undefined,
       ubicacionEquipo: orden.equipos?.ubicacion_texto ?? undefined,
       configParametros: (() => {
-        const pModelo = (orden.equipos?.modelos_equipo?.plantilla_parametros_config as object) || {};
+        const pModelo =
+          (orden.equipos?.modelos_equipo?.plantilla_parametros_config as object) || {};
         const pEquipo = (orden.equipos?.config_parametros as object) || {};
         const merged = { ...pModelo, ...pEquipo };
         return Object.keys(merged).length > 0 ? merged : undefined;
@@ -1763,42 +1801,48 @@ export class SyncService {
       fechaCreacion: orden.fecha_creacion?.toISOString() || new Date().toISOString(),
       fechaModificacion: orden.fecha_modificacion?.toISOString(),
       // ✅ NUEVO: Plan de actividades asignadas a la orden
-      actividadesPlan: (orden as any).ordenes_actividades_plan?.map((p: any) => ({
-        idActividadCatalogo: p.id_actividad_catalogo,
-        ordenSecuencia: p.orden_secuencia,
-        origen: p.origen,
-        esObligatoria: p.es_obligatoria ?? true,
-      })) || [],
+      actividadesPlan:
+        (orden as any).ordenes_actividades_plan?.map((p: any) => ({
+          idActividadCatalogo: p.id_actividad_catalogo,
+          ordenSecuencia: p.orden_secuencia,
+          origen: p.origen,
+          esObligatoria: p.es_obligatoria ?? true,
+        })) || [],
       // ✅ FIX 28-ENE-2026: Incluir ordenesEquipos para multi-equipos
       ordenesEquipos: (() => {
-        const mapped = orden.ordenes_equipos?.map((oe) => ({
-          idOrdenEquipo: oe.id_orden_equipo,
-          idOrdenServicio: oe.id_orden_servicio,
-          idEquipo: oe.id_equipo,
-          ordenSecuencia: oe.orden_secuencia,
-          nombreSistema: oe.nombre_sistema || undefined,
-          estado: oe.estado || 'PENDIENTE',
-          fechaInicio: oe.fecha_inicio?.toISOString(),
-          fechaFin: oe.fecha_fin?.toISOString(),
-          observaciones: oe.observaciones || undefined,
-          codigoEquipo: oe.equipos?.codigo_equipo || '',
-          nombreEquipo: oe.equipos?.nombre_equipo || '',
-          marcaEquipo: oe.equipos ? EquipoSpecsReader.getMarca(oe.equipos) : undefined,
-          modeloEquipo: oe.equipos ? EquipoSpecsReader.getModelo(oe.equipos) : undefined,
-          serieEquipo: oe.equipos ? EquipoSpecsReader.getSerie(oe.equipos) : (oe.equipos?.numero_serie_equipo || undefined),
-          tipoEquipo: oe.equipos ? EquipoSpecsReader.getCategoriaCanonica(oe.equipos) : undefined,
-          ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
-          configParametros: (() => {
-            const pModelo = (oe.equipos?.modelos_equipo?.plantilla_parametros_config as object) || {};
-            const pEquipo = (oe.equipos?.config_parametros as object) || {};
-            const merged = { ...pModelo, ...pEquipo };
-            return Object.keys(merged).length > 0 ? merged : undefined;
-          })(),
-        })) || [];
+        const mapped =
+          orden.ordenes_equipos?.map((oe) => ({
+            idOrdenEquipo: oe.id_orden_equipo,
+            idOrdenServicio: oe.id_orden_servicio,
+            idEquipo: oe.id_equipo,
+            ordenSecuencia: oe.orden_secuencia,
+            nombreSistema: oe.nombre_sistema || undefined,
+            estado: oe.estado || 'PENDIENTE',
+            fechaInicio: oe.fecha_inicio?.toISOString(),
+            fechaFin: oe.fecha_fin?.toISOString(),
+            observaciones: oe.observaciones || undefined,
+            codigoEquipo: oe.equipos?.codigo_equipo || '',
+            nombreEquipo: oe.equipos?.nombre_equipo || '',
+            marcaEquipo: oe.equipos ? EquipoSpecsReader.getMarca(oe.equipos) : undefined,
+            modeloEquipo: oe.equipos ? EquipoSpecsReader.getModelo(oe.equipos) : undefined,
+            serieEquipo: oe.equipos ? EquipoSpecsReader.getSerie(oe.equipos) : undefined,
+            tipoEquipo: oe.equipos ? EquipoSpecsReader.getCategoriaCanonica(oe.equipos) : undefined,
+            ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
+            configParametros: (() => {
+              const pModelo =
+                (oe.equipos?.modelos_equipo?.plantilla_parametros_config as object) || {};
+              const pEquipo = (oe.equipos?.config_parametros as object) || {};
+              const merged = { ...pModelo, ...pEquipo };
+              return Object.keys(merged).length > 0 ? merged : undefined;
+            })(),
+          })) || [];
         // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos iguales
         if (mapped.length > 1) {
-          const allSame = mapped.every(m => m.ordenSecuencia === mapped[0].ordenSecuencia);
-          if (allSame) mapped.forEach((m, i) => { m.ordenSecuencia = i + 1; });
+          const allSame = mapped.every((m) => m.ordenSecuencia === mapped[0].ordenSecuencia);
+          if (allSame)
+            mapped.forEach((m, i) => {
+              m.ordenSecuencia = i + 1;
+            });
         }
         return mapped;
       })(),

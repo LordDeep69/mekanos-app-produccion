@@ -4,9 +4,7 @@ import { categoria_motivo_ajuste_enum, motivos_ajuste } from '@prisma/client';
 import { IMotivosAjusteRepository } from '../domain/motivos-ajuste.repository.interface';
 
 @Injectable()
-export class PrismaMotivosAjusteRepository
-  implements IMotivosAjusteRepository
-{
+export class PrismaMotivosAjusteRepository implements IMotivosAjusteRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async crear(data: {
@@ -19,9 +17,7 @@ export class PrismaMotivosAjusteRepository
     // Validar código único
     const existe = await this.findByCodigo(data.codigo_motivo);
     if (existe) {
-      throw new ConflictException(
-        `Ya existe un motivo con código: ${data.codigo_motivo}`,
-      );
+      throw new ConflictException(`Ya existe un motivo con código: ${data.codigo_motivo}`);
     }
 
     return this.prisma.motivos_ajuste.create({
@@ -50,9 +46,7 @@ export class PrismaMotivosAjusteRepository
       });
 
       if (existe) {
-        throw new ConflictException(
-          `Ya existe un motivo con código: ${data.codigo_motivo}`,
-        );
+        throw new ConflictException(`Ya existe un motivo con código: ${data.codigo_motivo}`);
       }
     }
 
@@ -109,7 +103,7 @@ export class PrismaMotivosAjusteRepository
   }
 
   async findByCodigo(codigo_motivo: string): Promise<motivos_ajuste | null> {
-    return this.prisma.motivos_ajuste.findUnique({
+    return this.prisma.motivos_ajuste.findFirst({
       where: { codigo_motivo },
     });
   }

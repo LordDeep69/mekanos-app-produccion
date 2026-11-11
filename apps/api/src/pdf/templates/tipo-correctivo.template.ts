@@ -27,13 +27,12 @@ import {
   baseStyles,
   EquipoOrdenPDF,
   EvidenciasPorEquipoPDF,
-  formatearFechaServicio,
   generarHeaderConLogo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
   LoteGaleriaPDF,
   MedicionesPorEquipoPDF,
-  MEKANOS_COLORS
+  MEKANOS_COLORS,
 } from './mekanos-base.template';
 
 /**
@@ -77,22 +76,22 @@ export interface DatosCorrectivoOrdenPDF {
 
   // ✅ REDISEÑO 06-FEB-2026: Campos dedicados por naturaleza de actividad
   // Estado del equipo (selectores enum)
-  estadoInicial?: string;          // Texto legible mapeado: "✅ Equipo Operativo"
-  estadoFinal?: string;            // Texto legible mapeado: "⚠️ Reparación Parcial"
+  estadoInicial?: string; // Texto legible mapeado: "✅ Equipo Operativo"
+  estadoFinal?: string; // Texto legible mapeado: "⚠️ Reparación Parcial"
 
   // Texto narrativo (campos de texto libre)
-  problemaReportado?: string;      // Texto libre del técnico
-  fallasObservadas?: string;       // Texto libre del técnico
-  diagnosticoTecnico?: string;     // Texto libre del técnico
-  trabajosRealizados?: string;     // Texto libre del técnico
-  trabajosPendientes?: string;     // Texto libre del técnico
-  recomendaciones?: string;        // Texto libre del técnico
+  problemaReportado?: string; // Texto libre del técnico
+  fallasObservadas?: string; // Texto libre del técnico
+  diagnosticoTecnico?: string; // Texto libre del técnico
+  trabajosRealizados?: string; // Texto libre del técnico
+  trabajosPendientes?: string; // Texto libre del técnico
+  recomendaciones?: string; // Texto libre del técnico
 
   // Sistemas afectados (multi-selector → chips)
-  sistemasAfectados?: string[];    // Array de nombres legibles
+  sistemasAfectados?: string[]; // Array de nombres legibles
 
   // Listas de items (listas dinámicas)
-  repuestosUtilizados?: string[];  // Array de strings
+  repuestosUtilizados?: string[]; // Array de strings
   materialesUtilizados?: string[]; // Array de strings
 
   // ✅ FIX 06-FEB-2026: Observaciones auxiliares del técnico por actividad (parte después de |||)
@@ -388,7 +387,8 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
     datos.esMultiEquipo || (datos.actividadesPorEquipo && datos.actividadesPorEquipo.length > 1);
 
   // Determinar si hay contenido en secciones condicionales
-  const tieneProblemaODiagnostico = !esTextoVacioOSinContenido(datos.problemaReportado) ||
+  const tieneProblemaODiagnostico =
+    !esTextoVacioOSinContenido(datos.problemaReportado) ||
     !esTextoVacioOSinContenido(datos.fallasObservadas) ||
     !esTextoVacioOSinContenido(datos.diagnosticoTecnico) ||
     (datos.sistemasAfectados && datos.sistemasAfectados.length > 0);
@@ -397,7 +397,8 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
     (datos.repuestosUtilizados && datos.repuestosUtilizados.length > 0) ||
     (datos.materialesUtilizados && datos.materialesUtilizados.length > 0);
   const tieneTrabajosRealizados = !esTextoVacioOSinContenido(datos.trabajosRealizados);
-  const tieneResultado = !esTextoVacioOSinContenido(datos.estadoFinal) ||
+  const tieneResultado =
+    !esTextoVacioOSinContenido(datos.estadoFinal) ||
     !esTextoVacioOSinContenido(datos.trabajosPendientes) ||
     !esTextoVacioOSinContenido(datos.recomendaciones);
 
@@ -420,9 +421,9 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         
         <!-- MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
         ${generarLeyendaEquipos(
-    datos.actividadesPorEquipo?.map((a) => a.equipo),
-    esMultiEquipo,
-  )}
+          datos.actividadesPorEquipo?.map((a) => a.equipo),
+          esMultiEquipo,
+        )}
         
         <!-- 2. DATOS DEL CLIENTE Y SERVICIO (siempre visible) -->
         ${generarDatosCliente(datos)}
@@ -430,9 +431,10 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         <!-- 3. PARÁMETROS OPERATIVOS / MÓDULO DE CONTROL (según la naturaleza del activo) -->
         ${tieneParametrosOperativos ? generarParametrosOperativosYModulo(datos) : ''}
         
-        ${esMultiEquipo && datos.datosPorEquipo && datos.datosPorEquipo.length > 0
-      ? generarNarrativaCorrectivoPorEquipo(datos.datosPorEquipo)
-      : `
+        ${
+          esMultiEquipo && datos.datosPorEquipo && datos.datosPorEquipo.length > 0
+            ? generarNarrativaCorrectivoPorEquipo(datos.datosPorEquipo)
+            : `
         <!-- 4. PROBLEMA Y DIAGNÓSTICO -->
         ${tieneProblemaODiagnostico ? generarProblemaYDiagnostico(datos) : ''}
         
@@ -445,21 +447,23 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         <!-- 7. RESULTADO DEL SERVICIO -->
         ${tieneResultado ? generarResultadoServicio(datos) : ''}
         `
-    }
+        }
         
         <!-- 8. MEDICIONES TÉCNICAS (solo si aplica y no fueron completamente resumidas arriba) -->
-        ${esMultiEquipo && datos.medicionesPorEquipo
-      ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
-      : (tieneMediciones && (esGenerador || (datos.mediciones?.length || 0) > 4))
-        ? generarMediciones(datos.mediciones!)
-        : ''
-    }
+        ${
+          esMultiEquipo && datos.medicionesPorEquipo
+            ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
+            : tieneMediciones && (esGenerador || (datos.mediciones?.length || 0) > 4)
+              ? generarMediciones(datos.mediciones!)
+              : ''
+        }
         
         <!-- 9. REGISTRO FOTOGRÁFICO DEL SERVICIO -->
-        ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
-      ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo, datos.lotesGaleria)
-      : generarEvidencias(datos.evidencias || [], datos.lotesGaleria)
-    }
+        ${
+          esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+            ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo, datos.lotesGaleria)
+            : generarEvidencias(datos.evidencias || [], datos.lotesGaleria)
+        }
         
         <!-- 10. OBSERVACIONES ADICIONALES -->
         ${generarObservaciones(datos)}
@@ -487,13 +491,15 @@ const generarHeader = (datos: DatosCorrectivoOrdenPDF): string =>
   );
 
 const generarDatosCliente = (datos: DatosCorrectivoOrdenPDF): string => {
-  const extraEstadoInicial = datos.estadoInicial ? `
+  const extraEstadoInicial = datos.estadoInicial
+    ? `
     <div class="corr-estado-inicial-bar" style="margin-top: 6px; padding: 4px 8px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; display: flex; align-items: center; justify-content: space-between;">
       <span class="corr-estado-label" style="font-weight: 700; font-size: 8.5px; color: #991b1b;">ESTADO INICIAL DEL EQUIPO:</span>
       <span class="corr-estado-badge corr-estado-inicial" style="background: #dc2626; color: #ffffff; padding: 2px 8px; border-radius: 3px; font-weight: 700; font-size: 9px;">${datos.estadoInicial}</span>
     </div>
     ${renderObsAux(datos.obsEstadoInicial)}
-  ` : '';
+  `
+    : '';
 
   return generarDatosClienteConFichaTecnica(datos as any, { extraHtml: extraEstadoInicial });
 };
@@ -533,10 +539,18 @@ function formatearLabelParametro(parametro: string): string {
   if (pUpper.includes('AMPERAJE') || pUpper.includes('CORRIENTE')) {
     return 'Corriente / Amperaje';
   }
-  if (pUpper.includes('PRESIÓN DE DESCARGA') || pUpper.includes('PRESION DE DESCARGA') || pUpper.includes('ALTA')) {
+  if (
+    pUpper.includes('PRESIÓN DE DESCARGA') ||
+    pUpper.includes('PRESION DE DESCARGA') ||
+    pUpper.includes('ALTA')
+  ) {
     return 'Presión de Descarga';
   }
-  if (pUpper.includes('PRESIÓN DE SUCCIÓN') || pUpper.includes('PRESION DE SUCCION') || pUpper.includes('BAJA')) {
+  if (
+    pUpper.includes('PRESIÓN DE SUCCIÓN') ||
+    pUpper.includes('PRESION DE SUCCION') ||
+    pUpper.includes('BAJA')
+  ) {
     return 'Presión de Succión';
   }
   if (pUpper.includes('PRESOSTATO') && pUpper.includes('ENCENDIDO')) {
@@ -552,7 +566,7 @@ function formatearLabelParametro(parametro: string): string {
     return 'Temperatura';
   }
 
-  let limpio = p.replace(/^medici[oó]n\s+de\s+/i, '').trim();
+  const limpio = p.replace(/^medici[oó]n\s+de\s+/i, '').trim();
   return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 
@@ -608,7 +622,12 @@ const generarParametrosOperativosYModulo = (datos: DatosCorrectivoOrdenPDF): str
 
   if (Array.isArray(datos.mediciones) && datos.mediciones.length > 0) {
     for (const m of datos.mediciones) {
-      if (m.valorDespues != null && m.valorDespues !== '' && m.valorDespues !== '0' && m.valorDespues !== '-') {
+      if (
+        m.valorDespues != null &&
+        m.valorDespues !== '' &&
+        m.valorDespues !== '0' &&
+        m.valorDespues !== '-'
+      ) {
         items.push({
           label: formatearLabelParametro(m.parametro),
           value: `${m.valorDespues}${m.unidad ? ` ${m.unidad}` : ''}`,
@@ -623,10 +642,13 @@ const generarParametrosOperativosYModulo = (datos: DatosCorrectivoOrdenPDF): str
     if (mod.voltaje) items.push({ label: 'Voltaje de Operación', value: `${mod.voltaje} V` });
     if (mod.corriente) items.push({ label: 'Corriente / Amperaje', value: `${mod.corriente} A` });
     if (mod.rpm) items.push({ label: 'Velocidad de Operación', value: `${mod.rpm} RPM` });
-    if (mod.presionAceite) items.push({ label: 'Presión de Trabajo', value: `${mod.presionAceite} PSI` });
+    if (mod.presionAceite)
+      items.push({ label: 'Presión de Trabajo', value: `${mod.presionAceite} PSI` });
     if (mod.frecuencia) items.push({ label: 'Frecuencia', value: `${mod.frecuencia} Hz` });
-    if (mod.temperaturaRefrigerante) items.push({ label: 'Temperatura', value: `${mod.temperaturaRefrigerante} °C` });
-    if (mod.horasTrabajo) items.push({ label: 'Horas de Trabajo', value: `${mod.horasTrabajo} Hrs` });
+    if (mod.temperaturaRefrigerante)
+      items.push({ label: 'Temperatura', value: `${mod.temperaturaRefrigerante} °C` });
+    if (mod.horasTrabajo)
+      items.push({ label: 'Horas de Trabajo', value: `${mod.horasTrabajo} Hrs` });
   }
 
   if (items.length === 0) return '';
@@ -702,24 +724,48 @@ export function esTextoVacioOSinContenido(texto?: string | null): boolean {
 
   const upperFinal = limpio.toUpperCase();
   const placeholders = [
-    '.', '..', '...', '-', '--', '---', '/',
-    'N/A', 'NA', 'NO APLICA', 'S/N', 'S.N.',
-    '(SIN INFORMACIÓN)', '(SIN INFORMACION)', 'SIN INFORMACION', 'SIN INFORMACIÓN',
-    '(NINGUNO)', '(NINGUNA)', 'NINGUNO', 'NINGUNA', 'NINGUN',
-    'SIN PENDIENTES', 'NO PRESENTA PENDIENTES', 'NO HAY PENDIENTES', 'SIN TRABAJOS PENDIENTES',
-    'SIN RECOMENDACIONES', 'NO PRESENTA RECOMENDACIONES', 'NO HAY RECOMENDACIONES',
-    'SIN NOVEDAD', 'SIN NOVEDADES',
-    'NULL', 'UNDEFINED',
+    '.',
+    '..',
+    '...',
+    '-',
+    '--',
+    '---',
+    '/',
+    'N/A',
+    'NA',
+    'NO APLICA',
+    'S/N',
+    'S.N.',
+    '(SIN INFORMACIÓN)',
+    '(SIN INFORMACION)',
+    'SIN INFORMACION',
+    'SIN INFORMACIÓN',
+    '(NINGUNO)',
+    '(NINGUNA)',
+    'NINGUNO',
+    'NINGUNA',
+    'NINGUN',
+    'SIN PENDIENTES',
+    'NO PRESENTA PENDIENTES',
+    'NO HAY PENDIENTES',
+    'SIN TRABAJOS PENDIENTES',
+    'SIN RECOMENDACIONES',
+    'NO PRESENTA RECOMENDACIONES',
+    'NO HAY RECOMENDACIONES',
+    'SIN NOVEDAD',
+    'SIN NOVEDADES',
+    'NULL',
+    'UNDEFINED',
   ];
 
   if (placeholders.includes(upperFinal)) return true;
-  if (/^[\.\-_\s\*\/\\]+$/.test(limpio)) return true;
+  if (/^[._\s*/\\-]+$/.test(limpio)) return true;
 
   return false;
 }
 
 const renderObsAux = (obs?: string): string =>
-  (obs && !esTextoVacioOSinContenido(obs)) ? `<div class="corr-obs-aux">${obs}</div>` : '';
+  obs && !esTextoVacioOSinContenido(obs) ? `<div class="corr-obs-aux">${obs}</div>` : '';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ✅ REDISEÑO 06-FEB-2026: Secciones dedicadas por naturaleza de actividad
@@ -753,7 +799,7 @@ const generarProblemaYDiagnostico = (datos: DatosCorrectivoOrdenPDF): string => 
       <div class="corr-field">
         <div class="corr-field-label">⚙️ Sistemas Afectados</div>
         <div class="corr-chips">
-          ${datos.sistemasAfectados.map(s => `<span class="corr-chip">${s}</span>`).join('')}
+          ${datos.sistemasAfectados.map((s) => `<span class="corr-chip">${s}</span>`).join('')}
         </div>
         ${renderObsAux(datos.obsSistemas)}
       </div>
@@ -803,15 +849,21 @@ const generarRepuestosYMateriales = (datos: DatosCorrectivoOrdenPDF): string => 
       ${renderObsAux(datos.obsMateriales)}
     `;
   }
-  const repuestos = (datos.repuestosUtilizados || []).filter(r => !esTextoVacioOSinContenido(r));
-  const materiales = (datos.materialesUtilizados || []).filter(m => !esTextoVacioOSinContenido(m));
+  const repuestos = (datos.repuestosUtilizados || []).filter((r) => !esTextoVacioOSinContenido(r));
+  const materiales = (datos.materialesUtilizados || []).filter(
+    (m) => !esTextoVacioOSinContenido(m),
+  );
   const rows: string[] = [];
 
   repuestos.forEach((r, i) => {
-    rows.push(`<tr><td style="text-align:center;">${i + 1}</td><td>${r}</td><td style="text-align:center;">Repuesto</td></tr>`);
+    rows.push(
+      `<tr><td style="text-align:center;">${i + 1}</td><td>${r}</td><td style="text-align:center;">Repuesto</td></tr>`,
+    );
   });
   materiales.forEach((m, i) => {
-    rows.push(`<tr><td style="text-align:center;">${repuestos.length + i + 1}</td><td>${m}</td><td style="text-align:center;">Material</td></tr>`);
+    rows.push(
+      `<tr><td style="text-align:center;">${repuestos.length + i + 1}</td><td>${m}</td><td style="text-align:center;">Material</td></tr>`,
+    );
   });
 
   if (rows.length === 0) return '';
@@ -882,7 +934,9 @@ const generarResultadoServicio = (datos: DatosCorrectivoOrdenPDF): string => {
   `;
 };
 
-const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosCorrectivoPorEquipo[]): string => {
+const generarNarrativaCorrectivoPorEquipo = (
+  datosPorEquipo: DatosEstructuradosCorrectivoPorEquipo[],
+): string => {
   if (!datosPorEquipo || datosPorEquipo.length === 0) return '';
 
   const coloresEquipo = [
@@ -892,59 +946,86 @@ const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosC
     { bg: '#dcfce7', border: '#16a34a', header: '#15803d' },
   ];
 
-  const equiposHTML = datosPorEquipo.map((eq, idx) => {
-    const color = coloresEquipo[idx % coloresEquipo.length];
-    const nombreEquipo = eq.equipo?.nombreSistema || eq.equipo?.nombreEquipo || `Equipo ${eq.equipo?.ordenSecuencia || idx + 1}`;
-    const codigoEquipo = eq.equipo?.codigoEquipo;
-    const nombreCompleto = nombreEquipo + (codigoEquipo ? ` (${codigoEquipo})` : '');
+  const equiposHTML = datosPorEquipo
+    .map((eq, idx) => {
+      const color = coloresEquipo[idx % coloresEquipo.length];
+      const nombreEquipo =
+        eq.equipo?.nombreSistema ||
+        eq.equipo?.nombreEquipo ||
+        `Equipo ${eq.equipo?.ordenSecuencia || idx + 1}`;
+      const codigoEquipo = eq.equipo?.codigoEquipo;
+      const nombreCompleto = nombreEquipo + (codigoEquipo ? ` (${codigoEquipo})` : '');
 
-    const sections: string[] = [];
+      const sections: string[] = [];
 
-    // --- ESTADO INICIAL ---
-    if (!esTextoVacioOSinContenido(eq.estadoInicial)) {
-      sections.push(`
+      // --- ESTADO INICIAL ---
+      if (!esTextoVacioOSinContenido(eq.estadoInicial)) {
+        sections.push(`
         <div style="margin-bottom: 10px;">
           <div class="corr-field-label" style="color: ${color.header};">📋 Estado Inicial</div>
           <div class="corr-field-value">${eq.estadoInicial}</div>
           ${eq.obsEstadoInicial && !esTextoVacioOSinContenido(eq.obsEstadoInicial) ? `<div style="font-size:9px; color:#6b7280; margin-top:3px; font-style:italic;">📝 ${eq.obsEstadoInicial}</div>` : ''}
         </div>
       `);
-    }
+      }
 
-    // --- PROBLEMA Y DIAGNÓSTICO ---
-    const problemas: string[] = [];
-    if (!esTextoVacioOSinContenido(eq.problemaReportado)) problemas.push(`<div class="corr-field"><div class="corr-field-label">⚠️ Problema Reportado</div><div class="corr-field-value">${eq.problemaReportado}</div>${eq.obsProblema ? renderObsAux(eq.obsProblema) : ''}</div>`);
-    if (!esTextoVacioOSinContenido(eq.fallasObservadas)) problemas.push(`<div class="corr-field"><div class="corr-field-label">🔍 Fallas Observadas</div><div class="corr-field-value">${eq.fallasObservadas}</div>${eq.obsFallas ? renderObsAux(eq.obsFallas) : ''}</div>`);
-    if (eq.sistemasAfectados && eq.sistemasAfectados.length > 0) {
-      problemas.push(`<div class="corr-field"><div class="corr-field-label">⚙️ Sistemas Afectados</div><div class="corr-chips">${eq.sistemasAfectados.map(s => `<span class="corr-chip">${s}</span>`).join('')}</div>${eq.obsSistemas ? renderObsAux(eq.obsSistemas) : ''}</div>`);
-    }
-    if (!esTextoVacioOSinContenido(eq.diagnosticoTecnico)) problemas.push(`<div class="corr-field"><div class="corr-field-label">🔧 Diagnóstico Técnico</div><div class="corr-field-value">${eq.diagnosticoTecnico}</div>${eq.obsDiagnostico ? renderObsAux(eq.obsDiagnostico) : ''}</div>`);
-    if (problemas.length > 0) {
-      sections.push(`
+      // --- PROBLEMA Y DIAGNÓSTICO ---
+      const problemas: string[] = [];
+      if (!esTextoVacioOSinContenido(eq.problemaReportado))
+        problemas.push(
+          `<div class="corr-field"><div class="corr-field-label">⚠️ Problema Reportado</div><div class="corr-field-value">${eq.problemaReportado}</div>${eq.obsProblema ? renderObsAux(eq.obsProblema) : ''}</div>`,
+        );
+      if (!esTextoVacioOSinContenido(eq.fallasObservadas))
+        problemas.push(
+          `<div class="corr-field"><div class="corr-field-label">🔍 Fallas Observadas</div><div class="corr-field-value">${eq.fallasObservadas}</div>${eq.obsFallas ? renderObsAux(eq.obsFallas) : ''}</div>`,
+        );
+      if (eq.sistemasAfectados && eq.sistemasAfectados.length > 0) {
+        problemas.push(
+          `<div class="corr-field"><div class="corr-field-label">⚙️ Sistemas Afectados</div><div class="corr-chips">${eq.sistemasAfectados.map((s) => `<span class="corr-chip">${s}</span>`).join('')}</div>${eq.obsSistemas ? renderObsAux(eq.obsSistemas) : ''}</div>`,
+        );
+      }
+      if (!esTextoVacioOSinContenido(eq.diagnosticoTecnico))
+        problemas.push(
+          `<div class="corr-field"><div class="corr-field-label">🔧 Diagnóstico Técnico</div><div class="corr-field-value">${eq.diagnosticoTecnico}</div>${eq.obsDiagnostico ? renderObsAux(eq.obsDiagnostico) : ''}</div>`,
+        );
+      if (problemas.length > 0) {
+        sections.push(`
         <div style="margin-bottom: 10px;">
           <div class="corr-field-label" style="color: ${color.header};">🔍 Problema y Diagnóstico</div>
           <div class="corr-fields-container">${problemas.join('')}</div>
         </div>
       `);
-    }
+      }
 
-    // --- TRABAJOS REALIZADOS ---
-    if (!esTextoVacioOSinContenido(eq.trabajosRealizados)) {
-      sections.push(`
+      // --- TRABAJOS REALIZADOS ---
+      if (!esTextoVacioOSinContenido(eq.trabajosRealizados)) {
+        sections.push(`
         <div style="margin-bottom: 10px;">
           <div class="corr-field-label" style="color: ${color.header};">🛠️ Trabajos Realizados</div>
           <div class="corr-narrative-box">${eq.trabajosRealizados}</div>
           ${eq.obsTrabajos ? renderObsAux(eq.obsTrabajos) : ''}
         </div>
       `);
-    }
+      }
 
-    // --- REPUESTOS Y MATERIALES ---
-    const repRows: string[] = [];
-    (eq.repuestosUtilizados || []).filter(r => !esTextoVacioOSinContenido(r)).forEach((r: string, i: number) => repRows.push(`<tr><td style="text-align:center;">${i + 1}</td><td>${r}</td><td style="text-align:center;">Repuesto</td></tr>`));
-    (eq.materialesUtilizados || []).filter(m => !esTextoVacioOSinContenido(m)).forEach((m: string, i: number) => repRows.push(`<tr><td style="text-align:center;">${(eq.repuestosUtilizados || []).length + i + 1}</td><td>${m}</td><td style="text-align:center;">Material</td></tr>`));
-    if (repRows.length > 0) {
-      sections.push(`
+      // --- REPUESTOS Y MATERIALES ---
+      const repRows: string[] = [];
+      (eq.repuestosUtilizados || [])
+        .filter((r) => !esTextoVacioOSinContenido(r))
+        .forEach((r: string, i: number) =>
+          repRows.push(
+            `<tr><td style="text-align:center;">${i + 1}</td><td>${r}</td><td style="text-align:center;">Repuesto</td></tr>`,
+          ),
+        );
+      (eq.materialesUtilizados || [])
+        .filter((m) => !esTextoVacioOSinContenido(m))
+        .forEach((m: string, i: number) =>
+          repRows.push(
+            `<tr><td style="text-align:center;">${(eq.repuestosUtilizados || []).length + i + 1}</td><td>${m}</td><td style="text-align:center;">Material</td></tr>`,
+          ),
+        );
+      if (repRows.length > 0) {
+        sections.push(`
         <div style="margin-bottom: 10px;">
           <div class="corr-field-label" style="color: ${color.header};">📦 Repuestos y Materiales</div>
           <table class="checklist-table" style="font-size:9px;">
@@ -955,35 +1036,42 @@ const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosC
           ${eq.obsMateriales ? renderObsAux(eq.obsMateriales) : ''}
         </div>
       `);
-    }
+      }
 
-    // --- RESULTADO ---
-    const resultadoItems: string[] = [];
-    if (!esTextoVacioOSinContenido(eq.estadoFinal)) {
-      resultadoItems.push(`
+      // --- RESULTADO ---
+      const resultadoItems: string[] = [];
+      if (!esTextoVacioOSinContenido(eq.estadoFinal)) {
+        resultadoItems.push(`
         <div class="corr-resultado-estado">
           <span class="corr-estado-label">ESTADO FINAL:</span>
           <span class="corr-estado-badge corr-estado-final">${eq.estadoFinal}</span>
         </div>
         ${eq.obsEstadoFinal ? renderObsAux(eq.obsEstadoFinal) : ''}
       `);
-    }
-    if (!esTextoVacioOSinContenido(eq.trabajosPendientes)) resultadoItems.push(`<div class="corr-field"><div class="corr-field-label">⚠️ Trabajos Pendientes</div><div class="corr-field-value corr-pendientes">${eq.trabajosPendientes}</div>${eq.obsPendientes ? renderObsAux(eq.obsPendientes) : ''}</div>`);
-    if (!esTextoVacioOSinContenido(eq.recomendaciones)) resultadoItems.push(`<div class="corr-field"><div class="corr-field-label">💡 Recomendaciones</div><div class="corr-field-value">${eq.recomendaciones}</div>${eq.obsRecomendaciones ? renderObsAux(eq.obsRecomendaciones) : ''}</div>`);
-    if (resultadoItems.length > 0) {
-      sections.push(`
+      }
+      if (!esTextoVacioOSinContenido(eq.trabajosPendientes))
+        resultadoItems.push(
+          `<div class="corr-field"><div class="corr-field-label">⚠️ Trabajos Pendientes</div><div class="corr-field-value corr-pendientes">${eq.trabajosPendientes}</div>${eq.obsPendientes ? renderObsAux(eq.obsPendientes) : ''}</div>`,
+        );
+      if (!esTextoVacioOSinContenido(eq.recomendaciones))
+        resultadoItems.push(
+          `<div class="corr-field"><div class="corr-field-label">💡 Recomendaciones</div><div class="corr-field-value">${eq.recomendaciones}</div>${eq.obsRecomendaciones ? renderObsAux(eq.obsRecomendaciones) : ''}</div>`,
+        );
+      if (resultadoItems.length > 0) {
+        sections.push(`
         <div style="margin-bottom: 10px;">
           <div class="corr-field-label" style="color: ${color.header};">📊 Resultado del Servicio</div>
           <div class="corr-fields-container">${resultadoItems.join('')}</div>
         </div>
       `);
-    }
+      }
 
-    const contentHTML = sections.length > 0
-      ? sections.join('')
-      : '<div style="text-align:center; color:#9ca3af; padding:8px; font-size:10px;">Sin datos de diagnóstico o traballos para este equipo</div>';
+      const contentHTML =
+        sections.length > 0
+          ? sections.join('')
+          : '<div style="text-align:center; color:#9ca3af; padding:8px; font-size:10px;">Sin datos de diagnóstico o traballos para este equipo</div>';
 
-    return `
+      return `
       <div style="margin-bottom: 16px; border: 2px solid ${color.border}; border-radius: 8px; overflow: hidden;">
         <div style="background: ${color.header}; color: white; padding: 8px 14px; font-weight: bold; font-size: 12px;">
           🔧 EQUIPO ${eq.equipo?.ordenSecuencia || idx + 1}: ${nombreCompleto.toUpperCase()}
@@ -993,7 +1081,8 @@ const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosC
         </div>
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 
   return `
     <div class="section">
@@ -1017,8 +1106,8 @@ const generarMediciones = (mediciones: MedicionCorrectivoPDF[]): string => `
             </thead>
             <tbody>
                 ${mediciones
-    .map(
-      (med) => `
+                  .map(
+                    (med) => `
                 <tr>
                     <td>${med.parametro}</td>
                     <td style="text-align: center; font-weight: bold;">${med.valorDespues}</td>
@@ -1026,15 +1115,18 @@ const generarMediciones = (mediciones: MedicionCorrectivoPDF[]): string => `
                     <td style="text-align: center;" class="alerta-${med.estado}">${med.estado}</td>
                 </tr>
                 `,
-    )
-    .join('')}
+                  )
+                  .join('')}
             </tbody>
         </table>
     </div>
 `;
 
 // Soporte para evidencias - Estructura idéntica a Tipo A
-type EvidenciaInput = EvidenciaCorrectivoPDF | string | { url: string; caption?: string; idLote?: number };
+type EvidenciaInput =
+  | EvidenciaCorrectivoPDF
+  | string
+  | { url: string; caption?: string; idLote?: number };
 
 export const extraerTipoEvidencia = (caption: string): string => {
   // El ÚLTIMO prefijo del caption manda: p.ej. "GENERAL: ANTES: Bombín dañado" → ANTES
@@ -1070,7 +1162,9 @@ const getTituloSeccion = (tipo: string): { titulo: string; icono: string } => {
  * ANTES=azul (estado inicial) · DURANTE=ámbar (proceso) · DESPUES=verde (resultado)
  * MEDICION=violeta · GENERAL=teal
  */
-const getColoresTipoEvidencia = (tipo: string): { fondo: string; borde: string; caption: string } => {
+const getColoresTipoEvidencia = (
+  tipo: string,
+): { fondo: string; borde: string; caption: string } => {
   switch (tipo) {
     case 'ANTES':
       return {
@@ -1212,14 +1306,10 @@ const generarLotesGaleriaHTMLCorrectivo = (
   evidenciasGeneral: Array<{ url: string; caption: string; fase?: string; idLote?: number }>,
 ): string => {
   if (!lotesGaleria || lotesGaleria.length === 0) return '';
-  const lotesOrdenados = [...lotesGaleria].sort(
-    (a, b) => (a.ordenLote || 0) - (b.ordenLote || 0),
-  );
+  const lotesOrdenados = [...lotesGaleria].sort((a, b) => (a.ordenLote || 0) - (b.ordenLote || 0));
   return lotesOrdenados
     .map((lote) => {
-      const fotosLote = evidenciasGeneral.filter(
-        (ev) => ev.idLote === lote.idLoteGaleria,
-      );
+      const fotosLote = evidenciasGeneral.filter((ev) => ev.idLote === lote.idLoteGaleria);
       return generarLoteGaleriaHTMLCorrectivo(lote, fotosLote);
     })
     .join('');
@@ -1273,7 +1363,10 @@ export const generarEvidencias = (
   // ✅ FIX 20-AGO-2026: las evidencias CON lote van SIEMPRE al grupo GENERAL
   // (sin importar el prefijo de fase — el "último prefijo manda" solo aplica
   // a evidencias sin lote). Así los contenedores de lote reciben sus fotos.
-  const grupos: Record<string, Array<{ url: string; caption: string; fase?: string; idLote?: number }>> = {};
+  const grupos: Record<
+    string,
+    Array<{ url: string; caption: string; fase?: string; idLote?: number }>
+  > = {};
   const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
 
   evidenciasNormalizadas.forEach((ev) => {
@@ -1302,9 +1395,7 @@ export const generarEvidencias = (
 
       // ✅ FIX 20-AGO-2026: Galería por lotes — contenedor estándar solo con
       // fotos SIN lote; cada lote en su contenedor sólido propio
-      const fotosSinLote = esGeneral
-        ? evidenciasTipo.filter((ev) => !ev.idLote)
-        : evidenciasTipo;
+      const fotosSinLote = esGeneral ? evidenciasTipo.filter((ev) => !ev.idLote) : evidenciasTipo;
       const lotesHTML = esGeneral
         ? generarLotesGaleriaHTMLCorrectivo(lotesGaleria, evidenciasTipo)
         : '';
@@ -1315,23 +1406,33 @@ export const generarEvidencias = (
             <div class="evidencias-grupo-titulo" style="background: ${colores.fondo}; font-size: ${esGeneral ? '12px' : '11px'}; letter-spacing: 0.4px;">
                 ${tituloMostrar} (${conteoMostrar})
             </div>
-            ${esGeneral
-              ? `<div class="evidencias-grid" style="padding: 10px; background: #f8f9fa; margin-top: 0;">
-                ${fotosSinLote.map((ev, idx) => `
+            ${
+              esGeneral
+                ? `<div class="evidencias-grid" style="padding: 10px; background: #f8f9fa; margin-top: 0;">
+                ${fotosSinLote
+                  .map(
+                    (ev, idx) => `
                     <div class="evidencia-item" style="border: 2px solid ${colores.borde};">
                         <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" onerror="console.error('Error cargando imagen:', this.src)" />
                         <div class="evidencia-caption" style="background: ${colores.caption};">${ev.caption || `Foto ${idx + 1}`}</div>
                     </div>
-                `).join('')}
+                `,
+                  )
+                  .join('')}
             </div>${lotesHTML}`
-              : `<div class="evidencias-grid" style="padding: 10px; background: #f8f9fa; margin-top: 0;">
-                ${evidenciasTipo.map((ev, idx) => `
+                : `<div class="evidencias-grid" style="padding: 10px; background: #f8f9fa; margin-top: 0;">
+                ${evidenciasTipo
+                  .map(
+                    (ev, idx) => `
                     <div class="evidencia-item" style="border: 2px solid ${colores.borde};">
                         <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" onerror="console.error('Error cargando imagen:', this.src)" />
                         <div class="evidencia-caption" style="background: ${colores.caption};">${ev.caption || `Foto ${idx + 1}`}</div>
                     </div>
-                `).join('')}
-            </div>`}
+                `,
+                  )
+                  .join('')}
+            </div>`
+            }
         </div>
       `;
     })
@@ -1365,19 +1466,21 @@ const generarObservaciones = (datos: DatosCorrectivoOrdenPDF): string => {
 const generarFirmas = (datos: DatosCorrectivoOrdenPDF): string => `
     <div class="firmas-container">
         <div class="firma-box">
-            ${datos.firmaTecnico
-    ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" /></div>`
-    : `<div class="firma-line"></div>`
-  }
+            ${
+              datos.firmaTecnico
+                ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" /></div>`
+                : `<div class="firma-line"></div>`
+            }
             <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || ''}</div>
             <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable'}</div>
             <div class="firma-label">Firma Técnico Asignado</div>
         </div>
         <div class="firma-box">
-            ${datos.firmaCliente
-    ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" /></div>`
-    : `<div class="firma-line"></div>`
-  }
+            ${
+              datos.firmaCliente
+                ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" /></div>`
+                : `<div class="firma-line"></div>`
+            }
             <div class="firma-nombre">${datos.nombreCliente || ''}</div>
             <div class="firma-cargo">${datos.cargoCliente || 'Cliente / Autorizador'}</div>
             <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
@@ -1424,7 +1527,10 @@ const generarEvidenciasMultiEquipo = (
 
       // Agrupar evidencias por tipo (ANTES, DURANTE, DESPUÉS)
       const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
-      const grupos: Record<string, Array<{ url: string; caption: string; fase?: string; idLote?: number }>> = {};
+      const grupos: Record<
+        string,
+        Array<{ url: string; caption: string; fase?: string; idLote?: number }>
+      > = {};
 
       evidencias.forEach((ev: any) => {
         const captionRaw = ev.caption || '';
@@ -1470,31 +1576,33 @@ const generarEvidenciasMultiEquipo = (
                     <div style="background: ${colores.fondo}; color: white; padding: 5px 12px; font-size: 10px; font-weight: bold; border-radius: 4px 4px 0 0;">
                         ${icono} ${titulo} (${conteoMostrar})
                     </div>
-                    ${esGeneral
-                      ? `<div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
+                    ${
+                      esGeneral
+                        ? `<div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
                         ${fotosSinLote
-              .map(
-                (ev: any, idx: number) => `
+                          .map(
+                            (ev: any, idx: number) => `
                             <div class="evidencia-item" style="border: 2px solid ${colores.borde};">
                                 <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" onerror="console.error('Error cargando imagen:', this.src)" />
                                 <div class="evidencia-caption" style="background: ${colores.caption};">${ev.caption || `Foto ${idx + 1}`}</div>
                             </div>
                         `,
-              )
-              .join('')}
+                          )
+                          .join('')}
                     </div>${lotesHTML}`
-                      : `<div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
+                        : `<div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
                         ${evidenciasTipo
-              .map(
-                (ev: any, idx: number) => `
+                          .map(
+                            (ev: any, idx: number) => `
                             <div class="evidencia-item" style="border: 2px solid ${colores.borde};">
                                 <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" onerror="console.error('Error cargando imagen:', this.src)" />
                                 <div class="evidencia-caption" style="background: ${colores.caption};">${ev.caption || `Foto ${idx + 1}`}</div>
                             </div>
                         `,
-              )
-              .join('')}
-                    </div>`}
+                          )
+                          .join('')}
+                    </div>`
+                    }
                 </div>
                 `;
         })

@@ -6,24 +6,25 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
   ChevronUp,
   Edit3,
-  FolderOpen,
   GripVertical,
   Layers,
   Loader2,
   Plus,
   Search,
   Sparkles,
-  Tag,
   Trash2,
   X,
   Lock,
   Unlock,
 } from 'lucide-react';
-import { generarCodigoParteModulo, generarCodigoCampoTecnico, verificarCodigoDuplicado } from '../utils/eam-code-generator';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  generarCodigoParteModulo,
+  generarCodigoCampoTecnico,
+  verificarCodigoDuplicado,
+} from '../utils/eam-code-generator';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   EamSelect,
   ModuloAtributoItem,
@@ -64,13 +65,8 @@ const SECCIONES_PRESET_INGENIERIA = [
 
 export function TabModulosTecnicos() {
   const { data: modulos = [], isLoading } = useModulosEam();
-  const [selectedModuloCode, setSelectedModuloCode] = useState<string>('');
-
-  useEffect(() => {
-    if (!selectedModuloCode && modulos.length > 0) {
-      setSelectedModuloCode(modulos[0].codigo_modulo);
-    }
-  }, [modulos, selectedModuloCode]);
+  const [selectedModuloCodeRaw, setSelectedModuloCode] = useState<string>('');
+  const selectedModuloCode = selectedModuloCodeRaw || modulos[0]?.codigo_modulo || '';
 
   const [searchModQuery, setSearchModQuery] = useState<string>('');
 
@@ -95,8 +91,9 @@ export function TabModulosTecnicos() {
     [modulosFiltrados, selectedModuloCode],
   );
 
-  const { data: moduloDetalle, isLoading: loadingDetalle } =
-    useModuloDetalleEam(selectedModuloCode || null);
+  const { data: moduloDetalle, isLoading: loadingDetalle } = useModuloDetalleEam(
+    selectedModuloCode || null,
+  );
 
   const { data: todosAtributos = [] } = useAtributosEam();
   const { data: magnitudes = [] } = useMagnitudesEam();
@@ -123,10 +120,11 @@ export function TabModulosTecnicos() {
         setSelectedModuloCode(restantes[0]?.codigo_modulo || '');
       }
       setDeleteTarget(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
       const msg =
-        err?.response?.data?.message ||
-        err?.message ||
+        apiErr?.response?.data?.message ||
+        apiErr?.message ||
         'Ocurrió un error al procesar la eliminación';
       setDeleteError(msg);
     }
@@ -158,7 +156,9 @@ export function TabModulosTecnicos() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignSelectorOpen, setAssignSelectorOpen] = useState(true);
   const [assignSearch, setAssignSearch] = useState('');
-  const [assignTypeFilter, setAssignTypeFilter] = useState<'ALL' | 'NUM_MAG' | 'SELECT' | 'BOOL' | 'OTROS'>('ALL');
+  const [assignTypeFilter, setAssignTypeFilter] = useState<
+    'ALL' | 'NUM_MAG' | 'SELECT' | 'BOOL' | 'OTROS'
+  >('ALL');
   const [assignSectionMode, setAssignSectionMode] = useState<'existing' | 'new'>('existing');
   const [assignNewSection, setAssignNewSection] = useState('');
   const [assignForm, setAssignForm] = useState({
@@ -173,7 +173,9 @@ export function TabModulosTecnicos() {
 
   // Modal Editar Asignación de Campo en esta parte (cambiar sección o switches)
   const [editingAssignment, setEditingAssignment] = useState<ModuloAtributoItem | null>(null);
-  const [editAssignSectionMode, setEditAssignSectionMode] = useState<'existing' | 'new'>('existing');
+  const [editAssignSectionMode, setEditAssignSectionMode] = useState<'existing' | 'new'>(
+    'existing',
+  );
   const [editAssignNewSection, setEditAssignNewSection] = useState('');
   const [editAssignForm, setEditAssignForm] = useState({
     grupo_visual: 'Especificaciones Técnicas',
@@ -188,7 +190,9 @@ export function TabModulosTecnicos() {
 
   // Drag & Drop state para reordenar campos
   const dragRowRef = useRef<{ grupoNombre: string; idx: number } | null>(null);
-  const [dragOverTarget, setDragOverTarget] = useState<{ grupoNombre: string; idx: number } | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<{ grupoNombre: string; idx: number } | null>(
+    null,
+  );
 
   // Modal Crear y Asignar Nuevo Campo en un solo paso
   const [showInPlaceModal, setShowInPlaceModal] = useState(false);
@@ -216,10 +220,7 @@ export function TabModulosTecnicos() {
   }, [modForm.codigo_modulo, codigosModulosExistentes, editingMod]);
 
   const isCodigoAtributoDuplicado = useMemo(() => {
-    return verificarCodigoDuplicado(
-      inPlaceForm.codigo_atributo,
-      codigosAtributosExistentes,
-    );
+    return verificarCodigoDuplicado(inPlaceForm.codigo_atributo, codigosAtributosExistentes);
   }, [inPlaceForm.codigo_atributo, codigosAtributosExistentes]);
 
   const gruposVisualesMap = useMemo(() => {
@@ -244,13 +245,25 @@ export function TabModulosTecnicos() {
     const q = assignSearch.trim().toLowerCase();
     return atributosDisponiblesParaAsignar.filter((a) => {
       // Filtro por categoría rápida
-      if (assignTypeFilter === 'NUM_MAG' && !a.id_magnitud && a.tipo_control !== 'NUMERICO_MAGNITUD') {
+      if (
+        assignTypeFilter === 'NUM_MAG' &&
+        !a.id_magnitud &&
+        a.tipo_control !== 'NUMERICO_MAGNITUD'
+      ) {
         return false;
       }
-      if (assignTypeFilter === 'SELECT' && a.tipo_control !== 'SELECT' && a.tipo_control !== 'SELECTOR') {
+      if (
+        assignTypeFilter === 'SELECT' &&
+        a.tipo_control !== 'SELECT' &&
+        a.tipo_control !== 'SELECTOR'
+      ) {
         return false;
       }
-      if (assignTypeFilter === 'BOOL' && a.tipo_control !== 'BOOLEANO' && a.tipo_control !== 'BOOLEAN') {
+      if (
+        assignTypeFilter === 'BOOL' &&
+        a.tipo_control !== 'BOOLEANO' &&
+        a.tipo_control !== 'BOOLEAN'
+      ) {
         return false;
       }
       if (assignTypeFilter === 'OTROS') {
@@ -278,25 +291,6 @@ export function TabModulosTecnicos() {
     );
   }, [atributosDisponiblesParaAsignar, assignForm.id_atributo]);
 
-  const sugerenciasSecciones = useMemo(() => {
-    const list: string[] = [];
-    for (const [nombre] of gruposVisualesMap) {
-      if (nombre && !list.includes(nombre)) list.push(nombre);
-    }
-    const defaults = [
-      'Especificaciones Técnicas',
-      'Desempeño y Capacidad',
-      'Refrigeración',
-      'Eléctrico',
-      'Identificación',
-      'General',
-    ];
-    for (const def of defaults) {
-      if (!list.includes(def)) list.push(def);
-    }
-    return list;
-  }, [gruposVisualesMap]);
-
   const seccionesDisponibles = useMemo(() => {
     const mapItems = new Map<string, ModuloAtributoItem[]>();
     for (const [secName, secItems] of gruposVisualesMap) {
@@ -308,9 +302,10 @@ export function TabModulosTecnicos() {
       const items = mapItems.get(preset.name);
       return {
         name: preset.name,
-        desc: items && items.length > 0
-          ? `${items.length} ${items.length === 1 ? 'campo' : 'campos'} · Se ubicará al final`
-          : preset.desc,
+        desc:
+          items && items.length > 0
+            ? `${items.length} ${items.length === 1 ? 'campo' : 'campos'} · Se ubicará al final`
+            : preset.desc,
         count: items?.length || 0,
       };
     });
@@ -335,9 +330,7 @@ export function TabModulosTecnicos() {
     setAssignSelectorOpen(true);
     const hasSections = gruposVisualesMap.length > 0;
     // Si ya hay secciones → modo "elegir existente" con la primera; si está vacío → "Especificaciones Técnicas" (NUNCA el nombre de la parte)
-    const defaultSection = hasSections
-      ? gruposVisualesMap[0][0]
-      : 'Especificaciones Técnicas';
+    const defaultSection = hasSections ? gruposVisualesMap[0][0] : 'Especificaciones Técnicas';
     setAssignSectionMode('existing');
     setAssignNewSection('');
     const allItems = moduloDetalle?.modulo_atributos || [];
@@ -357,8 +350,7 @@ export function TabModulosTecnicos() {
   };
 
   const magnitudInPlaceObj = useMemo(
-    () =>
-      magnitudes.find((m) => String(m.id_magnitud) === String(inPlaceForm.id_magnitud)) || null,
+    () => magnitudes.find((m) => String(m.id_magnitud) === String(inPlaceForm.id_magnitud)) || null,
     [magnitudes, inPlaceForm.id_magnitud],
   );
 
@@ -394,9 +386,7 @@ export function TabModulosTecnicos() {
     e.preventDefault();
     if (!selectedModuloCode || !editingAssignment) return;
     const grupoFinal =
-      editAssignSectionMode === 'new'
-        ? editAssignNewSection.trim()
-        : editAssignForm.grupo_visual;
+      editAssignSectionMode === 'new' ? editAssignNewSection.trim() : editAssignForm.grupo_visual;
     if (!grupoFinal) return;
 
     await updateFlagMut.mutateAsync({
@@ -507,12 +497,7 @@ export function TabModulosTecnicos() {
       toIdx: number,
       sectionItems: ModuloAtributoItem[],
     ) => {
-      if (
-        toIdx < 0 ||
-        toIdx >= sectionItems.length ||
-        fromIdx === toIdx ||
-        !selectedModuloCode
-      )
+      if (toIdx < 0 || toIdx >= sectionItems.length || fromIdx === toIdx || !selectedModuloCode)
         return;
 
       const reordered = [...sectionItems];
@@ -690,9 +675,7 @@ export function TabModulosTecnicos() {
     return (
       <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-slate-200">
         <Loader2 className="h-9 w-9 animate-spin text-blue-600 mb-3" />
-        <p className="text-sm font-medium text-slate-600">
-          Cargando Partes y Subsistemas...
-        </p>
+        <p className="text-sm font-medium text-slate-600">Cargando Partes y Subsistemas...</p>
       </div>
     );
   }
@@ -750,7 +733,9 @@ export function TabModulosTecnicos() {
           {searchModQuery.trim() && (
             <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
               <span>
-                Mostrando <strong className="text-blue-600 font-bold">{modulosFiltrados.length}</strong> de {modulos.length} partes
+                Mostrando{' '}
+                <strong className="text-blue-600 font-bold">{modulosFiltrados.length}</strong> de{' '}
+                {modulos.length} partes
               </span>
               <button
                 type="button"
@@ -931,7 +916,8 @@ export function TabModulosTecnicos() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Elige qué campos son obligatorios al registrar el equipo, cuáles sirven para filtrar, cuáles son KPI y cuáles se imprimen en el PDF.
+                  Elige qué campos son obligatorios al registrar el equipo, cuáles sirven para
+                  filtrar, cuáles son KPI y cuáles se imprimen en el PDF.
                 </p>
               </div>
 
@@ -979,9 +965,12 @@ export function TabModulosTecnicos() {
                   <div className="w-12 h-12 mx-auto rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
                     <Boxes className="h-6 w-6" />
                   </div>
-                  <p className="text-sm font-bold text-slate-700">Esta parte aún no tiene campos técnicos asignados</p>
+                  <p className="text-sm font-bold text-slate-700">
+                    Esta parte aún no tiene campos técnicos asignados
+                  </p>
                   <p className="text-xs text-slate-400 mt-1 mb-4">
-                    Usa los botones para vincular campos del catálogo global o crear campos exclusivos para esta parte.
+                    Usa los botones para vincular campos del catálogo global o crear campos
+                    exclusivos para esta parte.
                   </p>
                   <div className="inline-flex flex-wrap items-center justify-center gap-2.5">
                     <button
@@ -1025,208 +1014,216 @@ export function TabModulosTecnicos() {
                     className="rounded-xl border border-slate-200 overflow-hidden shadow-2xs"
                   >
                     <div className="px-5 py-3 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
-                      Sección de Ficha: {grupoNombre}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-500">
-                      {items.length} campos
-                    </span>
-                  </div>
+                      <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                        Sección de Ficha: {grupoNombre}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-500">
+                        {items.length} campos
+                      </span>
+                    </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase">
-                          <th className="py-3 px-2 w-14 text-center" title="Reordenar (arrastrar o flechas)">Orden</th>
-                          <th className="py-3 px-4">Campo Técnico</th>
-                          <th className="py-3 px-3">Tipo de Dato y Unidad</th>
-                          <th className="py-3 px-3 text-center">Obligatorio</th>
-                          <th className="py-3 px-3 text-center">Permitir Filtrar</th>
-                          <th className="py-3 px-3 text-center">Destacar en Tarjeta (KPI)</th>
-                          <th className="py-3 px-3 text-center">Imprimir en PDF</th>
-                          <th className="py-3 px-4 text-right">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-sm">
-                        {items.map((ma, idx) => {
-                          const attr = ma.atributo;
-                          const ctrlInfo = getTipoControlHumano(
-                            attr.tipo_control,
-                            Boolean(attr.id_magnitud || attr.unidad_defecto_codigo),
-                          );
-                          const isDragOver =
-                            dragOverTarget?.grupoNombre === grupoNombre && dragOverTarget?.idx === idx;
-
-                          return (
-                            <tr
-                              key={ma.id_modulo_atributo}
-                              draggable
-                              onDragStart={(e) => handleDragStart(grupoNombre, idx, e)}
-                              onDragOver={(e) => handleDragOver(grupoNombre, idx, e)}
-                              onDragEnd={handleDragEnd}
-                              onDrop={() => handleDrop(grupoNombre, idx, items)}
-                              className={`hover:bg-slate-50/80 transition-colors cursor-grab active:cursor-grabbing ${
-                                isDragOver ? 'border-t-2 !border-t-blue-500' : ''
-                              }`}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase">
+                            <th
+                              className="py-3 px-2 w-14 text-center"
+                              title="Reordenar (arrastrar o flechas)"
                             >
-                              {/* Grip Handle + Micro-flechas ↑ ↓ */}
-                              <td className="py-2.5 px-2 text-center select-none">
-                                <div className="inline-flex items-center gap-1 justify-center">
-                                  <span title="Arrastrar para mover de posición">
-                                    <GripVertical
-                                      className="h-4 w-4 text-slate-300 hover:text-slate-600 transition-colors cursor-grab"
-                                    />
-                                  </span>
-                                  <div className="flex flex-col -space-y-0.5">
-                                    <button
-                                      type="button"
-                                      disabled={idx === 0}
-                                      onClick={() => handleMoveField(grupoNombre, idx, idx - 1, items)}
-                                      className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-20 disabled:pointer-events-none transition-colors"
-                                      title="Subir un puesto"
-                                    >
-                                      <ChevronUp className="h-3 w-3 stroke-[2.5]" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={idx === items.length - 1}
-                                      onClick={() => handleMoveField(grupoNombre, idx, idx + 1, items)}
-                                      className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-20 disabled:pointer-events-none transition-colors"
-                                      title="Bajar un puesto"
-                                    >
-                                      <ChevronDown className="h-3 w-3 stroke-[2.5]" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <div className="font-bold text-slate-900 text-sm">
-                                  {attr.nombre_atributo}
-                                </div>
-                                {attr.descripcion && (
-                                  <div className="text-xs text-slate-500 mt-0.5">
-                                    {attr.descripcion}
-                                  </div>
-                                )}
-                              </td>
+                              Orden
+                            </th>
+                            <th className="py-3 px-4">Campo Técnico</th>
+                            <th className="py-3 px-3">Tipo de Dato y Unidad</th>
+                            <th className="py-3 px-3 text-center">Obligatorio</th>
+                            <th className="py-3 px-3 text-center">Permitir Filtrar</th>
+                            <th className="py-3 px-3 text-center">Destacar en Tarjeta (KPI)</th>
+                            <th className="py-3 px-3 text-center">Imprimir en PDF</th>
+                            <th className="py-3 px-4 text-right">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-sm">
+                          {items.map((ma, idx) => {
+                            const attr = ma.atributo;
+                            const ctrlInfo = getTipoControlHumano(
+                              attr.tipo_control,
+                              Boolean(attr.id_magnitud || attr.unidad_defecto_codigo),
+                            );
+                            const isDragOver =
+                              dragOverTarget?.grupoNombre === grupoNombre &&
+                              dragOverTarget?.idx === idx;
 
-                              <td className="py-3.5 px-3">
-                                <div className="flex flex-col gap-1 items-start">
-                                  <span
-                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-bold ${ctrlInfo.badgeClass}`}
-                                  >
-                                    <span>{ctrlInfo.iconSymbol}</span>
-                                    <span>{ctrlInfo.shortLabel}</span>
-                                  </span>
-                                  {attr.unidad_defecto_codigo && (
-                                    <span className="text-[11px] text-blue-700 font-semibold">
-                                      Unidad: {attr.unidad_defecto_codigo}
+                            return (
+                              <tr
+                                key={ma.id_modulo_atributo}
+                                draggable
+                                onDragStart={(e) => handleDragStart(grupoNombre, idx, e)}
+                                onDragOver={(e) => handleDragOver(grupoNombre, idx, e)}
+                                onDragEnd={handleDragEnd}
+                                onDrop={() => handleDrop(grupoNombre, idx, items)}
+                                className={`hover:bg-slate-50/80 transition-colors cursor-grab active:cursor-grabbing ${
+                                  isDragOver ? 'border-t-2 !border-t-blue-500' : ''
+                                }`}
+                              >
+                                {/* Grip Handle + Micro-flechas ↑ ↓ */}
+                                <td className="py-2.5 px-2 text-center select-none">
+                                  <div className="inline-flex items-center gap-1 justify-center">
+                                    <span title="Arrastrar para mover de posición">
+                                      <GripVertical className="h-4 w-4 text-slate-300 hover:text-slate-600 transition-colors cursor-grab" />
                                     </span>
+                                    <div className="flex flex-col -space-y-0.5">
+                                      <button
+                                        type="button"
+                                        disabled={idx === 0}
+                                        onClick={() =>
+                                          handleMoveField(grupoNombre, idx, idx - 1, items)
+                                        }
+                                        className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-20 disabled:pointer-events-none transition-colors"
+                                        title="Subir un puesto"
+                                      >
+                                        <ChevronUp className="h-3 w-3 stroke-[2.5]" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={idx === items.length - 1}
+                                        onClick={() =>
+                                          handleMoveField(grupoNombre, idx, idx + 1, items)
+                                        }
+                                        className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-20 disabled:pointer-events-none transition-colors"
+                                        title="Bajar un puesto"
+                                      >
+                                        <ChevronDown className="h-3 w-3 stroke-[2.5]" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold text-slate-900 text-sm">
+                                    {attr.nombre_atributo}
+                                  </div>
+                                  {attr.descripcion && (
+                                    <div className="text-xs text-slate-500 mt-0.5">
+                                      {attr.descripcion}
+                                    </div>
                                   )}
-                                </div>
-                              </td>
+                                </td>
 
-                              {/* Switch Obligatorio */}
-                              <td className="py-3.5 px-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleFlag(ma, 'obligatorio')}
-                                  className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
-                                    ma.obligatorio ? 'bg-rose-600' : 'bg-slate-200'
-                                  }`}
-                                  title="Exigir este dato obligatoriamente al registrar el equipo"
-                                >
-                                  <span
-                                    className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
-                                      ma.obligatorio ? 'translate-x-2' : '-translate-x-2'
-                                    }`}
-                                  />
-                                </button>
-                              </td>
+                                <td className="py-3.5 px-3">
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <span
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-bold ${ctrlInfo.badgeClass}`}
+                                    >
+                                      <span>{ctrlInfo.iconSymbol}</span>
+                                      <span>{ctrlInfo.shortLabel}</span>
+                                    </span>
+                                    {attr.unidad_defecto_codigo && (
+                                      <span className="text-[11px] text-blue-700 font-semibold">
+                                        Unidad: {attr.unidad_defecto_codigo}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
 
-                              {/* Switch Permitir Filtrar */}
-                              <td className="py-3.5 px-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleFlag(ma, 'es_filtrable')}
-                                  className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
-                                    ma.es_filtrable ? 'bg-blue-600' : 'bg-slate-200'
-                                  }`}
-                                  title="Permitir buscar y filtrar equipos por este campo en el directorio"
-                                >
-                                  <span
-                                    className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
-                                      ma.es_filtrable ? 'translate-x-2' : '-translate-x-2'
-                                    }`}
-                                  />
-                                </button>
-                              </td>
-
-                              {/* Switch Destacar en Tarjeta (KPI) */}
-                              <td className="py-3.5 px-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleFlag(ma, 'es_kpi')}
-                                  className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
-                                    ma.es_kpi ? 'bg-amber-500' : 'bg-slate-200'
-                                  }`}
-                                  title="Destacar como dato principal en la tarjeta del equipo y cabecera del PDF"
-                                >
-                                  <span
-                                    className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
-                                      ma.es_kpi ? 'translate-x-2' : '-translate-x-2'
-                                    }`}
-                                  />
-                                </button>
-                              </td>
-
-                              {/* Switch Imprimir en PDF */}
-                              <td className="py-3.5 px-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleFlag(ma, 'visible_en_pdf')}
-                                  className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
-                                    ma.visible_en_pdf ? 'bg-emerald-600' : 'bg-slate-200'
-                                  }`}
-                                  title="Incluir este campo en la placa técnica del informe PDF"
-                                >
-                                  <span
-                                    className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
-                                      ma.visible_en_pdf ? 'translate-x-2' : '-translate-x-2'
-                                    }`}
-                                  />
-                                </button>
-                              </td>
-
-                              <td className="py-3.5 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1">
+                                {/* Switch Obligatorio */}
+                                <td className="py-3.5 px-3 text-center">
                                   <button
                                     type="button"
-                                    onClick={() => handleOpenEditAssignment(ma)}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                                    title="Editar sección y configuración de este campo en esta parte"
+                                    onClick={() => handleToggleFlag(ma, 'obligatorio')}
+                                    className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
+                                      ma.obligatorio ? 'bg-rose-600' : 'bg-slate-200'
+                                    }`}
+                                    title="Exigir este dato obligatoriamente al registrar el equipo"
                                   >
-                                    <Edit3 className="h-4 w-4" />
+                                    <span
+                                      className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                                        ma.obligatorio ? 'translate-x-2' : '-translate-x-2'
+                                      }`}
+                                    />
                                   </button>
+                                </td>
+
+                                {/* Switch Permitir Filtrar */}
+                                <td className="py-3.5 px-3 text-center">
                                   <button
                                     type="button"
-                                    onClick={() => setUnassignTarget(ma)}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                    title="Quitar campo de esta parte"
+                                    onClick={() => handleToggleFlag(ma, 'es_filtrable')}
+                                    className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
+                                      ma.es_filtrable ? 'bg-blue-600' : 'bg-slate-200'
+                                    }`}
+                                    title="Permitir buscar y filtrar equipos por este campo en el directorio"
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <span
+                                      className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                                        ma.es_filtrable ? 'translate-x-2' : '-translate-x-2'
+                                      }`}
+                                    />
                                   </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                </td>
+
+                                {/* Switch Destacar en Tarjeta (KPI) */}
+                                <td className="py-3.5 px-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleFlag(ma, 'es_kpi')}
+                                    className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
+                                      ma.es_kpi ? 'bg-amber-500' : 'bg-slate-200'
+                                    }`}
+                                    title="Destacar como dato principal en la tarjeta del equipo y cabecera del PDF"
+                                  >
+                                    <span
+                                      className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                                        ma.es_kpi ? 'translate-x-2' : '-translate-x-2'
+                                      }`}
+                                    />
+                                  </button>
+                                </td>
+
+                                {/* Switch Imprimir en PDF */}
+                                <td className="py-3.5 px-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleFlag(ma, 'visible_en_pdf')}
+                                    className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
+                                      ma.visible_en_pdf ? 'bg-emerald-600' : 'bg-slate-200'
+                                    }`}
+                                    title="Incluir este campo en la placa técnica del informe PDF"
+                                  >
+                                    <span
+                                      className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                                        ma.visible_en_pdf ? 'translate-x-2' : '-translate-x-2'
+                                      }`}
+                                    />
+                                  </button>
+                                </td>
+
+                                <td className="py-3.5 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditAssignment(ma)}
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                      title="Editar sección y configuración de este campo en esta parte"
+                                    >
+                                      <Edit3 className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setUnassignTarget(ma)}
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                      title="Quitar campo de esta parte"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
+                ))
+              )}
             </div>
           </>
         )}
@@ -1238,7 +1235,9 @@ export function TabModulosTecnicos() {
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h4 className="text-base font-bold text-slate-900">
-                {editingMod ? `Editar Parte: ${editingMod.nombre_modulo}` : 'Nueva Parte o Subsistema'}
+                {editingMod
+                  ? `Editar Parte: ${editingMod.nombre_modulo}`
+                  : 'Nueva Parte o Subsistema'}
               </h4>
               <button
                 type="button"
@@ -1276,9 +1275,7 @@ export function TabModulosTecnicos() {
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    Código Identificador *
-                  </label>
+                  <label className="text-xs font-bold text-slate-700">Código Identificador *</label>
                   {!editingMod && (
                     <button
                       type="button"
@@ -1286,13 +1283,20 @@ export function TabModulosTecnicos() {
                         const nuevoModo = !isAutoCodigoModulo;
                         setIsAutoCodigoModulo(nuevoModo);
                         if (nuevoModo) {
-                          const auto = generarCodigoParteModulo(modForm.nombre_modulo, codigosModulosExistentes);
+                          const auto = generarCodigoParteModulo(
+                            modForm.nombre_modulo,
+                            codigosModulosExistentes,
+                          );
                           setModForm((prev) => ({ ...prev, codigo_modulo: auto }));
                         }
                       }}
                       className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
                     >
-                      {isAutoCodigoModulo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                      {isAutoCodigoModulo ? (
+                        <Unlock className="h-3 w-3" />
+                      ) : (
+                        <Lock className="h-3 w-3" />
+                      )}
                       <span>{isAutoCodigoModulo ? 'Personalizar código' : 'Auto-generar'}</span>
                     </button>
                   )}
@@ -1317,7 +1321,8 @@ export function TabModulosTecnicos() {
                 />
                 {isCodigoModuloDuplicado ? (
                   <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
-                    ✕ Este código "{modForm.codigo_modulo}" ya existe. Modifícalo para que sea único.
+                    ✕ Este código &ldquo;{modForm.codigo_modulo}&rdquo; ya existe. Modifícalo para
+                    que sea único.
                   </p>
                 ) : modForm.codigo_modulo && !editingMod ? (
                   <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
@@ -1325,7 +1330,8 @@ export function TabModulosTecnicos() {
                   </p>
                 ) : isAutoCodigoModulo && !editingMod ? (
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Generado automáticamente garantizando unicidad. Pulsa en "Personalizar código" para editarlo.
+                    Generado automáticamente garantizando unicidad. Pulsa en &ldquo;Personalizar
+                    código&rdquo; para editarlo.
                   </p>
                 ) : null}
               </div>
@@ -1382,7 +1388,8 @@ export function TabModulosTecnicos() {
                     Agregar Campo Existente a {moduloDetalle.nombre_modulo}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    Busca en los {atributosDisponiblesParaAsignar.length} campos del catálogo técnico global y vincúlalo en 1 clic.
+                    Busca en los {atributosDisponiblesParaAsignar.length} campos del catálogo
+                    técnico global y vincúlalo en 1 clic.
                   </p>
                 </div>
               </div>
@@ -1405,7 +1412,8 @@ export function TabModulosTecnicos() {
                   </label>
                   {(!selectedAtributoParaAsignar || assignSelectorOpen) && (
                     <span className="text-[11px] font-semibold text-slate-500">
-                      {atributosDisponiblesFiltrados.length} de {atributosDisponiblesParaAsignar.length} disponibles
+                      {atributosDisponiblesFiltrados.length} de{' '}
+                      {atributosDisponiblesParaAsignar.length} disponibles
                     </span>
                   )}
                 </div>
@@ -1427,9 +1435,19 @@ export function TabModulosTecnicos() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 font-medium">
-                          <span>{getTipoControlHumano(selectedAtributoParaAsignar.tipo_control, Boolean(selectedAtributoParaAsignar.id_magnitud)).shortLabel}</span>
+                          <span>
+                            {
+                              getTipoControlHumano(
+                                selectedAtributoParaAsignar.tipo_control,
+                                Boolean(selectedAtributoParaAsignar.id_magnitud),
+                              ).shortLabel
+                            }
+                          </span>
                           {selectedAtributoParaAsignar.magnitud && (
-                            <span>• {selectedAtributoParaAsignar.magnitud.nombre_magnitud} ({selectedAtributoParaAsignar.unidad_defecto_codigo || 'Estándar'})</span>
+                            <span>
+                              • {selectedAtributoParaAsignar.magnitud.nombre_magnitud} (
+                              {selectedAtributoParaAsignar.unidad_defecto_codigo || 'Estándar'})
+                            </span>
                           )}
                         </div>
                       </div>
@@ -1530,7 +1548,9 @@ export function TabModulosTecnicos() {
                     <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs overscroll-contain">
                       {atributosDisponiblesFiltrados.length === 0 ? (
                         <div className="p-6 text-center text-slate-400">
-                          <p className="text-xs font-semibold">No se encontraron campos con &ldquo;{assignSearch}&rdquo;</p>
+                          <p className="text-xs font-semibold">
+                            No se encontraron campos con &ldquo;{assignSearch}&rdquo;
+                          </p>
                           <button
                             type="button"
                             onClick={() => {
@@ -1542,7 +1562,8 @@ export function TabModulosTecnicos() {
                                 id_magnitud: '',
                                 unidad_defecto_codigo: '',
                                 opciones_csv: '',
-                                grupo_visual: assignForm.grupo_visual || 'Especificaciones Técnicas',
+                                grupo_visual:
+                                  assignForm.grupo_visual || 'Especificaciones Técnicas',
                                 orden_visual: '20',
                                 obligatorio: false,
                                 es_kpi: false,
@@ -1559,14 +1580,18 @@ export function TabModulosTecnicos() {
                         </div>
                       ) : (
                         atributosDisponiblesFiltrados.map((a) => {
-                          const isSelected = String(assignForm.id_atributo) === String(a.id_atributo);
+                          const isSelected =
+                            String(assignForm.id_atributo) === String(a.id_atributo);
                           const info = getTipoControlHumano(a.tipo_control, Boolean(a.id_magnitud));
                           const opts = Array.isArray(a.opciones_json) ? a.opciones_json : [];
                           return (
                             <div
                               key={a.id_atributo}
                               onClick={() => {
-                                setAssignForm({ ...assignForm, id_atributo: String(a.id_atributo) });
+                                setAssignForm({
+                                  ...assignForm,
+                                  id_atributo: String(a.id_atributo),
+                                });
                                 setAssignSelectorOpen(false);
                               }}
                               className={`p-3 cursor-pointer flex items-center justify-between gap-3 transition-colors ${
@@ -1578,14 +1603,20 @@ export function TabModulosTecnicos() {
                               <div className="flex items-center gap-3 min-w-0">
                                 <div
                                   className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
-                                    isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
+                                    isSelected
+                                      ? 'border-blue-600 bg-blue-600 text-white'
+                                      : 'border-slate-300 bg-white'
                                   }`}
                                 >
                                   {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-xs font-bold truncate leading-snug">{a.nombre_atributo}</p>
-                                  <p className="text-[10px] font-mono text-slate-400 truncate">{a.codigo_atributo}</p>
+                                  <p className="text-xs font-bold truncate leading-snug">
+                                    {a.nombre_atributo}
+                                  </p>
+                                  <p className="text-[10px] font-mono text-slate-400 truncate">
+                                    {a.codigo_atributo}
+                                  </p>
                                 </div>
                               </div>
 
@@ -1598,7 +1629,8 @@ export function TabModulosTecnicos() {
                                 </span>
                                 {a.magnitud && (
                                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                    {a.magnitud.nombre_magnitud}{a.unidad_defecto_codigo ? ` (${a.unidad_defecto_codigo})` : ''}
+                                    {a.magnitud.nombre_magnitud}
+                                    {a.unidad_defecto_codigo ? ` (${a.unidad_defecto_codigo})` : ''}
                                   </span>
                                 )}
                                 {opts.length > 0 && (
@@ -1740,7 +1772,9 @@ export function TabModulosTecnicos() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {/* Switch Obligatorio */}
                   <div
-                    onClick={() => setAssignForm({ ...assignForm, obligatorio: !assignForm.obligatorio })}
+                    onClick={() =>
+                      setAssignForm({ ...assignForm, obligatorio: !assignForm.obligatorio })
+                    }
                     className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
                       assignForm.obligatorio
                         ? 'bg-rose-50/70 border-rose-300 shadow-2xs'
@@ -1748,8 +1782,12 @@ export function TabModulosTecnicos() {
                     }`}
                   >
                     <div>
-                      <span className="text-xs font-bold text-slate-800 block">Obligatorio al Registrar</span>
-                      <span className="text-[10px] text-slate-500">Exige valor al dar de alta el equipo</span>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Obligatorio al Registrar
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Exige valor al dar de alta el equipo
+                      </span>
                     </div>
                     <div
                       className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
@@ -1766,7 +1804,9 @@ export function TabModulosTecnicos() {
 
                   {/* Switch Permitir Filtrar */}
                   <div
-                    onClick={() => setAssignForm({ ...assignForm, es_filtrable: !assignForm.es_filtrable })}
+                    onClick={() =>
+                      setAssignForm({ ...assignForm, es_filtrable: !assignForm.es_filtrable })
+                    }
                     className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
                       assignForm.es_filtrable
                         ? 'bg-blue-50/70 border-blue-300 shadow-2xs'
@@ -1774,8 +1814,12 @@ export function TabModulosTecnicos() {
                     }`}
                   >
                     <div>
-                      <span className="text-xs font-bold text-slate-800 block">Permitir Filtrar</span>
-                      <span className="text-[10px] text-slate-500">Búsqueda avanzada en /equipos</span>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Permitir Filtrar
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Búsqueda avanzada en /equipos
+                      </span>
                     </div>
                     <div
                       className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
@@ -1800,7 +1844,9 @@ export function TabModulosTecnicos() {
                     }`}
                   >
                     <div>
-                      <span className="text-xs font-bold text-slate-800 block">Destacar en Tarjeta (KPI)</span>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Destacar en Tarjeta (KPI)
+                      </span>
                       <span className="text-[10px] text-slate-500">Resaltar en cabecera y PDF</span>
                     </div>
                     <div
@@ -1818,7 +1864,9 @@ export function TabModulosTecnicos() {
 
                   {/* Switch Imprimir en PDF */}
                   <div
-                    onClick={() => setAssignForm({ ...assignForm, visible_en_pdf: !assignForm.visible_en_pdf })}
+                    onClick={() =>
+                      setAssignForm({ ...assignForm, visible_en_pdf: !assignForm.visible_en_pdf })
+                    }
                     className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
                       assignForm.visible_en_pdf
                         ? 'bg-emerald-50/70 border-emerald-300 shadow-2xs'
@@ -1826,8 +1874,12 @@ export function TabModulosTecnicos() {
                     }`}
                   >
                     <div>
-                      <span className="text-xs font-bold text-slate-800 block">Imprimir en PDF</span>
-                      <span className="text-[10px] text-slate-500">Placa técnica del informe de OT</span>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Imprimir en PDF
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Placa técnica del informe de OT
+                      </span>
                     </div>
                     <div
                       className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
@@ -1947,9 +1999,7 @@ export function TabModulosTecnicos() {
                   </label>
                   <EamSelect
                     value={inPlaceForm.tipo_control}
-                    onChange={(val) =>
-                      setInPlaceForm({ ...inPlaceForm, tipo_control: val })
-                    }
+                    onChange={(val) => setInPlaceForm({ ...inPlaceForm, tipo_control: val })}
                     options={TIPOS_CONTROL_HUMANOS.map((t) => ({
                       value: t.value,
                       label: `${t.iconSymbol} ${t.shortLabel}`,
@@ -1978,7 +2028,11 @@ export function TabModulosTecnicos() {
                       }}
                       className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
                     >
-                      {isAutoCodigoAtributo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                      {isAutoCodigoAtributo ? (
+                        <Unlock className="h-3 w-3" />
+                      ) : (
+                        <Lock className="h-3 w-3" />
+                      )}
                       <span>{isAutoCodigoAtributo ? 'Personalizar' : 'Auto'}</span>
                     </button>
                   </div>
@@ -2133,37 +2187,33 @@ export function TabModulosTecnicos() {
                   required
                   placeholder="O escribe otra sección personalizada..."
                   value={inPlaceForm.grupo_visual}
-                  onChange={(e) =>
-                    setInPlaceForm({ ...inPlaceForm, grupo_visual: e.target.value })
-                  }
+                  onChange={(e) => setInPlaceForm({ ...inPlaceForm, grupo_visual: e.target.value })}
                   className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
               </div>
 
               <div className="flex items-center gap-6 pt-1">
-                  <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={inPlaceForm.obligatorio}
-                      onChange={(e) =>
-                        setInPlaceForm({ ...inPlaceForm, obligatorio: e.target.checked })
-                      }
-                      className="rounded text-blue-600"
-                    />
-                    <span>Obligatorio</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={inPlaceForm.es_kpi}
-                      onChange={(e) =>
-                        setInPlaceForm({ ...inPlaceForm, es_kpi: e.target.checked })
-                      }
-                      className="rounded text-blue-600"
-                    />
-                    <span>Destacar (KPI)</span>
-                  </label>
-                </div>
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={inPlaceForm.obligatorio}
+                    onChange={(e) =>
+                      setInPlaceForm({ ...inPlaceForm, obligatorio: e.target.checked })
+                    }
+                    className="rounded text-blue-600"
+                  />
+                  <span>Obligatorio</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={inPlaceForm.es_kpi}
+                    onChange={(e) => setInPlaceForm({ ...inPlaceForm, es_kpi: e.target.checked })}
+                    className="rounded text-blue-600"
+                  />
+                  <span>Destacar (KPI)</span>
+                </label>
+              </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
@@ -2205,9 +2255,7 @@ export function TabModulosTecnicos() {
                 <h4 className="text-base font-bold text-slate-900">
                   ¿Eliminar Parte o Subsistema?
                 </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Confirmación de seguridad requerida
-                </p>
+                <p className="text-xs text-slate-500 mt-0.5">Confirmación de seguridad requerida</p>
               </div>
               <button
                 type="button"
@@ -2247,7 +2295,9 @@ export function TabModulosTecnicos() {
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-amber-900">
                 <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                 <div className="text-[11px] leading-relaxed">
-                  <strong className="font-bold">Advertencia de integridad:</strong> La parte no debe estar vinculada a tipos de equipo existentes. Al eliminarla, se removerán sus configuraciones de sección respetando los históricos de órdenes.
+                  <strong className="font-bold">Advertencia de integridad:</strong> La parte no debe
+                  estar vinculada a tipos de equipo existentes. Al eliminarla, se removerán sus
+                  configuraciones de sección respetando los históricos de órdenes.
                 </div>
               </div>
 
@@ -2298,12 +2348,8 @@ export function TabModulosTecnicos() {
                 <Trash2 className="h-5 w-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="text-base font-bold text-slate-900">
-                  ¿Quitar Campo de esta Parte?
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Confirmación de desvinculación
-                </p>
+                <h4 className="text-base font-bold text-slate-900">¿Quitar Campo de esta Parte?</h4>
+                <p className="text-xs text-slate-500 mt-0.5">Confirmación de desvinculación</p>
               </div>
               <button
                 type="button"
@@ -2325,16 +2371,26 @@ export function TabModulosTecnicos() {
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                  <span>Parte: <strong className="text-slate-700">{moduloDetalle.nombre_modulo}</strong></span>
+                  <span>
+                    Parte: <strong className="text-slate-700">{moduloDetalle.nombre_modulo}</strong>
+                  </span>
                   <span>•</span>
-                  <span>Sección: <strong className="text-slate-700">{unassignTarget.grupo_visual || 'General'}</strong></span>
+                  <span>
+                    Sección:{' '}
+                    <strong className="text-slate-700">
+                      {unassignTarget.grupo_visual || 'General'}
+                    </strong>
+                  </span>
                 </div>
               </div>
 
               <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 flex items-start gap-2.5 text-blue-900">
                 <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
                 <div className="text-[11px] leading-relaxed">
-                  <strong className="font-bold">No destructivo:</strong> Esta acción únicamente retira este campo de la ficha de <span className="font-medium">{moduloDetalle.nombre_modulo}</span>. El campo técnico y su historial permanecerán intactos en el Catálogo Global (Pestaña 4).
+                  <strong className="font-bold">No destructivo:</strong> Esta acción únicamente
+                  retira este campo de la ficha de{' '}
+                  <span className="font-medium">{moduloDetalle.nombre_modulo}</span>. El campo
+                  técnico y su historial permanecerán intactos en el Catálogo Global (Pestaña 4).
                 </div>
               </div>
             </div>
@@ -2406,7 +2462,15 @@ export function TabModulosTecnicos() {
                   </span>
                 </div>
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border bg-white border-blue-200 text-blue-700">
-                  {getTipoControlHumano(editingAssignment.atributo.tipo_control, Boolean(editingAssignment.atributo.id_magnitud || editingAssignment.atributo.unidad_defecto_codigo)).shortLabel}
+                  {
+                    getTipoControlHumano(
+                      editingAssignment.atributo.tipo_control,
+                      Boolean(
+                        editingAssignment.atributo.id_magnitud ||
+                          editingAssignment.atributo.unidad_defecto_codigo,
+                      ),
+                    ).shortLabel
+                  }
                 </span>
               </div>
 
@@ -2434,7 +2498,8 @@ export function TabModulosTecnicos() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {seccionesDisponibles.map((sec) => {
                     const isActive =
-                      editAssignSectionMode === 'existing' && editAssignForm.grupo_visual === sec.name;
+                      editAssignSectionMode === 'existing' &&
+                      editAssignForm.grupo_visual === sec.name;
                     return (
                       <button
                         key={sec.name}
@@ -2538,7 +2603,10 @@ export function TabModulosTecnicos() {
                   {/* Switch Obligatorio */}
                   <div
                     onClick={() =>
-                      setEditAssignForm({ ...editAssignForm, obligatorio: !editAssignForm.obligatorio })
+                      setEditAssignForm({
+                        ...editAssignForm,
+                        obligatorio: !editAssignForm.obligatorio,
+                      })
                     }
                     className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
                       editAssignForm.obligatorio
@@ -2547,8 +2615,12 @@ export function TabModulosTecnicos() {
                     }`}
                   >
                     <div>
-                      <span className="text-xs font-bold text-slate-800 block">Obligatorio al Registrar</span>
-                      <span className="text-[10px] text-slate-500">Exige valor al dar de alta el equipo</span>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Obligatorio al Registrar
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Exige valor al dar de alta el equipo
+                      </span>
                     </div>
                     <div
                       className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
@@ -2566,7 +2638,10 @@ export function TabModulosTecnicos() {
                   {/* Switch Permitir Filtrar */}
                   <div
                     onClick={() =>
-                      setEditAssignForm({ ...editAssignForm, es_filtrable: !editAssignForm.es_filtrable })
+                      setEditAssignForm({
+                        ...editAssignForm,
+                        es_filtrable: !editAssignForm.es_filtrable,
+                      })
                     }
                     className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
                       editAssignForm.es_filtrable
@@ -2575,8 +2650,12 @@ export function TabModulosTecnicos() {
                     }`}
                   >
                     <div>
-                      <span className="text-xs font-bold text-slate-800 block">Permitir Filtrar</span>
-                      <span className="text-[10px] text-slate-500">Búsqueda avanzada en /equipos</span>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Permitir Filtrar
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Búsqueda avanzada en /equipos
+                      </span>
                     </div>
                     <div
                       className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
@@ -2603,7 +2682,9 @@ export function TabModulosTecnicos() {
                     }`}
                   >
                     <div>
-                      <span className="text-xs font-bold text-slate-800 block">Destacar en Tarjeta (KPI)</span>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Destacar en Tarjeta (KPI)
+                      </span>
                       <span className="text-[10px] text-slate-500">Resaltar en cabecera y PDF</span>
                     </div>
                     <div
@@ -2634,8 +2715,12 @@ export function TabModulosTecnicos() {
                     }`}
                   >
                     <div>
-                      <span className="text-xs font-bold text-slate-800 block">Imprimir en PDF</span>
-                      <span className="text-[10px] text-slate-500">Placa técnica del informe de OT</span>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Imprimir en PDF
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Placa técnica del informe de OT
+                      </span>
                     </div>
                     <div
                       className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
@@ -2663,7 +2748,10 @@ export function TabModulosTecnicos() {
                 </button>
                 <button
                   type="submit"
-                  disabled={updateFlagMut.isPending || (editAssignSectionMode === 'new' && !editAssignNewSection.trim())}
+                  disabled={
+                    updateFlagMut.isPending ||
+                    (editAssignSectionMode === 'new' && !editAssignNewSection.trim())
+                  }
                   className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50"
                 >
                   {updateFlagMut.isPending ? (

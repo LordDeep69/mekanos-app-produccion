@@ -8,7 +8,7 @@
  * 🚀 OPTIMIZACIÓN ENTERPRISE 05-ENE-2026
  * ═══════════════════════════════════════════════════════════════════════════
  * PROBLEMA: Dashboard ejecutaba 20+ queries individuales (~4-10 segundos)
- * SOLUCIÓN: 
+ * SOLUCIÓN:
  *   1. Cache en memoria con TTL de 60 segundos
  *   2. Query única optimizada con $queryRaw para métricas principales
  *   3. Precarga de catálogos estáticos
@@ -48,7 +48,7 @@ const ESTADOS_CACHE_TTL = 30 * 60 * 1000; // 30 minutos (catálogos estáticos)
 export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
 
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * ✅ OPTIMIZADO: Dashboard completo con CACHE
@@ -59,9 +59,11 @@ export class DashboardService {
     const cacheKey = `${mes}-${anio}`;
 
     // ✅ OPTIMIZACIÓN: Verificar cache válido
-    if (dashboardCache &&
+    if (
+      dashboardCache &&
       Date.now() < dashboardCache.expiresAt &&
-      dashboardCache.data?.cacheKey === cacheKey) {
+      dashboardCache.data?.cacheKey === cacheKey
+    ) {
       this.logger.debug('[Dashboard] ⚡ Retornando desde cache');
       return dashboardCache.data;
     }
@@ -122,8 +124,8 @@ export class DashboardService {
     ]);
 
     estadosCache = {
-      ordenes: new Map(estadosOrden.map(e => [e.id_estado, e.nombre_estado])),
-      cotizaciones: new Map(estadosCotizacion.map(e => [e.id_estado, e.nombre_estado])),
+      ordenes: new Map(estadosOrden.map((e) => [e.id_estado, e.nombre_estado])),
+      cotizaciones: new Map(estadosCotizacion.map((e) => [e.id_estado, e.nombre_estado])),
       expiresAt: Date.now() + ESTADOS_CACHE_TTL,
     };
   }
@@ -137,11 +139,13 @@ export class DashboardService {
     inicioMes.setHours(0, 0, 0, 0);
 
     // ✅ UNA SOLA QUERY con múltiples agregaciones
-    const stats = await this.prisma.$queryRaw<Array<{
-      total: bigint;
-      ordenes_mes: bigint;
-      completadas_mes: bigint;
-    }>>`
+    const stats = await this.prisma.$queryRaw<
+      Array<{
+        total: bigint;
+        ordenes_mes: bigint;
+        completadas_mes: bigint;
+      }>
+    >`
       SELECT 
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE fecha_creacion >= ${inicioMes}) as ordenes_mes,
@@ -162,7 +166,7 @@ export class DashboardService {
       .map(([id]) => id);
 
     const pendientes = ordenesCount
-      .filter(item => estadosPendientes.includes(item.id_estado_actual))
+      .filter((item) => estadosPendientes.includes(item.id_estado_actual))
       .reduce((sum, item) => sum + item._count.id_orden_servicio, 0);
 
     return {
@@ -170,7 +174,7 @@ export class DashboardService {
       ordenesMes: Number(stats[0]?.ordenes_mes || 0),
       completadasMes: Number(stats[0]?.completadas_mes || 0),
       pendientes,
-      porEstado: ordenesCount.map(item => ({
+      porEstado: ordenesCount.map((item) => ({
         estado: estadosCache!.ordenes.get(item.id_estado_actual) || 'Desconocido',
         cantidad: item._count.id_orden_servicio,
       })),
@@ -188,8 +192,9 @@ export class DashboardService {
     ayer.setDate(ayer.getDate() - 1);
 
     // ID del estado PROGRAMADA (cacheado)
-    const estadoProgramadaId = Array.from(estadosCache!.ordenes.entries())
-      .find(([_, nombre]) => ['PROGRAMADA', 'Programada'].includes(nombre))?.[0];
+    const estadoProgramadaId = Array.from(estadosCache!.ordenes.entries()).find(([_, nombre]) =>
+      ['PROGRAMADA', 'Programada'].includes(nombre),
+    )?.[0];
 
     // ✅ Ejecutar todas las queries de conteo en paralelo
     const [
@@ -220,11 +225,11 @@ export class DashboardService {
       }),
       estadoProgramadaId
         ? this.prisma.ordenes_servicio.count({
-          where: {
-            id_estado_actual: estadoProgramadaId,
-            fecha_programada: { lt: ayer },
-          },
-        })
+            where: {
+              id_estado_actual: estadoProgramadaId,
+              fecha_programada: { lt: ayer },
+            },
+          })
         : Promise.resolve(0),
       this.prisma.mediciones_servicio.count({
         where: { nivel_alerta: 'CRITICO' },
@@ -260,7 +265,7 @@ export class DashboardService {
       select: { id_estado: true, nombre_estado: true },
     });
 
-    const estadosMap = new Map(estados.map(e => [e.id_estado, e.nombre_estado]));
+    const estadosMap = new Map(estados.map((e) => [e.id_estado, e.nombre_estado]));
 
     // Total órdenes
     const total = await this.prisma.ordenes_servicio.count();
@@ -287,7 +292,7 @@ export class DashboardService {
       where: { nombre_estado: { notIn: ['COMPLETADA', 'CANCELADA'] } },
       select: { id_estado: true },
     });
-    const idsPendientes = estadosPendientes.map(e => e.id_estado);
+    const idsPendientes = estadosPendientes.map((e) => e.id_estado);
 
     const pendientes = await this.prisma.ordenes_servicio.count({
       where: { id_estado_actual: { in: idsPendientes } },
@@ -298,7 +303,7 @@ export class DashboardService {
       ordenesMes,
       completadasMes,
       pendientes,
-      porEstado: ordenesCount.map(item => ({
+      porEstado: ordenesCount.map((item) => ({
         estado: estadosMap.get(item.id_estado_actual) || 'Desconocido',
         cantidad: item._count.id_orden_servicio,
       })),
@@ -323,30 +328,34 @@ export class DashboardService {
     const estados = await this.prisma.estados_cotizacion.findMany({
       select: { id_estado: true, nombre_estado: true },
     });
-    const estadosMap = new Map(estados.map(e => [e.id_estado, e.nombre_estado]));
+    const estadosMap = new Map(estados.map((e) => [e.id_estado, e.nombre_estado]));
 
     // Cotizaciones pendientes de respuesta
-    const estadoEnviada = estados.find(e => e.nombre_estado === 'ENVIADA');
-    const pendientesRespuesta = estadoEnviada ? await this.prisma.cotizaciones.count({
-      where: { id_estado: estadoEnviada.id_estado },
-    }) : 0;
+    const estadoEnviada = estados.find((e) => e.nombre_estado === 'ENVIADA');
+    const pendientesRespuesta = estadoEnviada
+      ? await this.prisma.cotizaciones.count({
+          where: { id_estado: estadoEnviada.id_estado },
+        })
+      : 0;
 
     // Cotizaciones aprobadas este mes
     const inicioMes = new Date();
     inicioMes.setDate(1);
     inicioMes.setHours(0, 0, 0, 0);
 
-    const estadoAprobada = estados.find(e => e.nombre_estado === 'APROBADA_CLIENTE');
-    const aprobadasMes = estadoAprobada ? await this.prisma.cotizaciones.count({
-      where: {
-        id_estado: estadoAprobada.id_estado,
-        fecha_modificacion: { gte: inicioMes },
-      },
-    }) : 0;
+    const estadoAprobada = estados.find((e) => e.nombre_estado === 'APROBADA_CLIENTE');
+    const aprobadasMes = estadoAprobada
+      ? await this.prisma.cotizaciones.count({
+          where: {
+            id_estado: estadoAprobada.id_estado,
+            fecha_modificacion: { gte: inicioMes },
+          },
+        })
+      : 0;
 
     // Valor total cotizado (pendientes)
     const valorPendiente = cotizacionesPorEstado
-      .filter(c => ['ENVIADA', 'EN_REVISION'].includes(estadosMap.get(c.id_estado) || ''))
+      .filter((c) => ['ENVIADA', 'EN_REVISION'].includes(estadosMap.get(c.id_estado) || ''))
       .reduce((sum, c) => sum + (Number(c._sum.total_cotizacion) || 0), 0);
 
     return {
@@ -354,7 +363,7 @@ export class DashboardService {
       pendientesRespuesta,
       aprobadasMes,
       valorPendienteCOP: valorPendiente,
-      porEstado: cotizacionesPorEstado.map(item => ({
+      porEstado: cotizacionesPorEstado.map((item) => ({
         estado: estadosMap.get(item.id_estado) || 'Desconocido',
         cantidad: item._count.id_cotizacion,
         valorTotal: Number(item._sum.total_cotizacion) || 0,
@@ -369,10 +378,7 @@ export class DashboardService {
     // Notificaciones no leídas (últimas 10)
     const notificacionesNoLeidas = await this.prisma.notificaciones.findMany({
       where: { leida: false },
-      orderBy: [
-        { prioridad: 'desc' },
-        { fecha_creacion: 'desc' },
-      ],
+      orderBy: [{ prioridad: 'desc' }, { fecha_creacion: 'desc' }],
       take: 10,
       select: {
         id_notificacion: true,
@@ -403,12 +409,14 @@ export class DashboardService {
       where: { nombre_estado: { in: ['PROGRAMADA', 'Programada'] } },
     });
 
-    const ordenesVencidas = estadoProgramada ? await this.prisma.ordenes_servicio.count({
-      where: {
-        id_estado_actual: estadoProgramada.id_estado,
-        fecha_programada: { lt: ayer },
-      },
-    }) : 0;
+    const ordenesVencidas = estadoProgramada
+      ? await this.prisma.ordenes_servicio.count({
+          where: {
+            id_estado_actual: estadoProgramada.id_estado,
+            fecha_programada: { lt: ayer },
+          },
+        })
+      : 0;
 
     // Equipos críticos (con mediciones fuera de rango)
     const equiposCriticos = await this.prisma.mediciones_servicio.count({
@@ -438,38 +446,40 @@ export class DashboardService {
     const fechaInicio = new Date(anio, mes - 1, 1);
     const fechaFin = new Date(anio, mes, 0);
 
-    const [serviciosProgramados, serviciosCompletados, ingresosMes, clientesActivos] = await Promise.all([
-      this.prisma.cronogramas_servicio.count({
-        where: {
-          fecha_prevista: { gte: fechaInicio, lte: fechaFin },
-        },
-      }),
-      this.prisma.ordenes_servicio.count({
-        where: {
-          fecha_fin_real: { gte: fechaInicio, lte: fechaFin },
-        },
-      }),
-      this.prisma.cotizaciones.aggregate({
-        where: {
-          fecha_modificacion: { gte: fechaInicio, lte: fechaFin },
-          estado: { nombre_estado: 'APROBADA_CLIENTE' },
-        },
-        _sum: { total_cotizacion: true },
-      }),
-      this.prisma.contratos_mantenimiento.count({
-        where: { estado_contrato: 'ACTIVO' },
-      }),
-    ]);
+    const [serviciosProgramados, serviciosCompletados, ingresosMes, clientesActivos] =
+      await Promise.all([
+        this.prisma.cronogramas_servicio.count({
+          where: {
+            fecha_prevista: { gte: fechaInicio, lte: fechaFin },
+          },
+        }),
+        this.prisma.ordenes_servicio.count({
+          where: {
+            fecha_fin_real: { gte: fechaInicio, lte: fechaFin },
+          },
+        }),
+        this.prisma.cotizaciones.aggregate({
+          where: {
+            fecha_modificacion: { gte: fechaInicio, lte: fechaFin },
+            estados_cotizacion: { nombre_estado: 'APROBADA_CLIENTE' },
+          },
+          _sum: { total_cotizacion: true },
+        }),
+        this.prisma.contratos_mantenimiento.count({
+          where: { estado_contrato: 'ACTIVO' },
+        }),
+      ]);
 
     return {
       mes,
       anio,
       serviciosProgramados,
       serviciosCompletados,
-      porcentajeCumplimiento: serviciosProgramados > 0
-        ? Math.round((serviciosCompletados / serviciosProgramados) * 100)
-        : 100,
-      ingresosMesCOP: Number(ingresosMes._sum.total_cotizacion) || 0,
+      porcentajeCumplimiento:
+        serviciosProgramados > 0
+          ? Math.round((serviciosCompletados / serviciosProgramados) * 100)
+          : 100,
+      ingresosMesCOP: Number(ingresosMes._sum?.total_cotizacion) || 0,
       clientesActivos,
     };
   }
@@ -492,26 +502,31 @@ export class DashboardService {
     });
 
     // Obtener nombres de técnicos
-    const tecnicosIds = ordenesCompletadas.map(o => o.id_tecnico_asignado).filter(Boolean) as number[];
+    const tecnicosIds = ordenesCompletadas
+      .map((o) => o.id_tecnico_asignado)
+      .filter(Boolean) as number[];
 
-    const tecnicos = tecnicosIds.length > 0 ? await this.prisma.empleados.findMany({
-      where: { id_empleado: { in: tecnicosIds } },
-      include: { persona: { select: { nombre_completo: true } } },
-    }) : [];
+    const tecnicos =
+      tecnicosIds.length > 0
+        ? await this.prisma.empleados.findMany({
+            where: { id_empleado: { in: tecnicosIds } },
+            include: { persona: { select: { nombre_completo: true } } },
+          })
+        : [];
 
-    const tecnicosMap = new Map(tecnicos.map(t => [
-      t.id_empleado,
-      t.persona.nombre_completo || `Técnico ${t.id_empleado}`,
-    ]));
+    const tecnicosMap = new Map(
+      tecnicos.map((t) => [t.id_empleado, t.persona.nombre_completo || `Técnico ${t.id_empleado}`]),
+    );
 
     return {
       mes,
       anio,
-      productividadPorTecnico: ordenesCompletadas.map(item => ({
-        tecnico: tecnicosMap.get(item.id_tecnico_asignado!) || 'Desconocido',
-        ordenesCompletadas: item._count.id_orden_servicio,
-      })).sort((a, b) => b.ordenesCompletadas - a.ordenesCompletadas),
+      productividadPorTecnico: ordenesCompletadas
+        .map((item) => ({
+          tecnico: tecnicosMap.get(item.id_tecnico_asignado!) || 'Desconocido',
+          ordenesCompletadas: item._count.id_orden_servicio,
+        }))
+        .sort((a, b) => b.ordenesCompletadas - a.ordenesCompletadas),
     };
   }
 }
-

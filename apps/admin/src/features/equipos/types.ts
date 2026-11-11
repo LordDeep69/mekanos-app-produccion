@@ -18,19 +18,9 @@ export type Criticidad = 'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA';
 
 export type TipoMotor = 'COMBUSTION' | 'ELECTRICO';
 
-export type TipoCombustible =
-  | 'DIESEL'
-  | 'GASOLINA'
-  | 'GAS_NATURAL'
-  | 'GLP'
-  | 'DUAL'
-  | 'BIODIESEL';
+export type TipoCombustible = 'DIESEL' | 'GASOLINA' | 'GAS_NATURAL' | 'GLP' | 'DUAL' | 'BIODIESEL';
 
-export type TipoArranque =
-  | 'ELECTRICO'
-  | 'MANUAL'
-  | 'NEUMATICO'
-  | 'HIDRAULICO';
+export type TipoArranque = 'ELECTRICO' | 'MANUAL' | 'NEUMATICO' | 'HIDRAULICO';
 
 export type NumeroFases = 'MONOFASICO' | 'TRIFASICO';
 
@@ -38,11 +28,7 @@ export type ClaseAislamiento = 'A' | 'B' | 'F' | 'H';
 
 export type CriterioIntervalo = 'DIAS' | 'HORAS' | 'LO_QUE_OCURRA_PRIMERO';
 
-export type TipoContrato =
-  | 'SIN_CONTRATO'
-  | 'PREVENTIVO'
-  | 'INTEGRAL'
-  | 'POR_LLAMADA';
+export type TipoContrato = 'SIN_CONTRATO' | 'PREVENTIVO' | 'INTEGRAL' | 'POR_LLAMADA';
 
 export type EstadoPintura = 'EXCELENTE' | 'BUENO' | 'REGULAR' | 'MALO' | 'NO_APLICA';
 
@@ -67,7 +53,7 @@ export type AplicacionBomba =
 
 export interface EspecificacionesJsonEam {
   _version?: number;
-  modulos?: Record<string, Record<string, any>>;
+  modulos?: Record<string, Record<string, unknown>>;
   origen_atributos?: Record<string, 'MODELO' | 'CUSTOM'>;
   unidades_personalizadas?: Record<string, string>;
 }
@@ -94,6 +80,7 @@ export interface EquipoListItem {
     id_tipo_equipo: number;
     nombre_tipo: string;
     codigo_tipo: string;
+    es_generador?: boolean;
   } | null;
   estado_equipo: EstadoEquipo;
   criticidad: Criticidad;
@@ -101,6 +88,8 @@ export interface EquipoListItem {
   cliente: {
     id_cliente: number;
     nombre: string;
+    codigo_cliente?: string;
+    numero_documento?: string | null;
   };
   sede: {
     id_sede: number;
@@ -114,6 +103,10 @@ export interface EquipoListItem {
 
 export interface EquipoDetalle extends EquipoListItem {
   numero_serie_equipo: string | null;
+  numero_serie?: string | null;
+  marca?: string | null;
+  modelo?: string | null;
+  id_sede?: number | null;
   tipo_equipo: {
     id_tipo_equipo: number;
     nombre_tipo: string;

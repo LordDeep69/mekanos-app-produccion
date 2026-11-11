@@ -1,12 +1,13 @@
 import { PrismaService } from '@mekanos/database';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { getNextTableId } from '../../../common/utils/next-id.helper';
 import { CreatePropuestaCommand } from './create-propuesta.command';
 
 /**
  * CreatePropuestaHandler
  * FASE 4.9: Crea propuesta correctivo y genera cotización automática
- * 
+ *
  * LÓGICA:
  * 1. Validar orden servicio existe y está EN_PROCESO
  * 2. Obtener cliente + sede + equipo desde orden servicio
@@ -33,14 +34,14 @@ export class CreatePropuestaHandler implements ICommandHandler<CreatePropuestaCo
     const ordenServicio = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: idOrdenServicio },
       include: {
-        cliente: {
+        clientes: {
           include: {
             persona: true,
           },
         },
-        sede: true,
-        equipo: true,
-        estado: true,
+        sedes_cliente: true,
+        equipos: true,
+        estados_orden: true,
       },
     });
 
@@ -49,9 +50,9 @@ export class CreatePropuestaHandler implements ICommandHandler<CreatePropuestaCo
     }
 
     // Validar orden servicio está EN_PROCESO (técnico puede generar propuestas durante ejecución)
-    if (ordenServicio.estado.nombre_estado !== 'EN_PROCESO') {
+    if (ordenServicio.estados_orden.nombre_estado !== 'EN_PROCESO') {
       throw new BadRequestException(
-        `Solo se pueden generar propuestas desde órdenes EN_PROCESO. Estado actual: ${ordenServicio.estado.nombre_estado}`,
+        `Solo se pueden generar propuestas desde órdenes EN_PROCESO. Estado actual: ${ordenServicio.estados_orden.nombre_estado}`,
       );
     }
 
@@ -88,8 +89,10 @@ export class CreatePropuestaHandler implements ICommandHandler<CreatePropuestaCo
     }
 
     // PASO 4: Crear propuesta correctivo
+    const idPropuesta = await getNextTableId(this.prisma, 'propuestas_correctivo', 'id_propuesta');
     const propuesta = await this.prisma.propuestas_correctivo.create({
       data: {
+        id_propuesta: idPropuesta,
         numero_propuesta: numeroPropuesta,
         id_orden_servicio: idOrdenServicio,
         id_cliente: ordenServicio.id_cliente,
@@ -123,8 +126,9 @@ export class CreatePropuestaHandler implements ICommandHandler<CreatePropuestaCo
         numero_orden: ordenServicio.numero_orden,
       },
       cliente: {
-        razon_social: ordenServicio.cliente.persona.razon_social || 
-                      `${ordenServicio.cliente.persona.primer_nombre} ${ordenServicio.cliente.persona.primer_apellido}`,
+        razon_social:
+          ordenServicio.clientes.persona.razon_social ||
+          `${ordenServicio.clientes.persona.primer_nombre} ${ordenServicio.clientes.persona.primer_apellido}`,
       },
     };
   }

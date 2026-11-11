@@ -117,6 +117,7 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
               orden.permiteEdicionTecnico;
           final irAHistorial = esFinalizada && !puedeEditar;
 
+          if (!mounted) return;
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => irAHistorial
@@ -295,7 +296,7 @@ class _NotificacionCard extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: colorPrioridad.withOpacity(0.1),
+                    color: colorPrioridad.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(

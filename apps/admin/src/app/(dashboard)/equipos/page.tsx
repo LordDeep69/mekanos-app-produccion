@@ -21,13 +21,23 @@ import {
   useMagnitudesEam,
   useModulosEam,
 } from '@/features/catalogos-eam';
-import type { EquipoListItem, TipoEquipo } from '@/features/equipos';
+import dynamic from 'next/dynamic';
+import type { EquipoListItem, TipoEquipo } from '@/features/equipos/types';
 import {
-  EquipoForm,
   useEliminarEquipoCompletamente,
   useEquipos,
   useFacetasEquipos,
-} from '@/features/equipos';
+} from '@/features/equipos/lib/equipos.service';
+
+const EquipoForm = dynamic(
+  () => import('@/features/equipos/components/EquipoForm').then((m) => m.EquipoForm),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="py-10 text-center text-sm text-slate-500">Cargando formulario...</div>
+    ),
+  },
+);
 import { cn } from '@/lib/utils';
 import {
   AlertCircle,
@@ -365,11 +375,24 @@ const CAMPOS_BTREE_CANONICOS: CampoFiltrableBTree[] = [
 // COMPONENTES AUXILIARES DE ETIQUETAS (BADGES)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TipoBadge({ tipo }: { tipo: TipoEquipo | string | any }) {
-  const raw = typeof tipo === 'string'
-    ? tipo
-    : (tipo?.codigo_tipo || tipo?.nombre_tipo || tipo?.nombre || '');
-  const normalized = String(raw || '').toUpperCase().trim();
+function TipoBadge({
+  tipo,
+}: {
+  tipo?:
+    | TipoEquipo
+    | { codigo_tipo?: string; nombre_tipo?: string; nombre?: string }
+    | string
+    | null;
+}) {
+  const raw =
+    typeof tipo === 'string' ? tipo : tipo?.codigo_tipo || tipo?.nombre_tipo || tipo?.nombre || '';
+  const normalized = String(raw || '')
+    .toUpperCase()
+    .trim();
+  const fallbackLabel =
+    typeof tipo === 'string'
+      ? tipo
+      : tipo?.nombre_tipo || tipo?.codigo_tipo || tipo?.nombre || 'Equipo';
   const config = {
     GENERADOR: {
       icon: Zap,
@@ -414,7 +437,7 @@ function TipoBadge({ tipo }: { tipo: TipoEquipo | string | any }) {
   }[normalized] || {
     icon: Zap,
     color: 'bg-slate-100 text-slate-700 border-slate-200',
-    label: tipo || 'Equipo',
+    label: fallbackLabel,
   };
 
   const Icon = config.icon;
@@ -432,8 +455,14 @@ function TipoBadge({ tipo }: { tipo: TipoEquipo | string | any }) {
   );
 }
 
-function EstadoBadge({ estado }: { estado: string | any }) {
-  const normEstado = String(typeof estado === 'string' ? estado : (estado?.nombre || estado?.estado || estado || '')).toUpperCase();
+function EstadoBadge({
+  estado,
+}: {
+  estado?: string | { nombre?: string; estado?: string } | null;
+}) {
+  const normEstado = String(
+    typeof estado === 'string' ? estado : estado?.nombre || estado?.estado || estado || '',
+  ).toUpperCase();
   const colors: Record<string, string> = {
     OPERATIVO: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     STANDBY: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -464,8 +493,16 @@ function EstadoBadge({ estado }: { estado: string | any }) {
   );
 }
 
-function CriticidadBadge({ criticidad }: { criticidad: string | any }) {
-  const normCrit = String(typeof criticidad === 'string' ? criticidad : (criticidad?.nombre || criticidad?.criticidad || criticidad || 'MEDIA')).toUpperCase();
+function CriticidadBadge({
+  criticidad,
+}: {
+  criticidad?: string | { nombre?: string; criticidad?: string } | null;
+}) {
+  const normCrit = String(
+    typeof criticidad === 'string'
+      ? criticidad
+      : criticidad?.nombre || criticidad?.criticidad || criticidad || 'MEDIA',
+  ).toUpperCase();
   const config: Record<string, { color: string; dot: string }> = {
     BAJA: { color: 'text-slate-600 bg-slate-50 border-slate-200', dot: 'bg-blue-500' },
     MEDIA: { color: 'text-amber-700 bg-amber-50/60 border-amber-200', dot: 'bg-amber-500' },
@@ -509,7 +546,10 @@ function Modal({ isOpen, onClose, title, children }: ModalProps) {
         <div className="relative w-full max-w-5xl bg-white rounded-xl shadow-2xl border border-slate-200">
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
             <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-            <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+            >
               <X className="h-5 w-5 text-slate-500" />
             </button>
           </div>
@@ -557,7 +597,13 @@ function isValidTechString(val: unknown): val is string {
   const s = String(val).trim();
   if (!s) return false;
   const upper = s.toUpperCase();
-  return upper !== 'GENERICO' && upper !== 'GENÉRICO' && upper !== 'N/A' && upper !== 'NULL' && upper !== '0';
+  return (
+    upper !== 'GENERICO' &&
+    upper !== 'GENÉRICO' &&
+    upper !== 'N/A' &&
+    upper !== 'NULL' &&
+    upper !== '0'
+  );
 }
 
 function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
@@ -602,7 +648,7 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
 
   // Unificar lectura de especificaciones JSONB + datos_especificos + motor
   const specsModulos = useMemo(() => {
-    const flat: Record<string, any> = {};
+    const flat: Record<string, unknown> = {};
     const mods = equipo.especificaciones?.modulos;
     if (mods && typeof mods === 'object') {
       for (const mValues of Object.values(mods)) {
@@ -621,13 +667,22 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
     return flat;
   }, [equipo.especificaciones, equipo.datos_especificos]);
 
-  const motor = (equipo.motor || (equipo.datos_especificos as any)?.motor || null) as Record<string, any> | null;
+  const motor = (equipo.motor ||
+    (
+      equipo.datos_especificos as {
+        motor?: Record<string, string | number | boolean | null | undefined>;
+      } | null
+    )?.motor ||
+    null) as Record<string, string | number | boolean | null | undefined> | null;
 
   // 1. KPI de Potencia (kVA / kW / HP / TR)
   const potenciaTexto = useMemo(() => {
-    const capEnf = Number(specsModulos.capacidad_de_enfriamiento ?? specsModulos.capacidad_enfriamiento);
+    const capEnf = Number(
+      specsModulos.capacidad_de_enfriamiento ?? specsModulos.capacidad_enfriamiento,
+    );
     if (Number.isFinite(capEnf) && capEnf > 0) {
-      const uom = (equipo.especificaciones as any)?.unidades_personalizadas?.capacidad_de_enfriamiento || 'TR';
+      const uom =
+        equipo.especificaciones?.unidades_personalizadas?.capacidad_de_enfriamiento || 'TR';
       return `${capEnf} ${uom}`;
     }
     const kva = Number(specsModulos.potencia_kva);
@@ -643,7 +698,7 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
     const mkw = Number(motor?.potencia_kw ?? specsModulos.potencia_kw_electrico);
     if (Number.isFinite(mkw) && mkw > 0) return `${mkw} kW`;
     return null;
-  }, [specsModulos, motor]);
+  }, [specsModulos, motor, equipo.especificaciones]);
 
   // 2. KPI de Presión / Caudal / Altura / Refrigerante
   const metricaFluidoTexto = useMemo(() => {
@@ -667,8 +722,10 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
 
   // 3. KPI de Marca / Modelo de Subsistema (Motor, Compresor, Bomba o Generador)
   const subsistemaTexto = useMemo(() => {
-    const marcaMot = motor?.marca_motor ?? specsModulos.marca_motor ?? specsModulos.marca_motor_electrico;
-    const modMot = motor?.modelo_motor ?? specsModulos.modelo_motor ?? specsModulos.modelo_motor_electrico;
+    const marcaMot =
+      motor?.marca_motor ?? specsModulos.marca_motor ?? specsModulos.marca_motor_electrico;
+    const modMot =
+      motor?.modelo_motor ?? specsModulos.modelo_motor ?? specsModulos.modelo_motor_electrico;
     if (isValidTechString(marcaMot)) {
       return isValidTechString(modMot) ? `${marcaMot.trim()} ${modMot.trim()}` : marcaMot.trim();
     }
@@ -676,7 +733,9 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
     const marcaComp = specsModulos.marca_compresor;
     const modComp = specsModulos.modelo_compresor;
     if (isValidTechString(marcaComp)) {
-      return isValidTechString(modComp) ? `${marcaComp.trim()} ${modComp.trim()}` : marcaComp.trim();
+      return isValidTechString(modComp)
+        ? `${marcaComp.trim()} ${modComp.trim()}`
+        : marcaComp.trim();
     }
 
     const marcaBom = specsModulos.marca_bomba;
@@ -697,7 +756,9 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
   // 4. KPI de RPM o Voltaje
   const rpmVoltajeTexto = useMemo(() => {
     const rpm = Number(
-      motor?.velocidad_nominal_rpm ?? specsModulos.velocidad_nominal_rpm ?? specsModulos.velocidad_rpm,
+      motor?.velocidad_nominal_rpm ??
+        specsModulos.velocidad_nominal_rpm ??
+        specsModulos.velocidad_rpm,
     );
     if (Number.isFinite(rpm) && rpm > 0) return `${rpm} RPM`;
     const vac = specsModulos.voltaje_operacion_vac ?? specsModulos.voltaje_salida_vac;
@@ -836,7 +897,11 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
           </div>
 
           {/* Franja de Especificaciones Rápidas Polimórficas (Potencia / Presión-Caudal / Marca / RPM / Horómetro) */}
-          {(potenciaTexto || metricaFluidoTexto || subsistemaTexto || rpmVoltajeTexto || horasNum > 0) && (
+          {(potenciaTexto ||
+            metricaFluidoTexto ||
+            subsistemaTexto ||
+            rpmVoltajeTexto ||
+            horasNum > 0) && (
             <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
               {potenciaTexto && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50/70 text-amber-900 border border-amber-200/80 rounded text-[11px] font-mono font-bold">
@@ -900,7 +965,10 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
       {showHardDeleteConfirm && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-slate-900/50" onClick={() => setShowHardDeleteConfirm(false)} />
+            <div
+              className="fixed inset-0 bg-slate-900/50"
+              onClick={() => setShowHardDeleteConfirm(false)}
+            />
             <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200">
               <div className="flex items-center gap-3 p-6 border-b border-rose-100">
                 <div className="p-3 bg-rose-100 rounded-full">
@@ -1070,14 +1138,23 @@ export default function EquiposPage() {
             label: o.label,
           }));
 
-          const tiposAplica = (mod as any).tipo_equipo_modulos
-            ?.map((tem: any) => {
+          const tiposAplica = (
+            mod.tipo_equipo_modulos as
+              | Array<{
+                  tipo_equipo?:
+                    | { codigo_tipo?: string; nombre_tipo?: string; nombre?: string }
+                    | string
+                    | null;
+                } | null>
+              | undefined
+          )
+            ?.map((tem) => {
               if (!tem) return null;
               const te = tem.tipo_equipo;
               const raw =
                 typeof te === 'string'
                   ? te
-                  : (te?.codigo_tipo || te?.nombre_tipo || te?.nombre || '');
+                  : te?.codigo_tipo || te?.nombre_tipo || te?.nombre || '';
               return raw ? String(raw).toUpperCase().trim() : null;
             })
             .filter(Boolean) as string[] | undefined;
@@ -1085,20 +1162,20 @@ export default function EquiposPage() {
           const existente = mapa.get(attr.codigo_atributo);
           mapa.set(attr.codigo_atributo, {
             codigo_atributo: attr.codigo_atributo,
-            nombre_atributo: attr.nombre_atributo || existente?.nombre_atributo || attr.codigo_atributo,
+            nombre_atributo:
+              attr.nombre_atributo || existente?.nombre_atributo || attr.codigo_atributo,
             tipo_control: ctrlInfo.value as CampoFiltrableBTree['tipo_control'],
             codigo_modulo: mod.codigo_modulo,
             nombre_modulo: modInfo.shortName,
             magnitud_codigo: magCode || existente?.magnitud_codigo,
             unidad_defecto:
-              attr.unidad_defecto_codigo ||
-              existente?.unidad_defecto ||
-              unidadesMag[0]?.codigo,
+              attr.unidad_defecto_codigo || existente?.unidad_defecto || unidadesMag[0]?.codigo,
             unidades_disponibles:
               unidadesMag.length > 0 ? unidadesMag : existente?.unidades_disponibles || [],
             opciones_sugeridas:
               opcionesEnum.length > 0 ? opcionesEnum : existente?.opciones_sugeridas,
-            aplica_tipos: tiposAplica && tiposAplica.length > 0 ? tiposAplica : existente?.aplica_tipos,
+            aplica_tipos:
+              tiposAplica && tiposAplica.length > 0 ? tiposAplica : existente?.aplica_tipos,
           });
         }
       }
@@ -1109,7 +1186,12 @@ export default function EquiposPage() {
 
     // Si hay un tipo seleccionado, mostrar primero los aplicables a ese tipo
     const normTipo = tipoFiltro ? String(tipoFiltro).toUpperCase().trim() : '';
-    return todos.filter((c) => !c.aplica_tipos || c.aplica_tipos.length === 0 || (normTipo && c.aplica_tipos.includes(normTipo)));
+    return todos.filter(
+      (c) =>
+        !c.aplica_tipos ||
+        c.aplica_tipos.length === 0 ||
+        (normTipo && c.aplica_tipos.includes(normTipo)),
+    );
   }, [modulosHub, magnitudesHub, tipoFiltro]);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1165,10 +1247,20 @@ export default function EquiposPage() {
       list = list.filter((c) => c.codigo_modulo === comboboxModuloFiltro);
     }
     if (!comboboxSearch.trim()) return list;
-    const q = comboboxSearch.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const q = comboboxSearch
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
     return list.filter((c) => {
-      const nom = c.nombre_atributo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const mod = c.nombre_modulo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const nom = c.nombre_atributo
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      const mod = c.nombre_modulo
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
       const cod = c.codigo_atributo.toLowerCase();
       return nom.includes(q) || mod.includes(q) || cod.includes(q);
     });
@@ -1238,7 +1330,6 @@ export default function EquiposPage() {
 
   const { data: facetasData } = useFacetasEquipos(tipoFiltro);
   const marcasDisponibles = useMemo(() => facetasData?.marcas || [], [facetasData]);
-  const valoresTrabajoDisponibles = useMemo(() => facetasData?.valoresTrabajo || [], [facetasData]);
 
   // Sugerencias de marcas para el campo seleccionado (tanto en B-Tree como en facetas)
   const sugerenciasBTreeActual = useMemo(() => {
@@ -1246,9 +1337,7 @@ export default function EquiposPage() {
     if (campoBTreeActual.opciones_sugeridas && campoBTreeActual.opciones_sugeridas.length > 0) {
       return campoBTreeActual.opciones_sugeridas;
     }
-    const facetaMarca = marcasDisponibles.find(
-      (m) => m.campo === campoBTreeActual.codigo_atributo,
-    );
+    const facetaMarca = marcasDisponibles.find((m) => m.campo === campoBTreeActual.codigo_atributo);
     if (facetaMarca?.valoresSugeridos) {
       return facetaMarca.valoresSugeridos.map((v) => ({ value: v, label: v }));
     }
@@ -1448,7 +1537,8 @@ export default function EquiposPage() {
                 Parque de Activos Industriales (EAM 360°)
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Directorio universal de equipos, filtros técnicos por especificaciones con conversión de unidades, plantillas OEM y repuestos BOM
+                Directorio universal de equipos, filtros técnicos por especificaciones con
+                conversión de unidades, plantillas OEM y repuestos BOM
               </p>
             </div>
           </div>
@@ -1498,7 +1588,9 @@ export default function EquiposPage() {
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">{totalParque.toLocaleString()}</span>
+            <span className="text-2xl font-black text-slate-900">
+              {totalParque.toLocaleString()}
+            </span>
             <span className="text-xs font-medium text-slate-500">equipos</span>
           </div>
           <p
@@ -1567,11 +1659,15 @@ export default function EquiposPage() {
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">{totalBombas.toLocaleString()}</span>
+            <span className="text-2xl font-black text-slate-900">
+              {totalBombas.toLocaleString()}
+            </span>
             <span className="text-xs font-semibold text-blue-700">Bombas</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            {totalParque > 0 ? `${Math.round((totalBombas / totalParque) * 100)}% del parque • ` : ''}
+            {totalParque > 0
+              ? `${Math.round((totalBombas / totalParque) * 100)}% del parque • `
+              : ''}
             Presión y red de agua
           </p>
         </button>
@@ -1606,8 +1702,8 @@ export default function EquiposPage() {
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            En reparación: <strong className="text-amber-700">{resumen?.en_reparacion ?? 0}</strong> •
-            Fuera serv.: <strong className="text-rose-700">{resumen?.fuera_servicio ?? 0}</strong>
+            En reparación: <strong className="text-amber-700">{resumen?.en_reparacion ?? 0}</strong>{' '}
+            • Fuera serv.: <strong className="text-rose-700">{resumen?.fuera_servicio ?? 0}</strong>
           </p>
         </button>
       </div>
@@ -1761,7 +1857,9 @@ export default function EquiposPage() {
               onClick={() => setViewMode('grid')}
               className={cn(
                 'p-1.5',
-                viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-500',
+                viewMode === 'grid'
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'hover:bg-slate-50 text-slate-500',
               )}
               title="Vista cuadrícula"
             >
@@ -1771,7 +1869,9 @@ export default function EquiposPage() {
               onClick={() => setViewMode('list')}
               className={cn(
                 'p-1.5',
-                viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-500',
+                viewMode === 'list'
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'hover:bg-slate-50 text-slate-500',
               )}
               title="Vista lista"
             >
@@ -1810,7 +1910,8 @@ export default function EquiposPage() {
                       )}
                     </h4>
                     <p className="text-[11px] text-slate-500">
-                      Filtra por potencia, caudal, presión, capacidad o marca. Si eliges otra unidad de medida (ej. kVA, kW o HP), el sistema convierte el rango automáticamente.
+                      Filtra por potencia, caudal, presión, capacidad o marca. Si eliges otra unidad
+                      de medida (ej. kVA, kW o HP), el sistema convierte el rango automáticamente.
                     </p>
                   </div>
                 </div>
@@ -1845,11 +1946,11 @@ export default function EquiposPage() {
                     <div
                       onClick={() => setComboboxOpen(!comboboxOpen)}
                       className={cn(
-                        "w-full px-3 py-2 border rounded-lg text-xs font-semibold bg-white cursor-pointer flex items-center justify-between transition-all",
+                        'w-full px-3 py-2 border rounded-lg text-xs font-semibold bg-white cursor-pointer flex items-center justify-between transition-all',
                         comboboxOpen
-                          ? "border-blue-500 ring-2 ring-blue-500/20 shadow-sm"
-                          : "border-slate-300 hover:border-blue-400 shadow-2xs",
-                        filtroAtributoCodigo ? "text-slate-900" : "text-slate-400"
+                          ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-sm'
+                          : 'border-slate-300 hover:border-blue-400 shadow-2xs',
+                        filtroAtributoCodigo ? 'text-slate-900' : 'text-slate-400',
                       )}
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -1884,7 +1985,12 @@ export default function EquiposPage() {
                             <X className="h-3 w-3" />
                           </button>
                         )}
-                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", comboboxOpen && "rotate-180")} />
+                        <ChevronDown
+                          className={cn(
+                            'h-3.5 w-3.5 text-slate-400 transition-transform',
+                            comboboxOpen && 'rotate-180',
+                          )}
+                        />
                       </div>
                     </div>
 
@@ -1920,10 +2026,10 @@ export default function EquiposPage() {
                               type="button"
                               onClick={() => setComboboxModuloFiltro('TODOS')}
                               className={cn(
-                                "px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap transition-colors",
+                                'px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap transition-colors',
                                 comboboxModuloFiltro === 'TODOS'
-                                  ? "bg-blue-600 text-white"
-                                  : "bg-slate-200/80 text-slate-700 hover:bg-slate-300"
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-slate-200/80 text-slate-700 hover:bg-slate-300',
                               )}
                             >
                               Todos ({camposFiltrablesBTree.length})
@@ -1934,10 +2040,10 @@ export default function EquiposPage() {
                                 type="button"
                                 onClick={() => setComboboxModuloFiltro(m.codigo)}
                                 className={cn(
-                                  "px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap transition-colors",
+                                  'px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap transition-colors',
                                   comboboxModuloFiltro === m.codigo
-                                    ? "bg-blue-600 text-white"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
                                 )}
                               >
                                 {m.nombre}
@@ -1950,9 +2056,12 @@ export default function EquiposPage() {
                         <div className="overflow-y-auto p-1.5 space-y-0.5 flex-1 divide-y divide-slate-100">
                           {camposFiltradosCombobox.length === 0 ? (
                             <div className="p-4 text-center text-xs text-slate-500">
-                              <p className="font-semibold text-slate-700">No se encontraron características</p>
+                              <p className="font-semibold text-slate-700">
+                                No se encontraron características
+                              </p>
                               <p className="text-[11px] text-slate-400 mt-0.5">
-                                Intenta con otro término de búsqueda o selecciona "Todos".
+                                Intenta con otro término de búsqueda o selecciona
+                                &ldquo;Todos&rdquo;.
                               </p>
                             </div>
                           ) : (
@@ -1967,15 +2076,20 @@ export default function EquiposPage() {
                                     setComboboxSearch('');
                                   }}
                                   className={cn(
-                                    "p-2 rounded-lg flex items-center justify-between cursor-pointer transition-colors text-xs",
+                                    'p-2 rounded-lg flex items-center justify-between cursor-pointer transition-colors text-xs',
                                     isSelected
-                                      ? "bg-blue-50 text-blue-900 font-bold border border-blue-200"
-                                      : "hover:bg-slate-50 text-slate-800"
+                                      ? 'bg-blue-50 text-blue-900 font-bold border border-blue-200'
+                                      : 'hover:bg-slate-50 text-slate-800',
                                   )}
                                 >
                                   <div className="min-w-0 flex-1 pr-2">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className={cn("font-bold", isSelected ? "text-blue-950" : "text-slate-900")}>
+                                      <span
+                                        className={cn(
+                                          'font-bold',
+                                          isSelected ? 'text-blue-950' : 'text-slate-900',
+                                        )}
+                                      >
                                         {c.nombre_atributo}
                                       </span>
                                       {c.unidad_defecto && (
@@ -2010,7 +2124,8 @@ export default function EquiposPage() {
                       <div className="px-3.5 py-2 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-500 flex items-center gap-2">
                         <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                         <span>
-                          Selecciona un campo técnico a la izquierda o haz clic en uno de los accesos rápidos de abajo.
+                          Selecciona un campo técnico a la izquierda o haz clic en uno de los
+                          accesos rápidos de abajo.
                         </span>
                       </div>
                     ) : campoBTreeActual.tipo_control === 'NUMERICO_MAGNITUD' ||
@@ -2188,7 +2303,8 @@ export default function EquiposPage() {
                         }}
                         className={cn(
                           'px-2.5 py-0.5 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer',
-                          String(filtroAtributoTexto).toUpperCase() === String(sug.value).toUpperCase()
+                          String(filtroAtributoTexto).toUpperCase() ===
+                            String(sug.value).toUpperCase()
                             ? 'bg-blue-600 text-white border-blue-600'
                             : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-blue-50 hover:text-blue-700',
                         )}
@@ -2201,8 +2317,8 @@ export default function EquiposPage() {
                   campoBTreeActual.tipo_control === 'NUMERICO_MAGNITUD' && (
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500">
                       <span>
-                        💡 Puedes ingresar solo el mínimo, solo el máximo, o ambos para acotar el rango en{' '}
-                        <strong className="text-slate-700">{filtroAtributoUnidad}</strong>.
+                        💡 Puedes ingresar solo el mínimo, solo el máximo, o ambos para acotar el
+                        rango en <strong className="text-slate-700">{filtroAtributoUnidad}</strong>.
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span>Rangos rápidos:</span>
@@ -2384,7 +2500,8 @@ export default function EquiposPage() {
                     No se encontraron equipos con esos filtros técnicos
                   </p>
                   <p className="text-slate-500 text-xs mt-1">
-                    Intenta ampliar el rango numérico, cambiar la unidad de medida o limpiar los filtros activos
+                    Intenta ampliar el rango numérico, cambiar la unidad de medida o limpiar los
+                    filtros activos
                   </p>
                   <button
                     onClick={clearFilters}

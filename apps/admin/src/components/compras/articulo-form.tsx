@@ -3,7 +3,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Componente Unificado: ArticuloForm (Alta y Edición de Recurso Maestro)
- * 
+ *
  * Arquitectura Zero-Trust:
  * - Modo 'create': Habilita 'Stock Inicial' (genera apertura formal en Kardex).
  * - Modo 'edit': Bloquea 'Stock Actual' en solo lectura (protección inmutable de Kardex).
@@ -11,17 +11,15 @@
  */
 
 import { useEffect, useState, useMemo } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
   Boxes,
-  Building2,
   Check,
   DollarSign,
   HardHat,
   Info,
-  Layers,
   Lock,
   Package,
   Plus,
@@ -31,7 +29,6 @@ import {
   Truck,
   Wrench,
   Loader2,
-  RefreshCw,
   FolderTree,
   X,
 } from 'lucide-react';
@@ -122,7 +119,7 @@ export const articuloFormSchema = z
     {
       message: 'El número de serie es obligatorio cuando la herramienta requiere serialización',
       path: ['numero_serie_activo'],
-    }
+    },
   );
 
 export type ArticuloFormValues = z.infer<typeof articuloFormSchema>;
@@ -236,28 +233,30 @@ export function ArticuloForm({
   const [costoInput, setCostoInput] = useState<string>(
     initialData?.precio_compra !== undefined && initialData?.precio_compra !== null
       ? String(initialData.precio_compra)
-      : ''
+      : '',
   );
   const [markupInput, setMarkupInput] = useState<string>(
-    initialData?.margen_utilidad_porcentaje !== undefined && initialData?.margen_utilidad_porcentaje !== null
+    initialData?.margen_utilidad_porcentaje !== undefined &&
+      initialData?.margen_utilidad_porcentaje !== null
       ? String(initialData.margen_utilidad_porcentaje)
-      : '40'
+      : '40',
   );
   const [precioVentaInput, setPrecioVentaInput] = useState<string>(
     initialData?.precio_venta !== undefined && initialData?.precio_venta !== null
       ? String(initialData.precio_venta)
-      : ''
+      : '',
   );
 
   const {
     register,
     handleSubmit,
     watch,
+    getValues,
     setValue,
     control,
     formState: { errors },
   } = useForm<ArticuloFormValues>({
-    resolver: zodResolver(articuloFormSchema) as any,
+    resolver: zodResolver(articuloFormSchema) as unknown as Resolver<ArticuloFormValues>,
     defaultValues: {
       destino_articulo: initialData?.destino_articulo || 'INSUMO_SERVICIO',
       id_categoria: initialData?.id_categoria || undefined,
@@ -286,7 +285,7 @@ export function ArticuloForm({
         ? Number(initialData.margen_utilidad_porcentaje)
         : 40,
       moneda: initialData?.moneda || 'COP',
-      observaciones: (initialData as any)?.observaciones || '',
+      observaciones: initialData?.observaciones || '',
       notas_instalacion: initialData?.notas_instalacion || '',
       proveedores_iniciales: [],
     },
@@ -308,7 +307,7 @@ export function ArticuloForm({
       try {
         if (mode === 'create') {
           const resProv = await comprasService.getProveedores();
-          setProveedores(Array.isArray(resProv) ? resProv : (resProv as any)?.proveedores || []);
+          setProveedores(Array.isArray(resProv) ? resProv : []);
         }
       } catch (e) {
         console.error('Error cargando proveedores auxiliares:', e);
@@ -333,7 +332,7 @@ export function ArticuloForm({
   useEffect(() => {
     let isMounted = true;
     async function initSku() {
-      if (mode === 'create' && !initialData?.codigo_interno && !watch('codigo_interno')) {
+      if (mode === 'create' && !initialData?.codigo_interno && !getValues('codigo_interno')) {
         try {
           setGenerandoSku(true);
           const res = await comprasService.getSiguienteSku();
@@ -356,7 +355,7 @@ export function ArticuloForm({
     return () => {
       isMounted = false;
     };
-  }, [mode, initialData]);
+  }, [mode, initialData, getValues, setValue]);
 
   // Manejador manual del botón ⚡ Auto-generar SKU
   const handleGenerarSku = async () => {
@@ -394,7 +393,7 @@ export function ArticuloForm({
         setSkuValidando(true);
         const res = await comprasService.validarCodigoInterno(
           codigoInternoWatch.trim(),
-          initialData?.id_componente
+          initialData?.id_componente,
         );
         setSkuEstado({
           disponible: res.disponible,
@@ -530,7 +529,9 @@ export function ArticuloForm({
                     : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/50'
                 }`}
               >
-                <div className={`p-2 rounded-lg mb-2.5 ${isSelected ? arq.iconBg : 'bg-gray-100 text-gray-600'}`}>
+                <div
+                  className={`p-2 rounded-lg mb-2.5 ${isSelected ? arq.iconBg : 'bg-gray-100 text-gray-600'}`}
+                >
                   <Icon className="h-4 w-4" />
                 </div>
                 <span className="font-bold text-xs text-gray-900 leading-tight">{arq.titulo}</span>
@@ -558,19 +559,26 @@ export function ArticuloForm({
               <Package className="h-5 w-5 text-blue-600" />
               Identidad Técnica y Taxonomía Jerárquica
             </div>
-            <Badge variant="outline" className="text-[11px] font-mono border-blue-200 text-blue-700 bg-blue-50/50">
+            <Badge
+              variant="outline"
+              className="text-[11px] font-mono border-blue-200 text-blue-700 bg-blue-50/50"
+            >
               Taxonomía Multinivel EAM
             </Badge>
           </CardTitle>
           <CardDescription className="text-xs text-gray-500">
-            Define la clasificación oficial, códigos de referencia y títulos de búsqueda estandarizados.
+            Define la clasificación oficial, códigos de referencia y títulos de búsqueda
+            estandarizados.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6 space-y-6">
           {/* Categoría Taxonómica Jerárquica (Selector Combobox Puntual con Drill-Down Exclusivo) */}
           <div className="space-y-1.5 border-b border-gray-100 pb-5">
             <div className="flex items-center justify-between">
-              <Label htmlFor="id_categoria" className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+              <Label
+                htmlFor="id_categoria"
+                className="text-xs font-bold text-gray-800 flex items-center gap-1.5"
+              >
                 <FolderTree className="h-4 w-4 text-blue-600" />
                 Taxonomía y Clasificación del Recurso <span className="text-red-500">*</span>
               </Label>
@@ -583,7 +591,7 @@ export function ArticuloForm({
               variant="combobox"
               value={watch('id_categoria')}
               onChange={(idCat, catObj) => {
-                setValue('id_categoria', idCat as any, { shouldValidate: true });
+                setValue('id_categoria', Number(idCat ?? 0), { shouldValidate: true });
                 if (catObj?.nombre) {
                   setNombreCategoriaActiva(catObj.nombre);
                 } else if (!idCat) {
@@ -624,12 +632,15 @@ export function ArticuloForm({
               <div className="relative">
                 <Input
                   id="codigo_interno"
-                  placeholder={mode === 'create' ? 'Auto-generado (ART-2026-XXXX)' : 'Ej: ART-2026-0001'}
+                  placeholder={
+                    mode === 'create' ? 'Auto-generado (ART-2026-XXXX)' : 'Ej: ART-2026-0001'
+                  }
                   {...register('codigo_interno')}
                   className={cn(
                     'bg-white font-mono text-xs uppercase pr-8',
-                    skuEstado?.disponible === true && 'border-emerald-500 focus-visible:ring-emerald-500',
-                    skuEstado?.disponible === false && 'border-red-500 focus-visible:ring-red-500'
+                    skuEstado?.disponible === true &&
+                      'border-emerald-500 focus-visible:ring-emerald-500',
+                    skuEstado?.disponible === false && 'border-red-500 focus-visible:ring-red-500',
                   )}
                 />
                 <div className="absolute right-2.5 top-2.5">
@@ -649,7 +660,7 @@ export function ArticuloForm({
                     'text-[11px] flex items-center gap-1.5 p-1.5 rounded font-mono',
                     skuEstado.disponible
                       ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
-                      : 'text-red-700 bg-red-50 border border-red-200'
+                      : 'text-red-700 bg-red-50 border border-red-200',
                   )}
                 >
                   <span>{skuEstado.disponible ? '✓' : '⚠️'}</span>
@@ -666,7 +677,10 @@ export function ArticuloForm({
 
             {/* Referencia Neutral del Fabricante */}
             <div className="space-y-1.5">
-              <Label htmlFor="referencia_fabricante" className="text-xs font-semibold text-gray-700">
+              <Label
+                htmlFor="referencia_fabricante"
+                className="text-xs font-semibold text-gray-700"
+              >
                 Referencia del Fabricante / Modelo <span className="text-red-500">*</span>
               </Label>
               <Input
@@ -731,12 +745,12 @@ export function ArticuloForm({
                     <button
                       key={tc.id}
                       type="button"
-                      onClick={() => setValue('tipo_comercial', tc.id as any)}
+                      onClick={() => setValue('tipo_comercial', tc.id)}
                       className={cn(
                         'flex flex-col items-center justify-center p-2 rounded-lg border text-xs transition-all text-center',
                         isSelected
                           ? 'border-blue-500 bg-blue-50/80 text-blue-900 font-bold ring-2 ring-blue-500/20 shadow-sm'
-                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50/80'
+                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50/80',
                       )}
                     >
                       <div className="flex items-center gap-1.5">
@@ -760,12 +774,14 @@ export function ArticuloForm({
               {tituloSugerido && watch('descripcion_corta') !== tituloSugerido && (
                 <button
                   type="button"
-                  onClick={() => setValue('descripcion_corta', tituloSugerido, { shouldValidate: true })}
+                  onClick={() =>
+                    setValue('descripcion_corta', tituloSugerido, { shouldValidate: true })
+                  }
                   className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
                   title="Aplicar nomenclatura industrial estandarizada"
                 >
                   <Sparkles className="h-3 w-3" />
-                  <span>Sugerir: "{tituloSugerido}"</span>
+                  <span>Sugerir: &ldquo;{tituloSugerido}&rdquo;</span>
                 </button>
               )}
             </div>
@@ -795,7 +811,7 @@ export function ArticuloForm({
           </div>
         </CardContent>
       </Card>
-      
+
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* SECCIÓN 3: PRECIOS, COSTO Y MATEMÁTICA FINANCIERA (MARKUP VS MARGEN) */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
@@ -812,8 +828,8 @@ export function ArticuloForm({
                   margenRealCalculado >= 25
                     ? 'bg-emerald-600 text-white'
                     : margenRealCalculado >= 10
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-red-600 text-white'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-red-600 text-white'
                 }`}
               >
                 Margen Real sobre Venta: {margenRealCalculado}%
@@ -821,7 +837,8 @@ export function ArticuloForm({
             )}
           </CardTitle>
           <CardDescription className="text-xs text-blue-700/80">
-            Cálculo bidireccional en tiempo real entre Costo de Adquisición, Markup de Taller y Margen Comercial.
+            Cálculo bidireccional en tiempo real entre Costo de Adquisición, Markup de Taller y
+            Margen Comercial.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6 space-y-6">
@@ -849,7 +866,9 @@ export function ArticuloForm({
                 <Label className="text-xs font-semibold text-gray-700">
                   Markup sobre Costo (% Utilidad)
                 </Label>
-                <span className="text-[10px] text-blue-600 font-semibold uppercase">Cotización</span>
+                <span className="text-[10px] text-blue-600 font-semibold uppercase">
+                  Cotización
+                </span>
               </div>
               <Input
                 type="number"
@@ -890,8 +909,12 @@ export function ArticuloForm({
               Claridad Financiera: Markup vs. Margen
             </div>
             <p className="text-[11px] text-blue-700 leading-relaxed">
-              <strong>Markup ({markupInput || 0}%):</strong> Es el recargo sobre el costo de adquisición (${Number(costoInput || 0).toLocaleString()} COP).<br />
-              <strong>Margen Real ({margenRealCalculado ?? 0}%):</strong> Es la proporción neta de cada peso facturado que corresponde a utilidad bruta sobre la venta total (${Number(precioVentaInput || 0).toLocaleString()} COP).
+              <strong>Markup ({markupInput || 0}%):</strong> Es el recargo sobre el costo de
+              adquisición (${Number(costoInput || 0).toLocaleString()} COP).
+              <br />
+              <strong>Margen Real ({margenRealCalculado ?? 0}%):</strong> Es la proporción neta de
+              cada peso facturado que corresponde a utilidad bruta sobre la venta total ($
+              {Number(precioVentaInput || 0).toLocaleString()} COP).
             </p>
           </div>
         </CardContent>
@@ -924,7 +947,9 @@ export function ArticuloForm({
                 {...register('stock_minimo')}
                 className="bg-white font-mono text-xs"
               />
-              <p className="text-[11px] text-gray-400">Cantidad mínima antes de detonar alertas de reposición.</p>
+              <p className="text-[11px] text-gray-400">
+                Cantidad mínima antes de detonar alertas de reposición.
+              </p>
             </div>
 
             {/* Stock Actual / Stock Inicial (Zero-Trust Logic) */}
@@ -943,7 +968,8 @@ export function ArticuloForm({
                     className="bg-white font-mono text-xs font-bold text-blue-700"
                   />
                   <p className="text-[11px] text-gray-400">
-                    Si es &gt; 0, genera automáticamente un movimiento auditado en Kardex con origen INVENTARIO_INICIAL.
+                    Si es &gt; 0, genera automáticamente un movimiento auditado en Kardex con origen
+                    INVENTARIO_INICIAL.
                   </p>
                 </>
               ) : (
@@ -953,7 +979,10 @@ export function ArticuloForm({
                       <Lock className="h-3.5 w-3.5 text-amber-600" />
                       Stock Físico en Bodega (Solo Lectura)
                     </Label>
-                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-800 border-amber-200">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-amber-50 text-amber-800 border-amber-200"
+                    >
                       Protegido por Kardex
                     </Badge>
                   </div>
@@ -963,7 +992,8 @@ export function ArticuloForm({
                     className="bg-gray-50 font-mono font-bold text-gray-800 text-xs cursor-not-allowed border-gray-200"
                   />
                   <p className="text-[11px] text-amber-700">
-                    🔒 Las existencias físicas no son editables directamente. Para registrar entradas, salidas o ajustes auditados, utilice los movimientos de Kardex.
+                    🔒 Las existencias físicas no son editables directamente. Para registrar
+                    entradas, salidas o ajustes auditados, utilice los movimientos de Kardex.
                   </p>
                 </>
               )}
@@ -1019,10 +1049,15 @@ export function ArticuloForm({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2">
             <div className="flex items-center justify-between rounded-lg border border-gray-200 p-3 bg-gray-50/50">
               <div className="space-y-0.5">
-                <Label htmlFor="requiere_serializacion" className="text-xs font-semibold text-gray-800">
+                <Label
+                  htmlFor="requiere_serializacion"
+                  className="text-xs font-semibold text-gray-800"
+                >
                   Requiere Serialización
                 </Label>
-                <p className="text-[11px] text-gray-500">Cada unidad física tiene número de serie único</p>
+                <p className="text-[11px] text-gray-500">
+                  Cada unidad física tiene número de serie único
+                </p>
               </div>
               <Switch
                 id="requiere_serializacion"
@@ -1036,7 +1071,9 @@ export function ArticuloForm({
                 <Label htmlFor="es_activo_fijo" className="text-xs font-semibold text-gray-800">
                   Es Activo Fijo
                 </Label>
-                <p className="text-[11px] text-gray-500">Herramienta o equipo patrimonial de Mekanos</p>
+                <p className="text-[11px] text-gray-500">
+                  Herramienta o equipo patrimonial de Mekanos
+                </p>
               </div>
               <Switch
                 id="es_activo_fijo"
@@ -1050,8 +1087,12 @@ export function ArticuloForm({
           {(requiereSerializacion || esActivoFijo) && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 p-4 rounded-xl border border-purple-200 bg-purple-50/30">
               <div className="space-y-1.5">
-                <Label htmlFor="numero_serie_activo" className="text-xs font-semibold text-purple-900">
-                  Número de Serie del Fabricante {requiereSerializacion && <span className="text-red-500">*</span>}
+                <Label
+                  htmlFor="numero_serie_activo"
+                  className="text-xs font-semibold text-purple-900"
+                >
+                  Número de Serie del Fabricante{' '}
+                  {requiereSerializacion && <span className="text-red-500">*</span>}
                 </Label>
                 <Input
                   id="numero_serie_activo"
@@ -1093,7 +1134,8 @@ export function ArticuloForm({
                   Matriz Inicial de Abastecimiento (Proveedores Homologados)
                 </CardTitle>
                 <CardDescription className="text-xs text-gray-500">
-                  Asocia los proveedores que comercializan este repuesto y sus costos de adquisición.
+                  Asocia los proveedores que comercializan este repuesto y sus costos de
+                  adquisición.
                 </CardDescription>
               </div>
               <Button
@@ -1123,7 +1165,8 @@ export function ArticuloForm({
             {fields.length === 0 ? (
               <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-xs text-gray-500">
                 <Truck className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                No se han añadido proveedores iniciales. Podrás vincularlos más adelante desde la Ficha 360°.
+                No se han añadido proveedores iniciales. Podrás vincularlos más adelante desde la
+                Ficha 360°.
               </div>
             ) : (
               fields.map((field, idx) => (
@@ -1153,14 +1196,18 @@ export function ArticuloForm({
                       >
                         {proveedores.map((p) => (
                           <option key={p.id_proveedor} value={p.id_proveedor}>
-                            {p.persona?.nombre_comercial || p.persona?.razon_social || `Proveedor #${p.id_proveedor}`}
+                            {p.persona?.nombre_comercial ||
+                              p.persona?.razon_social ||
+                              `Proveedor #${p.id_proveedor}`}
                           </option>
                         ))}
                       </select>
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold text-gray-700">Ref. / SKU Proveedor *</Label>
+                      <Label className="text-xs font-semibold text-gray-700">
+                        Ref. / SKU Proveedor *
+                      </Label>
                       <Input
                         placeholder="Ej: FLT-8821"
                         {...register(`proveedores_iniciales.${idx}.referencia_proveedor` as const)}

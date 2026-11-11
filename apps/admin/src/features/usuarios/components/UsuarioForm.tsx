@@ -1,6 +1,6 @@
 /**
  * FORMULARIO DE CREACIÓN DE USUARIO - MEKANOS S.A.S
- * 
+ *
  * Wizard de 3 pasos:
  * 1. Datos de Identidad (Persona)
  * 2. Datos de Acceso (Usuario)
@@ -25,10 +25,10 @@ import {
   MapPin,
   Phone,
   User,
-  UserPlus
+  UserPlus,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { useBuscarPersona, useCrearUsuario, useValidarUsername } from '../lib/usuarios.service';
 import { CARGO_OPTIONS, CargoEmpleado, TIPO_IDENTIFICACION_OPTIONS } from '../types';
@@ -38,107 +38,110 @@ import { RolesSelector } from './RolesSelector';
 // SCHEMA DE VALIDACIÓN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const usuarioSchema = z.object({
-  // Paso 1: Identidad
-  tipo_identificacion: z.enum(['CC', 'NIT', 'CE', 'PA', 'TI']),
-  numero_identificacion: z.string().min(5, 'Mínimo 5 caracteres').max(20),
-  tipo_persona: z.enum(['NATURAL', 'JURIDICA']),
-  primer_nombre: z.string().min(2, 'Mínimo 2 caracteres').optional(),
-  segundo_nombre: z.string().optional(),
-  primer_apellido: z.string().min(2, 'Mínimo 2 caracteres').optional(),
-  segundo_apellido: z.string().optional(),
-  razon_social: z.string().optional(),
-  email_principal: z.string().email('Email inválido').optional().or(z.literal('')),
-  telefono_principal: z.string().optional(),
-  celular: z.string().optional(),
-  direccion_principal: z.string().optional(),
-  ciudad: z.string().optional(),
+const usuarioSchema = z
+  .object({
+    // Paso 1: Identidad
+    tipo_identificacion: z.enum(['CC', 'NIT', 'CE', 'PA', 'TI']),
+    numero_identificacion: z.string().min(5, 'Mínimo 5 caracteres').max(20),
+    tipo_persona: z.enum(['NATURAL', 'JURIDICA']),
+    primer_nombre: z.string().min(2, 'Mínimo 2 caracteres').optional(),
+    segundo_nombre: z.string().optional(),
+    primer_apellido: z.string().min(2, 'Mínimo 2 caracteres').optional(),
+    segundo_apellido: z.string().optional(),
+    razon_social: z.string().optional(),
+    email_principal: z.string().email('Email inválido').optional().or(z.literal('')),
+    telefono_principal: z.string().optional(),
+    celular: z.string().optional(),
+    direccion_principal: z.string().optional(),
+    ciudad: z.string().optional(),
 
-  // Paso 2: Acceso
-  username: z.string().min(4, 'Mínimo 4 caracteres').max(50).regex(
-    /^[a-z0-9._-]+$/,
-    'Solo letras minúsculas, números, puntos y guiones (sin espacios)'
-  ),
-  email_usuario: z.string().email('Email inválido'),
-  password: z.string().min(8, 'Mínimo 8 caracteres').optional(),
-  confirmar_password: z.string().optional(),
-  generar_password: z.boolean(),
+    // Paso 2: Acceso
+    username: z
+      .string()
+      .min(4, 'Mínimo 4 caracteres')
+      .max(50)
+      .regex(/^[a-z0-9._-]+$/, 'Solo letras minúsculas, números, puntos y guiones (sin espacios)'),
+    email_usuario: z.string().email('Email inválido'),
+    password: z.string().min(8, 'Mínimo 8 caracteres').optional(),
+    confirmar_password: z.string().optional(),
+    generar_password: z.boolean(),
 
-  // Paso 2.5: Datos empleado (opcional)
-  crear_empleado: z.boolean(),
-  cargo: z.string().optional(),
-  fecha_ingreso: z.string().optional(),
-  contacto_emergencia: z.string().optional(),
-  telefono_emergencia: z.string().optional(),
-  es_tecnico: z.boolean().optional(),
-  es_asesor: z.boolean().optional(),
+    // Paso 2.5: Datos empleado (opcional)
+    crear_empleado: z.boolean(),
+    cargo: z.string().optional(),
+    fecha_ingreso: z.string().optional(),
+    contacto_emergencia: z.string().optional(),
+    telefono_emergencia: z.string().optional(),
+    es_tecnico: z.boolean().optional(),
+    es_asesor: z.boolean().optional(),
 
-  // Paso 3: Roles
-  rolesIds: z.array(z.number()).min(1, 'Debe seleccionar al menos un rol'),
-}).superRefine((data, ctx) => {
-  // Validar persona natural
-  if (data.tipo_persona === 'NATURAL') {
-    if (!data.primer_nombre) {
+    // Paso 3: Roles
+    rolesIds: z.array(z.number()).min(1, 'Debe seleccionar al menos un rol'),
+  })
+  .superRefine((data, ctx) => {
+    // Validar persona natural
+    if (data.tipo_persona === 'NATURAL') {
+      if (!data.primer_nombre) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'El nombre es requerido',
+          path: ['primer_nombre'],
+        });
+      }
+      if (!data.primer_apellido) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'El apellido es requerido',
+          path: ['primer_apellido'],
+        });
+      }
+    }
+
+    // Validar persona jurídica
+    if (data.tipo_persona === 'JURIDICA' && !data.razon_social) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'El nombre es requerido',
-        path: ['primer_nombre'],
+        message: 'La razón social es requerida',
+        path: ['razon_social'],
       });
     }
-    if (!data.primer_apellido) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'El apellido es requerido',
-        path: ['primer_apellido'],
-      });
-    }
-  }
 
-  // Validar persona jurídica
-  if (data.tipo_persona === 'JURIDICA' && !data.razon_social) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'La razón social es requerida',
-      path: ['razon_social'],
-    });
-  }
+    // Validar password manual
+    if (!data.generar_password) {
+      if (!data.password) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'La contraseña es requerida',
+          path: ['password'],
+        });
+      }
+      if (data.password !== data.confirmar_password) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Las contraseñas no coinciden',
+          path: ['confirmar_password'],
+        });
+      }
+    }
 
-  // Validar password manual
-  if (!data.generar_password) {
-    if (!data.password) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'La contraseña es requerida',
-        path: ['password'],
-      });
+    // Validar datos empleado
+    if (data.crear_empleado) {
+      if (!data.cargo) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'El cargo es requerido',
+          path: ['cargo'],
+        });
+      }
+      if (!data.fecha_ingreso) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'La fecha de ingreso es requerida',
+          path: ['fecha_ingreso'],
+        });
+      }
     }
-    if (data.password !== data.confirmar_password) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Las contraseñas no coinciden',
-        path: ['confirmar_password'],
-      });
-    }
-  }
-
-  // Validar datos empleado
-  if (data.crear_empleado) {
-    if (!data.cargo) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'El cargo es requerido',
-        path: ['cargo'],
-      });
-    }
-    if (!data.fecha_ingreso) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'La fecha de ingreso es requerida',
-        path: ['fecha_ingreso'],
-      });
-    }
-  }
-});
+  });
 
 type UsuarioFormData = z.infer<typeof usuarioSchema>;
 
@@ -157,8 +160,6 @@ interface UsuarioFormProps {
 
 export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
-  const [personaEncontrada, setPersonaEncontrada] = useState<boolean>(false);
-  const [usernameDisponible, setUsernameDisponible] = useState<boolean | null>(null);
 
   const crearUsuarioMutation = useCrearUsuario();
 
@@ -176,48 +177,41 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
     mode: 'onChange',
   });
 
-  const { watch, setValue, formState: { errors } } = form;
+  const {
+    setValue,
+    formState: { errors },
+    control,
+  } = form;
 
-  // Watchers
-  const tipoIdentificacion = watch('tipo_identificacion');
-  const numeroIdentificacion = watch('numero_identificacion');
-  const tipoPersona = watch('tipo_persona');
-  const username = watch('username');
-  const generarPassword = watch('generar_password');
-  const crearEmpleado = watch('crear_empleado');
-  const rolesIds = watch('rolesIds');
+  // Watchers (compatibles con React Compiler via useWatch)
+  const tipoIdentificacion = useWatch({ control, name: 'tipo_identificacion' });
+  const numeroIdentificacion = useWatch({ control, name: 'numero_identificacion' });
+  const tipoPersona = useWatch({ control, name: 'tipo_persona' });
+  const username = useWatch({ control, name: 'username' });
+  const generarPassword = useWatch({ control, name: 'generar_password' });
+  const crearEmpleado = useWatch({ control, name: 'crear_empleado' });
+  const rolesIds = useWatch({ control, name: 'rolesIds' });
+  const razonSocial = useWatch({ control, name: 'razon_social' });
+  const emailUsuario = useWatch({ control, name: 'email_usuario' });
 
   // Buscar persona existente
   const { data: personaData, isFetching: buscandoPersona } = useBuscarPersona(
     tipoIdentificacion,
     numeroIdentificacion,
-    numeroIdentificacion?.length >= 6
+    numeroIdentificacion?.length >= 6,
   );
-
-  useEffect(() => {
-    if (personaData?.existe) {
-      setPersonaEncontrada(true);
-      // Si tiene usuario, mostrar advertencia
-    } else {
-      setPersonaEncontrada(false);
-    }
-  }, [personaData]);
+  const personaEncontrada = Boolean(personaData?.existe);
 
   // Validar username
   const { data: usernameData, isFetching: validandoUsername } = useValidarUsername(
     username,
-    username?.length >= 4
+    username?.length >= 4,
   );
-
-  useEffect(() => {
-    if (usernameData) {
-      setUsernameDisponible(usernameData.disponible);
-    }
-  }, [usernameData]);
+  const usernameDisponible: boolean | null = usernameData ? usernameData.disponible : null;
 
   // Auto-generar username desde nombre
-  const primerNombre = watch('primer_nombre');
-  const primerApellido = watch('primer_apellido');
+  const primerNombre = useWatch({ control, name: 'primer_nombre' });
+  const primerApellido = useWatch({ control, name: 'primer_apellido' });
 
   useEffect(() => {
     if (primerNombre && primerApellido && !username) {
@@ -249,7 +243,9 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
           ciudad: data.ciudad,
         },
         datosUsuario: {
-          username: data.username.trim().toLowerCase()
+          username: data.username
+            .trim()
+            .toLowerCase()
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .replace(/\s+/g, '.'),
@@ -257,14 +253,16 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
           password: data.generar_password ? undefined : data.password,
           debe_cambiar_password: data.generar_password,
         },
-        datosEmpleado: data.crear_empleado ? {
-          cargo: (data.cargo || 'OTRO') as CargoEmpleado,
-          fecha_ingreso: data.fecha_ingreso!,
-          contacto_emergencia: data.contacto_emergencia || 'No registrado',
-          telefono_emergencia: data.telefono_emergencia || 'No registrado',
-          es_tecnico: data.es_tecnico,
-          es_asesor: data.es_asesor,
-        } : undefined,
+        datosEmpleado: data.crear_empleado
+          ? {
+              cargo: (data.cargo || 'OTRO') as CargoEmpleado,
+              fecha_ingreso: data.fecha_ingreso!,
+              contacto_emergencia: data.contacto_emergencia || 'No registrado',
+              telefono_emergencia: data.telefono_emergencia || 'No registrado',
+              es_tecnico: data.es_tecnico,
+              es_asesor: data.es_asesor,
+            }
+          : undefined,
         rolesIds: data.rolesIds,
         id_persona_existente: personaData?.persona?.id_persona,
       };
@@ -286,12 +284,12 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
   const canGoNext = () => {
     if (currentStep === 1) {
       if (tipoPersona === 'NATURAL') {
-        return watch('primer_nombre') && watch('primer_apellido');
+        return primerNombre && primerApellido;
       }
-      return watch('razon_social');
+      return razonSocial;
     }
     if (currentStep === 2) {
-      return username && watch('email_usuario') && usernameDisponible !== false;
+      return username && emailUsuario && usernameDisponible !== false;
     }
     return true;
   };
@@ -324,29 +322,35 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
             const Icon = step.icon;
             return (
               <div key={step.num} className="flex items-center">
-                <div className={cn(
-                  'flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all',
-                  currentStep >= step.num
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'bg-white border-gray-300 text-gray-400'
-                )}>
+                <div
+                  className={cn(
+                    'flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all',
+                    currentStep >= step.num
+                      ? 'bg-blue-600 border-blue-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-400',
+                  )}
+                >
                   {currentStep > step.num ? (
                     <CheckCircle className="h-5 w-5" />
                   ) : (
                     <Icon className="h-5 w-5" />
                   )}
                 </div>
-                <span className={cn(
-                  'ml-2 text-sm font-medium hidden sm:inline',
-                  currentStep >= step.num ? 'text-blue-600' : 'text-gray-400'
-                )}>
+                <span
+                  className={cn(
+                    'ml-2 text-sm font-medium hidden sm:inline',
+                    currentStep >= step.num ? 'text-blue-600' : 'text-gray-400',
+                  )}
+                >
                   {step.title}
                 </span>
                 {index < steps.length - 1 && (
-                  <div className={cn(
-                    'w-12 sm:w-24 h-0.5 mx-2',
-                    currentStep > step.num ? 'bg-blue-600' : 'bg-gray-200'
-                  )} />
+                  <div
+                    className={cn(
+                      'w-12 sm:w-24 h-0.5 mx-2',
+                      currentStep > step.num ? 'bg-blue-600' : 'bg-gray-200',
+                    )}
+                  />
                 )}
               </div>
             );
@@ -372,8 +376,10 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                 {...form.register('tipo_identificacion')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
-                {TIPO_IDENTIFICACION_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -385,7 +391,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                 {...form.register('numero_identificacion')}
                 className={cn(
                   'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                  errors.numero_identificacion ? 'border-red-500' : 'border-gray-300'
+                  errors.numero_identificacion ? 'border-red-500' : 'border-gray-300',
                 )}
                 placeholder="Ej: 12345678"
               />
@@ -403,16 +409,16 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
 
           {/* Tipo de persona */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tipo de Persona
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Persona</label>
             <div className="flex gap-4">
-              <label className={cn(
-                'flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer transition-all',
-                tipoPersona === 'NATURAL'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-300 hover:border-gray-400'
-              )}>
+              <label
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer transition-all',
+                  tipoPersona === 'NATURAL'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-300 hover:border-gray-400',
+                )}
+              >
                 <input
                   type="radio"
                   {...form.register('tipo_persona')}
@@ -422,12 +428,14 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                 <User className="h-4 w-4" />
                 Natural
               </label>
-              <label className={cn(
-                'flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer transition-all',
-                tipoPersona === 'JURIDICA'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-300 hover:border-gray-400'
-              )}>
+              <label
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer transition-all',
+                  tipoPersona === 'JURIDICA'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-300 hover:border-gray-400',
+                )}
+              >
                 <input
                   type="radio"
                   {...form.register('tipo_persona')}
@@ -451,7 +459,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                   {...form.register('primer_nombre')}
                   className={cn(
                     'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                    errors.primer_nombre ? 'border-red-500' : 'border-gray-300'
+                    errors.primer_nombre ? 'border-red-500' : 'border-gray-300',
                   )}
                 />
                 {errors.primer_nombre && (
@@ -475,7 +483,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                   {...form.register('primer_apellido')}
                   className={cn(
                     'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                    errors.primer_apellido ? 'border-red-500' : 'border-gray-300'
+                    errors.primer_apellido ? 'border-red-500' : 'border-gray-300',
                   )}
                 />
                 {errors.primer_apellido && (
@@ -497,14 +505,12 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
           {/* Campos de persona jurídica */}
           {tipoPersona === 'JURIDICA' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Razón Social *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Razón Social *</label>
               <input
                 {...form.register('razon_social')}
                 className={cn(
                   'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                  errors.razon_social ? 'border-red-500' : 'border-gray-300'
+                  errors.razon_social ? 'border-red-500' : 'border-gray-300',
                 )}
               />
             </div>
@@ -548,9 +554,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Dirección
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
               <input
                 {...form.register('direccion_principal')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -577,10 +581,13 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
               {...form.register('username')}
               className={cn(
                 'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                errors.username ? 'border-red-500'
-                  : usernameDisponible === false ? 'border-red-500'
-                    : usernameDisponible === true ? 'border-green-500'
-                      : 'border-gray-300'
+                errors.username
+                  ? 'border-red-500'
+                  : usernameDisponible === false
+                    ? 'border-red-500'
+                    : usernameDisponible === true
+                      ? 'border-green-500'
+                      : 'border-gray-300',
               )}
               placeholder="Ej: juan.perez"
             />
@@ -611,7 +618,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
               type="email"
               className={cn(
                 'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                errors.email_usuario ? 'border-red-500' : 'border-gray-300'
+                errors.email_usuario ? 'border-red-500' : 'border-gray-300',
               )}
               placeholder="usuario@empresa.com"
             />
@@ -646,7 +653,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                     type="password"
                     className={cn(
                       'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                      errors.password ? 'border-red-500' : 'border-gray-300'
+                      errors.password ? 'border-red-500' : 'border-gray-300',
                     )}
                   />
                   {errors.password && (
@@ -662,7 +669,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                     type="password"
                     className={cn(
                       'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                      errors.confirmar_password ? 'border-red-500' : 'border-gray-300'
+                      errors.confirmar_password ? 'border-red-500' : 'border-gray-300',
                     )}
                   />
                   {errors.confirmar_password && (
@@ -691,19 +698,19 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
               <div className="space-y-4 pl-6 border-l-2 border-blue-200">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Cargo *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Cargo *</label>
                     <select
                       {...form.register('cargo')}
                       className={cn(
                         'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                        errors.cargo ? 'border-red-500' : 'border-gray-300'
+                        errors.cargo ? 'border-red-500' : 'border-gray-300',
                       )}
                     >
                       <option value="">Seleccione...</option>
-                      {CARGO_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      {CARGO_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -716,7 +723,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                       type="date"
                       className={cn(
                         'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                        errors.fecha_ingreso ? 'border-red-500' : 'border-gray-300'
+                        errors.fecha_ingreso ? 'border-red-500' : 'border-gray-300',
                       )}
                     />
                   </div>
@@ -818,7 +825,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                 'flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-all',
                 canGoNext()
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed',
               )}
             >
               Siguiente
@@ -832,7 +839,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
                 'flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-all',
                 crearUsuarioMutation.isPending || rolesIds.length === 0
                   ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-green-600 text-white hover:bg-green-700',
               )}
             >
               {crearUsuarioMutation.isPending ? (

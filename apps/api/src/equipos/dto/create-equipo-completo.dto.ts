@@ -121,7 +121,7 @@ export class DatosEquipoBaseDto {
   @IsString()
   @MinLength(1)
   @MaxLength(30)
-  @Matches(/^[A-Z0-9\-]+$/, {
+  @Matches(/^[A-Z0-9-]+$/, {
     message: 'codigo_equipo debe contener solo letras mayúsculas, números y guiones',
   })
   codigo_equipo: string;
@@ -799,8 +799,13 @@ export class CreateEquipoCompletoDto {
    * Datos específicos de generador.
    * Requerido para tipo GENERADOR solo cuando no se envía el documento modular especificaciones.
    */
-  @ValidateIf((o) => (o.tipo === TipoEquipoDiscriminator.GENERADOR || o.tipo === 'GEN') && !o.especificaciones)
-  @IsNotEmpty({ message: 'datosGenerador o especificaciones es requerido para equipos tipo GENERADOR' })
+  @ValidateIf(
+    (o) =>
+      (o.tipo === TipoEquipoDiscriminator.GENERADOR || o.tipo === 'GEN') && !o.especificaciones,
+  )
+  @IsNotEmpty({
+    message: 'datosGenerador o especificaciones es requerido para equipos tipo GENERADOR',
+  })
   @ValidateNested()
   @Type(() => DatosGeneradorDto)
   datosGenerador?: DatosGeneradorDto;
@@ -809,7 +814,9 @@ export class CreateEquipoCompletoDto {
    * Datos específicos de bomba.
    * Requerido para tipo BOMBA solo cuando no se envía el documento modular especificaciones.
    */
-  @ValidateIf((o) => (o.tipo === TipoEquipoDiscriminator.BOMBA || o.tipo === 'BOM') && !o.especificaciones)
+  @ValidateIf(
+    (o) => (o.tipo === TipoEquipoDiscriminator.BOMBA || o.tipo === 'BOM') && !o.especificaciones,
+  )
   @IsNotEmpty({ message: 'datosBomba o especificaciones es requerido para equipos tipo BOMBA' })
   @ValidateNested()
   @Type(() => DatosBombaDto)

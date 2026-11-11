@@ -203,8 +203,13 @@ export function useActivarMagnitudBancoEam() {
 export function useUpdateMagnitudEam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ codigo, payload }: { codigo: string; payload: any }) =>
-      updateMagnitudEam(codigo, payload),
+    mutationFn: ({
+      codigo,
+      payload,
+    }: {
+      codigo: string;
+      payload: Parameters<typeof updateMagnitudEam>[1];
+    }) => updateMagnitudEam(codigo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },
@@ -234,8 +239,13 @@ export function useCreateUnidadEam() {
 export function useUpdateUnidadEam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ codigo, payload }: { codigo: string; payload: any }) =>
-      updateUnidadEam(codigo, payload),
+    mutationFn: ({
+      codigo,
+      payload,
+    }: {
+      codigo: string;
+      payload: Parameters<typeof updateUnidadEam>[1];
+    }) => updateUnidadEam(codigo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },
@@ -265,8 +275,13 @@ export function useCreateAtributoEam() {
 export function useUpdateAtributoEam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ codigo, payload }: { codigo: string; payload: any }) =>
-      updateAtributoEam(codigo, payload),
+    mutationFn: ({
+      codigo,
+      payload,
+    }: {
+      codigo: string;
+      payload: Parameters<typeof updateAtributoEam>[1];
+    }) => updateAtributoEam(codigo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },
@@ -296,8 +311,13 @@ export function useCreateModuloEam() {
 export function useUpdateModuloEam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ codigo, payload }: { codigo: string; payload: any }) =>
-      updateModuloEam(codigo, payload),
+    mutationFn: ({
+      codigo,
+      payload,
+    }: {
+      codigo: string;
+      payload: Parameters<typeof updateModuloEam>[1];
+    }) => updateModuloEam(codigo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },
@@ -317,8 +337,13 @@ export function useDeleteModuloEam() {
 export function useAsignarAtributoModuloEam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ codigoModulo, payload }: { codigoModulo: string; payload: any }) =>
-      asignarAtributoModuloEam(codigoModulo, payload),
+    mutationFn: ({
+      codigoModulo,
+      payload,
+    }: {
+      codigoModulo: string;
+      payload: Parameters<typeof asignarAtributoModuloEam>[1];
+    }) => asignarAtributoModuloEam(codigoModulo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },
@@ -335,7 +360,7 @@ export function useUpdateAtributoModuloEam() {
     }: {
       codigoModulo: string;
       idAtributo: number;
-      payload: any;
+      payload: Parameters<typeof updateAtributoModuloEam>[2];
     }) => updateAtributoModuloEam(codigoModulo, idAtributo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
@@ -367,8 +392,13 @@ export function useCreateArquetipoEam() {
 export function useUpdateArquetipoEam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ idTipoEquipo, payload }: { idTipoEquipo: number; payload: any }) =>
-      updateArquetipoEam(idTipoEquipo, payload),
+    mutationFn: ({
+      idTipoEquipo,
+      payload,
+    }: {
+      idTipoEquipo: number;
+      payload: Parameters<typeof updateArquetipoEam>[1];
+    }) => updateArquetipoEam(idTipoEquipo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },
@@ -415,8 +445,13 @@ export function useDesvincularModuloArquetipoEam() {
 export function useCreatePlanArquetipoEam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ idTipoEquipo, payload }: { idTipoEquipo: number; payload: any }) =>
-      createPlanArquetipoEam(idTipoEquipo, payload),
+    mutationFn: ({
+      idTipoEquipo,
+      payload,
+    }: {
+      idTipoEquipo: number;
+      payload: Parameters<typeof createPlanArquetipoEam>[1];
+    }) => createPlanArquetipoEam(idTipoEquipo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },
@@ -433,7 +468,7 @@ export function useUpdatePlanArquetipoEam() {
     }: {
       idTipoEquipo: number;
       idPlan: number;
-      payload: any;
+      payload: Parameters<typeof updatePlanArquetipoEam>[2];
     }) => updatePlanArquetipoEam(idTipoEquipo, idPlan, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
@@ -465,8 +500,13 @@ export function useCreateModeloOemEam() {
 export function useUpdateModeloOemEam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ idModelo, payload }: { idModelo: number; payload: any }) =>
-      updateModeloOemEam(idModelo, payload),
+    mutationFn: ({
+      idModelo,
+      payload,
+    }: {
+      idModelo: number;
+      payload: Parameters<typeof updateModeloOemEam>[1];
+    }) => updateModeloOemEam(idModelo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },
@@ -491,7 +531,12 @@ export function useAgregarItemBomOemEam() {
       payload,
     }: {
       idModelo: number;
-      payload: { id_componente: number; cantidad_sugerida: number; rol_bom?: string; notas?: string };
+      payload: {
+        id_componente: number;
+        cantidad_sugerida: number;
+        rol_bom?: string;
+        notas?: string;
+      };
     }) => agregarItemBomOemEam(idModelo, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
@@ -535,7 +580,6 @@ export function useCreateTipoServicioEam() {
   });
 }
 
-
 export function useSetActivoDisciplinaEam() {
   const qc = useQueryClient();
   return useMutation({
@@ -567,4 +611,3 @@ export function useReactivarTodasMagnitudesEam() {
     },
   });
 }
-

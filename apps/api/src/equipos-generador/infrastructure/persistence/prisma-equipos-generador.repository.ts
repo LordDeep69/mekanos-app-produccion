@@ -2,11 +2,11 @@ import { PrismaService } from '@mekanos/database';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { equipos_generador } from '@prisma/client';
 import {
-    ActualizarEquipoGeneradorData,
-    CrearEquipoGeneradorData,
-    EquipoGeneradorEntity,
-    EquiposGeneradorFilters,
-    IEquiposGeneradorRepository,
+  ActualizarEquipoGeneradorData,
+  CrearEquipoGeneradorData,
+  EquipoGeneradorEntity,
+  EquiposGeneradorFilters,
+  IEquiposGeneradorRepository,
 } from '../../domain/equipos-generador.repository';
 
 @Injectable()
@@ -48,39 +48,50 @@ export class PrismaEquiposGeneradorRepository implements IEquiposGeneradorReposi
 
     // Campos opcionales
     if (data.modelo_generador) createData.modelo_generador = data.modelo_generador;
-    if (data.numero_serie_generador) createData.numero_serie_generador = data.numero_serie_generador;
+    if (data.numero_serie_generador)
+      createData.numero_serie_generador = data.numero_serie_generador;
     if (data.marca_alternador) createData.marca_alternador = data.marca_alternador;
     if (data.modelo_alternador) createData.modelo_alternador = data.modelo_alternador;
-    if (data.numero_serie_alternador) createData.numero_serie_alternador = data.numero_serie_alternador;
+    if (data.numero_serie_alternador)
+      createData.numero_serie_alternador = data.numero_serie_alternador;
     if (data.potencia_kw) createData.potencia_kw = data.potencia_kw;
     if (data.potencia_kva) createData.potencia_kva = data.potencia_kva;
     if (data.factor_potencia) createData.factor_potencia = data.factor_potencia;
     if (data.numero_fases) createData.numero_fases = data.numero_fases;
     if (data.frecuencia_hz) createData.frecuencia_hz = data.frecuencia_hz;
-    if (data.amperaje_nominal_salida) createData.amperaje_nominal_salida = data.amperaje_nominal_salida;
+    if (data.amperaje_nominal_salida)
+      createData.amperaje_nominal_salida = data.amperaje_nominal_salida;
     if (data.configuracion_salida) createData.configuracion_salida = data.configuracion_salida;
     if (data.tiene_avr !== undefined) createData.tiene_avr = data.tiene_avr;
     if (data.marca_avr) createData.marca_avr = data.marca_avr;
     if (data.modelo_avr) createData.modelo_avr = data.modelo_avr;
     if (data.referencia_avr) createData.referencia_avr = data.referencia_avr;
-    if (data.tiene_modulo_control !== undefined) createData.tiene_modulo_control = data.tiene_modulo_control;
+    if (data.tiene_modulo_control !== undefined)
+      createData.tiene_modulo_control = data.tiene_modulo_control;
     if (data.marca_modulo_control) createData.marca_modulo_control = data.marca_modulo_control;
     if (data.modelo_modulo_control) createData.modelo_modulo_control = data.modelo_modulo_control;
-    if (data.tiene_arranque_automatico !== undefined) createData.tiene_arranque_automatico = data.tiene_arranque_automatico;
-    if (data.capacidad_tanque_principal_litros) createData.capacidad_tanque_principal_litros = data.capacidad_tanque_principal_litros;
-    if (data.tiene_tanque_auxiliar !== undefined) createData.tiene_tanque_auxiliar = data.tiene_tanque_auxiliar;
-    if (data.capacidad_tanque_auxiliar_litros) createData.capacidad_tanque_auxiliar_litros = data.capacidad_tanque_auxiliar_litros;
+    if (data.tiene_arranque_automatico !== undefined)
+      createData.tiene_arranque_automatico = data.tiene_arranque_automatico;
+    if (data.capacidad_tanque_principal_litros)
+      createData.capacidad_tanque_principal_litros = data.capacidad_tanque_principal_litros;
+    if (data.tiene_tanque_auxiliar !== undefined)
+      createData.tiene_tanque_auxiliar = data.tiene_tanque_auxiliar;
+    if (data.capacidad_tanque_auxiliar_litros)
+      createData.capacidad_tanque_auxiliar_litros = data.capacidad_tanque_auxiliar_litros;
     if (data.clase_aislamiento) createData.clase_aislamiento = data.clase_aislamiento;
     if (data.grado_proteccion_ip) createData.grado_proteccion_ip = data.grado_proteccion_ip;
     // Mapeo de año_fabricacion (DTO) a a_o_fabricacion (Prisma)
-    if (data.año_fabricacion) createData.a_o_fabricacion = data.año_fabricacion;
+    if (data.a_o_fabricacion) createData.a_o_fabricacion = data.a_o_fabricacion;
     if (data.observaciones) createData.observaciones = data.observaciones;
     if (data.metadata) createData.metadata = data.metadata;
 
     return this.prisma.equipos_generador.create({ data: createData });
   }
 
-  async actualizar(id_equipo: number, data: ActualizarEquipoGeneradorData): Promise<equipos_generador> {
+  async actualizar(
+    id_equipo: number,
+    data: ActualizarEquipoGeneradorData,
+  ): Promise<equipos_generador> {
     const existing = await this.prisma.equipos_generador.findUnique({
       where: { id_equipo },
     });
@@ -103,7 +114,9 @@ export class PrismaEquiposGeneradorRepository implements IEquiposGeneradorReposi
     return result ? this.toEntity(result) : null;
   }
 
-  async obtenerTodos(filters: EquiposGeneradorFilters): Promise<{ data: EquipoGeneradorEntity[]; total: number }> {
+  async obtenerTodos(
+    filters: EquiposGeneradorFilters,
+  ): Promise<{ data: EquipoGeneradorEntity[]; total: number }> {
     const { page = 1, limit = 50, ...whereFilters } = filters;
     const skip = (page - 1) * limit;
 

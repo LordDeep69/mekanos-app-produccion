@@ -31,11 +31,12 @@ export interface CreateCuentaEmailDto {
   activa?: boolean;
 }
 
-export interface UpdateCuentaEmailDto extends Partial<CreateCuentaEmailDto> {}
+export type UpdateCuentaEmailDto = Partial<CreateCuentaEmailDto>;
 
 export interface TestConexionResult {
   success: boolean;
   message: string;
+  error?: string;
 }
 
 // Obtener todas las cuentas de email
@@ -63,7 +64,10 @@ export const createCuentaEmail = async (data: CreateCuentaEmailDto): Promise<Cue
 };
 
 // Actualizar cuenta de email
-export const updateCuentaEmail = async (id: number, data: UpdateCuentaEmailDto): Promise<CuentaEmail> => {
+export const updateCuentaEmail = async (
+  id: number,
+  data: UpdateCuentaEmailDto,
+): Promise<CuentaEmail> => {
   const response = await apiClient.patch(`/cuentas-email/${id}`, data);
   return response.data;
 };

@@ -18,10 +18,11 @@ import {
   Put,
   Query,
   Res,
-  UseGuards
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { createHash } from 'crypto';
 import { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -56,7 +57,10 @@ import { DespacharComponenteOrdenDto, InventarioService } from '../inventario/in
 import { extractR2KeyFromUrl } from '../pdf/pdf-naming.helper';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { FinalizacionOrdenService, ProgressEvent } from './services/finalizacion-orden.service';
-import { ProgresoRegistroService, HeartbeatProgresoDto } from './services/progreso-registro.service';
+import {
+  ProgresoRegistroService,
+  HeartbeatProgresoDto,
+} from './services/progreso-registro.service';
 
 // Decorators
 import { UserId } from './decorators/user-id.decorator';
@@ -70,10 +74,10 @@ import { VALIDACIONES_POR_ESTADO } from './domain/workflow-estados';
 
 /**
  * OrdenesController - FASE 3
- * 
+ *
  * Controlador REST para órdenes de servicio
  * Endpoints: 10 operaciones CRUD + Workflow
- * 
+ *
  * POST   /api/ordenes               - Crear orden
  * GET    /api/ordenes               - Listar con filtros
  * GET    /api/ordenes/:id           - Detalle orden
@@ -98,7 +102,7 @@ export class OrdenesController {
     private readonly r2Service: R2StorageService,
     private readonly progresoService: ProgresoRegistroService,
     private readonly inventarioService: InventarioService,
-  ) { }
+  ) {}
 
   /**
    * GET /api/ordenes/:id/emails/historial
@@ -108,7 +112,8 @@ export class OrdenesController {
   @Get(':id/emails/historial')
   @ApiOperation({
     summary: 'Obtener historial de emails enviados',
-    description: 'Retorna el listado de todos los emails enviados para una orden, ordenados del más reciente al más antiguo.',
+    description:
+      'Retorna el listado de todos los emails enviados para una orden, ordenados del más reciente al más antiguo.',
   })
   @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: String })
   @ApiResponse({ status: 200, description: 'Historial de emails obtenido exitosamente' })
@@ -128,7 +133,9 @@ export class OrdenesController {
         orderBy: { fecha_envio: 'desc' },
       });
 
-      console.log(`✅ [HISTORIAL-EMAILS] Encontrados ${historial.length} registros para orden ${idNumerico}`);
+      console.log(
+        `✅ [HISTORIAL-EMAILS] Encontrados ${historial.length} registros para orden ${idNumerico}`,
+      );
       return {
         success: true,
         historial,
@@ -147,7 +154,8 @@ export class OrdenesController {
   @Get(':id/progreso-registro')
   @ApiOperation({
     summary: 'Lectura en tiempo real de avance de registro (Estilo Sytex)',
-    description: 'Calcula el porcentaje de avance, estado de conexión del técnico, desglose de checklist, mediciones, fotos y firmas.',
+    description:
+      'Calcula el porcentaje de avance, estado de conexión del técnico, desglose de checklist, mediciones, fotos y firmas.',
   })
   @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: Number })
   async getProgresoRegistro(@Param('id', ParseIntPipe) id: number) {
@@ -163,7 +171,8 @@ export class OrdenesController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Registrar latido/telemetría en tiempo real desde móvil (Estilo Sytex)',
-    description: 'Registra un ping de presencia con latitud, batería, estado y actividad actual durante la ejecución.',
+    description:
+      'Registra un ping de presencia con latitud, batería, estado y actividad actual durante la ejecución.',
   })
   @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: Number })
   async registrarHeartbeat(
@@ -239,17 +248,14 @@ export class OrdenesController {
               );
             }
             const ordenSecuencia =
-              typeof a.ordenSecuencia === 'number'
-                ? a.ordenSecuencia
-                : index + 1;
+              typeof a.ordenSecuencia === 'number' ? a.ordenSecuencia : index + 1;
 
             return {
               id_orden_servicio: id,
               id_actividad_catalogo: a.idActividadCatalogo,
               orden_secuencia: ordenSecuencia,
               origen: 'ADMIN',
-              es_obligatoria:
-                typeof a.esObligatoria === 'boolean' ? a.esObligatoria : true,
+              es_obligatoria: typeof a.esObligatoria === 'boolean' ? a.esObligatoria : true,
               creado_por: userId || null,
             };
           }),
@@ -492,10 +498,7 @@ export class OrdenesController {
       },
       // ✅ FIX 06-MAY-2026: Ordenar por orden_secuencia (canónico) en lugar de fecha_ejecucion
       // Esto evita que editar una actividad cambie su posición en la lista
-      orderBy: [
-        { orden_secuencia: 'asc' },
-        { id_actividad_ejecutada: 'asc' },
-      ],
+      orderBy: [{ orden_secuencia: 'asc' }, { id_actividad_ejecutada: 'asc' }],
     });
 
     return {
@@ -524,7 +527,7 @@ export class OrdenesController {
   /**
    * GET /api/ordenes/:id/mediciones-completas
    * ✅ 24-FEB-2026 (v3): Retorna mediciones registradas + parámetros disponibles sin medir
-   * 
+   *
    * ESTRATEGIA ROBUSTA (4 fuentes de parámetros):
    * 1. Plan de actividades de la orden (ordenes_actividades_plan → catalogo_actividades MEDICION → parametros_medicion)
    * 2. Catálogo de actividades del tipo de servicio (catalogo_actividades → MEDICION → parametros_medicion)
@@ -569,7 +572,9 @@ export class OrdenesController {
       return { success: false, data: [], parametros_sin_medir: [] };
     }
 
-    console.log(`[MEDICIONES-COMPLETAS] Orden #${id}: id_tipo_servicio=${orden.id_tipo_servicio}, id_tipo_equipo=${orden.equipos?.id_tipo_equipo}, plan_items=${orden.ordenes_actividades_plan?.length}, ordenes_equipos=${orden.ordenes_equipos?.length}`);
+    console.log(
+      `[MEDICIONES-COMPLETAS] Orden #${id}: id_tipo_servicio=${orden.id_tipo_servicio}, id_tipo_equipo=${orden.equipos?.id_tipo_equipo}, plan_items=${orden.ordenes_actividades_plan?.length}, ordenes_equipos=${orden.ordenes_equipos?.length}`,
+    );
 
     // 2. Obtener mediciones ya registradas
     const mediciones = await this.prisma.mediciones_servicio.findMany({
@@ -578,8 +583,10 @@ export class OrdenesController {
       orderBy: { fecha_medicion: 'desc' },
     });
 
-    const idsMedidos = new Set(mediciones.map(m => m.id_parametro_medicion));
-    console.log(`[MEDICIONES-COMPLETAS] Mediciones registradas: ${mediciones.length}, IDs medidos: [${Array.from(idsMedidos).join(',')}]`);
+    const idsMedidos = new Set(mediciones.map((m) => m.id_parametro_medicion));
+    console.log(
+      `[MEDICIONES-COMPLETAS] Mediciones registradas: ${mediciones.length}, IDs medidos: [${Array.from(idsMedidos).join(',')}]`,
+    );
 
     // 3. FUENTE 1: Parámetros del plan de actividades de la orden (MEDICION)
     const idsDesdelPlan = new Set<number>();
@@ -589,7 +596,9 @@ export class OrdenesController {
         idsDesdelPlan.add(act.id_parametro_medicion);
       }
     }
-    console.log(`[MEDICIONES-COMPLETAS] FUENTE 1 (plan orden): ${idsDesdelPlan.size} params -> [${Array.from(idsDesdelPlan).join(',')}]`);
+    console.log(
+      `[MEDICIONES-COMPLETAS] FUENTE 1 (plan orden): ${idsDesdelPlan.size} params -> [${Array.from(idsDesdelPlan).join(',')}]`,
+    );
 
     // 4. FUENTE 2: Catálogo de actividades del tipo de servicio (MEDICION con parámetro vinculado)
     const idsDesdeServicio = new Set<number>();
@@ -608,7 +617,9 @@ export class OrdenesController {
           idsDesdeServicio.add(act.id_parametro_medicion);
         }
       }
-      console.log(`[MEDICIONES-COMPLETAS] FUENTE 2 (catalogo tipo_servicio=${orden.id_tipo_servicio}): ${idsDesdeServicio.size} params -> [${Array.from(idsDesdeServicio).join(',')}]`);
+      console.log(
+        `[MEDICIONES-COMPLETAS] FUENTE 2 (catalogo tipo_servicio=${orden.id_tipo_servicio}): ${idsDesdeServicio.size} params -> [${Array.from(idsDesdeServicio).join(',')}]`,
+      );
     }
 
     // 5. FUENTE 3: Parámetros del tipo de equipo directo
@@ -624,26 +635,30 @@ export class OrdenesController {
       }
     }
 
-    const parametrosPorTipo = tiposEquipoIds.size > 0
-      ? await this.prisma.parametros_medicion.findMany({
-        where: {
-          id_tipo_equipo: { in: Array.from(tiposEquipoIds) },
-          activo: true,
-        },
-      })
-      : [];
-    console.log(`[MEDICIONES-COMPLETAS] FUENTE 3+4 (tipos_equipo=[${Array.from(tiposEquipoIds).join(',')}]): ${parametrosPorTipo.length} params`);
+    const parametrosPorTipo =
+      tiposEquipoIds.size > 0
+        ? await this.prisma.parametros_medicion.findMany({
+            where: {
+              id_tipo_equipo: { in: Array.from(tiposEquipoIds) },
+              activo: true,
+            },
+          })
+        : [];
+    console.log(
+      `[MEDICIONES-COMPLETAS] FUENTE 3+4 (tipos_equipo=[${Array.from(tiposEquipoIds).join(',')}]): ${parametrosPorTipo.length} params`,
+    );
 
     // 7. Consultar parámetros del plan + servicio
     const idsFromPlans = new Set([...idsDesdelPlan, ...idsDesdeServicio]);
-    const parametrosDelPlan = idsFromPlans.size > 0
-      ? await this.prisma.parametros_medicion.findMany({
-        where: {
-          id_parametro_medicion: { in: Array.from(idsFromPlans) },
-          activo: true,
-        },
-      })
-      : [];
+    const parametrosDelPlan =
+      idsFromPlans.size > 0
+        ? await this.prisma.parametros_medicion.findMany({
+            where: {
+              id_parametro_medicion: { in: Array.from(idsFromPlans) },
+              activo: true,
+            },
+          })
+        : [];
 
     // 8. UNION de todas las fuentes (deduplicar por ID)
     const mapaParametros = new Map<number, any>();
@@ -656,12 +671,16 @@ export class OrdenesController {
 
     // 9. Filtrar los que NO han sido medidos
     const parametrosSinMedir = Array.from(mapaParametros.values())
-      .filter(p => !idsMedidos.has(p.id_parametro_medicion))
+      .filter((p) => !idsMedidos.has(p.id_parametro_medicion))
       .sort((a, b) => (a.nombre_parametro || '').localeCompare(b.nombre_parametro || ''));
 
-    console.log(`[MEDICIONES-COMPLETAS] RESULTADO: total_disponibles=${mapaParametros.size}, medidos=${idsMedidos.size}, sin_medir=${parametrosSinMedir.length}`);
+    console.log(
+      `[MEDICIONES-COMPLETAS] RESULTADO: total_disponibles=${mapaParametros.size}, medidos=${idsMedidos.size}, sin_medir=${parametrosSinMedir.length}`,
+    );
     if (parametrosSinMedir.length > 0) {
-      console.log(`[MEDICIONES-COMPLETAS] Sin medir: ${parametrosSinMedir.map(p => p.nombre_parametro).join(', ')}`);
+      console.log(
+        `[MEDICIONES-COMPLETAS] Sin medir: ${parametrosSinMedir.map((p) => p.nombre_parametro).join(', ')}`,
+      );
     }
 
     return {
@@ -690,7 +709,8 @@ export class OrdenesController {
   @UseGuards(JwtAuthGuard)
   async createMedicion(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: {
+    @Body()
+    body: {
       id_parametro_medicion: number;
       valor_numerico?: number;
       valor_texto?: string;
@@ -721,10 +741,18 @@ export class OrdenesController {
 
     if (body.valor_numerico != null) {
       const val = body.valor_numerico;
-      const minNormal = parametro.valor_minimo_normal ? Number(parametro.valor_minimo_normal) : null;
-      const maxNormal = parametro.valor_maximo_normal ? Number(parametro.valor_maximo_normal) : null;
-      const minCritico = parametro.valor_minimo_critico ? Number(parametro.valor_minimo_critico) : null;
-      const maxCritico = parametro.valor_maximo_critico ? Number(parametro.valor_maximo_critico) : null;
+      const minNormal = parametro.valor_minimo_normal
+        ? Number(parametro.valor_minimo_normal)
+        : null;
+      const maxNormal = parametro.valor_maximo_normal
+        ? Number(parametro.valor_maximo_normal)
+        : null;
+      const minCritico = parametro.valor_minimo_critico
+        ? Number(parametro.valor_minimo_critico)
+        : null;
+      const maxCritico = parametro.valor_maximo_critico
+        ? Number(parametro.valor_maximo_critico)
+        : null;
 
       if (minCritico != null && val < minCritico) {
         fueraDeRango = true;
@@ -764,12 +792,16 @@ export class OrdenesController {
     });
 
     // ✅ Sincronización proactiva de horómetro en equipos al crear medición en orden
-    if (parametro && (
-      parametro.codigo_parametro?.toUpperCase().includes('HORO') ||
-      parametro.nombre_parametro?.toLowerCase().includes('hora') ||
-      parametro.nombre_parametro?.toLowerCase().includes('horo')
-    )) {
-      const horasVal = body.valor_numerico != null ? Number(body.valor_numerico) : parseFloat(String(body.valor_texto || ''));
+    if (
+      parametro &&
+      (parametro.codigo_parametro?.toUpperCase().includes('HORO') ||
+        parametro.nombre_parametro?.toLowerCase().includes('hora') ||
+        parametro.nombre_parametro?.toLowerCase().includes('horo'))
+    ) {
+      const horasVal =
+        body.valor_numerico != null
+          ? Number(body.valor_numerico)
+          : parseFloat(String(body.valor_texto || ''));
       if (!isNaN(horasVal) && horasVal > 0) {
         try {
           let idEquipoTarget = null;
@@ -872,7 +904,9 @@ export class OrdenesController {
 
       const cantidad = Number(body.cantidad || 1);
       const precioUnit =
-        body.precio_unitario !== undefined ? Number(body.precio_unitario) : Number(srv.precio_base || 0);
+        body.precio_unitario !== undefined
+          ? Number(body.precio_unitario)
+          : Number(srv.precio_base || 0);
       const descPct = Number(body.descuento_porcentaje || 0);
       const subtotalItem = Number((cantidad * precioUnit * (1 - descPct / 100)).toFixed(2));
 
@@ -905,7 +939,6 @@ export class OrdenesController {
         where: { id_orden_servicio: id },
         data: {
           total_servicios: new Decimal(nuevoTotalServicios.toFixed(2)),
-          subtotal: new Decimal(nuevoSubtotal.toFixed(2)),
           total_general: new Decimal(nuevoSubtotal.toFixed(2)),
           fecha_modificacion: new Date(),
         },
@@ -957,7 +990,6 @@ export class OrdenesController {
         where: { id_orden_servicio: id },
         data: {
           total_servicios: new Decimal(nuevoTotalServicios.toFixed(2)),
-          subtotal: new Decimal(nuevoSubtotal.toFixed(2)),
           total_general: new Decimal(nuevoSubtotal.toFixed(2)),
           fecha_modificacion: new Date(),
         },
@@ -992,7 +1024,9 @@ export class OrdenesController {
    */
   @Post(':id/componentes')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Despachar repuesto de almacén o registrar insumo en una orden de servicio' })
+  @ApiOperation({
+    summary: 'Despachar repuesto de almacén o registrar insumo en una orden de servicio',
+  })
   async addComponenteOrden(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: DespacharComponenteOrdenDto,
@@ -1041,12 +1075,12 @@ export class OrdenesController {
       ...ev,
       actividad_asociada: ev.actividades_ejecutadas
         ? {
-          id_actividad: ev.actividades_ejecutadas.id_actividad_ejecutada,
-          descripcion_actividad:
-            ev.actividades_ejecutadas.catalogo_actividades?.descripcion_actividad ||
-            ev.actividades_ejecutadas.observaciones ||
-            null,
-        }
+            id_actividad: ev.actividades_ejecutadas.id_actividad_ejecutada,
+            descripcion_actividad:
+              ev.actividades_ejecutadas.catalogo_actividades?.descripcion_actividad ||
+              ev.actividades_ejecutadas.observaciones ||
+              null,
+          }
         : null,
     }));
 
@@ -1095,12 +1129,13 @@ export class OrdenesController {
         select: {
           id_tecnico_asignado: true,
           empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
-            select: { id_persona: true }
-          }
+            select: { id_persona: true },
+          },
         },
       });
 
-      const idPersonaTecnico = ordenCompleta?.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_persona;
+      const idPersonaTecnico =
+        ordenCompleta?.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_persona;
 
       if (idPersonaTecnico) {
         // Buscar última firma del técnico
@@ -1123,7 +1158,7 @@ export class OrdenesController {
     }
 
     // Mapear para incluir nombre_firmante desde persona
-    const firmasConNombre = firmasOrden.map(f => {
+    const firmasConNombre = firmasOrden.map((f) => {
       // ✅ FIX 06-AGO-2026: Para CLIENTE, priorizar nombre_quien_recibe de la orden
       // (capturado del mobile: nombreFirmante/cargoFirmante) sobre el nombre de la persona
       const nombrePersona = f.persona
@@ -1137,15 +1172,16 @@ export class OrdenesController {
       } else if (nombrePersona) {
         nombreFirmante = nombrePersona;
       } else {
-        nombreFirmante = f.tipo_firma === 'CLIENTE' ? (nombreQuienRecibe || 'Cliente') : 'Sin nombre';
+        nombreFirmante = f.tipo_firma === 'CLIENTE' ? nombreQuienRecibe || 'Cliente' : 'Sin nombre';
       }
 
       return {
         ...f,
         nombre_firmante: nombreFirmante,
-        cargo_firmante: f.tipo_firma === 'TECNICO'
-          ? 'Técnico Responsable'
-          : (orden.cargo_quien_recibe || 'Cliente / Autorizador'),
+        cargo_firmante:
+          f.tipo_firma === 'TECNICO'
+            ? 'Técnico Responsable'
+            : orden.cargo_quien_recibe || 'Cliente / Autorizador',
       };
     });
 
@@ -1191,9 +1227,7 @@ export class OrdenesController {
       where: {
         id_persona: empleado.id_persona,
         tipo_firma: 'TECNICO',
-        ...(orden.id_firma_tecnico
-          ? { id_firma_digital: { not: orden.id_firma_tecnico } }
-          : {}),
+        ...(orden.id_firma_tecnico ? { id_firma_digital: { not: orden.id_firma_tecnico } } : {}),
       },
       select: {
         id_firma_digital: true,
@@ -1345,7 +1379,8 @@ export class OrdenesController {
     @Param('id', ParseIntPipe) id: number,
     @Param('tipo') tipo: string,
     @CurrentUser('id') userId: number,
-    @Body() body: {
+    @Body()
+    body: {
       firma_base64?: string;
       nombre_firmante?: string;
       cargo_firmante?: string;
@@ -1410,7 +1445,6 @@ export class OrdenesController {
       }
 
       // 2.2 Generar hash de la firma y limpiar prefijo data-url si viene
-      const { createHash } = require('crypto');
       let base64Data = body.firma_base64!;
       if (base64Data.includes(',')) {
         base64Data = base64Data.split(',')[1];
@@ -1449,11 +1483,15 @@ export class OrdenesController {
 
         // Vincular la firma a la orden
         if (tipoUpper === 'TECNICO') {
-          await this.prisma.$executeRaw`UPDATE ordenes_servicio SET id_firma_tecnico = ${firmaId} WHERE id_orden_servicio = ${id}`;
+          await this.prisma
+            .$executeRaw`UPDATE ordenes_servicio SET id_firma_tecnico = ${firmaId} WHERE id_orden_servicio = ${id}`;
         } else {
-          await this.prisma.$executeRaw`UPDATE ordenes_servicio SET id_firma_cliente = ${firmaId} WHERE id_orden_servicio = ${id}`;
+          await this.prisma
+            .$executeRaw`UPDATE ordenes_servicio SET id_firma_cliente = ${firmaId} WHERE id_orden_servicio = ${id}`;
         }
-        console.log(`[FIRMAS] ✅ Nueva firma ${tipoUpper} creada (id=${firmaId}) y vinculada a orden ${id}`);
+        console.log(
+          `[FIRMAS] ✅ Nueva firma ${tipoUpper} creada (id=${firmaId}) y vinculada a orden ${id}`,
+        );
       }
     }
 
@@ -1612,10 +1650,7 @@ export class OrdenesController {
     }
 
     return {
-      email:
-        process.env.EMAIL_FROM ||
-        process.env.EMAIL_FROM_ADDRESS ||
-        'mekanossas4@gmail.com',
+      email: process.env.EMAIL_FROM || process.env.EMAIL_FROM_ADDRESS || 'mekanossas4@gmail.com',
       nombre: process.env.EMAIL_FROM_NAME || 'MEKANOS S.A.S',
       origen: 'DEFAULT_ENV',
     };
@@ -1647,7 +1682,10 @@ export class OrdenesController {
       },
     });
 
-    console.log(`[PDF] Resultado para orden ${id}:`, documento ? documento.ruta_archivo : 'NO ENCONTRADO');
+    console.log(
+      `[PDF] Resultado para orden ${id}:`,
+      documento ? documento.ruta_archivo : 'NO ENCONTRADO',
+    );
 
     // ✅ FIX 06-MAY-2026: Generar URL firmada de previsualización inline para R2 directo
     let previewUrl: string | null = null;
@@ -1664,17 +1702,19 @@ export class OrdenesController {
 
     return {
       success: true,
-      data: documento ? {
-        // ✅ FIX 29-ABR-2026: Exponer id_documento para que el portal use el proxy
-        // de descarga `/informes/documento/:id/descargar` con Content-Disposition canónico.
-        id_documento: documento.id_documento,
-        url: documento.ruta_archivo,
-        previewUrl, // URL firmada R2 con inline (previsualización instantánea)
-        fecha: documento.fecha_generacion,
-        numero: documento.numero_documento,
-        veces_descargado: documento.veces_descargado ?? 0,
-        fecha_ultima_descarga: documento.fecha_ultima_descarga,
-      } : null,
+      data: documento
+        ? {
+            // ✅ FIX 29-ABR-2026: Exponer id_documento para que el portal use el proxy
+            // de descarga `/informes/documento/:id/descargar` con Content-Disposition canónico.
+            id_documento: documento.id_documento,
+            url: documento.ruta_archivo,
+            previewUrl, // URL firmada R2 con inline (previsualización instantánea)
+            fecha: documento.fecha_generacion,
+            numero: documento.numero_documento,
+            veces_descargado: documento.veces_descargado ?? 0,
+            fecha_ultima_descarga: documento.fecha_ultima_descarga,
+          }
+        : null,
     };
   }
 
@@ -1711,10 +1751,7 @@ export class OrdenesController {
   @ApiParam({ name: 'id', description: 'ID de la orden de servicio a eliminar', example: 1 })
   @ApiResponse({ status: 200, description: 'Orden eliminada permanentemente' })
   @ApiResponse({ status: 404, description: 'Orden no encontrada' })
-  async hardDeleteOrden(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser('id') userId: number,
-  ) {
+  async hardDeleteOrden(@Param('id', ParseIntPipe) id: number, @CurrentUser('id') userId: number) {
     // 1. Verificar que la orden existe
     const orden = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: id },
@@ -1732,122 +1769,151 @@ export class OrdenesController {
       throw new NotFoundException(`Orden ${id} no encontrada`);
     }
 
-    console.log(`🗑️ [HARD DELETE] Iniciando eliminación de orden ${orden.numero_orden} (id=${id}) por usuario ${userId}`);
+    console.log(
+      `🗑️ [HARD DELETE] Iniciando eliminación de orden ${orden.numero_orden} (id=${id}) por usuario ${userId}`,
+    );
 
     // 2. Transacción atómica: eliminar todos los datos asociados
-    await this.prisma.$transaction(async (tx) => {
-      // 2a. Tablas hijas directas de ordenes_servicio
-      const deletedActividades = await tx.actividades_ejecutadas.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ actividades_ejecutadas: ${deletedActividades.count}`);
-
-      const deletedMediciones = await tx.mediciones_servicio.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ mediciones_servicio: ${deletedMediciones.count}`);
-
-      const deletedEvidencias = await tx.evidencias_fotograficas.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ evidencias_fotograficas: ${deletedEvidencias.count}`);
-
-      const deletedComponentes = await tx.componentes_usados.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ componentes_usados: ${deletedComponentes.count}`);
-
-      const deletedGastos = await tx.gastos_orden.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ gastos_orden: ${deletedGastos.count}`);
-
-      const deletedServicios = await tx.detalle_servicios_orden.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ detalle_servicios_orden: ${deletedServicios.count}`);
-
-      const deletedHistorial = await tx.historial_estados_orden.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ historial_estados_orden: ${deletedHistorial.count}`);
-
-      const deletedEmails = await tx.historial_emails_enviados.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ historial_emails_enviados: ${deletedEmails.count}`);
-
-      const deletedPlan = await tx.ordenes_actividades_plan.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ ordenes_actividades_plan: ${deletedPlan.count}`);
-
-      const deletedEquipos = await tx.ordenes_equipos.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ ordenes_equipos: ${deletedEquipos.count}`);
-
-      // 2b. Informes y sus bitácoras
-      const informes = await tx.informes.findMany({
-        where: { id_orden_servicio: id },
-        select: { id_informe: true },
-      });
-      if (informes.length > 0) {
-        const informeIds = informes.map(i => i.id_informe);
-        const deletedBitacoras = await tx.bitacoras_informes.deleteMany({
-          where: { id_informe: { in: informeIds } },
+    await this.prisma.$transaction(
+      async (tx) => {
+        // 2a. Tablas hijas directas de ordenes_servicio
+        const deletedActividades = await tx.actividades_ejecutadas.deleteMany({
+          where: { id_orden_servicio: id },
         });
-        console.log(`  ├─ bitacoras_informes: ${deletedBitacoras.count}`);
-      }
-      const deletedInformes = await tx.informes.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ informes: ${deletedInformes.count}`);
+        console.log(`  ├─ actividades_ejecutadas: ${deletedActividades.count}`);
 
-      // 2c. Movimientos de inventario asociados
-      const deletedMovimientos = await tx.movimientos_inventario.deleteMany({ where: { id_orden_servicio: id } });
-      console.log(`  ├─ movimientos_inventario: ${deletedMovimientos.count}`);
-
-      // 2d. Nullificar FK en cronogramas_servicio (no eliminar cronogramas, solo desvincular)
-      await tx.cronogramas_servicio.updateMany({
-        where: { id_orden_servicio_generada: id },
-        data: { id_orden_servicio_generada: null },
-      });
-
-      // 2e. Nullificar FK en cotizaciones (no eliminar cotizaciones, solo desvincular)
-      await tx.cotizaciones.updateMany({
-        where: { id_orden_servicio_generada: id },
-        data: { id_orden_servicio_generada: null },
-      });
-
-      // 2f. Nullificar FK en remisiones
-      await tx.remisiones.updateMany({
-        where: { id_orden_servicio: id },
-        data: { id_orden_servicio: null },
-      });
-
-      // 2g. Nullificar FK en propuestas_correctivo
-      await tx.$executeRaw`UPDATE propuestas_correctivo SET id_orden_servicio = NULL WHERE id_orden_servicio = ${id}`;
-      await tx.$executeRaw`UPDATE propuestas_correctivo SET id_orden_servicio_generada = NULL WHERE id_orden_servicio_generada = ${id}`;
-
-      // 2h. Desvincular firmas de la orden antes de borrarla
-      await tx.ordenes_servicio.update({
-        where: { id_orden_servicio: id },
-        data: { id_firma_tecnico: null, id_firma_cliente: null },
-      });
-
-      // 2i. Eliminar firmas digitales vinculadas (opcional: solo si son exclusivas de esta orden)
-      const firmaIds: number[] = [];
-      if (orden.id_firma_tecnico) firmaIds.push(orden.id_firma_tecnico);
-      if (orden.id_firma_cliente) firmaIds.push(orden.id_firma_cliente);
-      if (firmaIds.length > 0) {
-        const deletedFirmas = await tx.firmas_digitales.deleteMany({
-          where: { id_firma_digital: { in: firmaIds } },
+        const deletedMediciones = await tx.mediciones_servicio.deleteMany({
+          where: { id_orden_servicio: id },
         });
-        console.log(`  ├─ firmas_digitales: ${deletedFirmas.count}`);
-      }
+        console.log(`  ├─ mediciones_servicio: ${deletedMediciones.count}`);
 
-      // 3. Registrar lápida (tombstone) para sincronización con app móvil
-      try {
-        await (tx as any).$executeRawUnsafe(
-          `INSERT INTO ordenes_eliminadas (id_orden_servicio, numero_orden, id_tecnico_asignado, fecha_eliminacion)
+        const deletedEvidencias = await tx.evidencias_fotograficas.deleteMany({
+          where: { id_orden_servicio: id },
+        });
+        console.log(`  ├─ evidencias_fotograficas: ${deletedEvidencias.count}`);
+
+        const deletedComponentes = await tx.componentes_usados.deleteMany({
+          where: { id_orden_servicio: id },
+        });
+        console.log(`  ├─ componentes_usados: ${deletedComponentes.count}`);
+
+        const deletedGastos = await tx.gastos_orden.deleteMany({
+          where: { id_orden_servicio: id },
+        });
+        console.log(`  ├─ gastos_orden: ${deletedGastos.count}`);
+
+        const deletedServicios = await tx.detalle_servicios_orden.deleteMany({
+          where: { id_orden_servicio: id },
+        });
+        console.log(`  ├─ detalle_servicios_orden: ${deletedServicios.count}`);
+
+        const deletedHistorial = await tx.historial_estados_orden.deleteMany({
+          where: { id_orden_servicio: id },
+        });
+        console.log(`  ├─ historial_estados_orden: ${deletedHistorial.count}`);
+
+        const deletedEmails = await tx.historial_emails_enviados.deleteMany({
+          where: { id_orden_servicio: id },
+        });
+        console.log(`  ├─ historial_emails_enviados: ${deletedEmails.count}`);
+
+        const deletedPlan = await tx.ordenes_actividades_plan.deleteMany({
+          where: { id_orden_servicio: id },
+        });
+        console.log(`  ├─ ordenes_actividades_plan: ${deletedPlan.count}`);
+
+        const deletedEquipos = await tx.ordenes_equipos.deleteMany({
+          where: { id_orden_servicio: id },
+        });
+        console.log(`  ├─ ordenes_equipos: ${deletedEquipos.count}`);
+
+        // 2b. Informes y sus bitácoras
+        const informes = await tx.informes.findMany({
+          where: { id_orden_servicio: id },
+          select: { id_informe: true },
+        });
+        if (informes.length > 0) {
+          const informeIds = informes.map((i) => i.id_informe);
+          const deletedBitacoras = await tx.bitacoras_informes.deleteMany({
+            where: { id_informe: { in: informeIds } },
+          });
+          console.log(`  ├─ bitacoras_informes: ${deletedBitacoras.count}`);
+        }
+        const deletedInformes = await tx.informes.deleteMany({ where: { id_orden_servicio: id } });
+        console.log(`  ├─ informes: ${deletedInformes.count}`);
+
+        // 2c. Movimientos de inventario asociados
+        const deletedMovimientos = await tx.movimientos_inventario.deleteMany({
+          where: { id_orden_servicio: id },
+        });
+        console.log(`  ├─ movimientos_inventario: ${deletedMovimientos.count}`);
+
+        // 2d. Nullificar FK en cronogramas_servicio (no eliminar cronogramas, solo desvincular)
+        await tx.cronogramas_servicio.updateMany({
+          where: { id_orden_servicio_generada: id },
+          data: { id_orden_servicio_generada: null },
+        });
+
+        // 2e. Nullificar FK en cotizaciones (no eliminar cotizaciones, solo desvincular)
+        await tx.cotizaciones.updateMany({
+          where: { id_orden_servicio_generada: id },
+          data: { id_orden_servicio_generada: null },
+        });
+
+        // 2f. Nullificar FK en remisiones
+        await tx.remisiones.updateMany({
+          where: { id_orden_servicio: id },
+          data: { id_orden_servicio: null },
+        });
+
+        // 2g. Nullificar FK en propuestas_correctivo
+        await tx.$executeRaw`UPDATE propuestas_correctivo SET id_orden_servicio = NULL WHERE id_orden_servicio = ${id}`;
+        await tx.$executeRaw`UPDATE propuestas_correctivo SET id_orden_servicio_generada = NULL WHERE id_orden_servicio_generada = ${id}`;
+
+        // 2h. Desvincular firmas de la orden antes de borrarla
+        await tx.ordenes_servicio.update({
+          where: { id_orden_servicio: id },
+          data: { id_firma_tecnico: null, id_firma_cliente: null },
+        });
+
+        // 2i. Eliminar firmas digitales vinculadas (opcional: solo si son exclusivas de esta orden)
+        const firmaIds: number[] = [];
+        if (orden.id_firma_tecnico) firmaIds.push(orden.id_firma_tecnico);
+        if (orden.id_firma_cliente) firmaIds.push(orden.id_firma_cliente);
+        if (firmaIds.length > 0) {
+          const deletedFirmas = await tx.firmas_digitales.deleteMany({
+            where: { id_firma_digital: { in: firmaIds } },
+          });
+          console.log(`  ├─ firmas_digitales: ${deletedFirmas.count}`);
+        }
+
+        // 3. Registrar lápida (tombstone) para sincronización con app móvil
+        try {
+          await (tx as any).$executeRawUnsafe(
+            `INSERT INTO ordenes_eliminadas (id_orden_servicio, numero_orden, id_tecnico_asignado, fecha_eliminacion)
            VALUES ($1, $2, $3, NOW())`,
-          id,
-          orden.numero_orden,
-          orden.id_tecnico_asignado ?? null,
-        );
-        console.log(`  ├─ ordenes_eliminadas: Lápida (tombstone) registrada`);
-      } catch (tombError) {
-        console.warn(`  ├─ ⚠️ Error registrando tombstone:`, tombError);
-      }
+            id,
+            orden.numero_orden,
+            orden.id_tecnico_asignado ?? null,
+          );
+          console.log(`  ├─ ordenes_eliminadas: Lápida (tombstone) registrada`);
+        } catch (tombError) {
+          console.warn(`  ├─ ⚠️ Error registrando tombstone:`, tombError);
+        }
 
-      // 4. Finalmente, eliminar la orden
-      await tx.ordenes_servicio.delete({ where: { id_orden_servicio: id } });
-      console.log(`  └─ ✅ ordenes_servicio: ELIMINADA`);
-    }, {
-      timeout: 30000,
-      maxWait: 10000,
-    });
+        // 4. Finalmente, eliminar la orden
+        await tx.ordenes_servicio.delete({ where: { id_orden_servicio: id } });
+        console.log(`  └─ ✅ ordenes_servicio: ELIMINADA`);
+      },
+      {
+        timeout: 30000,
+        maxWait: 10000,
+      },
+    );
 
-    console.log(`🗑️ [HARD DELETE] ✅ Orden ${orden.numero_orden} (id=${id}) eliminada completamente`);
+    console.log(
+      `🗑️ [HARD DELETE] ✅ Orden ${orden.numero_orden} (id=${id}) eliminada completamente`,
+    );
 
     return {
       success: true,
@@ -1904,10 +1970,7 @@ export class OrdenesController {
       where.activo = true;
     }
     if (idTipoEquipo) {
-      where.OR = [
-        { id_tipo_equipo: parseInt(idTipoEquipo, 10) },
-        { id_tipo_equipo: null },
-      ];
+      where.OR = [{ id_tipo_equipo: parseInt(idTipoEquipo, 10) }, { id_tipo_equipo: null }];
     }
     if (categoria && categoria !== 'TODAS') {
       where.categoria = categoria;
@@ -1921,10 +1984,7 @@ export class OrdenesController {
 
     const items = await this.prisma.catalogo_pendientes.findMany({
       where,
-      orderBy: [
-        { orden_visual: 'asc' },
-        { descripcion: 'asc' },
-      ],
+      orderBy: [{ orden_visual: 'asc' }, { descripcion: 'asc' }],
       include: {
         tipos_equipo: {
           select: {
@@ -1944,7 +2004,8 @@ export class OrdenesController {
   @Post('catalogo-pendientes')
   @ApiOperation({ summary: 'Crear nuevo ítem en el catálogo de pendientes técnicos' })
   async createCatalogoPendiente(
-    @Body() body: {
+    @Body()
+    body: {
       descripcion: string;
       codigo?: string;
       categoria?: string;
@@ -1981,7 +2042,8 @@ export class OrdenesController {
   @ApiOperation({ summary: 'Actualizar ítem del catálogo de pendientes técnicos' })
   async updateCatalogoPendiente(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: {
+    @Body()
+    body: {
       descripcion?: string;
       codigo?: string;
       categoria?: string;
@@ -1994,7 +2056,8 @@ export class OrdenesController {
     if (body.descripcion !== undefined) data.descripcion = body.descripcion.trim();
     if (body.codigo !== undefined) data.codigo = body.codigo?.trim() || null;
     if (body.categoria !== undefined) data.categoria = body.categoria?.trim() || 'GENERAL';
-    if (body.idTipoEquipo !== undefined) data.id_tipo_equipo = body.idTipoEquipo ? Number(body.idTipoEquipo) : null;
+    if (body.idTipoEquipo !== undefined)
+      data.id_tipo_equipo = body.idTipoEquipo ? Number(body.idTipoEquipo) : null;
     if (body.ordenVisual !== undefined) data.orden_visual = Number(body.ordenVisual);
     if (body.activo !== undefined) data.activo = Boolean(body.activo);
 
@@ -2041,7 +2104,8 @@ export class OrdenesController {
   @ApiOperation({ summary: 'Actualizar estado de un pendiente técnico' })
   async updateEstadoPendiente(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: {
+    @Body()
+    body: {
       estado: 'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO';
       observaciones_resolucion?: string;
       id_orden_resolucion?: number | null;
@@ -2070,9 +2134,12 @@ export class OrdenesController {
 
     const updateData: any = {
       estado: body.estado,
-      observaciones_resolucion: body.observaciones_resolucion !== undefined ? body.observaciones_resolucion : pendiente.observaciones_resolucion,
-      fecha_resolucion: (esResuelto || esCancelado) ? new Date() : null,
-      resuelto_por: (esResuelto || esCancelado) ? idEmpleadoResuelve : null,
+      observaciones_resolucion:
+        body.observaciones_resolucion !== undefined
+          ? body.observaciones_resolucion
+          : pendiente.observaciones_resolucion,
+      fecha_resolucion: esResuelto || esCancelado ? new Date() : null,
+      resuelto_por: esResuelto || esCancelado ? idEmpleadoResuelve : null,
     };
 
     if (body.id_orden_resolucion !== undefined) {
@@ -2126,7 +2193,8 @@ export class OrdenesController {
   @ApiOperation({ summary: 'Registrar un nuevo pendiente para una orden desde portal' })
   async createPendienteOrden(
     @Param('id', ParseIntPipe) idOrden: number,
-    @Body() body: {
+    @Body()
+    body: {
       descripcion: string;
       idPendienteCatalogo?: number;
       idEquipo?: number | null;
@@ -2206,11 +2274,15 @@ export class OrdenesController {
     };
 
     // ✅ CASO A: Multi-equipos seleccionado (array de idOrdenEquipos)
-    if (body.idOrdenEquipos && Array.isArray(body.idOrdenEquipos) && body.idOrdenEquipos.length > 0) {
+    if (
+      body.idOrdenEquipos &&
+      Array.isArray(body.idOrdenEquipos) &&
+      body.idOrdenEquipos.length > 0
+    ) {
       const createdList: any[] = [];
       for (const targetOeId of body.idOrdenEquipos) {
         let targetIdEquipo = orden.id_equipo;
-        let targetIdOrdenEquipo: number | null = targetOeId;
+        const targetIdOrdenEquipo: number | null = targetOeId;
 
         if (targetOeId && orden.ordenes_equipos) {
           const oe = orden.ordenes_equipos.find((e: any) => e.id_orden_equipo === targetOeId);
@@ -2314,7 +2386,9 @@ export class OrdenesController {
    * Motor Central de Pendientes 360° (Alcances: CLIENTE, EQUIPO, SERVICIO)
    */
   @Get('backlog-pendientes')
-  @ApiOperation({ summary: 'Consultar backlog transversal de pendientes (Cliente / Equipo / Servicio)' })
+  @ApiOperation({
+    summary: 'Consultar backlog transversal de pendientes (Cliente / Equipo / Servicio)',
+  })
   async getBacklogPendientes(
     @Query('idCliente') idCliente?: string,
     @Query('idEquipo') idEquipo?: string,
@@ -2337,11 +2411,7 @@ export class OrdenesController {
         .filter((n) => !isNaN(n) && n > 0);
       if (ids.length > 0) {
         if (idCliente) {
-          where.OR = [
-            { id_equipo: { in: ids } },
-            { alcance: 'CLIENTE' },
-            { id_equipo: null },
-          ];
+          where.OR = [{ id_equipo: { in: ids } }, { alcance: 'CLIENTE' }, { id_equipo: null }];
         } else {
           where.id_equipo = { in: ids };
         }
@@ -2370,9 +2440,7 @@ export class OrdenesController {
 
     const items = await this.prisma.ordenes_pendientes.findMany({
       where,
-      orderBy: [
-        { fecha_creacion: 'desc' },
-      ],
+      orderBy: [{ fecha_creacion: 'desc' }],
       include: {
         equipos: {
           select: {
@@ -2482,7 +2550,9 @@ export class OrdenesController {
    * conteo de visitas, equipos vinculados y pendientes activos del hilo completo.
    */
   @Get('casos-abiertos')
-  @ApiOperation({ summary: 'Consultar casos raíz abiertos de un cliente para encadenar nuevas visitas' })
+  @ApiOperation({
+    summary: 'Consultar casos raíz abiertos de un cliente para encadenar nuevas visitas',
+  })
   async getCasosAbiertosCliente(
     @Query('idCliente') idCliente?: string,
     @Query('idEquipos') idEquipos?: string,
@@ -2647,7 +2717,10 @@ export class OrdenesController {
     const casosFormateados = rootOrders
       .map((root) => {
         // Consolidar equipos del caso
-        const eqMap = new Map<number, { id_equipo: number; codigo_equipo: string; nombre_equipo: string }>();
+        const eqMap = new Map<
+          number,
+          { id_equipo: number; codigo_equipo: string; nombre_equipo: string }
+        >();
         if (root.equipos) {
           eqMap.set(root.equipos.id_equipo, {
             id_equipo: root.equipos.id_equipo,
@@ -2683,8 +2756,7 @@ export class OrdenesController {
         const pendientesResueltos = todosPendientes.filter((p) => p.estado === 'RESUELTO');
 
         const codigoCaso = root.numero_orden.replace(/^OS-/, 'CASO-');
-        const eqPrincipalTag =
-          equiposCaso[0]?.codigo_equipo || equiposCaso[0]?.nombre_equipo || '';
+        const eqPrincipalTag = equiposCaso[0]?.codigo_equipo || equiposCaso[0]?.nombre_equipo || '';
         const nombreCasoCalculado =
           root.nombre_caso?.trim() ||
           root.descripcion_inicial?.trim()?.split('\n')[0] ||
@@ -2698,8 +2770,7 @@ export class OrdenesController {
             : root;
 
         const coincideEquipoSeleccionado =
-          eqIdsFilter.length === 0 ||
-          equiposCaso.some((e) => eqIdsFilter.includes(e.id_equipo));
+          eqIdsFilter.length === 0 || equiposCaso.some((e) => eqIdsFilter.includes(e.id_equipo));
 
         return {
           id_orden_raiz: root.id_orden_servicio,
@@ -2805,7 +2876,8 @@ export class OrdenesController {
   @Post('pendientes-directos')
   @ApiOperation({ summary: 'Registrar un pendiente directo de Cliente, Equipo o Servicio' })
   async createPendienteDirecto(
-    @Body() body: {
+    @Body()
+    body: {
       idCliente?: number;
       idEquipo?: number | null;
       idOrdenServicio?: number | null;
@@ -2924,9 +2996,7 @@ export class OrdenesController {
 
   @Delete('pendientes/:id')
   @ApiOperation({ summary: 'Eliminar un pendiente técnico' })
-  async deletePendiente(
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  async deletePendiente(@Param('id', ParseIntPipe) id: number) {
     const pendiente = await this.prisma.ordenes_pendientes.findUnique({
       where: { id_orden_pendiente: id },
     });
@@ -2961,10 +3031,7 @@ export class OrdenesController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
-  async create(
-    @Body() dto: CreateOrdenDto,
-    @UserId() userId: number
-  ) {
+  async create(@Body() dto: CreateOrdenDto, @UserId() userId: number) {
     const tecnicoId = dto.id_tecnico_asignado || dto.tecnicoId;
     const equiposIds = dto.equipos_ids || (dto.id_equipo ? [dto.id_equipo] : []);
     const serviciosIds = dto.servicios_ids || dto.serviciosIds;
@@ -3003,7 +3070,7 @@ export class OrdenesController {
   /**
    * GET /api/ordenes
    * Lista órdenes con paginación, filtros y ordenamiento
-   * 
+   *
    * ENTERPRISE: Soporta sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta
    * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
    */
@@ -3085,7 +3152,7 @@ export class OrdenesController {
     console.log(`🚀 HOLA, SINCRONIZACIÓN REMOTA - Orden ID: ${id}`);
     console.log(`========================================\n`);
     let ordenIdNumerico = parseInt(id, 10);
-    if (isNaN(ordenIdNumerico) || id.toUpperCase().startsWith("OS-")) {
+    if (isNaN(ordenIdNumerico) || id.toUpperCase().startsWith('OS-')) {
       const encontrada = await this.prisma.ordenes_servicio.findFirst({
         where: { numero_orden: id.trim() },
         select: { id_orden_servicio: true },
@@ -3155,7 +3222,8 @@ export class OrdenesController {
       }
 
       if (dto.id_tecnico_asignado !== undefined) {
-        commandDto.id_tecnico_asignado = dto.id_tecnico_asignado !== null ? Number(dto.id_tecnico_asignado) : null;
+        commandDto.id_tecnico_asignado =
+          dto.id_tecnico_asignado !== null ? Number(dto.id_tecnico_asignado) : null;
       }
 
       if (dto.hora_programada) {
@@ -3186,8 +3254,8 @@ export class OrdenesController {
       const err = error as { name?: string; code?: string; message?: string; stack?: string };
       this.logger.error(
         `[UPDATE ORDEN] fallo al actualizar orden ${id} (userId=${userId}) | ` +
-        `error=${err?.name} code=${err?.code ?? 'n/a'} mensaje=${err?.message ?? String(error)} | ` +
-        `payload=${JSON.stringify(dto ?? {})}`,
+          `error=${err?.name} code=${err?.code ?? 'n/a'} mensaje=${err?.message ?? String(error)} | ` +
+          `payload=${JSON.stringify(dto ?? {})}`,
         err?.stack,
       );
       throw error; // Re-lanzar para que AllExceptionsFilter lo maneje
@@ -3208,7 +3276,8 @@ export class OrdenesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Actualizar observaciones de cierre',
-    description: 'Actualiza SOLO el campo observaciones_cierre de una orden. Permite edición en estado COMPLETADA y registra la auditoría en historial_estados_orden.',
+    description:
+      'Actualiza SOLO el campo observaciones_cierre de una orden. Permite edición en estado COMPLETADA y registra la auditoría en historial_estados_orden.',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID de la orden' })
   @ApiResponse({ status: 200, description: 'Observaciones actualizadas exitosamente' })
@@ -3221,13 +3290,10 @@ export class OrdenesController {
     @CurrentUser() user: any,
   ) {
     if (!body || typeof body.observaciones_cierre !== 'string') {
-      throw new BadRequestException(
-        'Debes enviar observaciones_cierre como texto.',
-      );
+      throw new BadRequestException('Debes enviar observaciones_cierre como texto.');
     }
 
-    const adminId =
-      Number(userId) || Number(user?.id) || Number(user?.id_usuario) || 1;
+    const adminId = Number(userId) || Number(user?.id) || Number(user?.id_usuario) || 1;
 
     const resultado = await this.prisma.$transaction(async (tx) => {
       // 1. Leer la orden dentro de la transacción para no auditar sobre datos obsoletos
@@ -3244,15 +3310,13 @@ export class OrdenesController {
       // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
       const estadoCodigo = orden.estados_orden?.codigo_estado;
       if (estadoCodigo === 'CANCELADA') {
-        throw new BadRequestException(
-          `No se puede modificar una orden en estado ${estadoCodigo}`,
-        );
+        throw new BadRequestException(`No se puede modificar una orden en estado ${estadoCodigo}`);
       }
 
       if (orden.id_estado_actual == null) {
         throw new InternalServerErrorException(
           `La orden ${orden.numero_orden ?? id} no tiene un estado actual válido. ` +
-          `No se puede registrar la auditoría de observaciones de cierre.`,
+            `No se puede registrar la auditoría de observaciones de cierre.`,
         );
       }
 
@@ -3283,20 +3347,14 @@ export class OrdenesController {
       // 5. Auditar sólo si cambió el texto visible. Un simple cambio de
       //    formato (texto plano → <p>texto</p>) no ensucia el historial.
       let historial: { id_historial: number } | null = null;
-      if (
-        !observacionesCierreEquivalentes(
-          orden.observaciones_cierre,
-          body.observaciones_cierre,
-        )
-      ) {
+      if (!observacionesCierreEquivalentes(orden.observaciones_cierre, body.observaciones_cierre)) {
         historial = await tx.historial_estados_orden.create({
           data: {
             id_orden_servicio: id,
             id_estado_anterior: orden.id_estado_actual,
             id_estado_nuevo: orden.id_estado_actual,
             accion: ACCION_MODIFICAR_OBSERVACIONES_CIERRE,
-            motivo_cambio:
-              'Edición de observaciones de cierre desde Portal Admin',
+            motivo_cambio: 'Edición de observaciones de cierre desde Portal Admin',
             observaciones: body.observaciones_cierre,
             realizado_por: adminId,
             fecha_cambio: fechaCambio,
@@ -3333,7 +3391,7 @@ export class OrdenesController {
    * PATCH /api/ordenes/:id/horarios-servicio
    * Endpoint ATÓMICO para actualizar hora de entrada y hora de salida del servicio
    * Diseñado para Portal Admin - permite edición incluso en órdenes COMPLETADAS
-   * 
+   *
    * Los campos se almacenan como:
    * - fecha_inicio_real (DateTime) → hora de entrada del técnico al sitio
    * - fecha_fin_real (DateTime) → hora de salida del técnico del sitio
@@ -3343,7 +3401,8 @@ export class OrdenesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Actualizar horarios de servicio (hora entrada/salida)',
-    description: 'Actualiza fecha_inicio_real y fecha_fin_real de una orden. Recalcula duracion_minutos automáticamente. Permite edición en estado COMPLETADA.',
+    description:
+      'Actualiza fecha_inicio_real y fecha_fin_real de una orden. Recalcula duracion_minutos automáticamente. Permite edición en estado COMPLETADA.',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID de la orden' })
   @ApiResponse({ status: 200, description: 'Horarios actualizados exitosamente' })
@@ -3351,7 +3410,8 @@ export class OrdenesController {
   @ApiResponse({ status: 400, description: 'Datos inválidos o estado no permite edición' })
   async updateHorariosServicio(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: {
+    @Body()
+    body: {
       fecha_inicio_real?: string;
       fecha_fin_real?: string;
       // ✅ FIX 20-AGO-2026: Permite guardar duraciones > 24h tras confirmación
@@ -3374,16 +3434,12 @@ export class OrdenesController {
     // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
     const estadoCodigo = orden.estados_orden?.codigo_estado;
     if (estadoCodigo === 'CANCELADA') {
-      throw new BadRequestException(
-        `No se puede modificar una orden en estado ${estadoCodigo}`,
-      );
+      throw new BadRequestException(`No se puede modificar una orden en estado ${estadoCodigo}`);
     }
 
     // 3. Validar que al menos un campo venga
     if (!body.fecha_inicio_real && !body.fecha_fin_real) {
-      throw new BadRequestException(
-        'Debe enviar al menos fecha_inicio_real o fecha_fin_real',
-      );
+      throw new BadRequestException('Debe enviar al menos fecha_inicio_real o fecha_fin_real');
     }
 
     // 4. Parsear fechas
@@ -3412,14 +3468,13 @@ export class OrdenesController {
     }
 
     // 5. Recalcular duración en minutos
-    const inicioFinal = fechaInicio || (orden.fecha_inicio_real ? new Date(orden.fecha_inicio_real) : null);
+    const inicioFinal =
+      fechaInicio || (orden.fecha_inicio_real ? new Date(orden.fecha_inicio_real) : null);
     const finFinal = fechaFin || (orden.fecha_fin_real ? new Date(orden.fecha_fin_real) : null);
 
     if (inicioFinal && finFinal) {
       if (finFinal <= inicioFinal) {
-        throw new BadRequestException(
-          'La hora de salida debe ser posterior a la hora de entrada',
-        );
+        throw new BadRequestException('La hora de salida debe ser posterior a la hora de entrada');
       }
 
       const diffMs = finFinal.getTime() - inicioFinal.getTime();
@@ -3497,16 +3552,12 @@ export class OrdenesController {
     }
 
     if (typeof body?.habilitada !== 'boolean') {
-      throw new BadRequestException(
-        'El campo "habilitada" es obligatorio y debe ser booleano.',
-      );
+      throw new BadRequestException('El campo "habilitada" es obligatorio y debe ser booleano.');
     }
 
     const motivo = body.motivo?.trim() || null;
     if (motivo && motivo.length > 500) {
-      throw new BadRequestException(
-        'El motivo no puede exceder 500 caracteres.',
-      );
+      throw new BadRequestException('El motivo no puede exceder 500 caracteres.');
     }
 
     const adminId = Number(userId) || Number(user?.id) || 1;
@@ -3550,9 +3601,7 @@ export class OrdenesController {
     }
 
     const fechaDecision = new Date();
-    const accion = body.habilitada
-      ? 'HABILITAR_EDICION_TECNICO'
-      : 'REVOCAR_EDICION_TECNICO';
+    const accion = body.habilitada ? 'HABILITAR_EDICION_TECNICO' : 'REVOCAR_EDICION_TECNICO';
 
     // 4. Actualización + auditoría atómicas.
     const [updated] = await this.prisma.$transaction([
@@ -3601,10 +3650,8 @@ export class OrdenesController {
       data: {
         id_orden_servicio: updated.id_orden_servicio,
         edicion_tecnico_habilitada: updated.edicion_tecnico_habilitada,
-        edicion_tecnico_autorizada_por:
-          updated.edicion_tecnico_autorizada_por,
-        edicion_tecnico_fecha_autorizacion:
-          updated.edicion_tecnico_fecha_autorizacion,
+        edicion_tecnico_autorizada_por: updated.edicion_tecnico_autorizada_por,
+        edicion_tecnico_fecha_autorizacion: updated.edicion_tecnico_fecha_autorizacion,
         edicion_tecnico_motivo: updated.edicion_tecnico_motivo,
       },
     };
@@ -3678,11 +3725,7 @@ export class OrdenesController {
    */
   @Put(':id/programar')
   async programar(@Param('id') id: string, @Body() dto: ProgramarOrdenDto) {
-    const command = new ProgramarOrdenCommand(
-      id,
-      new Date(dto.fechaProgramada),
-      dto.observaciones
-    );
+    const command = new ProgramarOrdenCommand(id, new Date(dto.fechaProgramada), dto.observaciones);
 
     const result = await this.commandBus.execute(command);
 
@@ -3700,10 +3743,7 @@ export class OrdenesController {
    */
   @Put(':id/asignar')
   async asignarTecnico(@Param('id') id: string, @Body() dto: AsignarTecnicoDto) {
-    const command = new AsignarTecnicoCommand(
-      id,
-      dto.tecnicoId
-    );
+    const command = new AsignarTecnicoCommand(id, dto.tecnicoId);
 
     const result = await this.commandBus.execute(command);
     console.log('[OrdenesController] Command executed, returning simplified response');
@@ -3718,10 +3758,12 @@ export class OrdenesController {
         id_orden_servicio: result.id_orden_servicio,
         numero_orden: result.numero_orden,
         estado: result.estados_orden,
-        tecnico: tecnico ? {
-          id_empleado: tecnico.id_empleado,
-          persona: tecnico.persona
-        } : null
+        tecnico: tecnico
+          ? {
+              id_empleado: tecnico.id_empleado,
+              persona: tecnico.persona,
+            }
+          : null,
       },
     };
   }
@@ -3748,7 +3790,7 @@ export class OrdenesController {
    * PUT /api/ordenes/:id/finalizar
    * Finaliza la ejecución de la orden
    * Estado: EN_PROCESO → COMPLETADA
-   * 
+   *
    * ACCIONES AUTOMÁTICAS:
    * - Genera PDF del informe de servicio
    * - Sube PDF a Cloudflare R2
@@ -3774,10 +3816,7 @@ export class OrdenesController {
   @ApiResponse({ status: 200, description: 'Orden finalizada exitosamente' })
   @ApiResponse({ status: 400, description: 'Orden no está en estado EN_PROCESO' })
   @ApiResponse({ status: 404, description: 'Orden no encontrada' })
-  async finalizar(
-    @Param('id') id: string,
-    @Body() dto: { observaciones?: string },
-  ) {
+  async finalizar(@Param('id') id: string, @Body() dto: { observaciones?: string }) {
     const command = new FinalizarOrdenCommand(id, dto.observaciones);
 
     const result = await this.commandBus.execute(command);
@@ -3816,10 +3855,7 @@ export class OrdenesController {
    * Estado: CUALQUIERA → CANCELADA
    */
   @Put(':id/cancelar')
-  async cancelar(
-    @Param('id') id: string,
-    @Body() dto: { motivo?: string },
-  ) {
+  async cancelar(@Param('id') id: string, @Body() dto: { motivo?: string }) {
     const command = new CancelarOrdenCommand(
       parseInt(id, 10),
       dto.motivo || 'Sin motivo especificado',
@@ -3839,9 +3875,9 @@ export class OrdenesController {
    * ==========================================================================
    * POST /api/ordenes/:id/finalizar-completo
    * ==========================================================================
-   * 
+   *
    * ENDPOINT PRINCIPAL DE FINALIZACIÓN - FLUJO COMPLETO
-   * 
+   *
    * Este endpoint ejecuta TODO el flujo de finalización de una orden:
    * 1. Sube evidencias fotográficas a Cloudinary
    * 2. Registra evidencias en BD con hash SHA256
@@ -3851,7 +3887,7 @@ export class OrdenesController {
    * 6. Registra documento en BD
    * 7. Envía email al cliente con PDF adjunto
    * 8. Actualiza estado de la orden a COMPLETADA
-   * 
+   *
    * USO DESDE FRONTEND:
    * - La app móvil del técnico envía todos los datos en una sola request
    * - Incluye evidencias en Base64, firmas digitales, actividades, mediciones
@@ -3883,7 +3919,7 @@ export class OrdenesController {
   @ApiParam({ name: 'id', description: 'ID de la orden de servicio', example: 1 })
   @ApiResponse({
     status: 200,
-    description: 'Orden finalizada exitosamente. PDF generado y email enviado.'
+    description: 'Orden finalizada exitosamente. PDF generado y email enviado.',
   })
   @ApiResponse({ status: 400, description: 'Datos inválidos o incompletos' })
   @ApiResponse({ status: 404, description: 'Orden no encontrada' })
@@ -3905,15 +3941,21 @@ export class OrdenesController {
     console.log('📋 EVIDENCIAS recibidas:', dto.evidencias?.length || 0);
     // ✅ FIX 17-DIC-2025: Log forense de idOrdenEquipo para diagnóstico multi-equipo
     dto.evidencias?.slice(0, 5).forEach((ev, i) => {
-      console.log(`   [${i}] tipo="${ev.tipo}", idOrdenEquipo=${ev.idOrdenEquipo ?? 'NULL'}, desc="${ev.descripcion?.substring(0, 30) ?? 'N/A'}...", base64=${ev.base64?.length || 0} chars`);
+      console.log(
+        `   [${i}] tipo="${ev.tipo}", idOrdenEquipo=${ev.idOrdenEquipo ?? 'NULL'}, desc="${ev.descripcion?.substring(0, 30) ?? 'N/A'}...", base64=${ev.base64?.length || 0} chars`,
+      );
     });
     if (dto.evidencias?.length > 5) {
       console.log(`   ... y ${dto.evidencias.length - 5} evidencias más`);
     }
     console.log('');
     console.log('✍️ FIRMAS:');
-    console.log(`   tecnico: tipo="${dto.firmas?.tecnico?.tipo}", idPersona=${dto.firmas?.tecnico?.idPersona}`);
-    console.log(`   cliente: ${dto.firmas?.cliente ? `tipo="${dto.firmas.cliente.tipo}"` : 'NO ENVIADA'}`);
+    console.log(
+      `   tecnico: tipo="${dto.firmas?.tecnico?.tipo}", idPersona=${dto.firmas?.tecnico?.idPersona}`,
+    );
+    console.log(
+      `   cliente: ${dto.firmas?.cliente ? `tipo="${dto.firmas.cliente.tipo}"` : 'NO ENVIADA'}`,
+    );
     console.log('');
     console.log('📝 ACTIVIDADES recibidas:', dto.actividades?.length || 0);
     dto.actividades?.slice(0, 3).forEach((act, i) => {
@@ -3932,7 +3974,7 @@ export class OrdenesController {
     // Construir DTO interno con ID de orden
     const finalizarDto = {
       idOrden: parseInt(id, 10),
-      evidencias: dto.evidencias.map(e => ({
+      evidencias: dto.evidencias.map((e) => ({
         tipo: e.tipo as 'ANTES' | 'DURANTE' | 'DESPUES' | 'MEDICION',
         base64: e.base64,
         descripcion: e.descripcion,
@@ -3947,23 +3989,25 @@ export class OrdenesController {
           idPersona: dto.firmas.tecnico.idPersona,
           formato: dto.firmas.tecnico.formato,
         },
-        cliente: dto.firmas.cliente ? {
-          tipo: 'CLIENTE' as const,
-          base64: dto.firmas.cliente.base64,
-          idPersona: dto.firmas.cliente.idPersona,
-          formato: dto.firmas.cliente.formato,
-          // ✅ FIX 06-FEB-2026: Pasar nombre y cargo del firmante cliente al servicio
-          nombreFirmante: dto.firmas.cliente.nombreFirmante,
-          cargoFirmante: dto.firmas.cliente.cargoFirmante,
-        } : undefined,
+        cliente: dto.firmas.cliente
+          ? {
+              tipo: 'CLIENTE' as const,
+              base64: dto.firmas.cliente.base64,
+              idPersona: dto.firmas.cliente.idPersona,
+              formato: dto.firmas.cliente.formato,
+              // ✅ FIX 06-FEB-2026: Pasar nombre y cargo del firmante cliente al servicio
+              nombreFirmante: dto.firmas.cliente.nombreFirmante,
+              cargoFirmante: dto.firmas.cliente.cargoFirmante,
+            }
+          : undefined,
       },
-      actividades: dto.actividades.map(a => ({
+      actividades: dto.actividades.map((a) => ({
         sistema: a.sistema,
         descripcion: a.descripcion,
         resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
         observaciones: a.observaciones,
       })),
-      mediciones: dto.mediciones?.map(m => ({
+      mediciones: dto.mediciones?.map((m) => ({
         parametro: m.parametro,
         valor: m.valor,
         unidad: m.unidad,
@@ -3983,11 +4027,7 @@ export class OrdenesController {
 
     // Ejecutar flujo de finalización (solo datos, sin PDF ni email).
     // Se pasa el usuario autenticado para validar asignación (Zero Trust).
-    const result = await this.finalizacionService.finalizarOrden(
-      finalizarDto,
-      undefined,
-      user,
-    );
+    const result = await this.finalizacionService.finalizarOrden(finalizarDto, undefined, user);
 
     return {
       success: result.success,
@@ -4001,13 +4041,13 @@ export class OrdenesController {
    * ==========================================================================
    * POST /api/ordenes/:id/finalizar-completo-stream
    * ==========================================================================
-   * 
+   *
    * ENDPOINT CON STREAMING DE PROGRESO EN TIEMPO REAL
-   * 
+   *
    * Este endpoint ejecuta el mismo flujo de finalización pero emite eventos
    * Server-Sent Events (SSE) para que el cliente pueda mostrar el progreso
    * en tiempo real.
-   * 
+   *
    * Cada evento tiene el formato:
    * {
    *   step: 'validando' | 'evidencias' | 'firmas' | 'generando_pdf' | ...
@@ -4022,7 +4062,8 @@ export class OrdenesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Finalizar orden con streaming de progreso',
-    description: 'Ejecuta el flujo completo de finalización emitiendo eventos SSE de progreso en tiempo real.',
+    description:
+      'Ejecuta el flujo completo de finalización emitiendo eventos SSE de progreso en tiempo real.',
   })
   @ApiParam({ name: 'id', description: 'ID de la orden de servicio', example: 1 })
   @ApiResponse({
@@ -4056,7 +4097,7 @@ export class OrdenesController {
       // Construir DTO interno con ID de orden
       const finalizarDto = {
         idOrden: parseInt(id, 10),
-        evidencias: dto.evidencias.map(e => ({
+        evidencias: dto.evidencias.map((e) => ({
           tipo: e.tipo as 'ANTES' | 'DURANTE' | 'DESPUES' | 'MEDICION',
           base64: e.base64,
           descripcion: e.descripcion,
@@ -4070,23 +4111,25 @@ export class OrdenesController {
             idPersona: dto.firmas.tecnico.idPersona,
             formato: dto.firmas.tecnico.formato,
           },
-          cliente: dto.firmas.cliente ? {
-            tipo: 'CLIENTE' as const,
-            base64: dto.firmas.cliente.base64,
-            idPersona: dto.firmas.cliente.idPersona,
-            formato: dto.firmas.cliente.formato,
-            // ✅ FIX 06-AGO-2026: Pasar nombre y cargo del firmante cliente al servicio
-            nombreFirmante: dto.firmas.cliente.nombreFirmante,
-            cargoFirmante: dto.firmas.cliente.cargoFirmante,
-          } : undefined,
+          cliente: dto.firmas.cliente
+            ? {
+                tipo: 'CLIENTE' as const,
+                base64: dto.firmas.cliente.base64,
+                idPersona: dto.firmas.cliente.idPersona,
+                formato: dto.firmas.cliente.formato,
+                // ✅ FIX 06-AGO-2026: Pasar nombre y cargo del firmante cliente al servicio
+                nombreFirmante: dto.firmas.cliente.nombreFirmante,
+                cargoFirmante: dto.firmas.cliente.cargoFirmante,
+              }
+            : undefined,
         },
-        actividades: dto.actividades.map(a => ({
+        actividades: dto.actividades.map((a) => ({
           sistema: a.sistema,
           descripcion: a.descripcion,
           resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
           observaciones: a.observaciones,
         })),
-        mediciones: dto.mediciones?.map(m => ({
+        mediciones: dto.mediciones?.map((m) => ({
           parametro: m.parametro,
           valor: m.valor,
           unidad: m.unidad,
@@ -4112,33 +4155,36 @@ export class OrdenesController {
       );
 
       // Enviar resultado final
-      res.write(`data: ${JSON.stringify({
-        step: 'result',
-        status: 'completed',
-        message: result.mensaje,
-        progress: 100,
-        timestamp: Date.now(),
-        data: {
-          success: result.success,
-          datos: result.datos,
-          tiempoTotal: result.tiempoTotal,
-        },
-      })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          step: 'result',
+          status: 'completed',
+          message: result.mensaje,
+          progress: 100,
+          timestamp: Date.now(),
+          data: {
+            success: result.success,
+            datos: result.datos,
+            tiempoTotal: result.tiempoTotal,
+          },
+        })}\n\n`,
+      );
 
       // Cerrar stream
       res.end();
-
     } catch (error) {
       const err = error as Error;
 
       // Enviar evento de error
-      res.write(`data: ${JSON.stringify({
-        step: 'error',
-        status: 'error',
-        message: err.message,
-        progress: 0,
-        timestamp: Date.now(),
-      })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          step: 'error',
+          status: 'error',
+          message: err.message,
+          progress: 0,
+          timestamp: Date.now(),
+        })}\n\n`,
+      );
 
       // Cerrar stream
       res.end();
@@ -4159,7 +4205,8 @@ export class OrdenesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Transferir datos completos de otra orden',
-    description: 'Copia todos los datos (campos directos, actividades, evidencias, mediciones, firmas, componentes) de una orden origen a la orden destino.',
+    description:
+      'Copia todos los datos (campos directos, actividades, evidencias, mediciones, firmas, componentes) de una orden origen a la orden destino.',
   })
   @ApiParam({ name: 'id', description: 'ID de la orden DESTINO', type: Number })
   @ApiResponse({ status: 200, description: 'Datos transferidos exitosamente' })
@@ -4178,7 +4225,9 @@ export class OrdenesController {
       throw new BadRequestException('La orden origen y destino no pueden ser la misma');
     }
 
-    console.log(`🔄 [TRANSFER] Iniciando transferencia: Orden #${idOrdenOrigen} → Orden #${idDestino}`);
+    console.log(
+      `🔄 [TRANSFER] Iniciando transferencia: Orden #${idOrdenOrigen} → Orden #${idDestino}`,
+    );
 
     // 1. Validar que ambas órdenes existen
     const [ordenOrigen, ordenDestino] = await Promise.all([
@@ -4213,19 +4262,21 @@ export class OrdenesController {
     if (!estadoDestinoRow || !estadoDestino) {
       throw new InternalServerErrorException(
         `La orden destino #${idDestino} tiene id_estado_actual=${ordenDestino.id_estado_actual} ` +
-        `sin relación válida en estados_orden. No se puede evaluar la transferencia.`,
+          `sin relación válida en estados_orden. No se puede evaluar la transferencia.`,
       );
     }
 
     if (estadoDestinoRow.es_estado_final) {
       throw new BadRequestException(
         `La orden destino #${idDestino} (${ordenDestino.numero_orden}) está en estado ` +
-        `"${estadoDestinoRow.nombre_estado}" y no se puede sobrescribir. ` +
-        `Solo se puede transferir a órdenes en estados no finales.`,
+          `"${estadoDestinoRow.nombre_estado}" y no se puede sobrescribir. ` +
+          `Solo se puede transferir a órdenes en estados no finales.`,
       );
     }
 
-    console.log(`🔄 [TRANSFER] Origen: ${ordenOrigen.numero_orden} (${estadoOrigen}) | Destino: ${ordenDestino.numero_orden} (${estadoDestino})`);
+    console.log(
+      `🔄 [TRANSFER] Origen: ${ordenOrigen.numero_orden} (${estadoOrigen}) | Destino: ${ordenDestino.numero_orden} (${estadoDestino})`,
+    );
 
     // ── ADOPCIÓN DE ESTADO (no "transición") ──
     //
@@ -4249,7 +4300,7 @@ export class OrdenesController {
       if (estadoOrigen === 'CANCELADA') {
         throw new BadRequestException(
           `No se puede transferir desde la orden ${ordenOrigen.numero_orden}: está CANCELADA. ` +
-          `Una orden cancelada no aporta datos de trabajo; use "Aprobar/Rechazar" sobre la orden destino.`,
+            `Una orden cancelada no aporta datos de trabajo; use "Aprobar/Rechazar" sobre la orden destino.`,
         );
       }
 
@@ -4258,8 +4309,8 @@ export class OrdenesController {
       if (ESTADOS_QUE_EXIGEN_TECNICO.includes(estadoOrigen!) && !ordenDestino.id_tecnico_asignado) {
         throw new BadRequestException(
           `No se puede transferir: la orden destino ${ordenDestino.numero_orden} no tiene técnico asignado, ` +
-          `pero el estado de la orden origen es "${estadoOrigen}", que exige un técnico responsable. ` +
-          `Asigne un técnico a la orden destino antes de transferir.`,
+            `pero el estado de la orden origen es "${estadoOrigen}", que exige un técnico responsable. ` +
+            `Asigne un técnico a la orden destino antes de transferir.`,
         );
       }
 
@@ -4275,335 +4326,361 @@ export class OrdenesController {
       if (faltantes.length > 0) {
         throw new BadRequestException(
           `No se puede adoptar el estado "${estadoOrigen}" en la orden ${ordenDestino.numero_orden}: ` +
-          `la orden origen ${ordenOrigen.numero_orden} no tiene ${faltantes.join(', ')}. ` +
-          `Un estado que exige esos campos no puede quedar incompleto.`,
+            `la orden origen ${ordenOrigen.numero_orden} no tiene ${faltantes.join(', ')}. ` +
+            `Un estado que exige esos campos no puede quedar incompleto.`,
         );
       }
     }
 
     // 3. Ejecutar transferencia en transacción atómica
-    const resultado = await this.prisma.$transaction(async (tx) => {
-      const stats = {
-        camposDirectos: false,
-        ordenesEquipos: 0,
-        actividadesEjecutadas: 0,
-        evidenciasFotograficas: 0,
-        medicionesServicio: 0,
-        componentesUsados: 0,
-        ordenesActividadesPlan: 0,
-      };
+    const resultado = await this.prisma.$transaction(
+      async (tx) => {
+        const stats = {
+          camposDirectos: false,
+          ordenesEquipos: 0,
+          actividadesEjecutadas: 0,
+          evidenciasFotograficas: 0,
+          medicionesServicio: 0,
+          componentesUsados: 0,
+          ordenesActividadesPlan: 0,
+        };
 
-      // ── PASO A: Limpiar datos existentes en destino (orden inverso de dependencias) ──
-      console.log(`🗑️ [TRANSFER] Limpiando datos existentes en orden destino #${idDestino}...`);
+        // ── PASO A: Limpiar datos existentes en destino (orden inverso de dependencias) ──
+        console.log(`🗑️ [TRANSFER] Limpiando datos existentes en orden destino #${idDestino}...`);
 
-      // ✅ FIX 14-ABR-2026: NO borrar ordenes_equipos - mantener equipo de orden destino
-      const delComponentes = await tx.componentes_usados.deleteMany({ where: { id_orden_servicio: idDestino } });
-      const delEvidencias = await tx.evidencias_fotograficas.deleteMany({ where: { id_orden_servicio: idDestino } });
-      const delMediciones = await tx.mediciones_servicio.deleteMany({ where: { id_orden_servicio: idDestino } });
-      const delActividades = await tx.actividades_ejecutadas.deleteMany({ where: { id_orden_servicio: idDestino } });
-      // await tx.ordenes_equipos.deleteMany({ where: { id_orden_servicio: idDestino } }); // ❌ NO borrar equipos
-      const delPlan = await tx.ordenes_actividades_plan.deleteMany({ where: { id_orden_servicio: idDestino } });
+        // ✅ FIX 14-ABR-2026: NO borrar ordenes_equipos - mantener equipo de orden destino
+        const delComponentes = await tx.componentes_usados.deleteMany({
+          where: { id_orden_servicio: idDestino },
+        });
+        const delEvidencias = await tx.evidencias_fotograficas.deleteMany({
+          where: { id_orden_servicio: idDestino },
+        });
+        const delMediciones = await tx.mediciones_servicio.deleteMany({
+          where: { id_orden_servicio: idDestino },
+        });
+        const delActividades = await tx.actividades_ejecutadas.deleteMany({
+          where: { id_orden_servicio: idDestino },
+        });
+        // await tx.ordenes_equipos.deleteMany({ where: { id_orden_servicio: idDestino } }); // ❌ NO borrar equipos
+        const delPlan = await tx.ordenes_actividades_plan.deleteMany({
+          where: { id_orden_servicio: idDestino },
+        });
 
-      // ── PASO B: Copiar campos directos de la orden ──
-      console.log(`📋 [TRANSFER] Copiando campos directos...`);
+        // ── PASO B: Copiar campos directos de la orden ──
+        console.log(`📋 [TRANSFER] Copiando campos directos...`);
 
-      await tx.ordenes_servicio.update({
-        where: { id_orden_servicio: idDestino },
-        data: {
-          // Adopta el estado del ORIGEN (decisión de negocio 03-OCT-2026), ya validado
-          // contra la FSM arriba. Si el estado no cambia, se envía el del destino para
-          // no generar un update redundante del campo.
-          id_estado_actual: estadoSeAdopta ? ordenOrigen.id_estado_actual : ordenDestino.id_estado_actual,
-          trabajo_realizado: ordenOrigen.trabajo_realizado,
-          observaciones_tecnico: ordenOrigen.observaciones_tecnico,
-          observaciones_cierre: ordenOrigen.observaciones_cierre,
-          descripcion_inicial: ordenOrigen.descripcion_inicial,
-          fecha_inicio_real: ordenOrigen.fecha_inicio_real,
-          fecha_fin_real: ordenOrigen.fecha_fin_real,
-          duracion_minutos: ordenOrigen.duracion_minutos,
-          nombre_quien_recibe: ordenOrigen.nombre_quien_recibe,
-          cargo_quien_recibe: ordenOrigen.cargo_quien_recibe,
-          cliente_conforme: ordenOrigen.cliente_conforme,
-          calificacion_cliente: ordenOrigen.calificacion_cliente,
-          tiene_garantia: ordenOrigen.tiene_garantia,
-          meses_garantia: ordenOrigen.meses_garantia,
-          fecha_vencimiento_garantia: ordenOrigen.fecha_vencimiento_garantia,
-          observaciones_garantia: ordenOrigen.observaciones_garantia,
-          id_firma_cliente: ordenOrigen.id_firma_cliente,
-          id_firma_tecnico: ordenOrigen.id_firma_tecnico,
-          metadata: ordenOrigen.metadata ?? undefined,
-          total_servicios: ordenOrigen.total_servicios,
-          total_gastos: ordenOrigen.total_gastos,
-          total_componentes: ordenOrigen.total_componentes,
-          total_general: ordenOrigen.total_general,
-          modificado_por: userId || null,
-          fecha_modificacion: new Date(),
-        },
-      });
-      stats.camposDirectos = true;
-
-      // ── TRAZABILIDAD INTERNA DE LA TRANSFERENCIA (03-OCT-2026) ──
-      // Antes solo se escribía un historial con `id_estado_anterior` NULL y un texto
-      // libre, lo que dejaba 1.430 de 1.521 registros de historial sin estado de
-      // partida (auditoría no reconstruible). Ahora se registran estado anterior y
-      // nuevo, y el `metadata` guarda el detalle forense de lo que se copió y lo que NO.
-      const auditoria = {
-        operacion: 'TRANSFERIR_DATOS_ENTRE_ORDENES',
-        orden_origen_id: idOrdenOrigen,
-        orden_origen_numero: ordenOrigen.numero_orden,
-        orden_destino_id: idDestino,
-        orden_destino_numero: ordenDestino.numero_orden,
-        estado_origen: estadoOrigen ?? null,
-        estado_destino_antes: estadoDestino,
-        estado_destino_despues: estadoOrigen ?? estadoDestino,
-        // La transferencia es una ADOPCIÓN de estado, no una transición por la FSM.
-        // Se deja explícito para que un auditor no interprete este salto como
-        // una transición saltada: el estado anterior y el nuevo quedan ambos
-        // registrados en las columnas propias del historial.
-        tipo_operacion: 'ADOPCION_ESTADO',
-        validado_contra_fsm: false,
-        validacion_aplicada: 'compatibilidad_de_destino',
-        // Campos explícitos: la ausencia detransferencia de técnico y de equipo es
-        // una decisión de negocio, no un olvido. Se hace auditable.
-        tecnico_transferido: false,
-        tecnico_conservado: ordenDestino.id_tecnico_asignado ?? null,
-        equipos_transferidos: false,
-        equipos_conservados: true,
-        campos_directos_sobrescritos: true,
-        // La transferencia también reemplaza las observaciones de cierre del
-        // destino con las del origen. Se deja el antes/después explícito para
-        // que la auditoría no dependa de reconstruir el estado anterior.
-        observacion_cierre_anterior:
-          ordenDestino.observaciones_cierre ?? null,
-        observacion_cierre_nueva: ordenOrigen.observaciones_cierre ?? null,
-        // Conteo de lo SOBREESCRITO, tomado del `deleteMany` de PASO A (no de un
-        // `count` posterior, que siempre devolvería 0 al haber borrado ya).
-        sobrescrito_en_destino: {
-          componentes_usados: delComponentes,
-          evidencias_fotograficas: delEvidencias,
-          mediciones_servicio: delMediciones,
-          actividades_ejecutadas: delActividades,
-          ordenes_actividades_plan: delPlan,
-        },
-        usuario: userId ?? null,
-        timestamp: new Date().toISOString(),
-      };
-
-      await tx.historial_estados_orden.create({
-        data: {
-          id_orden_servicio: idDestino,
-          // Estado anterior explícito: sin esto el salto queda huérfano en la auditoría.
-          id_estado_anterior: ordenDestino.id_estado_actual,
-          id_estado_nuevo: ordenOrigen.id_estado_actual,
-          motivo_cambio: 'Transferencia de datos entre órdenes',
-          observaciones:
-            `ADOPCIÓN de estado por transferencia: ${estadoDestino} → ${estadoOrigen}, ` +
-            `tomando el cuerpo de trabajo de ${ordenOrigen.numero_orden} (ID ${idOrdenOrigen}). ` +
-            `No es una transición por la FSM: la transferencia reemplaza la orden, no la avanza. ` +
-            `Técnico conservado: ${ordenDestino.id_tecnico_asignado ?? 'sin asignar'}. ` +
-            `Equipos conservados (no se transfieren por diseño).`,
-          accion: 'TRANSFERIR_DATOS',
-          fecha_cambio: new Date(),
-          realizado_por: userId || 1,
-          metadata: auditoria,
-        },
-      });
-      console.log(`🔄 [TRANSFER] Estado ${estadoDestino} → ${estadoOrigen} registrado en historial (auditado)`);
-
-      // ── PASO C: NO copiar ordenes_equipos (mantener equipo de orden destino)
-      // ✅ FIX 14-ABR-2026: Si el técnico se equivocó de equipo, queremos mantener el equipo correcto de destino
-      console.log(`📦 [TRANSFER] Equipos NO transferidos (manteniendo equipo de orden destino)`);
-      // Sin usages posteriores: se eliminó el Map vacío para no mantener código muerto.
-
-      // ── PASO D: Copiar actividades_ejecutadas ──
-      const actividadesOrigen = await tx.actividades_ejecutadas.findMany({
-        where: { id_orden_servicio: idOrdenOrigen },
-        orderBy: { orden_secuencia: 'asc' },
-      });
-
-      // Mapa de ID viejo → ID nuevo para actividades
-      const mapActividades = new Map<number, number>();
-
-      for (const act of actividadesOrigen) {
-        // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
-        const nuevoIdOrdenEquipo = null;
-        const nuevaAct = await tx.actividades_ejecutadas.create({
+        await tx.ordenes_servicio.update({
+          where: { id_orden_servicio: idDestino },
           data: {
-            id_orden_servicio: idDestino,
-            id_actividad_catalogo: act.id_actividad_catalogo,
-            descripcion_manual: act.descripcion_manual,
-            sistema: act.sistema,
-            orden_secuencia: act.orden_secuencia,
-            estado: act.estado,
-            observaciones: act.observaciones,
-            ejecutada: act.ejecutada,
-            fecha_ejecucion: act.fecha_ejecucion,
-            ejecutada_por: act.ejecutada_por,
-            tiempo_ejecucion_minutos: act.tiempo_ejecucion_minutos,
-            requiere_evidencia: act.requiere_evidencia,
-            evidencia_capturada: act.evidencia_capturada,
-            fecha_registro: act.fecha_registro,
-            id_orden_equipo: nuevoIdOrdenEquipo,
+            // Adopta el estado del ORIGEN (decisión de negocio 03-OCT-2026), ya validado
+            // contra la FSM arriba. Si el estado no cambia, se envía el del destino para
+            // no generar un update redundante del campo.
+            id_estado_actual: estadoSeAdopta
+              ? ordenOrigen.id_estado_actual
+              : ordenDestino.id_estado_actual,
+            trabajo_realizado: ordenOrigen.trabajo_realizado,
+            observaciones_tecnico: ordenOrigen.observaciones_tecnico,
+            observaciones_cierre: ordenOrigen.observaciones_cierre,
+            descripcion_inicial: ordenOrigen.descripcion_inicial,
+            fecha_inicio_real: ordenOrigen.fecha_inicio_real,
+            fecha_fin_real: ordenOrigen.fecha_fin_real,
+            duracion_minutos: ordenOrigen.duracion_minutos,
+            nombre_quien_recibe: ordenOrigen.nombre_quien_recibe,
+            cargo_quien_recibe: ordenOrigen.cargo_quien_recibe,
+            cliente_conforme: ordenOrigen.cliente_conforme,
+            calificacion_cliente: ordenOrigen.calificacion_cliente,
+            tiene_garantia: ordenOrigen.tiene_garantia,
+            meses_garantia: ordenOrigen.meses_garantia,
+            fecha_vencimiento_garantia: ordenOrigen.fecha_vencimiento_garantia,
+            observaciones_garantia: ordenOrigen.observaciones_garantia,
+            id_firma_cliente: ordenOrigen.id_firma_cliente,
+            id_firma_tecnico: ordenOrigen.id_firma_tecnico,
+            metadata: ordenOrigen.metadata ?? undefined,
+            total_servicios: ordenOrigen.total_servicios,
+            total_gastos: ordenOrigen.total_gastos,
+            total_componentes: ordenOrigen.total_componentes,
+            total_general: ordenOrigen.total_general,
+            modificado_por: userId || null,
+            fecha_modificacion: new Date(),
           },
         });
-        mapActividades.set(act.id_actividad_ejecutada, nuevaAct.id_actividad_ejecutada);
-        stats.actividadesEjecutadas++;
-      }
+        stats.camposDirectos = true;
 
-      console.log(`⚡ [TRANSFER] Copiadas ${stats.actividadesEjecutadas} actividades_ejecutadas`);
+        // ── TRAZABILIDAD INTERNA DE LA TRANSFERENCIA (03-OCT-2026) ──
+        // Antes solo se escribía un historial con `id_estado_anterior` NULL y un texto
+        // libre, lo que dejaba 1.430 de 1.521 registros de historial sin estado de
+        // partida (auditoría no reconstruible). Ahora se registran estado anterior y
+        // nuevo, y el `metadata` guarda el detalle forense de lo que se copió y lo que NO.
+        const auditoria = {
+          operacion: 'TRANSFERIR_DATOS_ENTRE_ORDENES',
+          orden_origen_id: idOrdenOrigen,
+          orden_origen_numero: ordenOrigen.numero_orden,
+          orden_destino_id: idDestino,
+          orden_destino_numero: ordenDestino.numero_orden,
+          estado_origen: estadoOrigen ?? null,
+          estado_destino_antes: estadoDestino,
+          estado_destino_despues: estadoOrigen ?? estadoDestino,
+          // La transferencia es una ADOPCIÓN de estado, no una transición por la FSM.
+          // Se deja explícito para que un auditor no interprete este salto como
+          // una transición saltada: el estado anterior y el nuevo quedan ambos
+          // registrados en las columnas propias del historial.
+          tipo_operacion: 'ADOPCION_ESTADO',
+          validado_contra_fsm: false,
+          validacion_aplicada: 'compatibilidad_de_destino',
+          // Campos explícitos: la ausencia detransferencia de técnico y de equipo es
+          // una decisión de negocio, no un olvido. Se hace auditable.
+          tecnico_transferido: false,
+          tecnico_conservado: ordenDestino.id_tecnico_asignado ?? null,
+          equipos_transferidos: false,
+          equipos_conservados: true,
+          campos_directos_sobrescritos: true,
+          // La transferencia también reemplaza las observaciones de cierre del
+          // destino con las del origen. Se deja el antes/después explícito para
+          // que la auditoría no dependa de reconstruir el estado anterior.
+          observacion_cierre_anterior: ordenDestino.observaciones_cierre ?? null,
+          observacion_cierre_nueva: ordenOrigen.observaciones_cierre ?? null,
+          // Conteo de lo SOBREESCRITO, tomado del `deleteMany` de PASO A (no de un
+          // `count` posterior, que siempre devolvería 0 al haber borrado ya).
+          sobrescrito_en_destino: {
+            componentes_usados: delComponentes,
+            evidencias_fotograficas: delEvidencias,
+            mediciones_servicio: delMediciones,
+            actividades_ejecutadas: delActividades,
+            ordenes_actividades_plan: delPlan,
+          },
+          usuario: userId ?? null,
+          timestamp: new Date().toISOString(),
+        };
 
-      // ── PASO E: Copiar evidencias_fotograficas ──
-      const evidenciasOrigen = await tx.evidencias_fotograficas.findMany({
-        where: { id_orden_servicio: idOrdenOrigen },
-        orderBy: { orden_visualizacion: 'asc' },
-      });
-
-      for (const ev of evidenciasOrigen) {
-        // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
-        const nuevoIdOrdenEquipo = null;
-        const nuevoIdActividad = ev.id_actividad_ejecutada ? mapActividades.get(ev.id_actividad_ejecutada) ?? null : null;
-
-        await tx.evidencias_fotograficas.create({
+        await tx.historial_estados_orden.create({
           data: {
             id_orden_servicio: idDestino,
-            id_actividad_ejecutada: nuevoIdActividad,
-            tipo_evidencia: ev.tipo_evidencia,
-            descripcion: ev.descripcion,
-            nombre_archivo: ev.nombre_archivo,
-            ruta_archivo: ev.ruta_archivo,
-            hash_sha256: ev.hash_sha256,
-            tama_o_bytes: ev.tama_o_bytes,
-            mime_type: ev.mime_type,
-            ancho_pixels: ev.ancho_pixels,
-            alto_pixels: ev.alto_pixels,
-            orden_visualizacion: ev.orden_visualizacion,
-            es_principal: ev.es_principal,
-            fecha_captura: ev.fecha_captura,
-            capturada_por: ev.capturada_por,
-            latitud: ev.latitud,
-            longitud: ev.longitud,
-            metadata_exif: ev.metadata_exif ?? undefined,
-            tiene_miniatura: ev.tiene_miniatura,
-            ruta_miniatura: ev.ruta_miniatura,
-            esta_comprimida: ev.esta_comprimida,
-            tama_o_original_bytes: ev.tama_o_original_bytes,
-            fecha_registro: ev.fecha_registro,
-            id_orden_equipo: nuevoIdOrdenEquipo,
+            // Estado anterior explícito: sin esto el salto queda huérfano en la auditoría.
+            id_estado_anterior: ordenDestino.id_estado_actual,
+            id_estado_nuevo: ordenOrigen.id_estado_actual,
+            motivo_cambio: 'Transferencia de datos entre órdenes',
+            observaciones:
+              `ADOPCIÓN de estado por transferencia: ${estadoDestino} → ${estadoOrigen}, ` +
+              `tomando el cuerpo de trabajo de ${ordenOrigen.numero_orden} (ID ${idOrdenOrigen}). ` +
+              `No es una transición por la FSM: la transferencia reemplaza la orden, no la avanza. ` +
+              `Técnico conservado: ${ordenDestino.id_tecnico_asignado ?? 'sin asignar'}. ` +
+              `Equipos conservados (no se transfieren por diseño).`,
+            accion: 'TRANSFERIR_DATOS',
+            fecha_cambio: new Date(),
+            realizado_por: userId || 1,
+            metadata: auditoria,
           },
         });
-        stats.evidenciasFotograficas++;
-      }
+        console.log(
+          `🔄 [TRANSFER] Estado ${estadoDestino} → ${estadoOrigen} registrado en historial (auditado)`,
+        );
 
-      console.log(`📸 [TRANSFER] Copiadas ${stats.evidenciasFotograficas} evidencias_fotograficas`);
+        // ── PASO C: NO copiar ordenes_equipos (mantener equipo de orden destino)
+        // ✅ FIX 14-ABR-2026: Si el técnico se equivocó de equipo, queremos mantener el equipo correcto de destino
+        console.log(`📦 [TRANSFER] Equipos NO transferidos (manteniendo equipo de orden destino)`);
+        // Sin usages posteriores: se eliminó el Map vacío para no mantener código muerto.
 
-      // ── PASO F: Copiar mediciones_servicio ──
-      const medicionesOrigen = await tx.mediciones_servicio.findMany({
-        where: { id_orden_servicio: idOrdenOrigen },
-      });
-
-      for (const med of medicionesOrigen) {
-        // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
-        const nuevoIdOrdenEquipo = null;
-
-        await tx.mediciones_servicio.create({
-          data: {
-            id_orden_servicio: idDestino,
-            id_parametro_medicion: med.id_parametro_medicion,
-            valor_numerico: med.valor_numerico,
-            valor_texto: med.valor_texto,
-            unidad_medida: med.unidad_medida,
-            fuera_de_rango: med.fuera_de_rango,
-            nivel_alerta: med.nivel_alerta,
-            mensaje_alerta: med.mensaje_alerta,
-            observaciones: med.observaciones,
-            temperatura_ambiente: med.temperatura_ambiente,
-            humedad_relativa: med.humedad_relativa,
-            fecha_medicion: med.fecha_medicion,
-            medido_por: med.medido_por,
-            instrumento_medicion: med.instrumento_medicion,
-            fecha_registro: med.fecha_registro,
-            id_orden_equipo: nuevoIdOrdenEquipo,
-          },
+        // ── PASO D: Copiar actividades_ejecutadas ──
+        const actividadesOrigen = await tx.actividades_ejecutadas.findMany({
+          where: { id_orden_servicio: idOrdenOrigen },
+          orderBy: { orden_secuencia: 'asc' },
         });
-        stats.medicionesServicio++;
-      }
 
-      console.log(`📏 [TRANSFER] Copiadas ${stats.medicionesServicio} mediciones_servicio`);
+        // Mapa de ID viejo → ID nuevo para actividades
+        const mapActividades = new Map<number, number>();
 
-      // ── PASO G: Copiar componentes_usados ──
-      const componentesOrigen = await tx.componentes_usados.findMany({
-        where: { id_orden_servicio: idOrdenOrigen },
-      });
+        for (const act of actividadesOrigen) {
+          // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
+          const nuevoIdOrdenEquipo = null;
+          const nuevaAct = await tx.actividades_ejecutadas.create({
+            data: {
+              id_orden_servicio: idDestino,
+              id_actividad_catalogo: act.id_actividad_catalogo,
+              descripcion_manual: act.descripcion_manual,
+              sistema: act.sistema,
+              orden_secuencia: act.orden_secuencia,
+              estado: act.estado,
+              observaciones: act.observaciones,
+              ejecutada: act.ejecutada,
+              fecha_ejecucion: act.fecha_ejecucion,
+              ejecutada_por: act.ejecutada_por,
+              tiempo_ejecucion_minutos: act.tiempo_ejecucion_minutos,
+              requiere_evidencia: act.requiere_evidencia,
+              evidencia_capturada: act.evidencia_capturada,
+              fecha_registro: act.fecha_registro,
+              id_orden_equipo: nuevoIdOrdenEquipo,
+            },
+          });
+          mapActividades.set(act.id_actividad_ejecutada, nuevaAct.id_actividad_ejecutada);
+          stats.actividadesEjecutadas++;
+        }
 
-      for (const comp of componentesOrigen) {
-        const nuevoIdActividad = comp.id_actividad_ejecutada ? mapActividades.get(comp.id_actividad_ejecutada) ?? null : null;
+        console.log(`⚡ [TRANSFER] Copiadas ${stats.actividadesEjecutadas} actividades_ejecutadas`);
 
-        // Generar nuevo ID (no es autoincrement)
-        const maxComp = await tx.componentes_usados.findFirst({
-          orderBy: { id_componente_usado: 'desc' },
-          select: { id_componente_usado: true },
+        // ── PASO E: Copiar evidencias_fotograficas ──
+        const evidenciasOrigen = await tx.evidencias_fotograficas.findMany({
+          where: { id_orden_servicio: idOrdenOrigen },
+          orderBy: { orden_visualizacion: 'asc' },
         });
-        const nuevoId = (maxComp?.id_componente_usado ?? 0) + 1;
 
-        await tx.componentes_usados.create({
-          data: {
-            id_componente_usado: nuevoId,
-            id_orden_servicio: idDestino,
-            id_componente: comp.id_componente,
-            id_tipo_componente: comp.id_tipo_componente,
-            id_actividad_ejecutada: nuevoIdActividad,
-            descripcion: comp.descripcion,
-            referencia_manual: comp.referencia_manual,
-            marca_manual: comp.marca_manual,
-            cantidad: comp.cantidad,
-            unidad: comp.unidad,
-            costo_unitario: comp.costo_unitario,
-            costo_total: comp.costo_total,
-            estado_componente_retirado: comp.estado_componente_retirado,
-            razon_uso: comp.razon_uso,
-            componente_guardado: comp.componente_guardado,
-            origen_componente: comp.origen_componente,
-            observaciones: comp.observaciones,
-            fecha_uso: comp.fecha_uso,
-            usado_por: comp.usado_por,
-            fecha_registro: comp.fecha_registro,
-            registrado_por: comp.registrado_por,
-          },
+        for (const ev of evidenciasOrigen) {
+          // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
+          const nuevoIdOrdenEquipo = null;
+          const nuevoIdActividad = ev.id_actividad_ejecutada
+            ? (mapActividades.get(ev.id_actividad_ejecutada) ?? null)
+            : null;
+
+          await tx.evidencias_fotograficas.create({
+            data: {
+              id_orden_servicio: idDestino,
+              id_actividad_ejecutada: nuevoIdActividad,
+              tipo_evidencia: ev.tipo_evidencia,
+              descripcion: ev.descripcion,
+              nombre_archivo: ev.nombre_archivo,
+              ruta_archivo: ev.ruta_archivo,
+              hash_sha256: ev.hash_sha256,
+              tama_o_bytes: ev.tama_o_bytes,
+              mime_type: ev.mime_type,
+              ancho_pixels: ev.ancho_pixels,
+              alto_pixels: ev.alto_pixels,
+              orden_visualizacion: ev.orden_visualizacion,
+              es_principal: ev.es_principal,
+              fecha_captura: ev.fecha_captura,
+              capturada_por: ev.capturada_por,
+              latitud: ev.latitud,
+              longitud: ev.longitud,
+              metadata_exif: ev.metadata_exif ?? undefined,
+              tiene_miniatura: ev.tiene_miniatura,
+              ruta_miniatura: ev.ruta_miniatura,
+              esta_comprimida: ev.esta_comprimida,
+              tama_o_original_bytes: ev.tama_o_original_bytes,
+              fecha_registro: ev.fecha_registro,
+              id_orden_equipo: nuevoIdOrdenEquipo,
+            },
+          });
+          stats.evidenciasFotograficas++;
+        }
+
+        console.log(
+          `📸 [TRANSFER] Copiadas ${stats.evidenciasFotograficas} evidencias_fotograficas`,
+        );
+
+        // ── PASO F: Copiar mediciones_servicio ──
+        const medicionesOrigen = await tx.mediciones_servicio.findMany({
+          where: { id_orden_servicio: idOrdenOrigen },
         });
-        stats.componentesUsados++;
-      }
 
-      console.log(`🔧 [TRANSFER] Copiados ${stats.componentesUsados} componentes_usados`);
+        for (const med of medicionesOrigen) {
+          // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
+          const nuevoIdOrdenEquipo = null;
 
-      // ── PASO H: Copiar ordenes_actividades_plan ──
-      const planOrigen = await tx.ordenes_actividades_plan.findMany({
-        where: { id_orden_servicio: idOrdenOrigen },
-        orderBy: { orden_secuencia: 'asc' },
-      });
+          await tx.mediciones_servicio.create({
+            data: {
+              id_orden_servicio: idDestino,
+              id_parametro_medicion: med.id_parametro_medicion,
+              valor_numerico: med.valor_numerico,
+              valor_texto: med.valor_texto,
+              unidad_medida: med.unidad_medida,
+              fuera_de_rango: med.fuera_de_rango,
+              nivel_alerta: med.nivel_alerta,
+              mensaje_alerta: med.mensaje_alerta,
+              observaciones: med.observaciones,
+              temperatura_ambiente: med.temperatura_ambiente,
+              humedad_relativa: med.humedad_relativa,
+              fecha_medicion: med.fecha_medicion,
+              medido_por: med.medido_por,
+              instrumento_medicion: med.instrumento_medicion,
+              fecha_registro: med.fecha_registro,
+              id_orden_equipo: nuevoIdOrdenEquipo,
+            },
+          });
+          stats.medicionesServicio++;
+        }
 
-      for (const plan of planOrigen) {
-        await tx.ordenes_actividades_plan.create({
-          data: {
-            id_orden_servicio: idDestino,
-            id_actividad_catalogo: plan.id_actividad_catalogo,
-            orden_secuencia: plan.orden_secuencia,
-            origen: plan.origen,
-            es_obligatoria: plan.es_obligatoria,
-            creado_por: plan.creado_por,
-            fecha_creacion: plan.fecha_creacion,
-          },
+        console.log(`📏 [TRANSFER] Copiadas ${stats.medicionesServicio} mediciones_servicio`);
+
+        // ── PASO G: Copiar componentes_usados ──
+        const componentesOrigen = await tx.componentes_usados.findMany({
+          where: { id_orden_servicio: idOrdenOrigen },
         });
-        stats.ordenesActividadesPlan++;
-      }
 
-      console.log(`📋 [TRANSFER] Copiados ${stats.ordenesActividadesPlan} ordenes_actividades_plan`);
+        for (const comp of componentesOrigen) {
+          const nuevoIdActividad = comp.id_actividad_ejecutada
+            ? (mapActividades.get(comp.id_actividad_ejecutada) ?? null)
+            : null;
 
-      return stats;
-    }, {
-      timeout: 60000, // 60 segundos para transacciones grandes
-    });
+          // Generar nuevo ID (no es autoincrement)
+          const maxComp = await tx.componentes_usados.findFirst({
+            orderBy: { id_componente_usado: 'desc' },
+            select: { id_componente_usado: true },
+          });
+          const nuevoId = (maxComp?.id_componente_usado ?? 0) + 1;
 
-    console.log(`✅ [TRANSFER] Transferencia completada exitosamente: ${ordenOrigen.numero_orden} → ${ordenDestino.numero_orden}`);
+          await tx.componentes_usados.create({
+            data: {
+              id_componente_usado: nuevoId,
+              id_orden_servicio: idDestino,
+              id_componente: comp.id_componente,
+              id_tipo_componente: comp.id_tipo_componente,
+              id_actividad_ejecutada: nuevoIdActividad,
+              descripcion: comp.descripcion,
+              referencia_manual: comp.referencia_manual,
+              marca_manual: comp.marca_manual,
+              cantidad: comp.cantidad,
+              unidad: comp.unidad,
+              costo_unitario: comp.costo_unitario,
+              costo_total: comp.costo_total,
+              estado_componente_retirado: comp.estado_componente_retirado,
+              razon_uso: comp.razon_uso,
+              componente_guardado: comp.componente_guardado,
+              origen_componente: comp.origen_componente,
+              observaciones: comp.observaciones,
+              fecha_uso: comp.fecha_uso,
+              usado_por: comp.usado_por,
+              fecha_registro: comp.fecha_registro,
+              registrado_por: comp.registrado_por,
+            },
+          });
+          stats.componentesUsados++;
+        }
+
+        console.log(`🔧 [TRANSFER] Copiados ${stats.componentesUsados} componentes_usados`);
+
+        // ── PASO H: Copiar ordenes_actividades_plan ──
+        const planOrigen = await tx.ordenes_actividades_plan.findMany({
+          where: { id_orden_servicio: idOrdenOrigen },
+          orderBy: { orden_secuencia: 'asc' },
+        });
+
+        for (const plan of planOrigen) {
+          await tx.ordenes_actividades_plan.create({
+            data: {
+              id_orden_servicio: idDestino,
+              id_actividad_catalogo: plan.id_actividad_catalogo,
+              orden_secuencia: plan.orden_secuencia,
+              origen: plan.origen,
+              es_obligatoria: plan.es_obligatoria,
+              creado_por: plan.creado_por,
+              fecha_creacion: plan.fecha_creacion,
+            },
+          });
+          stats.ordenesActividadesPlan++;
+        }
+
+        console.log(
+          `📋 [TRANSFER] Copiados ${stats.ordenesActividadesPlan} ordenes_actividades_plan`,
+        );
+
+        return stats;
+      },
+      {
+        timeout: 60000, // 60 segundos para transacciones grandes
+      },
+    );
+
+    console.log(
+      `✅ [TRANSFER] Transferencia completada exitosamente: ${ordenOrigen.numero_orden} → ${ordenDestino.numero_orden}`,
+    );
     console.log(`📊 [TRANSFER] Resumen: ${JSON.stringify(resultado)}`);
 
     return {
@@ -4620,6 +4697,4 @@ export class OrdenesController {
       estadisticas: resultado,
     };
   }
-
 }
-

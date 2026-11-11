@@ -1,12 +1,11 @@
 import {
-    IsBoolean,
-    IsEnum,
-    IsInt,
-    IsNotEmpty,
-    IsOptional,
-    IsPositive,
-    IsString,
-    MaxLength,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  MaxLength,
 } from 'class-validator';
 
 enum TipoProveedorEnum {

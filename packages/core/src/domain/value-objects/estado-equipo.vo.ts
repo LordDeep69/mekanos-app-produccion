@@ -8,7 +8,7 @@ export enum EstadoEquipoEnum {
   INACTIVO = 'INACTIVO',
   EN_REPARACION = 'EN_REPARACION',
   FUERA_SERVICIO = 'FUERA_SERVICIO',
-  BAJA = 'BAJA'
+  BAJA = 'BAJA',
 }
 
 export class EstadoEquipo {
@@ -48,30 +48,27 @@ export class EstadoEquipo {
       [EstadoEquipoEnum.OPERATIVO]: [
         EstadoEquipoEnum.STANDBY,
         EstadoEquipoEnum.EN_REPARACION,
-        EstadoEquipoEnum.INACTIVO
+        EstadoEquipoEnum.INACTIVO,
       ],
       [EstadoEquipoEnum.STANDBY]: [
         EstadoEquipoEnum.OPERATIVO,
         EstadoEquipoEnum.EN_REPARACION,
-        EstadoEquipoEnum.INACTIVO
+        EstadoEquipoEnum.INACTIVO,
       ],
       [EstadoEquipoEnum.INACTIVO]: [
         EstadoEquipoEnum.OPERATIVO,
         EstadoEquipoEnum.STANDBY,
-        EstadoEquipoEnum.BAJA
+        EstadoEquipoEnum.BAJA,
       ],
       [EstadoEquipoEnum.EN_REPARACION]: [
         EstadoEquipoEnum.OPERATIVO,
-        EstadoEquipoEnum.FUERA_SERVICIO
+        EstadoEquipoEnum.FUERA_SERVICIO,
       ],
-      [EstadoEquipoEnum.FUERA_SERVICIO]: [
-        EstadoEquipoEnum.EN_REPARACION,
-        EstadoEquipoEnum.BAJA
-      ],
-      [EstadoEquipoEnum.BAJA]: [] // Estado final
+      [EstadoEquipoEnum.FUERA_SERVICIO]: [EstadoEquipoEnum.EN_REPARACION, EstadoEquipoEnum.BAJA],
+      [EstadoEquipoEnum.BAJA]: [], // Estado final
     };
 
-    const permitidas = transicionesValidas[this.value] || [];
+    const permitidas = transicionesValidas[this.value] ?? [];
     return permitidas.includes(nuevoEstado.value);
   }
 
@@ -88,16 +85,15 @@ export class EstadoEquipo {
   }
 
   puedeRecibirMantenimiento(): boolean {
-    return this.value === EstadoEquipoEnum.OPERATIVO || 
-           this.value === EstadoEquipoEnum.STANDBY;
+    return this.value === EstadoEquipoEnum.OPERATIVO || this.value === EstadoEquipoEnum.STANDBY;
   }
 
   getValue(): EstadoEquipoEnum {
     return this.value;
   }
 
-  equals(other: EstadoEquipo): boolean {
-    if (!other) return false;
+  equals(other?: EstadoEquipo | null): boolean {
+    if (other == null) return false;
     return this.value === other.value;
   }
 

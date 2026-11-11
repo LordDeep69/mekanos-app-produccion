@@ -1,4 +1,12 @@
-import { IsString, IsInt, IsOptional, IsEnum, Matches, MinLength, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsOptional,
+  IsEnum,
+  Matches,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 
 /**
  * DTO para crear un equipo
@@ -8,8 +16,8 @@ export class CreateEquipoDto {
   @IsString({ message: 'codigo_equipo debe ser una cadena de texto' })
   @MinLength(1, { message: 'codigo_equipo no puede estar vacío' })
   @MaxLength(30, { message: 'codigo_equipo no puede exceder 30 caracteres' })
-  @Matches(/^[A-Z0-9\-]+$/, { 
-    message: 'codigo_equipo debe contener solo letras mayúsculas, números y guiones' 
+  @Matches(/^[A-Z0-9-]+$/, {
+    message: 'codigo_equipo debe contener solo letras mayúsculas, números y guiones',
   })
   codigo_equipo!: string;
 
@@ -40,13 +48,13 @@ export class CreateEquipoDto {
 
   @IsOptional()
   @IsEnum(['OPERATIVO', 'FUERA_DE_SERVICIO', 'EN_REPARACION', 'BAJA'], {
-    message: 'estado_equipo debe ser un valor válido del enum'
+    message: 'estado_equipo debe ser un valor válido del enum',
   })
   estado_equipo?: string;
 
   @IsOptional()
   @IsEnum(['BAJA', 'MEDIA', 'ALTA', 'CRITICA'], {
-    message: 'criticidad debe ser un valor válido del enum'
+    message: 'criticidad debe ser un valor válido del enum',
   })
   criticidad?: string;
 

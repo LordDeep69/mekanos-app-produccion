@@ -48,11 +48,11 @@ export class PrismaComponentesUsadosRepository implements IComponentesUsadosRepo
     },
   };
 
-  async create(data: CreateComponenteUsadoDto & { costoTotal?: number | null }): Promise<componentes_usados> {
-    const createData: Prisma.componentes_usadosCreateInput = {
-      ordenes_servicio: {
-        connect: { id_orden_servicio: data.idOrdenServicio },
-      },
+  async create(
+    data: CreateComponenteUsadoDto & { costoTotal?: number | null },
+  ): Promise<componentes_usados> {
+    const createData: Prisma.componentes_usadosUncheckedCreateInput = {
+      id_orden_servicio: data.idOrdenServicio,
       descripcion: data.descripcion,
       referencia_manual: data.referenciaManual,
       marca_manual: data.marcaManual,
@@ -63,40 +63,30 @@ export class PrismaComponentesUsadosRepository implements IComponentesUsadosRepo
       estado_componente_retirado: data.estadoComponenteRetirado as any,
       razon_uso: data.razonUso,
       componente_guardado: data.componenteGuardado ?? false,
-      origen_componente: data.origenComponente as any ?? 'BODEGA',
+      origen_componente: (data.origenComponente as any) ?? 'BODEGA',
       observaciones: data.observaciones,
       fecha_uso: data.fechaUso ? new Date(data.fechaUso) : new Date(),
     };
 
     // Conexiones opcionales de FKs
     if (data.idComponente) {
-      createData.catalogo_componentes = {
-        connect: { id_componente: data.idComponente },
-      };
+      createData.id_componente = data.idComponente;
     }
 
     if (data.idTipoComponente) {
-      createData.tipos_componente = {
-        connect: { id_tipo_componente: data.idTipoComponente },
-      };
+      createData.id_tipo_componente = data.idTipoComponente;
     }
 
     if (data.idActividadEjecutada) {
-      createData.actividades_ejecutadas = {
-        connect: { id_actividad_ejecutada: data.idActividadEjecutada },
-      };
+      createData.id_actividad_ejecutada = data.idActividadEjecutada;
     }
 
     if (data.usadoPor) {
-      createData.empleados = {
-        connect: { id_empleado: data.usadoPor },
-      };
+      createData.usado_por = data.usadoPor;
     }
 
     if (data.registradoPor) {
-      createData.usuarios_componentes_usados_registrado_porTousuarios = {
-        connect: { id_usuario: data.registradoPor },
-      };
+      createData.registrado_por = data.registradoPor;
     }
 
     return this.prisma.componentes_usados.create({
@@ -105,7 +95,10 @@ export class PrismaComponentesUsadosRepository implements IComponentesUsadosRepo
     });
   }
 
-  async update(id: number, data: UpdateComponenteUsadoDto & { costoTotal?: number | null }): Promise<componentes_usados> {
+  async update(
+    id: number,
+    data: UpdateComponenteUsadoDto & { costoTotal?: number | null },
+  ): Promise<componentes_usados> {
     const updateData: Prisma.componentes_usadosUpdateInput = {};
 
     // Campos simples
@@ -116,10 +109,13 @@ export class PrismaComponentesUsadosRepository implements IComponentesUsadosRepo
     if (data.unidad !== undefined) updateData.unidad = data.unidad;
     if (data.costoUnitario !== undefined) updateData.costo_unitario = data.costoUnitario;
     if (data.costoTotal !== undefined) updateData.costo_total = data.costoTotal;
-    if (data.estadoComponenteRetirado !== undefined) updateData.estado_componente_retirado = data.estadoComponenteRetirado as any;
+    if (data.estadoComponenteRetirado !== undefined)
+      updateData.estado_componente_retirado = data.estadoComponenteRetirado as any;
     if (data.razonUso !== undefined) updateData.razon_uso = data.razonUso;
-    if (data.componenteGuardado !== undefined) updateData.componente_guardado = data.componenteGuardado;
-    if (data.origenComponente !== undefined) updateData.origen_componente = data.origenComponente as any;
+    if (data.componenteGuardado !== undefined)
+      updateData.componente_guardado = data.componenteGuardado;
+    if (data.origenComponente !== undefined)
+      updateData.origen_componente = data.origenComponente as any;
     if (data.observaciones !== undefined) updateData.observaciones = data.observaciones;
     if (data.fechaUso !== undefined) updateData.fecha_uso = new Date(data.fechaUso);
 
@@ -131,25 +127,25 @@ export class PrismaComponentesUsadosRepository implements IComponentesUsadosRepo
     }
 
     if (data.idComponente !== undefined) {
-      updateData.catalogo_componentes = data.idComponente 
+      updateData.catalogo_componentes = data.idComponente
         ? { connect: { id_componente: data.idComponente } }
         : { disconnect: true };
     }
 
     if (data.idTipoComponente !== undefined) {
-      updateData.tipos_componente = data.idTipoComponente 
+      updateData.tipos_componente = data.idTipoComponente
         ? { connect: { id_tipo_componente: data.idTipoComponente } }
         : { disconnect: true };
     }
 
     if (data.idActividadEjecutada !== undefined) {
-      updateData.actividades_ejecutadas = data.idActividadEjecutada 
+      updateData.actividades_ejecutadas = data.idActividadEjecutada
         ? { connect: { id_actividad_ejecutada: data.idActividadEjecutada } }
         : { disconnect: true };
     }
 
     if (data.usadoPor !== undefined) {
-      updateData.empleados = data.usadoPor 
+      updateData.empleados = data.usadoPor
         ? { connect: { id_empleado: data.usadoPor } }
         : { disconnect: true };
     }

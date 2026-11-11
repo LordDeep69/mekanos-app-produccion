@@ -15,7 +15,6 @@ import {
   Eye,
   Factory,
   Gauge,
-  Info,
   Layers,
   LayoutGrid,
   List,
@@ -47,8 +46,8 @@ import {
   ArquetipoEquipo,
   DynamicEquipmentFormPreview,
   EamSelect,
-  TIPOS_CONTROL_HUMANOS,
   TipoServicioEam,
+  TIPOS_CONTROL_HUMANOS,
   getCriterioIntervaloHumano,
   getModuloBadgeInfo,
   useArquetipoEsquemaEam,
@@ -160,31 +159,86 @@ export const PRESETS_MEDIDOR_USO = [
 
 export function getCategoryBadgeInfo(categoryName?: string) {
   const norm = categoryName?.toLowerCase() || '';
-  if (norm.includes('vertical') || norm.includes('ascensor') || norm.includes('elevaci') || norm.includes('carga')) {
-    return { icon: ArrowUpDown, color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200', tag: 'Elevación' };
+  if (
+    norm.includes('vertical') ||
+    norm.includes('ascensor') ||
+    norm.includes('elevaci') ||
+    norm.includes('carga')
+  ) {
+    return {
+      icon: ArrowUpDown,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-50 border-indigo-200',
+      tag: 'Elevación',
+    };
   }
   if (norm.includes('energ') || norm.includes('eléctric') || norm.includes('generaci')) {
-    return { icon: Zap, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', tag: 'Energía' };
+    return {
+      icon: Zap,
+      color: 'text-amber-600',
+      bg: 'bg-amber-50 border-amber-200',
+      tag: 'Energía',
+    };
   }
   if (norm.includes('hidrául') || norm.includes('bombeo') || norm.includes('presión')) {
-    return { icon: Droplets, color: 'text-cyan-600', bg: 'bg-cyan-50 border-cyan-200', tag: 'Hidráulica' };
+    return {
+      icon: Droplets,
+      color: 'text-cyan-600',
+      bg: 'bg-cyan-50 border-cyan-200',
+      tag: 'Hidráulica',
+    };
   }
   if (norm.includes('comprimido') || norm.includes('neumátic') || norm.includes('aire')) {
     return { icon: Wind, color: 'text-sky-600', bg: 'bg-sky-50 border-sky-200', tag: 'Neumática' };
   }
-  if (norm.includes('clima') || norm.includes('refrig') || norm.includes('hvac') || norm.includes('chiller')) {
+  if (
+    norm.includes('clima') ||
+    norm.includes('refrig') ||
+    norm.includes('hvac') ||
+    norm.includes('chiller')
+  ) {
     return { icon: Cpu, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', tag: 'HVAC' };
   }
   if (norm.includes('transfor') || norm.includes('subestaci')) {
-    return { icon: Zap, color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', tag: 'Subestación' };
+    return {
+      icon: Zap,
+      color: 'text-yellow-600',
+      bg: 'bg-yellow-50 border-yellow-200',
+      tag: 'Subestación',
+    };
   }
-  if (norm.includes('pesada') || norm.includes('flota') || norm.includes('móvil') || norm.includes('vehicul')) {
-    return { icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', tag: 'Móvil' };
+  if (
+    norm.includes('pesada') ||
+    norm.includes('flota') ||
+    norm.includes('móvil') ||
+    norm.includes('vehicul')
+  ) {
+    return {
+      icon: Truck,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50 border-emerald-200',
+      tag: 'Móvil',
+    };
   }
-  if (norm.includes('producc') || norm.includes('envas') || norm.includes('manuf') || norm.includes('línea')) {
-    return { icon: Factory, color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200', tag: 'Planta' };
+  if (
+    norm.includes('producc') ||
+    norm.includes('envas') ||
+    norm.includes('manuf') ||
+    norm.includes('línea')
+  ) {
+    return {
+      icon: Factory,
+      color: 'text-purple-600',
+      bg: 'bg-purple-50 border-purple-200',
+      tag: 'Planta',
+    };
   }
-  return { icon: Boxes, color: 'text-slate-600', bg: 'bg-slate-50 border-slate-200', tag: 'General' };
+  return {
+    icon: Boxes,
+    color: 'text-slate-600',
+    bg: 'bg-slate-50 border-slate-200',
+    tag: 'General',
+  };
 }
 
 /** Componente Premium para Selección de Macro-Categoría Industrial */
@@ -221,7 +275,7 @@ function MacroCategoriaSelector({
     };
   }, [isOpen]);
 
-  const activeCategoryName = isCustom ? (customValue || 'Categoría Personalizada') : value;
+  const activeCategoryName = isCustom ? customValue || 'Categoría Personalizada' : value;
   const currentBadge = getCategoryBadgeInfo(activeCategoryName);
   const CurrentIcon = currentBadge.icon;
 
@@ -244,12 +298,18 @@ function MacroCategoriaSelector({
         className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white hover:border-blue-400 hover:bg-slate-50/50 transition-all text-left shadow-2xs group cursor-pointer"
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${currentBadge.bg}`}>
+          <div
+            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${currentBadge.bg}`}
+          >
             <CurrentIcon className={`h-4 w-4 ${currentBadge.color}`} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-xs font-bold text-slate-800 truncate">
-              {isCustom ? (customValue.trim() ? customValue : 'Escribe tu categoría personalizada...') : value}
+              {isCustom
+                ? customValue.trim()
+                  ? customValue
+                  : 'Escribe tu categoría personalizada...'
+                : value}
             </div>
             <div className="text-[10px] text-slate-400 font-medium">
               {isCustom ? 'Categoría definida por el usuario' : 'Macro-categoría universal del EAM'}
@@ -302,7 +362,9 @@ function MacroCategoriaSelector({
                   }`}
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${badge.bg}`}>
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${badge.bg}`}
+                    >
                       <Icon className={`h-3.5 w-3.5 ${badge.color}`} />
                     </div>
                     <span className="text-xs truncate">{cat}</span>
@@ -337,8 +399,12 @@ function MacroCategoriaSelector({
                   <Sparkles className="h-3.5 w-3.5 text-indigo-700" />
                 </div>
                 <div>
-                  <span className="text-xs font-bold text-indigo-700">+ Otra categoría personalizada...</span>
-                  <p className="text-[10px] text-indigo-500">Crea una nueva macro-categoría para tus activos</p>
+                  <span className="text-xs font-bold text-indigo-700">
+                    + Otra categoría personalizada...
+                  </span>
+                  <p className="text-[10px] text-indigo-500">
+                    Crea una nueva macro-categoría para tus activos
+                  </p>
                 </div>
               </div>
               {isCustom && <Check className="h-4 w-4 text-indigo-600 shrink-0 ml-2" />}
@@ -357,7 +423,12 @@ function MacroCategoriaSelector({
             </label>
             <button
               type="button"
-              onClick={() => onChange(availableCategories[0] || 'Generación de Energía y Respaldo Eléctrico', false)}
+              onClick={() =>
+                onChange(
+                  availableCategories[0] || 'Generación de Energía y Respaldo Eléctrico',
+                  false,
+                )
+              }
               className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer"
             >
               Volver a predefinidas
@@ -373,7 +444,8 @@ function MacroCategoriaSelector({
             autoFocus
           />
           <p className="text-[10px] text-indigo-700/80 font-medium">
-            ✓ Esta categoría se registrará permanentemente en PostgreSQL y quedará disponible para futuros equipos.
+            ✓ Esta categoría se registrará permanentemente en PostgreSQL y quedará disponible para
+            futuros equipos.
           </p>
         </div>
       )}
@@ -411,7 +483,8 @@ function MedidorUsoGrid({
           Medidor de Uso / Contador de Desgaste *
         </label>
         <p className="text-[11px] text-slate-500">
-          Define la métrica con la que este tipo de activo mide su ciclo de vida y programa sus mantenimientos preventivos.
+          Define la métrica con la que este tipo de activo mide su ciclo de vida y programa sus
+          mantenimientos preventivos.
         </p>
       </div>
 
@@ -438,15 +511,21 @@ function MedidorUsoGrid({
                   : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
               }`}
             >
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${p.color}`}>
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${p.color}`}
+              >
                 <Icon className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1 mb-0.5">
-                  <span className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
+                  <span
+                    className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}
+                  >
                     {p.titulo}
                   </span>
-                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold shrink-0 border ${p.badgeClass}`}>
+                  <span
+                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold shrink-0 border ${p.badgeClass}`}
+                  >
                     {p.id === 'CUSTOM' ? 'CUSTOM' : p.id === 'NA' ? 'CAL' : p.unidad}
                   </span>
                 </div>
@@ -494,13 +573,16 @@ function MedidorUsoGrid({
                 required
                 placeholder="Ej: GOLPES, DISP, M3..."
                 value={unidadUso}
-                onChange={(e) => onCustomUnidadChange(e.target.value.toUpperCase().replace(/\s+/g, '_'))}
+                onChange={(e) =>
+                  onCustomUnidadChange(e.target.value.toUpperCase().replace(/\s+/g, '_'))
+                }
                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono uppercase font-bold focus:ring-2 focus:ring-indigo-500/20 bg-white"
               />
             </div>
           </div>
           <p className="text-[10px] text-indigo-700 font-medium">
-            ✓ Esta métrica se guardará en PostgreSQL en las columnas `etiqueta_contador` y `unidad_uso`.
+            ✓ Esta métrica se guardará en PostgreSQL en las columnas `etiqueta_contador` y
+            `unidad_uso`.
           </p>
         </div>
       )}
@@ -518,7 +600,9 @@ function MedidorUsoGrid({
           ) : (
             <>
               <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-              <span className="text-slate-600">Planificación 100% por Calendario (Sin contador de desgaste)</span>
+              <span className="text-slate-600">
+                Planificación 100% por Calendario (Sin contador de desgaste)
+              </span>
             </>
           )}
         </span>
@@ -648,12 +732,7 @@ export function TabArquetiposEquipo() {
   const [deleteArqError, setDeleteArqError] = useState<string | null>(null);
 
   const isCodigoTipoDuplicado = useMemo(() => {
-    return verificarCodigoDuplicado(
-      arqForm.codigo_tipo,
-      codigosTiposExistentes,
-      undefined,
-      false,
-    );
+    return verificarCodigoDuplicado(arqForm.codigo_tipo, codigosTiposExistentes, undefined, false);
   }, [arqForm.codigo_tipo, codigosTiposExistentes]);
 
   const isCodigoEditTipoDuplicado = useMemo(() => {
@@ -698,7 +777,9 @@ export function TabArquetiposEquipo() {
   const [linkModId, setLinkModId] = useState<string>('');
   const [linkModObligatorio, setLinkModObligatorio] = useState<boolean>(true);
   const [linkModSearch, setLinkModSearch] = useState<string>('');
-  const [deletingModuloTem, setDeletingModuloTem] = useState<any | null>(null);
+  const [deletingModuloTem, setDeletingModuloTem] = useState<
+    ArquetipoEquipo['tipo_equipo_modulos'][number] | null
+  >(null);
 
   const yaVinculadosModulosIds = useMemo(() => {
     return new Set(
@@ -710,9 +791,7 @@ export function TabArquetiposEquipo() {
     const q = linkModSearch.trim().toLowerCase();
     if (!q) return modulosDisponibles;
     return modulosDisponibles.filter(
-      (m) =>
-        m.nombre_modulo.toLowerCase().includes(q) ||
-        m.codigo_modulo.toLowerCase().includes(q),
+      (m) => m.nombre_modulo.toLowerCase().includes(q) || m.codigo_modulo.toLowerCase().includes(q),
     );
   }, [modulosDisponibles, linkModSearch]);
 
@@ -767,21 +846,15 @@ export function TabArquetiposEquipo() {
   });
 
   const isCodigoAtributoDuplicado = useMemo(() => {
-    return verificarCodigoDuplicado(
-      inPlaceForm.codigo_atributo,
-      codigosAtributosExistentes,
-    );
+    return verificarCodigoDuplicado(inPlaceForm.codigo_atributo, codigosAtributosExistentes);
   }, [inPlaceForm.codigo_atributo, codigosAtributosExistentes]);
 
   const isCodigoSrvDuplicado = useMemo(() => {
-    return verificarCodigoDuplicado(
-      newSrvForm.codigo_tipo,
-      codigosServiciosExistentes,
-    );
+    return verificarCodigoDuplicado(newSrvForm.codigo_tipo, codigosServiciosExistentes);
   }, [newSrvForm.codigo_tipo, codigosServiciosExistentes]);
 
   // Helper para generar nombres de plan sin redundancias léxicas tipo "Plan Preventivo Preventivo..."
-  const construirNombrePlan = (srv: any) => {
+  const construirNombrePlan = (srv?: TipoServicioEam | null) => {
     if (!srv) return '';
     const nom = (srv.nombre_tipo || '').trim();
     const isInsp = srv.codigo_tipo === 'INSPECCION' || nom.toLowerCase().includes('inspecci');
@@ -792,7 +865,10 @@ export function TabArquetiposEquipo() {
     if (nom.toLowerCase().startsWith('plan')) {
       return nom;
     }
-    if (nom.toLowerCase().startsWith('preventivo') || nom.toLowerCase().startsWith('mantenimiento')) {
+    if (
+      nom.toLowerCase().startsWith('preventivo') ||
+      nom.toLowerCase().startsWith('mantenimiento')
+    ) {
       return `Plan ${nom}`;
     }
     return `Plan Preventivo ${nom}`;
@@ -800,14 +876,19 @@ export function TabArquetiposEquipo() {
 
   // Catálogo de servicios compatibles con el arquetipo actual (específicos primero, luego universales; excluye otros equipos y correctivos)
   const todosLosServicios = useMemo(() => {
-    const rawList = tiposServicioList.length > 0 ? tiposServicioList : (resumen?.tipos_servicio_preventivos || []);
+    const rawList =
+      tiposServicioList.length > 0 ? tiposServicioList : resumen?.tipos_servicio_preventivos || [];
     const currentArqId = selectedArquetipo?.id_tipo_equipo;
-    const currentArqCod = (selectedArquetipo?.codigo_corto || selectedArquetipo?.codigo_tipo || '').toUpperCase().trim();
+    const currentArqCod = (selectedArquetipo?.codigo_corto || selectedArquetipo?.codigo_tipo || '')
+      .toUpperCase()
+      .trim();
     const syncCods: string[] = Array.isArray(selectedArquetipo?.codigos_sincronizados)
       ? selectedArquetipo.codigos_sincronizados.map((c: string) => String(c).toUpperCase().trim())
-      : currentArqCod ? [currentArqCod] : [];
+      : currentArqCod
+        ? [currentArqCod]
+        : [];
 
-    const esDelArquetipoActual = (s: any) => {
+    const esDelArquetipoActual = (s: TipoServicioEam) => {
       if (currentArqId && Number(s.id_tipo_equipo) === Number(currentArqId)) return true;
       if (Array.isArray(s.aplica_a) && s.aplica_a.length > 0) {
         return s.aplica_a.some((c: string) => syncCods.includes(String(c).toUpperCase().trim()));
@@ -815,7 +896,7 @@ export function TabArquetiposEquipo() {
       return false;
     };
 
-    const esUniversal = (s: any) => {
+    const esUniversal = (s: TipoServicioEam) => {
       return s.id_tipo_equipo == null && (!Array.isArray(s.aplica_a) || s.aplica_a.length === 0);
     };
 
@@ -840,7 +921,8 @@ export function TabArquetiposEquipo() {
     return todosLosServicios.filter((s) => {
       if (planCatFilter !== 'TODOS') {
         const cat = s.categoria?.toUpperCase();
-        if (planCatFilter === 'INSPECCION' && cat !== 'INSPECCION' && cat !== 'DIAGNOSTICO') return false;
+        if (planCatFilter === 'INSPECCION' && cat !== 'INSPECCION' && cat !== 'DIAGNOSTICO')
+          return false;
         if (planCatFilter !== 'INSPECCION' && cat !== planCatFilter) return false;
       }
       if (planSearch.trim()) {
@@ -854,17 +936,18 @@ export function TabArquetiposEquipo() {
     });
   }, [todosLosServicios, planCatFilter, planSearch]);
 
-  const tiposServicioPreventivos = todosLosServicios;
-
   const servicioPlanSeleccionado = useMemo(() => {
     if (!planForm.id_tipo_servicio) return null;
-    return todosLosServicios.find((s) => String(s.id_tipo_servicio) === planForm.id_tipo_servicio) || null;
+    return (
+      todosLosServicios.find((s) => String(s.id_tipo_servicio) === planForm.id_tipo_servicio) ||
+      null
+    );
   }, [todosLosServicios, planForm.id_tipo_servicio]);
 
   const handleSaveNewArq = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalCategoria = arqForm.is_custom_categoria
-      ? (arqForm.categoria_custom.trim() || 'Otra Maquinaria Industrial')
+      ? arqForm.categoria_custom.trim() || 'Otra Maquinaria Industrial'
       : arqForm.categoria;
 
     const created = await createArqMut.mutateAsync({
@@ -885,7 +968,7 @@ export function TabArquetiposEquipo() {
     setEditingArq(arq);
     setEditArqError(null);
     const existingCat = arq.categoria || 'Generación de Energía y Respaldo Eléctrico';
-    const isStandardCat = categoriasDisponibles.includes(existingCat as any);
+    const isStandardCat = categoriasDisponibles.some((cat) => (cat as string) === existingCat);
 
     const preset = PRESETS_MEDIDOR_USO.find(
       (p) => p.unidad === arq.unidad_uso && p.etiqueta === arq.etiqueta_contador,
@@ -919,7 +1002,7 @@ export function TabArquetiposEquipo() {
     try {
       setEditArqError(null);
       const finalCategoria = editArqForm.is_custom_categoria
-        ? (editArqForm.categoria_custom.trim() || 'Otra Maquinaria Industrial')
+        ? editArqForm.categoria_custom.trim() || 'Otra Maquinaria Industrial'
         : editArqForm.categoria;
 
       await updateArqMut.mutateAsync({
@@ -936,10 +1019,14 @@ export function TabArquetiposEquipo() {
         },
       });
       setShowEditArqModal(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      };
       const msg =
-        err?.response?.data?.message ||
-        err?.message ||
+        apiErr?.response?.data?.message ||
+        apiErr?.message ||
         'Error al actualizar el tipo de equipo';
       setEditArqError(Array.isArray(msg) ? msg.join(', ') : msg);
     }
@@ -959,10 +1046,11 @@ export function TabArquetiposEquipo() {
         setSelectedArqId(null);
       }
       setShowDeleteArqModal(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
       const msg =
-        err?.response?.data?.message ||
-        err?.message ||
+        apiErr?.response?.data?.message ||
+        apiErr?.message ||
         'No se pudo eliminar el tipo de equipo';
       setDeleteArqError(msg);
     }
@@ -1012,11 +1100,15 @@ export function TabArquetiposEquipo() {
         color_hex: newSrvForm.color_hex,
       });
 
-      const isInsp = created.categoria === 'INSPECCION' || created.nombre_tipo.toLowerCase().includes('inspecci');
+      const isInsp =
+        created.categoria === 'INSPECCION' ||
+        created.nombre_tipo.toLowerCase().includes('inspecci');
       setPlanForm({
         ...planForm,
         id_tipo_servicio: String(created.id_tipo_servicio),
-        nombre_plan: isInsp ? 'Plan de Visita de Inspección Periódica' : `Plan de ${created.nombre_tipo}`,
+        nombre_plan: isInsp
+          ? 'Plan de Visita de Inspección Periódica'
+          : `Plan de ${created.nombre_tipo}`,
         frecuencia_dias: isInsp ? '30' : '90',
         frecuencia_uso: isInsp ? '100' : '250',
       });
@@ -1029,8 +1121,11 @@ export function TabArquetiposEquipo() {
         duracion_estimada_horas: '2',
         color_hex: '#0284c7',
       });
-    } catch (err: any) {
-      setSrvInlineError(err.response?.data?.message || err.message || 'Error al crear el tipo de servicio');
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
+      setSrvInlineError(
+        apiErr.response?.data?.message || apiErr.message || 'Error al crear el tipo de servicio',
+      );
     } finally {
       setCreatingSrv(false);
     }
@@ -1063,7 +1158,8 @@ export function TabArquetiposEquipo() {
       codigo_atributo: inPlaceForm.codigo_atributo,
       nombre_atributo: inPlaceForm.nombre_atributo,
       tipo_control: inPlaceForm.tipo_control,
-      id_magnitud: isNumMag && inPlaceForm.id_magnitud ? Number(inPlaceForm.id_magnitud) : undefined,
+      id_magnitud:
+        isNumMag && inPlaceForm.id_magnitud ? Number(inPlaceForm.id_magnitud) : undefined,
       unidad_defecto_codigo:
         isNumMag && inPlaceForm.unidad_defecto_codigo
           ? inPlaceForm.unidad_defecto_codigo
@@ -1107,12 +1203,16 @@ export function TabArquetiposEquipo() {
               {selectedArquetipo && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                  Activo: <strong>{selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}</strong>
+                  Activo:{' '}
+                  <strong>
+                    {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
+                  </strong>
                 </span>
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Selecciona un tipo de equipo para configurar sus partes, planes preventivos y probar su ficha técnica en vivo.
+              Selecciona un tipo de equipo para configurar sus partes, planes preventivos y probar
+              su ficha técnica en vivo.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -1194,7 +1294,8 @@ export function TabArquetiposEquipo() {
           {/* Estadísticas de filtrado y Alternador de Vista (Cuadrícula vs Compacto) */}
           <div className="flex items-center justify-between sm:justify-end gap-3 text-xs text-slate-500 shrink-0">
             <span className="font-medium text-[11px]">
-              Mostrando <strong className="text-slate-800">{arquetiposFiltrados.length}</strong> de {arquetipos.length} clases
+              Mostrando <strong className="text-slate-800">{arquetiposFiltrados.length}</strong> de{' '}
+              {arquetipos.length} clases
             </span>
 
             <div className="flex items-center border border-slate-200 rounded-xl p-0.5 bg-slate-50 shadow-2xs">
@@ -1233,7 +1334,7 @@ export function TabArquetiposEquipo() {
               <Search className="h-5 w-5" />
             </div>
             <p className="text-xs font-bold text-slate-700">
-              No se encontraron tipos de equipo para "{arqSearch}"
+              No se encontraron tipos de equipo para &ldquo;{arqSearch}&rdquo;
             </p>
             <p className="text-[11px] text-slate-500">
               Prueba con otro término de búsqueda o restablece los filtros.
@@ -1290,7 +1391,9 @@ export function TabArquetiposEquipo() {
                             <Clock className="h-3 w-3 shrink-0 text-amber-600" />
                             <span>{arq.etiqueta_contador || 'Horómetro'}</span>
                             {arq.unidad_uso && (
-                              <span className="font-mono text-[9px] opacity-75">({arq.unidad_uso})</span>
+                              <span className="font-mono text-[9px] opacity-75">
+                                ({arq.unidad_uso})
+                              </span>
                             )}
                           </span>
                         )}
@@ -1332,21 +1435,22 @@ export function TabArquetiposEquipo() {
                       </h4>
 
                       {/* Fila 3: Disciplina / Categoría Industrial */}
-                      {arq.categoria && (() => {
-                        const cBadge = getCategoryBadgeInfo(arq.categoria);
-                        const CIcon = cBadge.icon;
-                        return (
-                          <div className="mt-1.5 flex items-center">
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${cBadge.bg} ${cBadge.color}`}
-                              title={arq.categoria}
-                            >
-                              <CIcon className="h-3 w-3 shrink-0" />
-                              <span className="truncate max-w-[260px]">{arq.categoria}</span>
-                            </span>
-                          </div>
-                        );
-                      })()}
+                      {arq.categoria &&
+                        (() => {
+                          const cBadge = getCategoryBadgeInfo(arq.categoria);
+                          const CIcon = cBadge.icon;
+                          return (
+                            <div className="mt-1.5 flex items-center">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${cBadge.bg} ${cBadge.color}`}
+                                title={arq.categoria}
+                              >
+                                <CIcon className="h-3 w-3 shrink-0" />
+                                <span className="truncate max-w-[260px]">{arq.categoria}</span>
+                              </span>
+                            </div>
+                          );
+                        })()}
                     </div>
                   </div>
 
@@ -1477,7 +1581,9 @@ export function TabArquetiposEquipo() {
                 </h4>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Secciones técnicas que integran la ficha de{' '}
-                  <strong>{selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}</strong>
+                  <strong>
+                    {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
+                  </strong>
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1521,7 +1627,8 @@ export function TabArquetiposEquipo() {
                       Sin partes o subsistemas vinculados
                     </h5>
                     <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-0.5 leading-relaxed">
-                      Vincula las partes que componen este activo (ej: Cabina y Sistema de Puertas, Máquina de Tracción) para estructurar su ficha técnica.
+                      Vincula las partes que componen este activo (ej: Cabina y Sistema de Puertas,
+                      Máquina de Tracción) para estructurar su ficha técnica.
                     </p>
                   </div>
                   <button
@@ -1536,7 +1643,8 @@ export function TabArquetiposEquipo() {
               ) : (
                 selectedArquetipo.tipo_equipo_modulos.map((tem) => {
                   const mod = tem.modulo;
-                  const countAttrs = mod._count?.modulo_atributos ?? mod.modulo_atributos?.length ?? 0;
+                  const countAttrs =
+                    mod._count?.modulo_atributos ?? mod.modulo_atributos?.length ?? 0;
                   const badgeInfo = getModuloBadgeInfo(mod.codigo_modulo, mod.nombre_modulo);
                   return (
                     <div
@@ -1573,7 +1681,11 @@ export function TabArquetiposEquipo() {
                               title="Haz clic para alternar entre Obligatoria y Opcional"
                             >
                               <ShieldCheck className="h-3 w-3 shrink-0" />
-                              <span>{tem.obligatorio ? 'Parte Principal (Obligatoria)' : 'Parte Opcional'}</span>
+                              <span>
+                                {tem.obligatorio
+                                  ? 'Parte Principal (Obligatoria)'
+                                  : 'Parte Opcional'}
+                              </span>
                             </button>
                           </div>
                           <div className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
@@ -1651,9 +1763,7 @@ export function TabArquetiposEquipo() {
                   >
                     <div className="space-y-1">
                       <div className="flex items-center flex-wrap gap-2">
-                        <span className="text-sm font-bold text-slate-900">
-                          {plan.nombre_plan}
-                        </span>
+                        <span className="text-sm font-bold text-slate-900">{plan.nombre_plan}</span>
                         <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold">
                           {plan.tipo_servicio?.nombre_tipo ||
                             plan.tipo_servicio?.codigo_tipo ||
@@ -1666,7 +1776,10 @@ export function TabArquetiposEquipo() {
                         </span>
                         <span>•</span>
                         <span className="font-bold text-amber-700">
-                          Cada {Number(plan.frecuencia_uso ?? 250)} {selectedArquetipo.unidad_uso ? selectedArquetipo.unidad_uso.toLowerCase() : 'horas'}
+                          Cada {Number(plan.frecuencia_uso ?? 250)}{' '}
+                          {selectedArquetipo.unidad_uso
+                            ? selectedArquetipo.unidad_uso.toLowerCase()
+                            : 'horas'}
                         </span>
                         <span>•</span>
                         <span className="text-slate-600 font-medium">
@@ -1742,7 +1855,10 @@ export function TabArquetiposEquipo() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleSaveNewArq} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <form
+              onSubmit={handleSaveNewArq}
+              className="p-6 space-y-4 max-h-[85vh] overflow-y-auto"
+            >
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Nombre del Tipo de Equipo *
@@ -1778,13 +1894,20 @@ export function TabArquetiposEquipo() {
                       const nuevoModo = !isAutoCodigoTipo;
                       setIsAutoCodigoTipo(nuevoModo);
                       if (nuevoModo) {
-                        const auto = generarCodigoTipoEquipo(arqForm.nombre_tipo, codigosTiposExistentes);
+                        const auto = generarCodigoTipoEquipo(
+                          arqForm.nombre_tipo,
+                          codigosTiposExistentes,
+                        );
                         setArqForm((prev) => ({ ...prev, codigo_tipo: auto }));
                       }
                     }}
                     className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
                   >
-                    {isAutoCodigoTipo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                    {isAutoCodigoTipo ? (
+                      <Unlock className="h-3 w-3" />
+                    ) : (
+                      <Lock className="h-3 w-3" />
+                    )}
                     <span>{isAutoCodigoTipo ? 'Personalizar código' : 'Auto-generar'}</span>
                   </button>
                 </div>
@@ -1795,7 +1918,10 @@ export function TabArquetiposEquipo() {
                   placeholder="Ej: ELEV, GEN, HVAC"
                   value={arqForm.codigo_tipo}
                   onChange={(e) =>
-                    setArqForm({ ...arqForm, codigo_tipo: e.target.value.toUpperCase().replace(/\s+/g, '_') })
+                    setArqForm({
+                      ...arqForm,
+                      codigo_tipo: e.target.value.toUpperCase().replace(/\s+/g, '_'),
+                    })
                   }
                   className={`w-full px-3.5 py-2 rounded-xl border font-mono text-sm transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
                     isCodigoTipoDuplicado
@@ -1805,7 +1931,8 @@ export function TabArquetiposEquipo() {
                 />
                 {isCodigoTipoDuplicado ? (
                   <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
-                    ✕ Este código "{arqForm.codigo_tipo}" ya está en uso. Modifícalo para que sea único.
+                    ✕ Este código &ldquo;{arqForm.codigo_tipo}&rdquo; ya está en uso. Modifícalo
+                    para que sea único.
                   </p>
                 ) : arqForm.codigo_tipo ? (
                   <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
@@ -1862,7 +1989,8 @@ export function TabArquetiposEquipo() {
                     !arqForm.nombre_tipo.trim() ||
                     !arqForm.codigo_tipo.trim() ||
                     (arqForm.is_custom_categoria && !arqForm.categoria_custom.trim()) ||
-                    (arqForm.medidor_preset === 'CUSTOM' && (!arqForm.etiqueta_contador.trim() || !arqForm.unidad_uso.trim()))
+                    (arqForm.medidor_preset === 'CUSTOM' &&
+                      (!arqForm.etiqueta_contador.trim() || !arqForm.unidad_uso.trim()))
                   }
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
                 >
@@ -1900,7 +2028,10 @@ export function TabArquetiposEquipo() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleSaveEditArq} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <form
+              onSubmit={handleSaveEditArq}
+              className="p-6 space-y-4 max-h-[85vh] overflow-y-auto"
+            >
               {editArqError && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-medium">
                   {editArqError}
@@ -1915,9 +2046,7 @@ export function TabArquetiposEquipo() {
                   required
                   placeholder="Ej: Aire Acondicionado / Chiller"
                   value={editArqForm.nombre_tipo}
-                  onChange={(e) =>
-                    setEditArqForm({ ...editArqForm, nombre_tipo: e.target.value })
-                  }
+                  onChange={(e) => setEditArqForm({ ...editArqForm, nombre_tipo: e.target.value })}
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
               </div>
@@ -1932,7 +2061,10 @@ export function TabArquetiposEquipo() {
                   placeholder="Ej: ELEV, HVAC, GEN"
                   value={editArqForm.codigo_tipo}
                   onChange={(e) =>
-                    setEditArqForm({ ...editArqForm, codigo_tipo: e.target.value.toUpperCase().replace(/\s+/g, '_') })
+                    setEditArqForm({
+                      ...editArqForm,
+                      codigo_tipo: e.target.value.toUpperCase().replace(/\s+/g, '_'),
+                    })
                   }
                   className={`w-full px-3.5 py-2 rounded-xl border font-mono text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 uppercase transition-colors ${
                     isCodigoEditTipoDuplicado
@@ -1942,7 +2074,8 @@ export function TabArquetiposEquipo() {
                 />
                 {isCodigoEditTipoDuplicado ? (
                   <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
-                    ✕ Este código "{editArqForm.codigo_tipo}" ya pertenece a otro tipo de equipo.
+                    ✕ Este código &ldquo;{editArqForm.codigo_tipo}&rdquo; ya pertenece a otro tipo
+                    de equipo.
                   </p>
                 ) : (
                   <p className="text-[10px] text-slate-400 mt-1">
@@ -1975,7 +2108,9 @@ export function TabArquetiposEquipo() {
                 etiquetaContador={editArqForm.etiqueta_contador}
                 requiereHorometro={editArqForm.requiere_horometro}
                 onChange={(u) => setEditArqForm({ ...editArqForm, ...u })}
-                onCustomEtiquetaChange={(val) => setEditArqForm({ ...editArqForm, etiqueta_contador: val })}
+                onCustomEtiquetaChange={(val) =>
+                  setEditArqForm({ ...editArqForm, etiqueta_contador: val })
+                }
                 onCustomUnidadChange={(val) => setEditArqForm({ ...editArqForm, unidad_uso: val })}
               />
 
@@ -1987,9 +2122,7 @@ export function TabArquetiposEquipo() {
                   rows={2}
                   placeholder="Notas técnicas o alcance del tipo de equipo..."
                   value={editArqForm.descripcion}
-                  onChange={(e) =>
-                    setEditArqForm({ ...editArqForm, descripcion: e.target.value })
-                  }
+                  onChange={(e) => setEditArqForm({ ...editArqForm, descripcion: e.target.value })}
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs resize-none"
                 />
               </div>
@@ -2010,7 +2143,8 @@ export function TabArquetiposEquipo() {
                     !editArqForm.nombre_tipo.trim() ||
                     !editArqForm.codigo_tipo.trim() ||
                     (editArqForm.is_custom_categoria && !editArqForm.categoria_custom.trim()) ||
-                    (editArqForm.medidor_preset === 'CUSTOM' && (!editArqForm.etiqueta_contador.trim() || !editArqForm.unidad_uso.trim()))
+                    (editArqForm.medidor_preset === 'CUSTOM' &&
+                      (!editArqForm.etiqueta_contador.trim() || !editArqForm.unidad_uso.trim()))
                   }
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
                 >
@@ -2056,7 +2190,9 @@ export function TabArquetiposEquipo() {
                   Código: {deletingArq.codigo_corto || deletingArq.codigo_tipo}
                 </p>
                 <div className="flex items-center gap-3 pt-1 text-[11px] text-slate-600 font-semibold">
-                  <span>{deletingArq.equipos_activos ?? deletingArq._count.equipos} equipos activos</span>
+                  <span>
+                    {deletingArq.equipos_activos ?? deletingArq._count.equipos} equipos activos
+                  </span>
                   <span>•</span>
                   <span>{deletingArq.tipo_equipo_modulos.length} partes</span>
                   <span>•</span>
@@ -2070,8 +2206,12 @@ export function TabArquetiposEquipo() {
                   <div>
                     <p className="font-bold">Acción Bloqueada por Integridad Operativa</p>
                     <p className="mt-1 text-[11px] text-amber-800 leading-relaxed">
-                      Este tipo de equipo tiene <strong>{deletingArq.equipos_activos ?? deletingArq._count.equipos} equipos activos</strong> registrados en Mekanos.
-                      Para mantener la trazabilidad de órdenes de servicio e historial de fallas, no puede ser eliminado mientras tenga activos vinculados.
+                      Este tipo de equipo tiene{' '}
+                      <strong>
+                        {deletingArq.equipos_activos ?? deletingArq._count.equipos} equipos activos
+                      </strong>{' '}
+                      registrados en Mekanos. Para mantener la trazabilidad de órdenes de servicio e
+                      historial de fallas, no puede ser eliminado mientras tenga activos vinculados.
                     </p>
                   </div>
                 </div>
@@ -2079,7 +2219,8 @@ export function TabArquetiposEquipo() {
                 <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900">
                   <p className="font-bold">¿Confirmas la eliminación definitiva?</p>
                   <p className="mt-1 text-[11px] text-rose-800 leading-relaxed">
-                    Esta acción desvinculará sus partes técnicas y rutinas de mantenimiento preventivo asociadas. No se puede deshacer.
+                    Esta acción desvinculará sus partes técnicas y rutinas de mantenimiento
+                    preventivo asociadas. No se puede deshacer.
                   </p>
                 </div>
               )}
@@ -2100,7 +2241,10 @@ export function TabArquetiposEquipo() {
                 </button>
                 <button
                   type="button"
-                  disabled={(deletingArq.equipos_activos ?? deletingArq._count.equipos) > 0 || deleteArqMut.isPending}
+                  disabled={
+                    (deletingArq.equipos_activos ?? deletingArq._count.equipos) > 0 ||
+                    deleteArqMut.isPending
+                  }
                   onClick={handleConfirmDeleteArq}
                   className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-sm"
                 >
@@ -2153,7 +2297,10 @@ export function TabArquetiposEquipo() {
               </button>
             </div>
 
-            <form onSubmit={handleLinkModulo} className="p-6 flex flex-col flex-1 overflow-y-auto space-y-4">
+            <form
+              onSubmit={handleLinkModulo}
+              className="p-6 flex flex-col flex-1 overflow-y-auto space-y-4"
+            >
               {/* Buscador de Partes */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
@@ -2240,7 +2387,9 @@ export function TabArquetiposEquipo() {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
+                            <span
+                              className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}
+                            >
                               {m.nombre_modulo}
                             </span>
                             <span className="px-1.5 py-0.2 rounded text-[10px] font-mono text-slate-500 bg-slate-100">
@@ -2271,7 +2420,7 @@ export function TabArquetiposEquipo() {
 
                 {modulosFiltradosParaVincular.length === 0 && (
                   <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    No se encontraron partes con el término "{linkModSearch}".
+                    No se encontraron partes con el término &ldquo;{linkModSearch}&rdquo;.
                   </div>
                 )}
               </div>
@@ -2281,7 +2430,9 @@ export function TabArquetiposEquipo() {
                 <div className="space-y-0.5 min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span className="text-xs font-bold text-slate-800">Parte Principal Obligatoria</span>
+                    <span className="text-xs font-bold text-slate-800">
+                      Parte Principal Obligatoria
+                    </span>
                     <span
                       className={`px-2 py-0.2 rounded text-[10px] font-bold ${
                         linkModObligatorio
@@ -2321,7 +2472,9 @@ export function TabArquetiposEquipo() {
                   {moduloSeleccionadoParaVincular ? (
                     <span className="font-semibold text-slate-700">
                       Se vinculará:{' '}
-                      <strong className="text-blue-700 font-bold">{moduloSeleccionadoParaVincular.nombre_modulo}</strong>
+                      <strong className="text-blue-700 font-bold">
+                        {moduloSeleccionadoParaVincular.nombre_modulo}
+                      </strong>
                     </span>
                   ) : (
                     <span>Elige una parte de la lista para continuar</span>
@@ -2338,7 +2491,11 @@ export function TabArquetiposEquipo() {
                   </button>
                   <button
                     type="submit"
-                    disabled={vincularModMut.isPending || !linkModId || yaVinculadosModulosIds.has(Number(linkModId))}
+                    disabled={
+                      vincularModMut.isPending ||
+                      !linkModId ||
+                      yaVinculadosModulosIds.has(Number(linkModId))
+                    }
                     className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
                   >
                     {vincularModMut.isPending ? (
@@ -2367,13 +2524,15 @@ export function TabArquetiposEquipo() {
               </div>
               <div>
                 <h4 className="text-base font-bold text-slate-900">
-                  ¿Quitar "{deletingModuloTem.modulo.nombre_modulo}"?
+                  ¿Quitar &ldquo;{deletingModuloTem.modulo.nombre_modulo}&rdquo;?
                 </h4>
                 <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                  Esta parte y sus campos técnicos configurados ya no se requerirán en la plantilla de{' '}
+                  Esta parte y sus campos técnicos configurados ya no se requerirán en la plantilla
+                  de{' '}
                   <strong className="text-slate-700">
                     {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
-                  </strong>.
+                  </strong>
+                  .
                 </p>
               </div>
 
@@ -2423,9 +2582,7 @@ export function TabArquetiposEquipo() {
                   <CalendarClock className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-slate-900">
-                    Configurar Plan Preventivo
-                  </h4>
+                  <h4 className="text-base font-bold text-slate-900">Configurar Plan Preventivo</h4>
                   <p className="text-xs text-slate-500">
                     Asociar protocolo de servicio periódico a {selectedArquetipo.nombre_tipo}
                   </p>
@@ -2453,7 +2610,9 @@ export function TabArquetiposEquipo() {
                     className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
                   >
                     <Sparkles className="h-3.5 w-3.5" />
-                    <span>{showCreateSrvInline ? 'Ocultar Creador' : '+ Crear Nuevo Tipo de Servicio'}</span>
+                    <span>
+                      {showCreateSrvInline ? 'Ocultar Creador' : '+ Crear Nuevo Tipo de Servicio'}
+                    </span>
                   </button>
                 </div>
 
@@ -2491,7 +2650,12 @@ export function TabArquetiposEquipo() {
                         onChange={(e) => {
                           const nombre = e.target.value;
                           const auto = isAutoCodigoSrv
-                            ? generarCodigoTipoServicio(nombre, newSrvForm.categoria, codigosServiciosExistentes, selectedArquetipo?.codigo_tipo)
+                            ? generarCodigoTipoServicio(
+                                nombre,
+                                newSrvForm.categoria,
+                                codigosServiciosExistentes,
+                                selectedArquetipo?.codigo_tipo,
+                              )
                             : newSrvForm.codigo_tipo;
                           setNewSrvForm({
                             ...newSrvForm,
@@ -2526,7 +2690,11 @@ export function TabArquetiposEquipo() {
                             }}
                             className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
                           >
-                            {isAutoCodigoSrv ? <Unlock className="h-2.5 w-2.5" /> : <Lock className="h-2.5 w-2.5" />}
+                            {isAutoCodigoSrv ? (
+                              <Unlock className="h-2.5 w-2.5" />
+                            ) : (
+                              <Lock className="h-2.5 w-2.5" />
+                            )}
                             <span>{isAutoCodigoSrv ? 'Personalizar' : 'Auto'}</span>
                           </button>
                         </div>
@@ -2566,7 +2734,12 @@ export function TabArquetiposEquipo() {
                           value={newSrvForm.categoria}
                           onChange={(cat) => {
                             const auto = isAutoCodigoSrv
-                              ? generarCodigoTipoServicio(newSrvForm.nombre_tipo, cat, codigosServiciosExistentes, selectedArquetipo?.codigo_tipo)
+                              ? generarCodigoTipoServicio(
+                                  newSrvForm.nombre_tipo,
+                                  cat,
+                                  codigosServiciosExistentes,
+                                  selectedArquetipo?.codigo_tipo,
+                                )
                               : newSrvForm.codigo_tipo;
                             setNewSrvForm({
                               ...newSrvForm,
@@ -2621,7 +2794,8 @@ export function TabArquetiposEquipo() {
                               {servicioPlanSeleccionado.codigo_tipo}
                             </span>
                             {selectedArquetipo.id_tipo_equipo &&
-                            servicioPlanSeleccionado.id_tipo_equipo === selectedArquetipo.id_tipo_equipo ? (
+                            servicioPlanSeleccionado.id_tipo_equipo ===
+                              selectedArquetipo.id_tipo_equipo ? (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs">
                                 ★ Específico de este equipo
                               </span>
@@ -2733,7 +2907,8 @@ export function TabArquetiposEquipo() {
                         </div>
                       ) : (
                         serviciosFiltrados.map((s) => {
-                          const isSelected = String(s.id_tipo_servicio) === planForm.id_tipo_servicio;
+                          const isSelected =
+                            String(s.id_tipo_servicio) === planForm.id_tipo_servicio;
                           const esEspecifico =
                             selectedArquetipo.id_tipo_equipo &&
                             s.id_tipo_equipo === selectedArquetipo.id_tipo_equipo;
@@ -2802,7 +2977,9 @@ export function TabArquetiposEquipo() {
                                       : 'border-slate-300'
                                   }`}
                                 >
-                                  {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                                  {isSelected && (
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -2868,7 +3045,8 @@ export function TabArquetiposEquipo() {
 
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Cada cuántos {selectedArquetipo.etiqueta_contador || 'Horas de Uso'} ({selectedArquetipo.unidad_uso || 'HORAS'}) *
+                    Cada cuántos {selectedArquetipo.etiqueta_contador || 'Horas de Uso'} (
+                    {selectedArquetipo.unidad_uso || 'HORAS'}) *
                   </label>
                   <input
                     type="number"
@@ -2906,16 +3084,17 @@ export function TabArquetiposEquipo() {
                 </label>
                 <EamSelect
                   value={planForm.criterio_intervalo}
-                  onChange={(val) =>
-                    setPlanForm({ ...planForm, criterio_intervalo: val })
-                  }
+                  onChange={(val) => setPlanForm({ ...planForm, criterio_intervalo: val })}
                   options={[
                     {
                       value: 'LO_QUE_OCURRA_PRIMERO',
                       label: `⚡ Lo que ocurra primero (Días o ${selectedArquetipo.etiqueta_contador || 'Horas de uso'}) - Recomendado`,
                     },
                     { value: 'DIAS', label: '📅 Solo por Calendario (Días transcurridos)' },
-                    { value: 'HORAS', label: `⏱️ Solo por Uso (${selectedArquetipo.etiqueta_contador || 'Horas registradas'})` },
+                    {
+                      value: 'HORAS',
+                      label: `⏱️ Solo por Uso (${selectedArquetipo.etiqueta_contador || 'Horas registradas'})`,
+                    },
                   ]}
                   placeholder="Seleccionar regla..."
                 />
@@ -2973,7 +3152,8 @@ export function TabArquetiposEquipo() {
               <div className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5" />
                 <h4 className="text-sm font-bold">
-                  Crear Nuevo Campo Técnico para {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
+                  Crear Nuevo Campo Técnico para{' '}
+                  {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
                 </h4>
               </div>
               <button
@@ -2991,9 +3171,7 @@ export function TabArquetiposEquipo() {
                 </label>
                 <EamSelect
                   value={inPlaceForm.codigo_modulo}
-                  onChange={(val) =>
-                    setInPlaceForm({ ...inPlaceForm, codigo_modulo: val })
-                  }
+                  onChange={(val) => setInPlaceForm({ ...inPlaceForm, codigo_modulo: val })}
                   options={selectedArquetipo.tipo_equipo_modulos.map((tem) => ({
                     value: tem.modulo.codigo_modulo,
                     label: tem.modulo.nombre_modulo,
@@ -3037,9 +3215,7 @@ export function TabArquetiposEquipo() {
                   </label>
                   <EamSelect
                     value={inPlaceForm.tipo_control}
-                    onChange={(val) =>
-                      setInPlaceForm({ ...inPlaceForm, tipo_control: val })
-                    }
+                    onChange={(val) => setInPlaceForm({ ...inPlaceForm, tipo_control: val })}
                     options={TIPOS_CONTROL_HUMANOS.map((t) => ({
                       value: t.value,
                       label: `${t.iconSymbol} ${t.shortLabel}`,
@@ -3068,7 +3244,11 @@ export function TabArquetiposEquipo() {
                       }}
                       className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 cursor-pointer"
                     >
-                      {isAutoCodigoAtributo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                      {isAutoCodigoAtributo ? (
+                        <Unlock className="h-3 w-3" />
+                      ) : (
+                        <Lock className="h-3 w-3" />
+                      )}
                       <span>{isAutoCodigoAtributo ? 'Personalizar' : 'Auto'}</span>
                     </button>
                   </div>

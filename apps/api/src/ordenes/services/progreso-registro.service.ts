@@ -3,10 +3,10 @@
  * ProgresoRegistroService - MEKANOS S.A.S
  * ============================================================================
  * FEATURE: LECTURA EN TIEMPO REAL DE AVANCE DE REGISTRO (ESTILO SYTEX)
- * 
+ *
  * Permite monitorear la telemetría y el porcentaje real de avance de las
  * órdenes de servicio en campo:
- * 
+ *
  * 1. % Total ponderado de registro (Checklist, Mediciones, Fotos, Firmas).
  * 2. Desglose detallado por secciones con alertas de fuera de rango.
  * 3. Indicador de estado de conexión y última actividad en vivo.
@@ -14,12 +14,7 @@
  * ============================================================================
  */
 
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 export type EstadoConexionTecnico =
@@ -187,20 +182,23 @@ export class ProgresoRegistroService {
     }
 
     const actividadesCompletadas = orden.actividades_ejecutadas.filter(
-      (a) => a.ejecutada === true || a.estado === 'COMPLETADA',
+      (a) => a.ejecutada === true || a.estado != null,
     ).length;
 
     const porcentajeActividades =
       totalActividades > 0
         ? Math.min(100, Math.round((actividadesCompletadas / totalActividades) * 100))
         : orden.actividades_ejecutadas.length > 0
-        ? 100
-        : 0;
+          ? 100
+          : 0;
 
     // 2. Mediciones
     const medicionesRegistradas = orden.mediciones_servicio.length;
     const medicionesConAlerta = orden.mediciones_servicio.filter(
-      (m) => m.fuera_de_rango === true || m.nivel_alerta === 'CRITICO' || m.nivel_alerta === 'ALERTA',
+      (m) =>
+        m.fuera_de_rango === true ||
+        m.nivel_alerta === 'CRITICO' ||
+        m.nivel_alerta === 'ADVERTENCIA',
     ).length;
 
     // 3. Evidencias
@@ -249,9 +247,7 @@ export class ProgresoRegistroService {
     // 6. Estado de conexión del técnico en vivo
     const codigoEstado = orden.estados_orden?.codigo_estado || '';
     const esFinalizada =
-      codigoEstado === 'COMPLETADA' ||
-      codigoEstado === 'APROBADA' ||
-      codigoEstado === 'CANCELADA';
+      codigoEstado === 'COMPLETADA' || codigoEstado === 'APROBADA' || codigoEstado === 'CANCELADA';
 
     let estadoConexion: EstadoConexionTecnico = 'SIN_INICIAR';
     if (esFinalizada) {
@@ -303,7 +299,7 @@ export class ProgresoRegistroService {
 
     for (const a of orden.actividades_ejecutadas.slice(0, 5)) {
       const desc =
-        a.catalogo_actividades?.nombre_actividad ||
+        a.catalogo_actividades?.descripcion_actividad ||
         a.descripcion_manual ||
         `Actividad #${a.id_actividad_ejecutada}`;
       ultimosEventos.push({
@@ -316,7 +312,10 @@ export class ProgresoRegistroService {
     for (const m of orden.mediciones_servicio.slice(0, 5)) {
       const paramNombre =
         m.parametros_medicion?.nombre_parametro || `Parámetro #${m.id_parametro_medicion}`;
-      const val = m.valor_numerico !== null ? `${m.valor_numerico} ${m.unidad_medida || ''}` : m.valor_texto || '';
+      const val =
+        m.valor_numerico !== null
+          ? `${m.valor_numerico} ${m.unidad_medida || ''}`
+          : m.valor_texto || '';
       ultimosEventos.push({
         tipo: 'MEDICION',
         descripcion: `Medición: ${paramNombre} = ${val}${m.fuera_de_rango ? ' ⚠️ FUERA DE RANGO' : ''}`,
@@ -348,19 +347,19 @@ export class ProgresoRegistroService {
     }
 
     // Ordenar cronológicamente descendente
-    ultimosEventos.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    ultimosEventos.sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
 
     // Nombres
-    const personaTecnico =
-      orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona;
+    const personaTecnico = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona;
     const nombreTecnico = personaTecnico
       ? `${personaTecnico.primer_nombre || ''} ${personaTecnico.primer_apellido || ''}`.trim() ||
         personaTecnico.nombre_completo ||
         'Técnico'
       : 'Sin asignar';
 
-    const clientePersona =
-      orden.clientes?.persona || orden.clientes?.cliente_principal?.persona;
+    const clientePersona = orden.clientes?.persona || orden.clientes?.cliente_principal?.persona;
     const nombreCliente =
       clientePersona?.razon_social ||
       clientePersona?.nombre_comercial ||
@@ -419,7 +418,7 @@ export class ProgresoRegistroService {
         id_actividad_ejecutada: a.id_actividad_ejecutada,
         id_actividad_catalogo: a.id_actividad_catalogo,
         descripcion:
-          a.catalogo_actividades?.nombre_actividad ||
+          a.catalogo_actividades?.descripcion_actividad ||
           a.descripcion_manual ||
           `Actividad #${a.id_actividad_ejecutada}`,
         estado: a.estado,
@@ -468,12 +467,12 @@ export class ProgresoRegistroService {
       (orden.id_estado_actual === 4
         ? 'COMPLETADA'
         : orden.id_estado_actual === 2
-        ? 'APROBADA'
-        : orden.id_estado_actual === 5
-        ? 'EN_PROCESO'
-        : orden.id_estado_actual === 1
-        ? 'ASIGNADA'
-        : '');
+          ? 'APROBADA'
+          : orden.id_estado_actual === 5
+            ? 'EN_PROCESO'
+            : orden.id_estado_actual === 1
+              ? 'ASIGNADA'
+              : '');
 
     const totalActividades = totalActsPlan > 0 ? totalActsPlan : Math.max(actsEjecutadas, 10);
     const pctActividades =
@@ -499,8 +498,8 @@ export class ProgresoRegistroService {
     const dateRef = orden.fecha_modificacion
       ? new Date(orden.fecha_modificacion)
       : orden.fecha_cambio_estado
-      ? new Date(orden.fecha_cambio_estado)
-      : null;
+        ? new Date(orden.fecha_cambio_estado)
+        : null;
 
     const now = new Date();
     const minutosInactividad = dateRef
@@ -543,7 +542,9 @@ export class ProgresoRegistroService {
         total: totalFirmas,
       },
       tiempo: {
-        inicio_real: orden.fecha_inicio_real ? new Date(orden.fecha_inicio_real).toISOString() : null,
+        inicio_real: orden.fecha_inicio_real
+          ? new Date(orden.fecha_inicio_real).toISOString()
+          : null,
         fin_real: orden.fecha_fin_real ? new Date(orden.fecha_fin_real).toISOString() : null,
         duracion_minutos: orden.duracion_minutos || null,
       },
@@ -553,7 +554,10 @@ export class ProgresoRegistroService {
   /**
    * Registra un heartbeat / latido de telemetría desde la app móvil en tiempo real
    */
-  async registrarHeartbeat(idOrden: number, dto: HeartbeatProgresoDto): Promise<{ success: boolean; timestamp: string }> {
+  async registrarHeartbeat(
+    idOrden: number,
+    dto: HeartbeatProgresoDto,
+  ): Promise<{ success: boolean; timestamp: string }> {
     const orden = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: idOrden },
       select: { id_orden_servicio: true, metadata: true },
@@ -583,7 +587,9 @@ export class ProgresoRegistroService {
       },
     });
 
-    this.logger.log(`💓 [HEARTBEAT] Telemetría registrada para Orden #${idOrden} a las ${timestamp}`);
+    this.logger.log(
+      `💓 [HEARTBEAT] Telemetría registrada para Orden #${idOrden} a las ${timestamp}`,
+    );
 
     return { success: true, timestamp };
   }

@@ -10,13 +10,13 @@ export class PrismaDetalleServiciosOrdenRepository implements IDetalleServiciosO
 
   // ✅ INCLUDE_RELATIONS_LIST (lista paginada - mínimo)
   private readonly INCLUDE_RELATIONS_LIST = {
-    orden: {
+    ordenes_servicio: {
       select: {
         id_orden_servicio: true,
         numero_orden: true,
       },
     },
-    servicio: {
+    catalogo_servicios: {
       select: {
         id_servicio: true,
         codigo_servicio: true,
@@ -25,9 +25,9 @@ export class PrismaDetalleServiciosOrdenRepository implements IDetalleServiciosO
     },
   };
 
-  // ✅ INCLUDE_RELATIONS_DETAIL (detalle completo - máximo con nombres EXACTOS 60 chars)
+  // ✅ INCLUDE_RELATIONS_DETAIL (detalle completo)
   private readonly INCLUDE_RELATIONS_DETAIL = {
-    orden: {
+    ordenes_servicio: {
       select: {
         id_orden_servicio: true,
         numero_orden: true,
@@ -35,7 +35,7 @@ export class PrismaDetalleServiciosOrdenRepository implements IDetalleServiciosO
         id_equipo: true,
       },
     },
-    servicio: {
+    catalogo_servicios: {
       select: {
         id_servicio: true,
         codigo_servicio: true,
@@ -43,25 +43,13 @@ export class PrismaDetalleServiciosOrdenRepository implements IDetalleServiciosO
         descripcion: true,
       },
     },
-    tecnico: {
+    empleados: {
       include: {
         persona: {
           select: {
             nombre_completo: true,
           },
         },
-      },
-    },
-    usuarios_detalle_servicios_orden_registrado_porTousuarios: {
-      select: {
-        id_usuario: true,
-        email: true,
-      },
-    },
-    usuarios_detalle_servicios_orden_modificado_porTousuarios: {
-      select: {
-        id_usuario: true,
-        email: true,
       },
     },
   };
@@ -123,7 +111,11 @@ export class PrismaDetalleServiciosOrdenRepository implements IDetalleServiciosO
     return detalles.map((detalle) => DetalleServiciosOrdenMapper.toCamelCase(detalle));
   }
 
-  async listarPorOrden(idOrdenServicio: number, skip: number, take: number): Promise<DetalleServiciosOrdenResponseDto[]> {
+  async listarPorOrden(
+    idOrdenServicio: number,
+    skip: number,
+    take: number,
+  ): Promise<DetalleServiciosOrdenResponseDto[]> {
     const detalles = await this.prisma.detalle_servicios_orden.findMany({
       where: { id_orden_servicio: idOrdenServicio },
       skip,

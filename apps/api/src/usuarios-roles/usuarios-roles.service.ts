@@ -47,7 +47,7 @@ export class UsuariosRolesService {
         fecha_asignacion: new Date(),
       },
       include: {
-        usuarios_usuarios_roles_id_usuarioTousuarios: {
+        usuarios: {
           select: {
             id_usuario: true,
             email: true,

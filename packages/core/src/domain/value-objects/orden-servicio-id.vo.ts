@@ -39,10 +39,10 @@ export class OrdenServicioId {
 
     // Formato: OS-YYYYMM-UUID
     const regex = /^OS-\d{6}-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-    
+
     if (!regex.test(value)) {
       throw new Error(
-        `OrdenServicioId debe tener formato OS-YYYYMM-UUID (ejemplo: OS-202411-a3f4c2d1-...) o ser un ID numérico.`
+        `OrdenServicioId debe tener formato OS-YYYYMM-UUID (ejemplo: OS-202411-a3f4c2d1-...) o ser un ID numérico.`,
       );
     }
 
@@ -56,9 +56,7 @@ export class OrdenServicioId {
     const currentMonth = now.getMonth() + 1;
 
     if (year > currentYear || (year === currentYear && month > currentMonth)) {
-      throw new Error(
-        `OrdenServicioId no puede tener fecha futura. Recibido: ${year}-${month}`
-      );
+      throw new Error(`OrdenServicioId no puede tener fecha futura. Recibido: ${year}-${month}`);
     }
 
     // Validar rango de mes
@@ -79,8 +77,8 @@ export class OrdenServicioId {
     return this.value;
   }
 
-  equals(other: OrdenServicioId): boolean {
-    if (!other) return false;
+  equals(other?: OrdenServicioId | null): boolean {
+    if (other == null) return false;
     return this.value === other.value;
   }
 

@@ -17,50 +17,86 @@ export class ResponseMedicionDto {
   @ApiProperty({ description: 'ID del parámetro de medición', example: 1 })
   idParametroMedicion!: number;
 
-  @ApiPropertyOptional({ description: 'Valor numérico medido (Decimal 12,2)', example: 220.5, type: 'number' })
+  @ApiPropertyOptional({
+    description: 'Valor numérico medido (Decimal 12,2)',
+    example: 220.5,
+    type: 'number',
+  })
   valorNumerico?: number;
 
-  @ApiPropertyOptional({ description: 'Valor de texto para mediciones no numéricas', example: 'BUENO' })
+  @ApiPropertyOptional({
+    description: 'Valor de texto para mediciones no numéricas',
+    example: 'BUENO',
+  })
   valorTexto?: string;
 
-  @ApiPropertyOptional({ description: 'Unidad de medida (copiada automáticamente del catálogo)', example: 'V' })
+  @ApiPropertyOptional({
+    description: 'Unidad de medida (copiada automáticamente del catálogo)',
+    example: 'V',
+  })
   unidadMedida?: string;
 
-  @ApiPropertyOptional({ description: 'Indicador si el valor está fuera del rango crítico (calculado por trigger BD)', example: false })
+  @ApiPropertyOptional({
+    description: 'Indicador si el valor está fuera del rango crítico (calculado por trigger BD)',
+    example: false,
+  })
   fueraDeRango?: boolean;
 
   @ApiPropertyOptional({
     description: 'Nivel de alerta calculado por backend',
     enum: ['OK', 'ADVERTENCIA', 'CRITICO'],
-    example: 'OK'
+    example: 'OK',
   })
   nivelAlerta?: NivelAlertaEnum;
 
-  @ApiPropertyOptional({ description: 'Mensaje de alerta generado por backend', example: 'Voltaje dentro del rango normal' })
+  @ApiPropertyOptional({
+    description: 'Mensaje de alerta generado por backend',
+    example: 'Voltaje dentro del rango normal',
+  })
   mensajeAlerta?: string;
 
   @ApiPropertyOptional({ description: 'Observaciones adicionales' })
   observaciones?: string;
 
-  @ApiPropertyOptional({ description: 'Temperatura ambiente en °C (Decimal 5,2)', example: 25.5, type: 'number' })
+  @ApiPropertyOptional({
+    description: 'Temperatura ambiente en °C (Decimal 5,2)',
+    example: 25.5,
+    type: 'number',
+  })
   temperaturaAmbiente?: number;
 
-  @ApiPropertyOptional({ description: 'Humedad relativa en % (Decimal 5,2)', example: 65.2, type: 'number' })
+  @ApiPropertyOptional({
+    description: 'Humedad relativa en % (Decimal 5,2)',
+    example: 65.2,
+    type: 'number',
+  })
   humedadRelativa?: number;
 
-  @ApiPropertyOptional({ description: 'Fecha y hora de la medición', example: '2025-11-24T15:30:00Z' })
+  @ApiPropertyOptional({
+    description: 'Fecha y hora de la medición',
+    example: '2025-11-24T15:30:00Z',
+  })
   fechaMedicion?: Date;
 
   @ApiPropertyOptional({ description: 'ID del empleado que realizó la medición', example: 1 })
   medidoPor?: number;
 
-  @ApiPropertyOptional({ description: 'Instrumento usado para medir', example: 'Multímetro Fluke 87V' })
+  @ApiPropertyOptional({
+    description: 'Instrumento usado para medir',
+    example: 'Multímetro Fluke 87V',
+  })
   instrumentoMedicion?: string;
 
-  @ApiPropertyOptional({ description: 'Fecha de registro en el sistema', example: '2025-11-24T15:30:00Z' })
+  @ApiPropertyOptional({
+    description: 'Fecha de registro en el sistema',
+    example: '2025-11-24T15:30:00Z',
+  })
   fechaRegistro?: Date;
 
-  @ApiPropertyOptional({ description: 'Si true, esta medición está excluida del informe PDF', example: false })
+  @ApiPropertyOptional({
+    description: 'Si true, esta medición está excluida del informe PDF',
+    example: false,
+  })
   excluidoPdf?: boolean;
 
   // ======= RELACIONES ANIDADAS =======
@@ -116,6 +152,8 @@ export class ResponseMedicionDto {
     codigoParametro: string;
     nombreParametro: string;
     unidadMedida: string;
+    valorMinimoNormal?: number;
+    valorMaximoNormal?: number;
     valorMinimoCritico?: number;
     valorMaximoCritico?: number;
   };

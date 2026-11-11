@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText,
   Download,
@@ -44,6 +44,13 @@ export function ModalVistaPreviaTrazabilidadPdf({
   const [error, setError] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [filename, setFilename] = useState<string>('INFORME_EJECUTIVO_TRAZABILIDAD.pdf');
+  const pdfUrlRef = useRef<string | null>(null);
+
+  const filtrosKey = JSON.stringify(filtros);
+  const filtrosEstables = useMemo(
+    () => JSON.parse(filtrosKey) as ModalVistaPreviaTrazabilidadPdfProps['filtros'],
+    [filtrosKey],
+  );
 
   // Cargar PDF cuando se abre el modal o cambian los filtros
   useEffect(() => {
@@ -51,9 +58,9 @@ export function ModalVistaPreviaTrazabilidadPdf({
     let currentObjectUrl: string | null = null;
 
     if (!isOpen) {
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl);
-        setPdfUrl(null);
+      if (pdfUrlRef.current) {
+        URL.revokeObjectURL(pdfUrlRef.current);
+        pdfUrlRef.current = null;
       }
       return;
     }
@@ -64,7 +71,7 @@ export function ModalVistaPreviaTrazabilidadPdf({
         setError(null);
 
         const { blob, filename: serverFilename } = await getTrazabilidadPdfBlob(clienteId, {
-          ...filtros,
+          ...filtrosEstables,
           preview: true,
         });
 
@@ -72,14 +79,22 @@ export function ModalVistaPreviaTrazabilidadPdf({
 
         const objectUrl = URL.createObjectURL(blob);
         currentObjectUrl = objectUrl;
+        if (pdfUrlRef.current) {
+          URL.revokeObjectURL(pdfUrlRef.current);
+        }
+        pdfUrlRef.current = objectUrl;
         setPdfUrl(objectUrl);
         if (serverFilename) {
           setFilename(serverFilename);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!active) return;
         console.error('Error generando vista previa de PDF:', err);
-        setError(err.message || 'No se pudo generar la vista previa del informe PDF.');
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'No se pudo generar la vista previa del informe PDF.';
+        setError(msg);
       } finally {
         if (active) {
           setLoading(false);
@@ -93,9 +108,12 @@ export function ModalVistaPreviaTrazabilidadPdf({
       active = false;
       if (currentObjectUrl) {
         URL.revokeObjectURL(currentObjectUrl);
+        if (pdfUrlRef.current === currentObjectUrl) {
+          pdfUrlRef.current = null;
+        }
       }
     };
-  }, [isOpen, clienteId, JSON.stringify(filtros)]);
+  }, [isOpen, clienteId, filtrosEstables]);
 
   // Manejador de descarga
   const handleDownload = () => {
@@ -128,18 +146,18 @@ export function ModalVistaPreviaTrazabilidadPdf({
 
   if (!isOpen) return null;
 
-  const periodoLabel = filtros.fechaDesde && filtros.fechaHasta
-    ? `${filtros.fechaDesde} al ${filtros.fechaHasta}`
-    : filtros.fechaDesde
-    ? `Desde ${filtros.fechaDesde}`
-    : filtros.fechaHasta
-    ? `Hasta ${filtros.fechaHasta}`
-    : 'Todo el Histórico Operacional';
+  const periodoLabel =
+    filtros.fechaDesde && filtros.fechaHasta
+      ? `${filtros.fechaDesde} al ${filtros.fechaHasta}`
+      : filtros.fechaDesde
+        ? `Desde ${filtros.fechaDesde}`
+        : filtros.fechaHasta
+          ? `Hasta ${filtros.fechaHasta}`
+          : 'Todo el Histórico Operacional';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-slate-900 rounded-3xl w-full max-w-6xl shadow-2xl overflow-hidden flex flex-col border border-slate-700/60 h-[92vh]">
-        
         {/* HEADER CORPORATIVO DEL MODAL */}
         <div className="p-4 sm:p-5 bg-slate-900 border-b border-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
           <div className="flex items-start gap-3">
@@ -229,7 +247,8 @@ export function ModalVistaPreviaTrazabilidadPdf({
               <div className="space-y-1">
                 <p className="text-sm font-bold text-white">Generando Informe Ejecutivo PDF...</p>
                 <p className="text-xs text-slate-400 max-w-sm">
-                  Consolidando histórico operacional, métricas de confiabilidad y formateando plantilla corporativa MEKANOS.
+                  Consolidando histórico operacional, métricas de confiabilidad y formateando
+                  plantilla corporativa MEKANOS.
                 </p>
               </div>
             </div>
@@ -248,6 +267,8 @@ export function ModalVistaPreviaTrazabilidadPdf({
                   getTrazabilidadPdfBlob(clienteId, { ...filtros, preview: true })
                     .then(({ blob, filename: fName }) => {
                       const url = URL.createObjectURL(blob);
+                      if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+                      pdfUrlRef.current = url;
                       setPdfUrl(url);
                       if (fName) setFilename(fName);
                       setLoading(false);
@@ -285,7 +306,6 @@ export function ModalVistaPreviaTrazabilidadPdf({
             Formato A4 Oficial • Motor Puppeteer MEKANOS
           </span>
         </div>
-
       </div>
     </div>
   );

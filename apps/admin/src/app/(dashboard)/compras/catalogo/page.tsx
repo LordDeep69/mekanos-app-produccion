@@ -3,30 +3,23 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Catálogo Maestro y Abastecimiento (Módulo de Compras)
- * 
+ *
  * Vista Principal de Navegación, Búsqueda, Filtrado por Arquetipos y Métricas
  */
 
-import { useEffect, useState, useMemo, Suspense } from 'react';
+import { useCallback, useEffect, useState, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Boxes,
-  Building2,
-  CheckCircle2,
-  DollarSign,
   ExternalLink,
-  Filter,
   HardHat,
-  Layers,
   Package,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
-  Sparkles,
   Star,
-  Tag,
   Truck,
   Wrench,
   X,
@@ -36,7 +29,7 @@ import {
 import { toast } from 'sonner';
 
 import { comprasService } from '@/lib/api/compras.service';
-import { ArticuloMaestro, DestinoArticulo, TipoComponente } from '@/types/compras.types';
+import { ArticuloMaestro, DestinoArticulo } from '@/types/compras.types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -50,7 +43,6 @@ function CatalogoComprasContent() {
 
   // Estados
   const [articulos, setArticulos] = useState<ArticuloMaestro[]>([]);
-  const [tiposComponente, setTiposComponente] = useState<TipoComponente[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -66,7 +58,7 @@ function CatalogoComprasContent() {
     consumibles: 0,
   });
 
-  const cargarConteosGlobales = async () => {
+  const cargarConteosGlobales = useCallback(async () => {
     try {
       const resumen = await comprasService.getResumen();
       setConteoArquetipos({
@@ -80,11 +72,11 @@ function CatalogoComprasContent() {
     } catch (e) {
       console.error('Error al calcular conteos de arquetipos:', e);
     }
-  };
+  }, []);
 
   useEffect(() => {
     cargarConteosGlobales();
-  }, []);
+  }, [cargarConteosGlobales]);
 
   // Filtros activos y paginación
   const currentPage = searchParams.get('page') ? Number(searchParams.get('page')) : 1;
@@ -96,68 +88,70 @@ function CatalogoComprasContent() {
   const currentCategoria = searchParams.get('categoria')
     ? Number(searchParams.get('categoria'))
     : searchParams.get('id_categoria')
-    ? Number(searchParams.get('id_categoria'))
-    : undefined;
+      ? Number(searchParams.get('id_categoria'))
+      : undefined;
   const currentProveedor = searchParams.get('id_proveedor')
     ? Number(searchParams.get('id_proveedor'))
     : searchParams.get('proveedor')
-    ? Number(searchParams.get('proveedor'))
-    : undefined;
+      ? Number(searchParams.get('proveedor'))
+      : undefined;
 
   const [searchTerm, setSearchTerm] = useState(currentSearch);
 
   // Cargar artículos del catálogo
-  const cargarArticulos = async (showToast = false) => {
-    try {
-      if (showToast) setRefreshing(true);
-      else setLoading(true);
+  const cargarArticulos = useCallback(
+    async (showToast = false) => {
+      try {
+        if (showToast) setRefreshing(true);
+        else setLoading(true);
 
-      const [resArticulos, resTipos] = await Promise.all([
-        comprasService.getArticulos({
-          destino_articulo: currentDestino,
-          q: currentSearch || undefined,
-          id_tipo_componente: currentTipo,
-          id_marca: currentMarca,
-          id_categoria: currentCategoria,
-          id_proveedor: currentProveedor,
-          page: currentPage,
-          limit: currentLimit,
-        }),
-        comprasService.getTiposComponente(),
-      ]);
+        const [resArticulos] = await Promise.all([
+          comprasService.getArticulos({
+            destino_articulo: currentDestino,
+            q: currentSearch || undefined,
+            id_tipo_componente: currentTipo,
+            id_marca: currentMarca,
+            id_categoria: currentCategoria,
+            id_proveedor: currentProveedor,
+            page: currentPage,
+            limit: currentLimit,
+          }),
+        ]);
 
-      setArticulos(resArticulos.items || []);
-      setTotal(resArticulos.total || 0);
-      setTotalPages(
-        resArticulos.meta?.totalPages || Math.ceil((resArticulos.total || 0) / currentLimit) || 1
-      );
-      setTiposComponente(resTipos || []);
+        setArticulos(resArticulos.items || []);
+        setTotal(resArticulos.total || 0);
+        setTotalPages(
+          resArticulos.meta?.totalPages || Math.ceil((resArticulos.total || 0) / currentLimit) || 1,
+        );
 
-      if (showToast) {
-        toast.success('Catálogo actualizado');
-        cargarConteosGlobales();
+        if (showToast) {
+          toast.success('Catálogo actualizado');
+          cargarConteosGlobales();
+        }
+      } catch (e: unknown) {
+        console.error('Error al cargar artículos:', e);
+        toast.error('No se pudo cargar el catálogo de compras');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (e: any) {
-      console.error('Error al cargar artículos:', e);
-      toast.error('No se pudo cargar el catálogo de compras');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+    },
+    [
+      currentDestino,
+      currentSearch,
+      currentTipo,
+      currentMarca,
+      currentCategoria,
+      currentProveedor,
+      currentPage,
+      currentLimit,
+      cargarConteosGlobales,
+    ],
+  );
 
   useEffect(() => {
     cargarArticulos();
-  }, [
-    currentDestino,
-    currentSearch,
-    currentTipo,
-    currentMarca,
-    currentCategoria,
-    currentProveedor,
-    currentPage,
-    currentLimit,
-  ]);
+  }, [cargarArticulos]);
 
   // Actualizar filtros en URL
   const actualizarFiltro = (params: {
@@ -237,7 +231,7 @@ function CatalogoComprasContent() {
     const insumosCount = conteoArquetipos.insumos;
     const herramientasCount = conteoArquetipos.herramientas;
     const conProveedores = articulos.filter(
-      (a) => a.articulos_proveedores && a.articulos_proveedores.length > 0
+      (a) => a.articulos_proveedores && a.articulos_proveedores.length > 0,
     ).length;
 
     return { totalCount, insumosCount, herramientasCount, conProveedores };
@@ -257,7 +251,8 @@ function CatalogoComprasContent() {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-gray-600">
-            Administración centralizada de insumos, repuestos, herramientas y su matriz de proveedores.
+            Administración centralizada de insumos, repuestos, herramientas y su matriz de
+            proveedores.
           </p>
         </div>
 
@@ -278,8 +273,7 @@ function CatalogoComprasContent() {
             className="h-10 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm"
           >
             <Link href="/compras/catalogo/nuevo">
-              <Plus className="mr-1.5 h-4 w-4" />
-              + Nuevo Recurso / Artículo
+              <Plus className="mr-1.5 h-4 w-4" />+ Nuevo Recurso / Artículo
             </Link>
           </Button>
         </div>
@@ -310,7 +304,9 @@ function CatalogoComprasContent() {
             <span className="text-xs font-semibold text-amber-800">Herramientas / Activos</span>
             <ShieldCheck className="h-4 w-4 text-amber-600" />
           </div>
-          <p className="mt-2 text-2xl font-extrabold text-amber-900">{metricas.herramientasCount}</p>
+          <p className="mt-2 text-2xl font-extrabold text-amber-900">
+            {metricas.herramientasCount}
+          </p>
           <span className="text-[11px] text-amber-700">Activo propio de la empresa</span>
         </Card>
 
@@ -328,11 +324,36 @@ function CatalogoComprasContent() {
       <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 pb-3">
         {[
           { id: '', label: 'Todos los Recursos', icon: Boxes, count: conteoArquetipos.total },
-          { id: 'INSUMO_SERVICIO', label: 'Insumos de Servicio', icon: Wrench, count: conteoArquetipos.insumos },
-          { id: 'REPUESTO_CORRECTIVO', label: 'Repuestos Correctivos', icon: Boxes, count: conteoArquetipos.repuestos },
-          { id: 'HERRAMIENTA_ACTIVO', label: 'Herramientas / Activos', icon: ShieldCheck, count: conteoArquetipos.herramientas },
-          { id: 'DOTACION_EPP', label: 'Dotación / EPP', icon: HardHat, count: conteoArquetipos.dotacion },
-          { id: 'CONSUMIBLE_TALLER', label: 'Consumibles Taller', icon: Package, count: conteoArquetipos.consumibles },
+          {
+            id: 'INSUMO_SERVICIO',
+            label: 'Insumos de Servicio',
+            icon: Wrench,
+            count: conteoArquetipos.insumos,
+          },
+          {
+            id: 'REPUESTO_CORRECTIVO',
+            label: 'Repuestos Correctivos',
+            icon: Boxes,
+            count: conteoArquetipos.repuestos,
+          },
+          {
+            id: 'HERRAMIENTA_ACTIVO',
+            label: 'Herramientas / Activos',
+            icon: ShieldCheck,
+            count: conteoArquetipos.herramientas,
+          },
+          {
+            id: 'DOTACION_EPP',
+            label: 'Dotación / EPP',
+            icon: HardHat,
+            count: conteoArquetipos.dotacion,
+          },
+          {
+            id: 'CONSUMIBLE_TALLER',
+            label: 'Consumibles Taller',
+            icon: Package,
+            count: conteoArquetipos.consumibles,
+          },
         ].map((f) => {
           const Icon = f.icon;
           const isSelected = (!currentDestino && f.id === '') || currentDestino === f.id;
@@ -351,9 +372,7 @@ function CatalogoComprasContent() {
               <span>{f.label}</span>
               <span
                 className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  isSelected
-                    ? 'bg-gray-700 text-white'
-                    : 'bg-gray-200/80 text-gray-700'
+                  isSelected ? 'bg-gray-700 text-white' : 'bg-gray-200/80 text-gray-700'
                 }`}
               >
                 {f.count}
@@ -415,12 +434,16 @@ function CatalogoComprasContent() {
         </div>
 
         {/* Resumen de Filtros Activos y Limpieza Rápida */}
-        {(currentDestino || currentSearch || currentMarca || currentCategoria || currentProveedor) && (
+        {(currentDestino ||
+          currentSearch ||
+          currentMarca ||
+          currentCategoria ||
+          currentProveedor) && (
           <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-gray-500">
             <span className="font-medium text-gray-600">Filtros aplicados:</span>
             {currentSearch && (
               <Badge variant="secondary" className="text-[11px] gap-1 bg-gray-100">
-                Texto: "{currentSearch}"
+                Texto: &ldquo;{currentSearch}&rdquo;
                 <button
                   onClick={() => {
                     setSearchTerm('');
@@ -433,7 +456,10 @@ function CatalogoComprasContent() {
               </Badge>
             )}
             {currentCategoria && (
-              <Badge variant="secondary" className="text-[11px] gap-1 bg-blue-50 text-blue-700 border-blue-200">
+              <Badge
+                variant="secondary"
+                className="text-[11px] gap-1 bg-blue-50 text-blue-700 border-blue-200"
+              >
                 Categoría #{currentCategoria}
                 <button
                   onClick={() => actualizarFiltro({ categoria: '' })}
@@ -445,7 +471,10 @@ function CatalogoComprasContent() {
               </Badge>
             )}
             {currentProveedor && (
-              <Badge variant="secondary" className="text-[11px] gap-1 bg-emerald-50 text-emerald-800 border-emerald-200">
+              <Badge
+                variant="secondary"
+                className="text-[11px] gap-1 bg-emerald-50 text-emerald-800 border-emerald-200"
+              >
                 Proveedor #{currentProveedor}
                 <button
                   onClick={() => actualizarFiltro({ proveedor: '' })}
@@ -457,7 +486,10 @@ function CatalogoComprasContent() {
               </Badge>
             )}
             {currentMarca && (
-              <Badge variant="secondary" className="text-[11px] gap-1 bg-amber-50 text-amber-800 border-amber-200">
+              <Badge
+                variant="secondary"
+                className="text-[11px] gap-1 bg-amber-50 text-amber-800 border-amber-200"
+              >
                 Marca #{currentMarca}
                 <button
                   onClick={() => actualizarFiltro({ marca: '' })}
@@ -501,7 +533,8 @@ function CatalogoComprasContent() {
               <Boxes className="mx-auto h-12 w-12 text-gray-300" />
               <p className="text-base font-bold text-gray-700">No se encontraron artículos</p>
               <p className="text-xs text-gray-500 max-w-sm mx-auto">
-                No hay recursos que coincidan con los filtros seleccionados o el catálogo aún está vacío.
+                No hay recursos que coincidan con los filtros seleccionados o el catálogo aún está
+                vacío.
               </p>
               <Button asChild size="sm" className="mt-2 text-xs">
                 <Link href="/compras/catalogo/nuevo">Crear Primer Recurso</Link>
@@ -574,7 +607,9 @@ function CatalogoComprasContent() {
                             {(art.marcas || art.marca) && <span>•</span>}
 
                             <span className="truncate">
-                              {art.categorias_componente?.nombre || art.tipos_componente?.nombre_componente || 'General'}
+                              {art.categorias_componente?.nombre ||
+                                art.tipos_componente?.nombre_componente ||
+                                'General'}
                             </span>
 
                             {art.categorias_componente?.ruta_jerarquica && (
@@ -592,12 +627,12 @@ function CatalogoComprasContent() {
                               art.destino_articulo === 'INSUMO_SERVICIO'
                                 ? 'bg-blue-100 text-blue-800 border-blue-200'
                                 : art.destino_articulo === 'HERRAMIENTA_ACTIVO'
-                                ? 'bg-amber-100 text-amber-800 border-amber-300'
-                                : art.destino_articulo === 'REPUESTO_CORRECTIVO'
-                                ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
-                                : art.destino_articulo === 'DOTACION_EPP'
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                : 'bg-purple-100 text-purple-800 border-purple-200'
+                                  ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                  : art.destino_articulo === 'REPUESTO_CORRECTIVO'
+                                    ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                                    : art.destino_articulo === 'DOTACION_EPP'
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                      : 'bg-purple-100 text-purple-800 border-purple-200'
                             }`}
                           >
                             {art.destino_articulo.replace('_', ' ')}
@@ -749,14 +784,16 @@ function CatalogoComprasContent() {
 
 export default function CatalogoComprasPage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-[400px] items-center justify-center p-8">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-sm font-medium">Cargando catálogo maestro de compras...</p>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[400px] items-center justify-center p-8">
+          <div className="flex flex-col items-center gap-3 text-slate-500">
+            <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+            <p className="text-sm font-medium">Cargando catálogo maestro de compras...</p>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <CatalogoComprasContent />
     </Suspense>
   );

@@ -16,6 +16,7 @@ export class AppService {
    */
   async getHealth(): Promise<{
     status: string;
+    commit?: string;
     timestamp: string;
     database: string;
     environment: string;

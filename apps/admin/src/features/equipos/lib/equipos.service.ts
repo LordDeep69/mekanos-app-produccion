@@ -455,11 +455,19 @@ export interface TrazabilidadEquipoResponse {
       id_informe: number;
       numero_informe: string;
       fecha_generacion: string;
-      documentos_generados?: Array<{
-        id_documento: number;
-        url_documento: string;
-        tipo_documento: string;
-      }>;
+      documentos_generados?:
+        | {
+            id_documento: number;
+            ruta_archivo?: string;
+            url_documento?: string;
+            tipo_documento: string;
+          }
+        | Array<{
+            id_documento: number;
+            ruta_archivo?: string;
+            url_documento?: string;
+            tipo_documento: string;
+          }>;
     }>;
   }>;
 }

@@ -3,13 +3,15 @@
  * TEST E2E REAL - MEKANOS S.A.S - FASE 3
  * ============================================================================
  * Script de prueba funcional con datos reales de Supabase
- * 
+ *
  * Ejecutar con: npx ts-node src/testing/test-fase3-real.ts
  * ============================================================================
  */
 
 import { PrismaClient } from '@prisma/client';
+import * as fs from 'fs';
 import * as nodemailer from 'nodemailer';
+import * as path from 'path';
 import * as puppeteer from 'puppeteer';
 
 // Configuración
@@ -20,15 +22,15 @@ const SMTP_CONFIG = {
   secure: false,
   auth: {
     user: 'mekanossas4@gmail.com',
-    pass: 'jvsd znpw hsfv jgmy'
-  }
+    pass: 'jvsd znpw hsfv jgmy',
+  },
 };
 
 const prisma = new PrismaClient();
 
 async function testSMTPConnection(): Promise<boolean> {
   console.log('\n📧 TEST 1: Verificando conexión SMTP...');
-  
+
   try {
     const transporter = nodemailer.createTransport(SMTP_CONFIG);
     await transporter.verify();
@@ -42,20 +44,20 @@ async function testSMTPConnection(): Promise<boolean> {
 
 async function testDatabaseConnection(): Promise<boolean> {
   console.log('\n🗄️ TEST 2: Verificando conexión a Supabase...');
-  
+
   try {
     const estados = await prisma.estados_orden.findMany();
     console.log(`   ✅ Conexión OK - ${estados.length} estados de orden encontrados`);
-    
+
     const clientes = await prisma.clientes.findMany({ take: 3 });
     console.log(`   ✅ ${clientes.length} clientes encontrados`);
-    
+
     const equipos = await prisma.equipos.findMany({ take: 3 });
     console.log(`   ✅ ${equipos.length} equipos encontrados`);
-    
+
     const ordenes = await prisma.ordenes_servicio.findMany({ take: 3 });
     console.log(`   ✅ ${ordenes.length} órdenes de servicio encontradas`);
-    
+
     return true;
   } catch (error) {
     console.error('   ❌ Error DB:', error);
@@ -65,36 +67,46 @@ async function testDatabaseConnection(): Promise<boolean> {
 
 async function testPDFGeneration(): Promise<Buffer | null> {
   console.log('\n📄 TEST 3: Generando PDF de prueba...');
-  
+
   try {
     // ✅ FIX 09-JUN-2026: Resolución cross-platform de Chrome
-    const path = require('path');
-    const fs = require('fs');
     const isWindows = process.platform === 'win32';
-    
+
     // Resolver Chrome executable
     let execPath: string | undefined;
     try {
       const defaultPath = puppeteer.executablePath();
       if (defaultPath && fs.existsSync(defaultPath)) execPath = defaultPath;
-    } catch { /* ignore */ }
-    
+    } catch {
+      /* ignore */
+    }
+
     if (!execPath) {
       const cacheDir = process.env.PUPPETEER_CACHE_DIR;
       if (cacheDir && fs.existsSync(path.join(cacheDir, 'chrome'))) {
-        const versions = fs.readdirSync(path.join(cacheDir, 'chrome'))
+        const versions = fs
+          .readdirSync(path.join(cacheDir, 'chrome'))
           .filter((d: string) => fs.statSync(path.join(cacheDir, 'chrome', d)).isDirectory())
-          .sort().reverse();
+          .sort()
+          .reverse();
         for (const v of versions) {
           const candidate = isWindows
             ? path.join(cacheDir, 'chrome', v, 'chrome-win64', 'chrome.exe')
             : path.join(cacheDir, 'chrome', v, 'chrome-linux64', 'chrome');
-          if (fs.existsSync(candidate)) { execPath = candidate; break; }
+          if (fs.existsSync(candidate)) {
+            execPath = candidate;
+            break;
+          }
         }
       }
     }
 
-    const baseArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'];
+    const baseArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+    ];
     const linuxArgs = isWindows ? [] : ['--single-process', '--no-zygote'];
 
     const browser = await puppeteer.launch({
@@ -102,9 +114,9 @@ async function testPDFGeneration(): Promise<Buffer | null> {
       ...(execPath ? { executablePath: execPath } : {}),
       args: [...baseArgs, ...linuxArgs],
     });
-    
+
     const page = await browser.newPage();
-    
+
     // HTML de prueba profesional MEKANOS
     const html = `
     <!DOCTYPE html>
@@ -173,17 +185,17 @@ async function testPDFGeneration(): Promise<Buffer | null> {
     </body>
     </html>
     `;
-    
+
     await page.setContent(html, { waitUntil: 'networkidle0' });
-    
+
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
       margin: { top: '0', right: '0', bottom: '0', left: '0' },
     });
-    
+
     await browser.close();
-    
+
     console.log(`   ✅ PDF generado exitosamente (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
     return Buffer.from(pdfBuffer);
   } catch (error) {
@@ -195,10 +207,10 @@ async function testPDFGeneration(): Promise<Buffer | null> {
 async function testEmailWithPDF(pdfBuffer: Buffer): Promise<boolean> {
   console.log('\n📨 TEST 4: Enviando email con PDF adjunto...');
   console.log(`   📧 Destino: ${TEST_EMAIL_DESTINO}`);
-  
+
   try {
     const transporter = nodemailer.createTransport(SMTP_CONFIG);
-    
+
     const mailOptions = {
       from: '"MEKANOS S.A.S" <mekanossas4@gmail.com>',
       to: TEST_EMAIL_DESTINO,
@@ -248,7 +260,7 @@ async function testEmailWithPDF(pdfBuffer: Buffer): Promise<boolean> {
         },
       ],
     };
-    
+
     const info = await transporter.sendMail(mailOptions);
     console.log(`   ✅ Email enviado exitosamente`);
     console.log(`   📬 Message ID: ${info.messageId}`);
@@ -261,31 +273,33 @@ async function testEmailWithPDF(pdfBuffer: Buffer): Promise<boolean> {
 
 async function testOrdenServicio(): Promise<boolean> {
   console.log('\n📝 TEST 5: Verificando datos de órdenes de servicio...');
-  
+
   try {
     // Obtener una orden existente con todos sus datos
     const orden = await prisma.ordenes_servicio.findFirst({
       include: {
         clientes: {
           include: {
-            personas: true
-          }
+            persona: true,
+          },
         },
         equipos: true,
         tipos_servicio: true,
         estados_orden: true,
-        empleados: {
+        empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
           include: {
-            personas: true
-          }
-        }
-      }
+            persona: true,
+          },
+        },
+      },
     });
-    
+
     if (orden) {
       console.log(`   ✅ Orden encontrada: ${orden.numero_orden}`);
       console.log(`   📊 Estado: ${orden.estados_orden?.nombre_estado || 'N/A'}`);
-      console.log(`   👤 Cliente: ${orden.clientes?.personas?.nombres || 'N/A'}`);
+      console.log(
+        `   👤 Cliente: ${orden.clientes?.persona?.razon_social || orden.clientes?.persona?.primer_nombre || 'N/A'}`,
+      );
       console.log(`   🔧 Equipo: ${orden.equipos?.nombre_equipo || 'N/A'}`);
       return true;
     } else {
@@ -306,7 +320,7 @@ async function runAllTests(): Promise<void> {
   console.log(`📅 Fecha: ${new Date().toLocaleString('es-CO')}`);
   console.log(`📧 Email destino: ${TEST_EMAIL_DESTINO}`);
   console.log('='.repeat(70));
-  
+
   const results = {
     smtp: false,
     database: false,
@@ -314,25 +328,25 @@ async function runAllTests(): Promise<void> {
     email: false,
     ordenes: false,
   };
-  
+
   // Test 1: SMTP
   results.smtp = await testSMTPConnection();
-  
+
   // Test 2: Database
   results.database = await testDatabaseConnection();
-  
+
   // Test 3: PDF Generation
   const pdfBuffer = await testPDFGeneration();
   results.pdf = pdfBuffer !== null;
-  
+
   // Test 4: Email con PDF
   if (pdfBuffer) {
     results.email = await testEmailWithPDF(pdfBuffer);
   }
-  
+
   // Test 5: Órdenes de servicio
   results.ordenes = await testOrdenServicio();
-  
+
   // Resumen
   console.log('\n');
   console.log('='.repeat(70));
@@ -344,8 +358,8 @@ async function runAllTests(): Promise<void> {
   console.log(`   Envío Email:       ${results.email ? '✅ PASS' : '❌ FAIL'}`);
   console.log(`   Órdenes Servicio:  ${results.ordenes ? '✅ PASS' : '❌ FAIL'}`);
   console.log('='.repeat(70));
-  
-  const allPassed = Object.values(results).every(r => r);
+
+  const allPassed = Object.values(results).every((r) => r);
   if (allPassed) {
     console.log('🎉 ¡TODOS LOS TESTS PASARON EXITOSAMENTE!');
     console.log(`📧 Revisa tu bandeja de entrada: ${TEST_EMAIL_DESTINO}`);
@@ -354,7 +368,7 @@ async function runAllTests(): Promise<void> {
   }
   console.log('='.repeat(70));
   console.log('\n');
-  
+
   await prisma.$disconnect();
 }
 

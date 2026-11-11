@@ -13,7 +13,7 @@ export class FinalizarOrdenHandler implements ICommandHandler<FinalizarOrdenComm
     private readonly ordenRepository: IOrdenServicioRepository,
     private readonly pdfService: PdfService,
     private readonly r2Storage: R2StorageService,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
   ) {}
 
   async execute(command: FinalizarOrdenCommand): Promise<OrdenServicioEntity> {
@@ -30,10 +30,9 @@ export class FinalizarOrdenHandler implements ICommandHandler<FinalizarOrdenComm
 
     // ========== GENERACIÓN AUTOMÁTICA PDF + EMAIL ==========
     // Non-blocking: Si falla, la orden ya está finalizada
-    this.generateAndSendPdfAsync(ordenId, ordenGuardada.toObject().numeroOrden)
-      .catch(error => {
-        console.error(`❌ Error generando PDF/Email para orden ${ordenId}:`, error);
-      });
+    this.generateAndSendPdfAsync(ordenId, ordenGuardada.toObject().numeroOrden).catch((error) => {
+      console.error(`❌ Error generando PDF/Email para orden ${ordenId}:`, error);
+    });
 
     return ordenGuardada;
   }
@@ -65,10 +64,12 @@ export class FinalizarOrdenHandler implements ICommandHandler<FinalizarOrdenComm
         fechaProgramada: ordenObj.fechaProgramada,
         fechaInicio: ordenObj.fechaInicio,
         fechaFinalizacion: ordenObj.fechaFin,
-        tecnicoAsignado: ordenObj.tecnicoAsignadoId ? String(ordenObj.tecnicoAsignadoId) : undefined,
+        tecnicoAsignado: ordenObj.tecnicoAsignadoId
+          ? String(ordenObj.tecnicoAsignadoId)
+          : undefined,
         descripcion: ordenObj.descripcion,
         observaciones: ordenObj.observaciones,
-        firmaDigital: ordenObj.firmaClienteUrl
+        firmaDigital: ordenObj.firmaClienteUrl,
       };
 
       const pdfBuffer = await this.pdfService.generateOrdenServicioPdf(pdfData);
@@ -88,20 +89,15 @@ export class FinalizarOrdenHandler implements ICommandHandler<FinalizarOrdenComm
       // 3. Enviar email al cliente (solo si Resend está configurado)
       // TODO: Obtener email del cliente desde ClienteRepository
       const clienteEmail = process.env.TEST_CLIENT_EMAIL || 'cliente@example.com';
-      
-      if (this.emailService.isConfigured()) {
-        await this.emailService.sendOrdenCompletadaEmail(
-          numeroOrden,
-          clienteEmail,
-          pdfUrl
-        );
+
+      if (this.emailService.isEmailConfigured()) {
+        await this.emailService.sendOrdenCompletadaEmail(numeroOrden, clienteEmail, pdfUrl);
         console.log(`✅ Email enviado a ${clienteEmail}`);
       } else {
         console.log(`⚠️ Resend no configurado - Email no enviado a ${clienteEmail}`);
       }
 
       console.log(`🎉 Proceso PDF/Email completado para orden ${numeroOrden}`);
-
     } catch (error) {
       // Log error pero no propagar (orden ya está finalizada)
       console.error(`❌ Error en proceso PDF/Email:`, error);

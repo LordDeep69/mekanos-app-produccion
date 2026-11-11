@@ -33,7 +33,7 @@ export class GetAprobacionesPendientesHandler
           fecha_solicitud: 'asc', // Más antiguas primero (FIFO)
         },
         include: {
-          cotizacion: {
+          cotizaciones: {
             select: {
               id_cotizacion: true,
               numero_cotizacion: true,

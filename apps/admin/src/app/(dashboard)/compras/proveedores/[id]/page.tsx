@@ -3,7 +3,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Ficha 360° del Proveedor Comercial (/compras/proveedores/[id])
- * 
+ *
  * Interfaz Enterprise para la Gestión Integral de Fuentes de Suministro:
  * 1. Cabecera Institucional con Datos Fiscales, Contacto Rápido y Acciones
  * 2. 4 KPI Cards de Gestión (Repuestos, Órdenes, Monto Comprado, Calidad)
@@ -13,25 +13,21 @@
  *    - Pestaña 3: Información Fiscal, Contacto y Logística
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
   Building2,
-  Calendar,
   Check,
-  CheckCircle2,
   Clock,
-  Copy,
   CreditCard,
   DollarSign,
   ExternalLink,
   Eye,
   FileText,
   Globe,
-  Info,
   Layers,
   Mail,
   MapPin,
@@ -54,11 +50,14 @@ import {
 } from 'lucide-react';
 
 import { comprasService } from '@/lib/api/compras.service';
-import { ModalHomologacionSourcing } from '@/components/compras/modal-homologacion-sourcing';
+import { getApiErrorMessage } from '@/lib/utils';
+import {
+  ModalHomologacionSourcing,
+  type ModalHomologacionSourcingProps,
+} from '@/components/compras/modal-homologacion-sourcing';
 import {
   ArticuloHomologadoProveedor,
-  ArticuloMaestro,
-  HomologarArticuloPayload,
+  OrdenCompraProveedorItem,
   ProveedorCompleto,
   ProveedorKPIs,
   getNombreProveedor,
@@ -70,7 +69,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -139,7 +137,7 @@ const extractWebUrl = (prov?: ProveedorCompleto | null): string => {
   const obs = prov.observaciones || '';
   const match = obs.match(/Web:\s*([^|]+)/i);
   if (match) return match[1].trim();
-  return (prov.persona as any)?.sitio_web || '';
+  return prov.persona?.sitio_web || '';
 };
 
 const extractLogistica = (prov?: ProveedorCompleto | null): string => {
@@ -187,7 +185,9 @@ export default function FichaProveedor360Page() {
   // Sincronización de pestaña activa mediante URL (?tab=catalogo | ordenes | fiscal)
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState<string>(
-    tabParam === 'ordenes' || tabParam === 'fiscal' || tabParam === 'catalogo' ? tabParam : 'catalogo'
+    tabParam === 'ordenes' || tabParam === 'fiscal' || tabParam === 'catalogo'
+      ? tabParam
+      : 'catalogo',
   );
 
   useEffect(() => {
@@ -205,8 +205,10 @@ export default function FichaProveedor360Page() {
     monto_total_comprado: 0,
     cumplimiento_calidad: 98.5,
   });
-  const [articulosHomologados, setArticulosHomologados] = useState<ArticuloHomologadoProveedor[]>([]);
-  const [ordenesCompra, setOrdenesCompra] = useState<any[]>([]);
+  const [articulosHomologados, setArticulosHomologados] = useState<ArticuloHomologadoProveedor[]>(
+    [],
+  );
+  const [ordenesCompra, setOrdenesCompra] = useState<OrdenCompraProveedorItem[]>([]);
 
   // Estados de carga
   const [loading, setLoading] = useState(true);
@@ -217,12 +219,15 @@ export default function FichaProveedor360Page() {
 
   // Modales y confirmaciones
   const [dialogDesvincularOpen, setDialogDesvincularOpen] = useState(false);
-  const [articuloADesvincular, setArticuloADesvincular] = useState<ArticuloHomologadoProveedor | null>(null);
+  const [articuloADesvincular, setArticuloADesvincular] =
+    useState<ArticuloHomologadoProveedor | null>(null);
 
   // Modal Atómico Unificado de Homologación Sourcing
   const [modalHomologacionOpen, setModalHomologacionOpen] = useState(false);
   const [modalHomologacionModo, setModalHomologacionModo] = useState<'crear' | 'editar'>('crear');
-  const [datosEdicionHomologacion, setDatosEdicionHomologacion] = useState<any>(null);
+  const [datosEdicionHomologacion, setDatosEdicionHomologacion] = useState<
+    ModalHomologacionSourcingProps['datosIniciales'] | null
+  >(null);
 
   // Modal Editar Proveedor Datos Generales (2 Columnas Enterprise)
   const [modalEditarProveedorOpen, setModalEditarProveedorOpen] = useState(false);
@@ -251,34 +256,37 @@ export default function FichaProveedor360Page() {
   });
 
   // Cargar datos consolidados
-  const cargarDatos = async (showToast = false) => {
-    if (!idProveedor || isNaN(idProveedor)) return;
-    try {
-      if (showToast) setRefreshing(true);
-      const [fichaRes, articulosRes, ordenesRes] = await Promise.all([
-        comprasService.getProveedorFicha360(idProveedor),
-        comprasService.getArticulosProveedor(idProveedor),
-        comprasService.getOrdenesProveedor(idProveedor),
-      ]);
+  const cargarDatos = useCallback(
+    async (showToast = false) => {
+      if (!idProveedor || isNaN(idProveedor)) return;
+      try {
+        if (showToast) setRefreshing(true);
+        const [fichaRes, articulosRes, ordenesRes] = await Promise.all([
+          comprasService.getProveedorFicha360(idProveedor),
+          comprasService.getArticulosProveedor(idProveedor),
+          comprasService.getOrdenesProveedor(idProveedor),
+        ]);
 
-      setProveedor(fichaRes.proveedor);
-      setKpis(fichaRes.kpis);
-      setArticulosHomologados(articulosRes || []);
-      setOrdenesCompra(ordenesRes || []);
+        setProveedor(fichaRes.proveedor);
+        setKpis(fichaRes.kpis);
+        setArticulosHomologados(articulosRes || []);
+        setOrdenesCompra(ordenesRes || []);
 
-      if (showToast) toast.success('Ficha 360° actualizada');
-    } catch (e) {
-      console.error('Error al cargar datos del proveedor:', e);
-      toast.error('No se pudo cargar la información de la Ficha 360°');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+        if (showToast) toast.success('Ficha 360° actualizada');
+      } catch (e) {
+        console.error('Error al cargar datos del proveedor:', e);
+        toast.error('No se pudo cargar la información de la Ficha 360°');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [idProveedor],
+  );
 
   useEffect(() => {
     cargarDatos();
-  }, [idProveedor]);
+  }, [cargarDatos]);
 
   // Cargar artículos del catálogo maestro para el selector de homologación
   // Artículos homologados filtrados por búsqueda
@@ -328,7 +336,7 @@ export default function FichaProveedor360Page() {
       id_proveedor: idProveedor,
       nombre_segun_proveedor: art.nombre_segun_proveedor || comp?.descripcion_corta || '',
       referencia_proveedor: art.referencia_proveedor || '',
-      marca_ofrecida: art.marca_ofrecida || comp?.marcas?.nombre || (comp as any)?.marca || '',
+      marca_ofrecida: art.marca_ofrecida || comp?.marcas?.nombre || comp?.marca || '',
       costo_actual: Number(art.costo_actual) || 0,
       costo_anterior: Number(art.costo_actual) || 0,
       tiempo_entrega_dias: art.tiempo_entrega_dias || 1,
@@ -337,7 +345,7 @@ export default function FichaProveedor360Page() {
       es_proveedor_preferido: Boolean(art.es_proveedor_preferido),
       observaciones: art.notas || '',
       moneda: art.moneda || 'COP',
-      nombre_articulo: comp?.descripcion_corta,
+      nombre_articulo: comp?.descripcion_corta ?? undefined,
       codigo_articulo: comp?.codigo_interno || `REF-${art.id_componente}`,
       ref_oem_articulo: comp?.referencia_fabricante || undefined,
       nombre_proveedor: nombreProv,
@@ -462,10 +470,9 @@ export default function FichaProveedor360Page() {
       toast.success('Datos del proveedor actualizados exitosamente.');
       setModalEditarProveedorOpen(false);
       cargarDatos(true);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Error al actualizar proveedor:', e);
-      const msg = e?.response?.data?.message || 'Error al actualizar el proveedor.';
-      toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
+      toast.error(getApiErrorMessage(e, 'Error al actualizar el proveedor.'));
     } finally {
       setIsSubmittingEditProveedor(false);
     }
@@ -600,13 +607,14 @@ export default function FichaProveedor360Page() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500">
-                  <span className="font-mono font-medium text-slate-700">
-                    NIT: {nit}
-                  </span>
+                  <span className="font-mono font-medium text-slate-700">NIT: {nit}</span>
                   {proveedor.persona?.representante_legal && (
                     <span className="flex items-center gap-1">
                       <User className="h-3.5 w-3.5 text-slate-400" />
-                      Asesor: <strong className="text-slate-700">{proveedor.persona.representante_legal}</strong>
+                      Asesor:{' '}
+                      <strong className="text-slate-700">
+                        {proveedor.persona.representante_legal}
+                      </strong>
                     </span>
                   )}
                   {proveedor.responsable_iva ? (
@@ -714,9 +722,7 @@ export default function FichaProveedor360Page() {
                 <p className="mt-1 text-2xl font-black text-slate-900">
                   {kpis.total_articulos_homologados}
                 </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  En matriz de abastecimiento
-                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">En matriz de abastecimiento</p>
               </div>
               <div className="h-12 w-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                 <Package className="h-6 w-6" />
@@ -736,9 +742,7 @@ export default function FichaProveedor360Page() {
                 <p className="mt-1 text-2xl font-black text-slate-900">
                   {kpis.total_ordenes_compra}
                 </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Histórico de compras
-                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Histórico de compras</p>
               </div>
               <div className="h-12 w-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                 <FileText className="h-6 w-6" />
@@ -761,7 +765,7 @@ export default function FichaProveedor360Page() {
                 <p className="text-[11px] text-slate-500 mt-0.5">
                   {kpis.monto_en_borrador && kpis.monto_en_borrador > 0
                     ? `En borrador: ${formatMonedaCOP(kpis.monto_en_borrador)}`
-                    : "Órdenes emitidas y en tránsito"}
+                    : 'Órdenes emitidas y en tránsito'}
                 </p>
               </div>
               <div className="h-12 w-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
@@ -782,12 +786,14 @@ export default function FichaProveedor360Page() {
                 <p className="mt-1 text-2xl font-black text-slate-900">
                   {kpis.cumplimiento_calidad !== null && kpis.cumplimiento_calidad !== undefined
                     ? `${kpis.cumplimiento_calidad}%`
-                    : "Sin evaluar"}
+                    : 'Sin evaluar'}
                 </p>
-                <p className={`text-[11px] font-medium mt-0.5 ${kpis.cumplimiento_calidad !== null && kpis.cumplimiento_calidad !== undefined ? "text-emerald-700" : "text-slate-400"}`}>
+                <p
+                  className={`text-[11px] font-medium mt-0.5 ${kpis.cumplimiento_calidad !== null && kpis.cumplimiento_calidad !== undefined ? 'text-emerald-700' : 'text-slate-400'}`}
+                >
                   {kpis.cumplimiento_calidad !== null && kpis.cumplimiento_calidad !== undefined
-                    ? "Conformidad y puntualidad"
-                    : "Sin recepciones en muelle"}
+                    ? 'Conformidad y puntualidad'
+                    : 'Sin recepciones en muelle'}
                 </p>
               </div>
               <div className="h-12 w-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -843,7 +849,8 @@ export default function FichaProveedor360Page() {
                     Matriz de Sourcing y Repuestos Homologados
                   </CardTitle>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Artículos del catálogo maestro que suministra {nombre} con su SKU comercial y costo pactado.
+                    Artículos del catálogo maestro que suministra {nombre} con su SKU comercial y
+                    costo pactado.
                   </p>
                 </div>
 
@@ -918,7 +925,7 @@ export default function FichaProveedor360Page() {
                         const skuMekanos = comp?.codigo_interno || `REF-${art.id_componente}`;
                         const descripcion = comp?.descripcion_corta || 'Artículo sin descripción';
                         const refFab = comp?.referencia_fabricante;
-                        const marca = comp?.marcas?.nombre || (comp as any)?.marca;
+                        const marca = comp?.marcas?.nombre || comp?.marca;
                         const costo = Number(art.costo_actual) || 0;
 
                         return (
@@ -945,11 +952,15 @@ export default function FichaProveedor360Page() {
 
                             {/* Descripción & Marca */}
                             <td className="px-4 py-3.5 max-w-[280px]">
-                              <p className="font-semibold text-slate-800 text-xs truncate" title={descripcion}>
+                              <p
+                                className="font-semibold text-slate-800 text-xs truncate"
+                                title={descripcion}
+                              >
                                 {descripcion}
                               </p>
                               {art.nombre_segun_proveedor &&
-                                art.nombre_segun_proveedor.trim().toLowerCase() !== descripcion.trim().toLowerCase() && (
+                                art.nombre_segun_proveedor.trim().toLowerCase() !==
+                                  descripcion.trim().toLowerCase() && (
                                   <p
                                     className="text-[11px] text-blue-700 font-medium truncate mt-0.5 flex items-center gap-1"
                                     title={art.nombre_segun_proveedor}
@@ -1001,12 +1012,16 @@ export default function FichaProveedor360Page() {
                               <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
                                 {art.marca_ofrecida && (
                                   <span>
-                                    Marca: <strong className="text-slate-600">{art.marca_ofrecida}</strong>
+                                    Marca:{' '}
+                                    <strong className="text-slate-600">{art.marca_ofrecida}</strong>
                                   </span>
                                 )}
                                 {Number(art.cantidad_minima_compra) > 1 && (
                                   <span>
-                                    MOQ: <strong className="text-slate-600">{art.cantidad_minima_compra}</strong>
+                                    MOQ:{' '}
+                                    <strong className="text-slate-600">
+                                      {art.cantidad_minima_compra}
+                                    </strong>
                                   </span>
                                 )}
                               </div>
@@ -1085,7 +1100,8 @@ export default function FichaProveedor360Page() {
                     Órdenes de Compra Emitidas a {nombre}
                   </CardTitle>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Historial de abastecimiento comercial, estado de muelle y totales transaccionados.
+                    Historial de abastecimiento comercial, estado de muelle y totales
+                    transaccionados.
                   </p>
                 </div>
 
@@ -1123,10 +1139,13 @@ export default function FichaProveedor360Page() {
                             Aún no se han emitido órdenes de compra para este proveedor
                           </p>
                           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                            Emite una orden de compra formal para registrar repuestos, precios y fechas de entrega pactadas.
+                            Emite una orden de compra formal para registrar repuestos, precios y
+                            fechas de entrega pactadas.
                           </p>
                           <div className="mt-4">
-                            <Link href={`/compras/ordenes/nueva?proveedorId=${proveedor.id_proveedor}`}>
+                            <Link
+                              href={`/compras/ordenes/nueva?proveedorId=${proveedor.id_proveedor}`}
+                            >
                               <Button
                                 size="sm"
                                 className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -1150,12 +1169,20 @@ export default function FichaProveedor360Page() {
                           : '--';
                         const estado = (oc.estado as string) || 'PENDIENTE';
                         const itemsCount = oc.ordenes_compra_detalle?.length || 0;
-                        const total = oc.ordenes_compra_detalle?.reduce((acc: number, d: any) => {
-                          return acc + (Number(d.subtotal) || Number(d.cantidad) * Number(d.precio_unitario) || 0);
+                        const total = (oc.ordenes_compra_detalle ?? []).reduce((acc, d) => {
+                          return (
+                            acc +
+                            (Number(d.subtotal) ||
+                              Number(d.cantidad) * Number(d.precio_unitario) ||
+                              0)
+                          );
                         }, 0);
 
                         return (
-                          <tr key={oc.id_orden_compra} className="hover:bg-slate-50/80 transition-colors">
+                          <tr
+                            key={oc.id_orden_compra}
+                            className="hover:bg-slate-50/80 transition-colors"
+                          >
                             <td className="px-4 py-3.5 font-mono text-xs font-bold text-slate-900 whitespace-nowrap">
                               <Link
                                 href={`/compras/ordenes/${oc.id_orden_compra}`}
@@ -1177,10 +1204,10 @@ export default function FichaProveedor360Page() {
                                   estado === 'COMPLETADA' || estado === 'RECIBIDA'
                                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                     : estado === 'APROBADA' || estado === 'ENVIADA'
-                                    ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                    : estado === 'ANULADA'
-                                    ? 'bg-rose-50 text-rose-800 border-rose-200'
-                                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                                      ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                      : estado === 'ANULADA'
+                                        ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                        : 'bg-amber-50 text-amber-800 border-amber-200'
                                 }`}
                               >
                                 {estado}
@@ -1259,7 +1286,10 @@ export default function FichaProveedor360Page() {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-slate-400 block font-medium">Categoría Principal</span>
-                    <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 mt-0.5">
+                    <Badge
+                      variant="outline"
+                      className="text-blue-700 bg-blue-50 border-blue-200 mt-0.5"
+                    >
                       {proveedor.categoria_proveedor}
                     </Badge>
                   </div>
@@ -1305,13 +1335,17 @@ export default function FichaProveedor360Page() {
               </CardHeader>
               <CardContent className="p-4 space-y-3 text-xs">
                 <div>
-                  <span className="text-slate-400 block font-medium">Asesor Comercial / Contacto</span>
+                  <span className="text-slate-400 block font-medium">
+                    Asesor Comercial / Contacto
+                  </span>
                   <span className="font-semibold text-slate-800">
                     {proveedor.persona?.representante_legal || 'No especificado'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block font-medium">Teléfono / WhatsApp Compras</span>
+                  <span className="text-slate-400 block font-medium">
+                    Teléfono / WhatsApp Compras
+                  </span>
                   {tel ? (
                     <a
                       href={`tel:${tel}`}
@@ -1339,7 +1373,9 @@ export default function FichaProveedor360Page() {
                   )}
                 </div>
                 <div>
-                  <span className="text-slate-400 block font-medium">Correo Facturación Electrónica</span>
+                  <span className="text-slate-400 block font-medium">
+                    Correo Facturación Electrónica
+                  </span>
                   {extractEmailFacturacion(proveedor) ? (
                     <span className="font-medium text-slate-700">
                       {extractEmailFacturacion(proveedor)}
@@ -1349,7 +1385,9 @@ export default function FichaProveedor360Page() {
                   )}
                 </div>
                 <div className="pt-2 border-t border-slate-100">
-                  <span className="text-slate-400 block font-medium">Catálogo Digital / Portal Web</span>
+                  <span className="text-slate-400 block font-medium">
+                    Catálogo Digital / Portal Web
+                  </span>
                   {webUrl ? (
                     <a
                       href={webUrl.startsWith('http') ? webUrl : `https://${webUrl}`}
@@ -1396,7 +1434,9 @@ export default function FichaProveedor360Page() {
                   </div>
                 </div>
                 <div>
-                  <span className="text-slate-400 block font-medium">Dirección Bodega / Despacho</span>
+                  <span className="text-slate-400 block font-medium">
+                    Dirección Bodega / Despacho
+                  </span>
                   <span className="font-medium text-slate-700">
                     {proveedor.persona?.direccion_principal || 'No especificada'}
                   </span>
@@ -1418,10 +1458,10 @@ export default function FichaProveedor360Page() {
                 )}
                 {extractLogistica(proveedor) && (
                   <div className="pt-2 border-t border-slate-100">
-                    <span className="text-slate-400 block font-medium">Observaciones de Muelle</span>
-                    <p className="text-slate-600 mt-0.5 italic">
-                      {extractLogistica(proveedor)}
-                    </p>
+                    <span className="text-slate-400 block font-medium">
+                      Observaciones de Muelle
+                    </span>
+                    <p className="text-slate-600 mt-0.5 italic">{extractLogistica(proveedor)}</p>
                   </div>
                 )}
               </CardContent>
@@ -1444,7 +1484,7 @@ export default function FichaProveedor360Page() {
             nombre: nombre,
             nit: nit,
           }}
-          datosIniciales={datosEdicionHomologacion}
+          datosIniciales={datosEdicionHomologacion ?? undefined}
           onSuccess={() => cargarDatos(true)}
         />
       )}
@@ -1467,7 +1507,8 @@ export default function FichaProveedor360Page() {
             </DialogDescription>
           </DialogHeader>
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800">
-            El ítem no se eliminará del Catálogo Maestro, pero ya no aparecerá como fuente de suministro asociada a este proveedor.
+            El ítem no se eliminará del Catálogo Maestro, pero ya no aparecerá como fuente de
+            suministro asociada a este proveedor.
           </div>
           <DialogFooter className="gap-2">
             <Button
@@ -1504,7 +1545,8 @@ export default function FichaProveedor360Page() {
                     Editar Proveedor Comercial
                   </DialogTitle>
                   <DialogDescription className="text-xs text-slate-500">
-                    Actualización integral de datos fiscales, comerciales, rubros y logística de {nombre}.
+                    Actualización integral de datos fiscales, comerciales, rubros y logística de{' '}
+                    {nombre}.
                   </DialogDescription>
                 </div>
               </div>
@@ -1523,7 +1565,8 @@ export default function FichaProveedor360Page() {
                 {/* Razón Social */}
                 <div className="space-y-1.5">
                   <Label htmlFor="edit_prov_razon" className="text-xs font-semibold text-slate-700">
-                    Razón Social o Nombre Comercial <span className="text-blue-600 font-bold">*</span>
+                    Razón Social o Nombre Comercial{' '}
+                    <span className="text-blue-600 font-bold">*</span>
                   </Label>
                   <Input
                     id="edit_prov_razon"
@@ -1558,14 +1601,20 @@ export default function FichaProveedor360Page() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="edit_prov_tipo" className="text-xs font-semibold text-slate-700">
+                    <Label
+                      htmlFor="edit_prov_tipo"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       Tipo Proveedor
                     </Label>
                     <select
                       id="edit_prov_tipo"
                       value={editProveedorData.tipo_proveedor}
                       onChange={(e) =>
-                        setEditProveedorData((prev) => ({ ...prev, tipo_proveedor: e.target.value }))
+                        setEditProveedorData((prev) => ({
+                          ...prev,
+                          tipo_proveedor: e.target.value,
+                        }))
                       }
                       className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
                     >
@@ -1709,7 +1758,10 @@ export default function FichaProveedor360Page() {
                 {/* Clasificación Secundaria / Tags */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="edit_prov_tags" className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                    <Label
+                      htmlFor="edit_prov_tags"
+                      className="text-xs font-semibold text-slate-700 flex items-center gap-1"
+                    >
                       <Tag className="h-3 w-3 text-slate-500" />
                       Etiquetas de Clasificación Secundarias
                     </Label>
@@ -1742,7 +1794,10 @@ export default function FichaProveedor360Page() {
                 {/* Asesor y Teléfono */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div className="space-y-1.5">
-                    <Label htmlFor="edit_prov_contacto" className="text-xs font-semibold text-slate-700">
+                    <Label
+                      htmlFor="edit_prov_contacto"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       Asesor Comercial / Contacto
                     </Label>
                     <Input
@@ -1784,7 +1839,10 @@ export default function FichaProveedor360Page() {
                 {/* Correos */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div className="space-y-1.5">
-                    <Label htmlFor="edit_prov_email" className="text-xs font-semibold text-slate-700">
+                    <Label
+                      htmlFor="edit_prov_email"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       Correo Pedidos / Compras
                     </Label>
                     <div className="relative">
@@ -1806,7 +1864,10 @@ export default function FichaProveedor360Page() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="edit_prov_email_fact" className="text-xs font-semibold text-slate-700">
+                    <Label
+                      htmlFor="edit_prov_email_fact"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       Correo Facturación Electrónica
                     </Label>
                     <div className="relative">
@@ -1875,7 +1936,10 @@ export default function FichaProveedor360Page() {
                 {/* Plazo de Pago y Tiempo de Entrega */}
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
                   <div className="space-y-1.5 sm:col-span-7">
-                    <Label htmlFor="edit_prov_plazo" className="text-xs font-semibold text-slate-700">
+                    <Label
+                      htmlFor="edit_prov_plazo"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       Plazo de Pago / Crédito
                     </Label>
                     <div className="relative">
@@ -1904,7 +1968,10 @@ export default function FichaProveedor360Page() {
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-5">
-                    <Label htmlFor="edit_prov_dias" className="text-xs font-semibold text-slate-700">
+                    <Label
+                      htmlFor="edit_prov_dias"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       Tiempo de Entrega (Días)
                     </Label>
                     <Input
@@ -1927,10 +1994,15 @@ export default function FichaProveedor360Page() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="edit_prov_iva" className="text-xs font-bold text-slate-800 cursor-pointer">
+                      <Label
+                        htmlFor="edit_prov_iva"
+                        className="text-xs font-bold text-slate-800 cursor-pointer"
+                      >
                         Responsable de IVA
                       </Label>
-                      <p className="text-[10px] text-slate-500">Aplica impuestos en órdenes de compra.</p>
+                      <p className="text-[10px] text-slate-500">
+                        Aplica impuestos en órdenes de compra.
+                      </p>
                     </div>
                     <Switch
                       id="edit_prov_iva"
@@ -1943,10 +2015,15 @@ export default function FichaProveedor360Page() {
 
                   <div className="flex items-center justify-between border-t border-slate-200/60 pt-2.5">
                     <div>
-                      <Label htmlFor="edit_prov_entregas" className="text-xs font-bold text-slate-800 cursor-pointer">
+                      <Label
+                        htmlFor="edit_prov_entregas"
+                        className="text-xs font-bold text-slate-800 cursor-pointer"
+                      >
                         Entrega a Domicilio / Sede Propia
                       </Label>
-                      <p className="text-[10px] text-slate-500">Entrega directa en taller o sede propia de la empresa.</p>
+                      <p className="text-[10px] text-slate-500">
+                        Entrega directa en taller o sede propia de la empresa.
+                      </p>
                     </div>
                     <Switch
                       id="edit_prov_entregas"
@@ -1959,10 +2036,15 @@ export default function FichaProveedor360Page() {
 
                   <div className="flex items-center justify-between border-t border-slate-200/60 pt-2.5">
                     <div>
-                      <Label htmlFor="edit_prov_activo" className="text-xs font-bold text-slate-800 cursor-pointer">
+                      <Label
+                        htmlFor="edit_prov_activo"
+                        className="text-xs font-bold text-slate-800 cursor-pointer"
+                      >
                         Proveedor Activo
                       </Label>
-                      <p className="text-[10px] text-slate-500">Habilitado para abastecimiento y requisiciones.</p>
+                      <p className="text-[10px] text-slate-500">
+                        Habilitado para abastecimiento y requisiciones.
+                      </p>
                     </div>
                     <Switch
                       id="edit_prov_activo"

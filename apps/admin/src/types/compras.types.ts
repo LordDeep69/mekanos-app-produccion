@@ -132,6 +132,7 @@ export interface PersonaProveedor {
   id_persona: number;
   razon_social?: string | null;
   nombre_comercial?: string | null;
+  nombre_completo?: string | null;
   numero_identificacion?: string | null;
   telefono_principal?: string | null;
   email_principal?: string | null;
@@ -214,7 +215,7 @@ export interface ArticuloMaestro {
   id_categoria?: number | null;
   descripcion_corta?: string | null;
   descripcion_detallada?: string | null;
-  especificaciones_tecnicas?: Record<string, any> | null;
+  especificaciones_tecnicas?: Record<string, unknown> | null;
   notas_instalacion?: string | null;
   tipo_comercial?: string | null;
   destino_articulo: DestinoArticulo;
@@ -223,6 +224,7 @@ export interface ArticuloMaestro {
   es_facturable: boolean;
   requiere_serializacion: boolean;
   es_activo_fijo: boolean;
+  observaciones?: string | null;
   numero_serie_activo?: string | null;
   placa_inventario?: string | null;
   frecuencia_mantenimiento_meses?: number | null;
@@ -244,6 +246,24 @@ export interface ArticuloMaestro {
   categorias_componente?: CategoriaNodo | null;
   articulos_proveedores?: ArticuloProveedor[];
   historial_costos_compra?: HistorialCostoCompra[];
+  lotes_componentes?: LoteComponenteItem[];
+}
+
+export interface LoteComponenteItem {
+  id_lote: number;
+  codigo_lote: string;
+  cantidad_actual: number | string;
+  cantidad_inicial?: number | string;
+  fecha_ingreso?: string | null;
+  fecha_vencimiento?: string | null;
+  estado_lote?: string | null;
+  movimientos_inventario?: Array<{
+    ubicaciones_bodega?: {
+      id_ubicacion: number;
+      codigo_ubicacion: string;
+      zona?: string | null;
+    } | null;
+  }>;
 }
 
 export interface ArticulosResponse {
@@ -253,6 +273,13 @@ export interface ArticulosResponse {
   limit: number;
   page?: number;
   totalPages?: number;
+  meta?: {
+    total?: number;
+    skip?: number;
+    limit?: number;
+    page?: number;
+    totalPages?: number;
+  };
 }
 
 export interface ResumenCatalogo {
@@ -283,16 +310,16 @@ export interface ArticuloProveedorInicialPayload {
 }
 
 export interface CreateArticuloMaestroPayload {
-  id_tipo_componente: number;
+  id_tipo_componente?: number;
   codigo_interno?: string;
   referencia_fabricante: string;
   marca?: string;
-  id_marca?: number;
-  codigo_unidad_medida?: string;
+  id_marca?: number | null;
+  codigo_unidad_medida?: string | null;
   id_categoria?: number;
   descripcion_corta?: string;
   descripcion_detallada?: string;
-  especificaciones_tecnicas?: Record<string, any>;
+  especificaciones_tecnicas?: Record<string, unknown>;
   tipo_comercial?: string;
   destino_articulo: DestinoArticulo;
   es_comprable?: boolean;
@@ -302,12 +329,12 @@ export interface CreateArticuloMaestroPayload {
   es_activo_fijo?: boolean;
   numero_serie_activo?: string;
   placa_inventario?: string;
-  frecuencia_mantenimiento_meses?: number;
+  frecuencia_mantenimiento_meses?: number | null;
   stock_minimo?: number;
   stock_actual?: number;
-  precio_compra?: number;
-  precio_venta?: number;
-  margen_utilidad_porcentaje?: number;
+  precio_compra?: number | null;
+  precio_venta?: number | null;
+  margen_utilidad_porcentaje?: number | null;
   moneda?: string;
   unidad_medida?: string;
   proveedores_iniciales?: ArticuloProveedorInicialPayload[];
@@ -379,10 +406,84 @@ export interface ProveedorKPIs {
   total_recepciones?: number;
 }
 
+export interface KardexMovimientoItem {
+  id_movimiento: number;
+  tipo_movimiento: string;
+  cantidad: number | string;
+  stock_resultante?: number | string;
+  saldo_acumulado?: number | string;
+  costo_unitario?: number | string | null;
+  motivo?: string | null;
+  justificacion?: string | null;
+  observaciones?: string | null;
+  numero_documento?: string | null;
+  origen_movimiento?: string | null;
+  fecha_movimiento: string;
+  ubicaciones?: {
+    id_ubicacion?: number;
+    codigo_bodega?: string;
+    nombre_bodega?: string;
+  } | null;
+  ubicaciones_bodega?: {
+    id_ubicacion: number;
+    codigo_ubicacion: string;
+    zona?: string | null;
+  } | null;
+  ordenes_compra?: {
+    numero_orden_compra?: string | null;
+  } | null;
+  ordenes_servicio?: {
+    numero_orden?: string | null;
+  } | null;
+  remisiones?: {
+    numero_remision?: string | null;
+  } | null;
+  usuarios?: {
+    username?: string;
+  } | null;
+  [key: string]: unknown;
+}
+
+export interface OrdenCompraProveedorItem {
+  id_orden_compra: number;
+  numero_orden?: string;
+  fecha_solicitud?: string;
+  fecha_creacion?: string;
+  estado?: string;
+  ordenes_compra_detalle?: Array<{
+    subtotal?: number | string | null;
+    cantidad?: number | string;
+    precio_unitario?: number | string;
+  }>;
+}
+
+export interface SaveProveedorPayload {
+  razon_social?: string;
+  nombre_comercial?: string;
+  numero_identificacion?: string;
+  categoria_proveedor?: string;
+  tipo_proveedor?: string;
+  rubros?: string[];
+  persona_contacto?: string;
+  telefono_principal?: string;
+  email_principal?: string;
+  email_facturacion?: string;
+  direccion_principal?: string;
+  url_ubicacion?: string;
+  sitio_web?: string;
+  terminos_credito?: string;
+  tiempo_entrega_dias?: number;
+  responsable_iva?: boolean;
+  realiza_entregas?: boolean;
+  proveedor_activo?: boolean;
+  observaciones_despacho?: string;
+  etiquetas_secundarias?: string;
+}
+
 export interface ProveedorFicha360Response {
   proveedor: ProveedorCompleto;
   kpis: ProveedorKPIs;
-  ordenes_recientes: any[];
+  ordenes_recientes: Array<Record<string, unknown>>;
 }
 
 export interface ArticuloHomologadoProveedor extends ArticuloProveedor {
@@ -391,6 +492,7 @@ export interface ArticuloHomologadoProveedor extends ArticuloProveedor {
     codigo_interno?: string | null;
     descripcion_corta?: string | null;
     referencia_fabricante?: string | null;
+    marca?: string | null;
     precio_compra?: number | string | null;
     marcas?: Marca | null;
     categorias_componente?: {
@@ -411,6 +513,7 @@ export interface HomologarArticuloPayload {
   referencia_proveedor: string;
   nombre_segun_proveedor?: string;
   costo_actual: number;
+  moneda?: string;
   tiempo_entrega_dias?: number;
   cantidad_minima_compra?: number;
   url_producto_proveedor?: string;
@@ -443,7 +546,7 @@ export interface ActualizarArticuloProveedorPayload {
  */
 export function getNombreProveedor(
   persona?: { razon_social?: string | null; nombre_comercial?: string | null } | null,
-  idFallback?: number
+  idFallback?: number,
 ): string {
   if (!persona) return idFallback ? `Proveedor #${idFallback}` : 'Proveedor';
   if (persona.razon_social && persona.razon_social.trim()) {
@@ -454,5 +557,3 @@ export function getNombreProveedor(
   }
   return idFallback ? `Proveedor #${idFallback}` : 'Proveedor';
 }
-
-

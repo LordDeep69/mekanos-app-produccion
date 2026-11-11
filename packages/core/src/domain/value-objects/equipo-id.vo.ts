@@ -29,8 +29,8 @@ export class EquipoId {
     return this.value;
   }
 
-  equals(other: EquipoId): boolean {
-    if (!other) return false;
+  equals(other?: EquipoId | null): boolean {
+    if (other == null) return false;
     return this.value === other.value;
   }
 

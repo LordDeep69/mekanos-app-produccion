@@ -13,19 +13,16 @@
 
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+  useSyncExternalStore,
+} from 'react';
 import { createPortal } from 'react-dom';
-import {
-  Check,
-  ChevronsUpDown,
-  Factory,
-  Globe,
-  Loader2,
-  Plus,
-  Search,
-  Sparkles,
-  X,
-} from 'lucide-react';
+import { Check, ChevronsUpDown, Factory, Loader2, Search, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMarcasEam, useCrearMarcaEam } from '../hooks/use-marcas-eam';
 import { Marca } from '@/types/compras.types';
@@ -47,14 +44,17 @@ export function MarcaCombobox({
   onChange,
   placeholder = 'Buscar o registrar marca...',
   disabled = false,
-  required = false,
   className = '',
   size = 'md',
   id,
 }: MarcaComboboxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -69,10 +69,6 @@ export function MarcaCombobox({
     width: number;
     openUpward: boolean;
   } | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const currentValue = (value || '').trim().toUpperCase();
 
@@ -132,10 +128,7 @@ export function MarcaCombobox({
 
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as Node;
-      if (
-        triggerRef.current?.contains(target) ||
-        popoverRef.current?.contains(target)
-      ) {
+      if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) {
         return;
       }
       setIsOpen(false);
@@ -192,8 +185,11 @@ export function MarcaCombobox({
       setIsOpen(false);
       setCoords(null);
       setSearchTerm('');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || `No se pudo registrar la marca '${cleanNombre}'`);
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      toast.error(
+        apiErr?.response?.data?.message || `No se pudo registrar la marca '${cleanNombre}'`,
+      );
     }
   };
 
@@ -210,9 +206,7 @@ export function MarcaCombobox({
         onClick={handleToggle}
         className={cn(
           'w-full flex items-center justify-between text-left transition-all border outline-none cursor-pointer',
-          isSmall
-            ? 'h-9 px-3 rounded-xl text-xs'
-            : 'h-10 px-3.5 rounded-xl text-sm',
+          isSmall ? 'h-9 px-3 rounded-xl text-xs' : 'h-10 px-3.5 rounded-xl text-sm',
           disabled
             ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
             : isOpen
@@ -238,9 +232,7 @@ export function MarcaCombobox({
               )}
             </div>
           ) : (
-            <span className="text-slate-400 font-normal truncate">
-              {placeholder}
-            </span>
+            <span className="text-slate-400 font-normal truncate">{placeholder}</span>
           )}
         </div>
 
@@ -355,9 +347,12 @@ export function MarcaCombobox({
                 </div>
               ) : marcasFiltradas.length === 0 ? (
                 <div className="py-6 px-4 text-center text-xs text-slate-500">
-                  <p className="font-semibold text-slate-700">No se encontró &quot;{searchTerm}&quot;</p>
+                  <p className="font-semibold text-slate-700">
+                    No se encontró &quot;{searchTerm}&quot;
+                  </p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Usa el botón superior para registrarla como marca oficial en el catálogo maestro.
+                    Usa el botón superior para registrarla como marca oficial en el catálogo
+                    maestro.
                   </p>
                 </div>
               ) : (
@@ -391,9 +386,7 @@ export function MarcaCombobox({
                         )}
                       </div>
 
-                      {isSelected && (
-                        <Check className="h-4 w-4 text-blue-600 shrink-0 ml-2" />
-                      )}
+                      {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0 ml-2" />}
                     </button>
                   );
                 })

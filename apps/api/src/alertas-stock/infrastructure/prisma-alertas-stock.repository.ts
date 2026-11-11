@@ -1,12 +1,12 @@
 import { PrismaService } from '@mekanos/database';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
-    AlertaGeneracionResult,
-    AlertaResult,
-    AlertasDashboardResult,
-    AlertasStockFilters,
-    AlertasStockPaginatedResult,
-    IAlertasStockRepository,
+  AlertaGeneracionResult,
+  AlertaResult,
+  AlertasDashboardResult,
+  AlertasStockFilters,
+  AlertasStockPaginatedResult,
+  IAlertasStockRepository,
 } from '../interfaces/alertas-stock.repository.interface';
 
 @Injectable()
@@ -38,7 +38,8 @@ export class PrismaAlertasStockRepository implements IAlertasStockRepository {
         descripcion_corta: true, // FIX: nombre doesn't exist, use descripcion_corta
         stock_minimo: true,
         stock_actual: true, // Available in model
-        alertas_stock: { // FIX: relation name is alertas_stock not alertas
+        alertas_stock: {
+          // FIX: relation name is alertas_stock not alertas
           where: {
             estado: 'PENDIENTE',
           },
@@ -73,7 +74,11 @@ export class PrismaAlertasStockRepository implements IAlertasStockRepository {
       }
 
       // Alerta: Stock mínimo
-      if (componente.stock_minimo && stockActual < componente.stock_minimo && !alertasPendientes.includes('STOCK_MINIMO')) {
+      if (
+        componente.stock_minimo &&
+        stockActual < componente.stock_minimo &&
+        !alertasPendientes.includes('STOCK_MINIMO')
+      ) {
         await this.prisma.alertas_stock.create({
           data: {
             tipo_alerta: 'STOCK_MINIMO',
@@ -102,17 +107,19 @@ export class PrismaAlertasStockRepository implements IAlertasStockRepository {
           lte: fecha30Dias,
           not: null, // Only lotes with vencimiento date
         },
-        cantidad_actual: { // FIX: correct field name
+        cantidad_actual: {
+          // FIX: correct field name
           gt: 0,
         },
       },
       include: {
-        catalogo_componentes: { // FIX: correct relation name
+        catalogo_componentes: {
+          // FIX: correct relation name
           select: {
             descripcion_corta: true, // FIX: nombre doesn't exist
           },
         },
-        alertas: { // Correct relation name (verified in schema)
+        alertas_stock: {
           where: {
             estado: 'PENDIENTE',
           },
@@ -124,8 +131,10 @@ export class PrismaAlertasStockRepository implements IAlertasStockRepository {
     });
 
     for (const lote of lotesProximosVencer) {
-      const alertasPendientesLote = lote.alertas.map((a) => a.tipo_alerta);
-      const diasRestantes = Math.ceil((lote.fecha_vencimiento!.getTime() - fechaHoy.getTime()) / (1000 * 60 * 60 * 24)); // Non-null assertion safe due to where filter
+      const alertasPendientesLote = lote.alertas_stock.map((a) => a.tipo_alerta);
+      const diasRestantes = Math.ceil(
+        (lote.fecha_vencimiento!.getTime() - fechaHoy.getTime()) / (1000 * 60 * 60 * 24),
+      ); // Non-null assertion safe due to where filter
 
       // Alerta: Vencimiento crítico (< 7 días)
       if (diasRestantes < 7 && !alertasPendientesLote.includes('VENCIMIENTO_CRITICO')) {
@@ -165,7 +174,11 @@ export class PrismaAlertasStockRepository implements IAlertasStockRepository {
   /**
    * Resuelve una alerta cambiando estado a RESUELTA
    */
-  async resolverAlerta(idAlerta: number, userId: number, observaciones?: string): Promise<AlertaResult> {
+  async resolverAlerta(
+    idAlerta: number,
+    userId: number,
+    observaciones?: string,
+  ): Promise<AlertaResult> {
     const alerta = await this.prisma.alertas_stock.findUnique({
       where: { id_alerta: idAlerta },
     });
@@ -188,15 +201,6 @@ export class PrismaAlertasStockRepository implements IAlertasStockRepository {
             id_componente: true,
             descripcion_corta: true,
             codigo_interno: true,
-          },
-        },
-        usuarios: {
-          include: {
-            persona: {
-              select: {
-                nombre_completo: true,
-              },
-            },
           },
         },
       },
@@ -255,15 +259,6 @@ export class PrismaAlertasStockRepository implements IAlertasStockRepository {
               codigo_interno: true,
             },
           },
-          usuarios: {
-            include: {
-              persona: {
-                select: {
-                  nombre_completo: true,
-                },
-              },
-            },
-          },
         },
       }),
       this.prisma.alertas_stock.count({ where }),
@@ -292,15 +287,6 @@ export class PrismaAlertasStockRepository implements IAlertasStockRepository {
             id_componente: true,
             descripcion_corta: true,
             codigo_interno: true,
-          },
-        },
-        usuarios: {
-          include: {
-            persona: {
-              select: {
-                nombre_completo: true,
-              },
-            },
           },
         },
       },
@@ -385,14 +371,14 @@ export class PrismaAlertasStockRepository implements IAlertasStockRepository {
       componente: alerta.catalogo_componentes
         ? {
             id_componente: alerta.catalogo_componentes.id_componente,
-            nombre: alerta.catalogo_componentes.nombre,
-            codigo_referencia: alerta.catalogo_componentes.codigo_referencia,
+            nombre: alerta.catalogo_componentes.descripcion_corta || 'N/A',
+            codigo_referencia: alerta.catalogo_componentes.codigo_interno,
           }
         : null,
-      resolvedor: alerta.usuarios
+      resolvedor: alerta.resuelto_por
         ? {
-            id_usuario: alerta.usuarios.id_usuario,
-            nombre_completo: alerta.usuarios.persona?.nombre_completo || 'N/A',
+            id_usuario: alerta.resuelto_por,
+            nombre_completo: `Usuario #${alerta.resuelto_por}`,
           }
         : null,
     };

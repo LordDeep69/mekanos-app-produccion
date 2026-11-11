@@ -56,8 +56,8 @@ interface DynamicEquipmentFormPreviewProps {
   esquema: ArquetipoEsquemaResponse;
   modelosOem?: ModeloEquipoOem[];
   magnitudes?: MagnitudFisica[];
-  initialValues?: Record<string, Record<string, any>>;
-  onChangeValues?: (values: Record<string, Record<string, any>>) => void;
+  initialValues?: Record<string, Record<string, unknown>>;
+  onChangeValues?: (values: Record<string, Record<string, unknown>>) => void;
 }
 
 export function DynamicEquipmentFormPreview({
@@ -72,7 +72,7 @@ export function DynamicEquipmentFormPreview({
   const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
 
   // Estado de valores por módulo: { [codigo_modulo]: { [codigo_atributo]: valor } }
-  const [formValues, setFormValues] = useState<Record<string, Record<string, any>>>({});
+  const [formValues, setFormValues] = useState<Record<string, Record<string, unknown>>>({});
   // Estado de unidades seleccionadas por campo: { [codigo_modulo.codigo_atributo]: codigo_unidad }
   const [selectedUnits, setSelectedUnits] = useState<Record<string, string>>({});
 
@@ -103,14 +103,13 @@ export function DynamicEquipmentFormPreview({
   }, [modelosOem, esquema.arquetipo.id_tipo_equipo]);
 
   const modeloSeleccionadoObj = useMemo(
-    () =>
-      modelosDelArquetipo.find((m) => String(m.id_modelo_equipo) === selectedOemId) || null,
+    () => modelosDelArquetipo.find((m) => String(m.id_modelo_equipo) === selectedOemId) || null,
     [modelosDelArquetipo, selectedOemId],
   );
 
   // Inicializar valores cuando cambia el esquema o cuando hay un modelo OEM compatible
   useEffect(() => {
-    const baseValues: Record<string, Record<string, any>> = {};
+    const baseValues: Record<string, Record<string, unknown>> = {};
     const baseUnits: Record<string, string> = {};
 
     // Si hay un modelo OEM del mismo tipo de equipo, pre-seleccionarlo por defecto para demostración viva
@@ -118,7 +117,11 @@ export function DynamicEquipmentFormPreview({
       (m) => m.id_tipo_equipo === esquema.arquetipo.id_tipo_equipo,
     );
     const specsModelo =
-      (primerModeloCompatible?.especificaciones_base as any)?.modulos || {};
+      (
+        primerModeloCompatible?.especificaciones_base as
+          | { modulos?: Record<string, Record<string, unknown>> }
+          | undefined
+      )?.modulos || {};
 
     if (primerModeloCompatible) {
       setSelectedOemId(String(primerModeloCompatible.id_modelo_equipo));
@@ -134,15 +137,13 @@ export function DynamicEquipmentFormPreview({
       for (const grp of mod.grupos) {
         for (const attr of grp.atributos) {
           const unitKey = `${mod.codigo_modulo}.${attr.codigo_atributo}`;
-          const defaultUnit =
-            attr.unidad_defecto || attr.unidades_disponibles?.[0]?.codigo || '';
+          const defaultUnit = attr.unidad_defecto || attr.unidades_disponibles?.[0]?.codigo || '';
           if (defaultUnit) {
             baseUnits[unitKey] = defaultUnit;
           }
 
           if (modDefaults[attr.codigo_atributo] !== undefined) {
-            baseValues[mod.codigo_modulo][attr.codigo_atributo] =
-              modDefaults[attr.codigo_atributo];
+            baseValues[mod.codigo_modulo][attr.codigo_atributo] = modDefaults[attr.codigo_atributo];
           } else if (attr.valor_defecto !== null && attr.valor_defecto !== undefined) {
             baseValues[mod.codigo_modulo][attr.codigo_atributo] = attr.valor_defecto;
           } else if ((attr.tipo_control || '').toUpperCase() === 'BOOLEANO') {
@@ -162,20 +163,22 @@ export function DynamicEquipmentFormPreview({
   // Aplicar plantilla de Modelo OEM cuando el usuario cambia el selector
   const handleSelectOemModel = (idModeloStr: string) => {
     setSelectedOemId(idModeloStr);
-    const modOem = modelosDelArquetipo.find(
-      (m) => String(m.id_modelo_equipo) === idModeloStr,
-    );
-    const specsModulos = (modOem?.especificaciones_base as any)?.modulos || {};
+    const modOem = modelosDelArquetipo.find((m) => String(m.id_modelo_equipo) === idModeloStr);
+    const specsModulos =
+      (
+        modOem?.especificaciones_base as
+          | { modulos?: Record<string, Record<string, unknown>> }
+          | undefined
+      )?.modulos || {};
 
-    const nextValues: Record<string, Record<string, any>> = {};
+    const nextValues: Record<string, Record<string, unknown>> = {};
     for (const mod of esquema.modulos) {
       nextValues[mod.codigo_modulo] = {};
       const preset = specsModulos[mod.codigo_modulo] || {};
       for (const grp of mod.grupos) {
         for (const attr of grp.atributos) {
           if (preset[attr.codigo_atributo] !== undefined) {
-            nextValues[mod.codigo_modulo][attr.codigo_atributo] =
-              preset[attr.codigo_atributo];
+            nextValues[mod.codigo_modulo][attr.codigo_atributo] = preset[attr.codigo_atributo];
           } else if ((attr.tipo_control || '').toUpperCase() === 'BOOLEANO') {
             nextValues[mod.codigo_modulo][attr.codigo_atributo] = false;
           } else {
@@ -188,7 +191,7 @@ export function DynamicEquipmentFormPreview({
     onChangeValues?.(nextValues);
   };
 
-  const handleFieldChange = (codigoModulo: string, codigoAtributo: string, val: any) => {
+  const handleFieldChange = (codigoModulo: string, codigoAtributo: string, val: unknown) => {
     setFormValues((prev) => {
       const next = {
         ...prev,
@@ -203,11 +206,7 @@ export function DynamicEquipmentFormPreview({
   };
 
   // Cambiar la unidad de un campo numérico convirtiendo el valor automáticamente si es número
-  const handleUnitChange = (
-    codigoModulo: string,
-    codigoAtributo: string,
-    newUnitCode: string,
-  ) => {
+  const handleUnitChange = (codigoModulo: string, codigoAtributo: string, newUnitCode: string) => {
     const unitKey = `${codigoModulo}.${codigoAtributo}`;
     const oldUnitCode = selectedUnits[unitKey];
     const currentRawVal = formValues[codigoModulo]?.[codigoAtributo];
@@ -311,43 +310,43 @@ export function DynamicEquipmentFormPreview({
   const etiquetaMedidor = etiquetaRaw
     ? `Control por ${etiquetaRaw}`
     : unidadUso === 'CICLOS'
-    ? 'Control por Ciclos de Viaje'
-    : unidadUso === 'KM_ODO'
-    ? 'Control por Odómetro'
-    : unidadUso === 'UPM'
-    ? 'Control por Unidades de Producción'
-    : unidadUso === 'CAL'
-    ? 'Mantenimiento por Calendario'
-    : 'Control por Horómetro';
+      ? 'Control por Ciclos de Viaje'
+      : unidadUso === 'KM_ODO'
+        ? 'Control por Odómetro'
+        : unidadUso === 'UPM'
+          ? 'Control por Unidades de Producción'
+          : unidadUso === 'CAL'
+            ? 'Mantenimiento por Calendario'
+            : 'Control por Horómetro';
 
   const sufijoUso =
     unidadUso === 'CICLOS'
       ? 'ciclos'
       : unidadUso === 'KM_ODO'
-      ? 'km'
-      : unidadUso === 'UPM'
-      ? 'und'
-      : unidadUso === 'CAL'
-      ? ''
-      : 'horas';
+        ? 'km'
+        : unidadUso === 'UPM'
+          ? 'und'
+          : unidadUso === 'CAL'
+            ? ''
+            : 'horas';
 
   const labelIntervencion =
     unidadUso === 'CICLOS'
       ? `${etiquetaRaw || 'Ciclos'} Intervención`
       : unidadUso === 'KM_ODO'
-      ? `${etiquetaRaw || 'Kilometraje'} Intervención`
-      : unidadUso === 'UPM'
-      ? `${etiquetaRaw || 'Producción'} Intervención`
-      : `${etiquetaRaw || 'Horómetro'} Intervención`;
+        ? `${etiquetaRaw || 'Kilometraje'} Intervención`
+        : unidadUso === 'UPM'
+          ? `${etiquetaRaw || 'Producción'} Intervención`
+          : `${etiquetaRaw || 'Horómetro'} Intervención`;
 
   const labelAcumulado =
     unidadUso === 'CICLOS'
       ? `${etiquetaRaw || 'Ciclos'} Acumulados (Hoja de Vida)`
       : unidadUso === 'KM_ODO'
-      ? `${etiquetaRaw || 'Kilometraje'} Acumulado`
-      : unidadUso === 'UPM'
-      ? `${etiquetaRaw || 'Producción'} Acumulada`
-      : `${etiquetaRaw || 'Horómetro'} Acumulado (Hoja de Vida)`;
+        ? `${etiquetaRaw || 'Kilometraje'} Acumulado`
+        : unidadUso === 'UPM'
+          ? `${etiquetaRaw || 'Producción'} Acumulada`
+          : `${etiquetaRaw || 'Horómetro'} Acumulado (Hoja de Vida)`;
 
   return (
     <div className="bg-white rounded-2xl border-2 border-indigo-200/90 shadow-md overflow-hidden">
@@ -361,7 +360,8 @@ export function DynamicEquipmentFormPreview({
             </h4>
           </div>
           <p className="text-xs text-slate-300">
-            Prueba cómo registrará el coordinador este equipo y cómo se imprimirá su Placa Técnica en el PDF.
+            Prueba cómo registrará el coordinador este equipo y cómo se imprimirá su Placa Técnica
+            en el PDF.
           </p>
         </div>
 
@@ -430,21 +430,13 @@ export function DynamicEquipmentFormPreview({
           {esquema.modulos.map((mod) => {
             const isCollapsed = Boolean(collapsedModules[mod.codigo_modulo]);
             const modBadge = getModuloBadgeInfo(mod.codigo_modulo, mod.nombre_modulo);
-            const totalCamposModulo = mod.grupos.reduce(
-              (acc, g) => acc + g.atributos.length,
-              0,
-            );
+            const totalCamposModulo = mod.grupos.reduce((acc, g) => acc + g.atributos.length, 0);
             const camposConValor = mod.grupos.reduce(
               (acc, g) =>
                 acc +
                 g.atributos.filter((a) => {
                   const v = formValues[mod.codigo_modulo]?.[a.codigo_atributo];
-                  return (
-                    v !== undefined &&
-                    v !== null &&
-                    String(v).trim() !== '' &&
-                    v !== false
-                  );
+                  return v !== undefined && v !== null && String(v).trim() !== '' && v !== false;
                 }).length,
               0,
             );
@@ -507,8 +499,7 @@ export function DynamicEquipmentFormPreview({
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {grp.atributos.map((attr) => {
                             const ctrl = (attr.tipo_control || '').toUpperCase();
-                            const val =
-                              formValues[mod.codigo_modulo]?.[attr.codigo_atributo] ?? '';
+                            const val = formValues[mod.codigo_modulo]?.[attr.codigo_atributo] ?? '';
                             const unitKey = `${mod.codigo_modulo}.${attr.codigo_atributo}`;
                             const activeUnit =
                               selectedUnits[unitKey] ||
@@ -602,7 +593,11 @@ export function DynamicEquipmentFormPreview({
                                       type="number"
                                       step="any"
                                       placeholder="0.00"
-                                      value={val}
+                                      value={
+                                        typeof val === 'string' || typeof val === 'number'
+                                          ? val
+                                          : ''
+                                      }
                                       onChange={(e) =>
                                         handleFieldChange(
                                           mod.codigo_modulo,
@@ -632,7 +627,9 @@ export function DynamicEquipmentFormPreview({
                                       attr.codigo_atributo,
                                       attr.nombre_atributo,
                                     )}
-                                    value={val}
+                                    value={
+                                      typeof val === 'string' || typeof val === 'number' ? val : ''
+                                    }
                                     onChange={(e) =>
                                       handleFieldChange(
                                         mod.codigo_modulo,
@@ -647,7 +644,7 @@ export function DynamicEquipmentFormPreview({
                                   attr.rol_semantico === 'MARCA_PRINCIPAL' ? (
                                   <MarcaCombobox
                                     size="sm"
-                                    value={val}
+                                    value={typeof val === 'string' ? val : String(val || '')}
                                     onChange={(newVal) =>
                                       handleFieldChange(
                                         mod.codigo_modulo,
@@ -661,7 +658,11 @@ export function DynamicEquipmentFormPreview({
                                   <input
                                     type="text"
                                     placeholder={`Escribir ${attr.nombre_atributo.toLowerCase()}...`}
-                                    value={val}
+                                    value={
+                                      typeof val === 'string' || typeof val === 'number'
+                                        ? val
+                                        : String(val || '')
+                                    }
                                     onChange={(e) =>
                                       handleFieldChange(
                                         mod.codigo_modulo,
@@ -734,11 +735,15 @@ export function DynamicEquipmentFormPreview({
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-2xs flex items-center gap-2">
-                    <span className="text-[11px] text-slate-500 font-semibold">{labelIntervencion}:</span>
+                    <span className="text-[11px] text-slate-500 font-semibold">
+                      {labelIntervencion}:
+                    </span>
                     <span className="font-extrabold text-slate-900 font-mono">0 {sufijoUso}</span>
                   </div>
                   <div className="bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-2xs flex items-center gap-2">
-                    <span className="text-[11px] text-slate-500 font-semibold">{labelAcumulado}:</span>
+                    <span className="text-[11px] text-slate-500 font-semibold">
+                      {labelAcumulado}:
+                    </span>
                     <span className="font-extrabold text-slate-900 font-mono">0 {sufijoUso}</span>
                   </div>
                 </div>

@@ -28,7 +28,11 @@ export class TareasProgramadasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificacionesService: NotificacionesService,
-  ) { }
+  ) {}
+
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
 
   /**
    * JOB 1: Enviar recordatorios de servicios programados para mañana
@@ -72,7 +76,8 @@ export class TareasProgramadasService {
       let notificacionesEnviadas = 0;
 
       for (const cronograma of cronogramas) {
-        const tecnicoEmpleado = cronograma.ordenes_servicio?.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
+        const tecnicoEmpleado =
+          cronograma.ordenes_servicio?.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
         if (tecnicoEmpleado) {
           // Resolver empleado -> usuario via id_persona
           const usuario = await this.prisma.usuarios.findFirst({
@@ -80,7 +85,7 @@ export class TareasProgramadasService {
           });
           if (!usuario) continue;
 
-          const descripcion = `${cronograma.tipos_servicio?.nombre_servicio || 'Servicio'} - ${cronograma.equipos?.codigo_equipo || 'Equipo'}`;
+          const descripcion = `${cronograma.tipos_servicio?.nombre_tipo || 'Servicio'} - ${cronograma.equipos?.codigo_equipo || 'Equipo'}`;
 
           await this.notificacionesService.notificarServicioProgramado(
             usuario.id_usuario,
@@ -94,7 +99,7 @@ export class TareasProgramadasService {
 
       this.logger.log(`✅ CRON: ${notificacionesEnviadas} recordatorios enviados`);
     } catch (error) {
-      this.logger.error(`❌ CRON Error recordatorios: ${error.message}`);
+      this.logger.error(`❌ CRON Error recordatorios: ${this.getErrorMessage(error)}`);
     }
   }
 
@@ -102,7 +107,10 @@ export class TareasProgramadasService {
    * JOB 2: Marcar cotizaciones como vencidas
    * Ejecuta: Todos los días a medianoche
    */
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, { name: 'cotizaciones-vencidas', timeZone: 'America/Bogota' })
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
+    name: 'cotizaciones-vencidas',
+    timeZone: 'America/Bogota',
+  })
   async marcarCotizacionesVencidas() {
     this.logger.log('📋 CRON: Verificando cotizaciones vencidas...');
 
@@ -136,7 +144,7 @@ export class TareasProgramadasService {
       if (cotizacionesVencidas.length > 0) {
         await this.prisma.cotizaciones.updateMany({
           where: {
-            id_cotizacion: { in: cotizacionesVencidas.map(c => c.id_cotizacion) },
+            id_cotizacion: { in: cotizacionesVencidas.map((c) => c.id_cotizacion) },
           },
           data: {
             id_estado: estadoVencida.id_estado,
@@ -144,12 +152,14 @@ export class TareasProgramadasService {
           },
         });
 
-        this.logger.log(`✅ CRON: ${cotizacionesVencidas.length} cotizaciones marcadas como VENCIDAS`);
+        this.logger.log(
+          `✅ CRON: ${cotizacionesVencidas.length} cotizaciones marcadas como VENCIDAS`,
+        );
       } else {
         this.logger.log('✅ CRON: No hay cotizaciones vencidas');
       }
     } catch (error) {
-      this.logger.error(`❌ CRON Error cotizaciones vencidas: ${error.message}`);
+      this.logger.error(`❌ CRON Error cotizaciones vencidas: ${this.getErrorMessage(error)}`);
     }
   }
 
@@ -186,11 +196,14 @@ export class TareasProgramadasService {
       for (const contrato of contratos) {
         if (contrato.id_asesor_responsable) {
           const diasRestantes = Math.ceil(
-            (new Date(contrato.fecha_fin!).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+            (new Date(contrato.fecha_fin!).getTime() - new Date().getTime()) /
+              (1000 * 60 * 60 * 24),
           );
 
-          const nombreCliente = contrato.clientes.persona.razon_social ||
-            contrato.clientes.persona.nombre_completo || 'Cliente';
+          const nombreCliente =
+            contrato.clientes.persona.razon_social ||
+            contrato.clientes.persona.nombre_completo ||
+            'Cliente';
 
           // Solo notificar una vez por contrato (verificar si ya existe notificación reciente)
           const notificacionExistente = await this.prisma.notificaciones.findFirst({
@@ -219,7 +232,7 @@ export class TareasProgramadasService {
 
       this.logger.log(`✅ CRON: ${notificacionesEnviadas} alertas de contratos enviadas`);
     } catch (error) {
-      this.logger.error(`❌ CRON Error contratos por vencer: ${error.message}`);
+      this.logger.error(`❌ CRON Error contratos por vencer: ${this.getErrorMessage(error)}`);
     }
   }
 
@@ -233,7 +246,9 @@ export class TareasProgramadasService {
 
     try {
       // Importar el servicio de programación dinámicamente
-      const { ProgramacionFacadeService } = await import('../common/services/programacion-facade.service');
+      const { ProgramacionFacadeService } = await import(
+        '../common/services/programacion-facade.service'
+      );
 
       // Obtener instancia del servicio
       const programacionService = new ProgramacionFacadeService(
@@ -251,7 +266,7 @@ export class TareasProgramadasService {
         this.logger.warn(`⚠️ CRON: Error generando órdenes: ${resultado.error}`);
       }
     } catch (error) {
-      this.logger.error(`❌ CRON Error generar órdenes: ${error.message}`);
+      this.logger.error(`❌ CRON Error generar órdenes: ${this.getErrorMessage(error)}`);
     }
   }
 
@@ -270,7 +285,7 @@ export class TareasProgramadasService {
         this.logger.log(`✅ CRON: ${resultado.mensaje}`);
       }
     } catch (error) {
-      this.logger.error(`❌ CRON Error limpiar notificaciones: ${error.message}`);
+      this.logger.error(`❌ CRON Error limpiar notificaciones: ${this.getErrorMessage(error)}`);
     }
   }
 
@@ -308,14 +323,14 @@ export class TareasProgramadasService {
       // Notificar a supervisores sobre órdenes vencidas
       const supervisores = await this.prisma.usuarios.findMany({
         where: {
-          roles: {
+          usuarios_roles: {
             some: {
-              rol: {
+              roles: {
                 nombre_rol: { in: ['SUPERVISOR', 'ADMINISTRADOR', 'GERENTE'] },
               },
             },
           },
-          activo: true,
+          estado: 'ACTIVO',
         },
       });
 
@@ -340,8 +355,7 @@ export class TareasProgramadasService {
         this.logger.log('✅ CRON: No hay órdenes vencidas');
       }
     } catch (error) {
-      this.logger.error(`❌ CRON Error órdenes vencidas: ${error.message}`);
+      this.logger.error(`❌ CRON Error órdenes vencidas: ${this.getErrorMessage(error)}`);
     }
   }
 }
-

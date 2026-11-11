@@ -17,7 +17,6 @@ import {
   baseStyles,
   DatosOrdenPDF,
   EvidenciasPorEquipoPDF,
-  formatearFechaServicio,
   generarChecklistMultiEquipo,
   generarDatosClienteConFichaTecnica,
   generarHeaderConLogo,
@@ -25,7 +24,7 @@ import {
   generarMedicionesMultiEquipo,
   generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
-  MEKANOS_COLORS
+  MEKANOS_COLORS,
 } from './mekanos-base.template';
 
 /**
@@ -136,9 +135,9 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- ✅ MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
     ${generarLeyendaEquipos(
-    datos.actividadesPorEquipo?.map((a) => a.equipo),
-    esMultiEquipo,
-  )}
+      datos.actividadesPorEquipo?.map((a) => a.equipo),
+      esMultiEquipo,
+    )}
     
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
     ${generarDatosClienteConFichaTecnica(datos)}
@@ -150,9 +149,10 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- SECCIÓN INSUMOS (VERIFICACIÓN FOTOGRÁFICA) -->
     <!-- ✅ MULTI-EQUIPOS (17-DIC-2025): Usar versión multi-equipo si aplica -->
-    ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
-      ? generarSeccionInsumosMultiEquipo(datos.evidenciasPorEquipo)
-      : generarSeccionInsumos(datos.evidencias)
+    ${
+      esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+        ? generarSeccionInsumosMultiEquipo(datos.evidenciasPorEquipo)
+        : generarSeccionInsumos(datos.evidencias)
     }
     
     <!-- SECCIÓN DE REPUESTOS, FILTROS Y FLUIDOS DE SERVICIO (TIPO B) -->
@@ -160,9 +160,10 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- LISTA DE ACTIVIDADES DE MANTENIMIENTO -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-    ${esMultiEquipo && datos.actividadesPorEquipo
-      ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
-      : generarTodasLasActividades(datos.actividades)
+    ${
+      esMultiEquipo && datos.actividadesPorEquipo
+        ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
+        : generarTodasLasActividades(datos.actividades)
     }
     
     <!-- REGISTRO DE DATOS DEL MÓDULO DE CONTROL -->
@@ -173,17 +174,19 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- ✅ FIX 17-DIC-2025: MEDICIONES TÉCNICAS (si hay) -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-    ${esMultiEquipo && datos.medicionesPorEquipo && datos.medicionesPorEquipo.length > 0
-      ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
-      : datos.mediciones && datos.mediciones.length > 0
-        ? generarMediciones(datos.mediciones)
-        : ''
+    ${
+      esMultiEquipo && datos.medicionesPorEquipo && datos.medicionesPorEquipo.length > 0
+        ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
+        : datos.mediciones && datos.mediciones.length > 0
+          ? generarMediciones(datos.mediciones)
+          : ''
     }
     
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
     <!-- ✅ MULTI-EQUIPOS: Usar evidencias agrupadas por equipo si es multi-equipo -->
-    ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
-    ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo, datos.lotesGaleria)
+    ${
+      esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+        ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo, datos.lotesGaleria)
         : generarEvidencias(datos.evidencias, datos.lotesGaleria)
     }
     
@@ -207,48 +210,6 @@ const generarHeader = (datos: DatosOrdenPDF): string =>
     'GENERADORES ELÉCTRICOS - CAMBIO DE FILTROS Y FLUIDOS',
     datos.numeroOrden,
   );
-
-const generarDatosCliente = (datos: DatosOrdenPDF): string => `
-  <div class="section">
-    <div class="section-title">DATOS DEL CLIENTE Y SERVICIO</div>
-    <div class="info-grid">
-      <div class="info-item">
-        <span class="info-label">Cliente</span>
-        <span class="info-value">${datos.cliente}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Marca del Equipo</span>
-        <span class="info-value">${datos.marcaEquipo}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">N° de Serie</span>
-        <span class="info-value">${datos.serieEquipo}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Dirección</span>
-        <span class="info-value">${datos.direccion}</span>
-      </div>
-    </div>
-    <div class="info-grid info-grid-4" style="margin-top: 8px;">
-      <div class="info-item">
-                <span class="info-label">Fecha</span>
-                <span class="info-value">${formatearFechaServicio(datos)}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Técnico</span>
-        <span class="info-value">${datos.tecnico}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">H. Entrada</span>
-        <span class="info-value">${datos.horaEntrada}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">H. Salida</span>
-        <span class="info-value">${datos.horaSalida}</span>
-      </div>
-    </div>
-  </div>
-`;
 
 /**
  * Detecta si una actividad es realmente un parámetro de medición (debe excluirse del checklist)
@@ -330,8 +291,8 @@ const generarMediciones = (mediciones: any[]): string => `
       </thead>
       <tbody>
         ${mediciones
-    .map(
-      (med) => `
+          .map(
+            (med) => `
           <tr>
             <td>${med.parametro}</td>
             <td style="text-align: center; font-weight: bold;">${med.valor}</td>
@@ -339,8 +300,8 @@ const generarMediciones = (mediciones: any[]): string => `
             <td style="text-align: center;" class="alerta-${med.nivelAlerta || 'OK'}">${med.nivelAlerta || 'OK'}</td>
           </tr>
         `,
-    )
-    .join('')}
+          )
+          .join('')}
       </tbody>
     </table>
   </div>
@@ -389,9 +350,9 @@ const generarTodasLasActividades = (actividades: any[]): string => {
       </thead>
       <tbody>
         ${actividadesChecklist
-      .map((act) => {
-        const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
-        return `
+          .map((act) => {
+            const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
+            return `
           <tr${esCambio ? ' style="background: #E8F5E9;"' : ''}>
             <td>${act.descripcion || 'Actividad'}${esCambio ? ' <span class="cambio-badge">CAMBIO</span>' : ''}</td>
             <td style="text-align: center;">
@@ -400,8 +361,8 @@ const generarTodasLasActividades = (actividades: any[]): string => {
             <td><span class="observacion-actividad">${act.observaciones || ''}</span></td>
           </tr>
         `;
-      })
-      .join('')}
+          })
+          .join('')}
       </tbody>
     </table>
   </div>
@@ -431,9 +392,9 @@ export const _generarSeccionActividades = (
       </thead>
       <tbody>
         ${actividades
-      .map((act) => {
-        const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
-        return `
+          .map((act) => {
+            const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
+            return `
           <tr${esCambio ? ' style="background: #E8F5E9;"' : ''}>
             <td>${act.descripcion}${esCambio ? ' <span class="cambio-badge">CAMBIO</span>' : ''}</td>
             <td style="text-align: center;">
@@ -442,8 +403,8 @@ export const _generarSeccionActividades = (
             <td><span class="observacion-actividad">${act.observaciones || ''}</span></td>
           </tr>
         `;
-      })
-      .join('')}
+          })
+          .join('')}
       </tbody>
     </table>
   </div>
@@ -726,14 +687,10 @@ const generarLotesGaleriaHTML = (
   captionClass: string,
 ): string => {
   if (!lotesGaleria || lotesGaleria.length === 0) return '';
-  const lotesOrdenados = [...lotesGaleria].sort(
-    (a, b) => (a.ordenLote || 0) - (b.ordenLote || 0),
-  );
+  const lotesOrdenados = [...lotesGaleria].sort((a, b) => (a.ordenLote || 0) - (b.ordenLote || 0));
   return lotesOrdenados
     .map((lote) => {
-      const fotosLote = evidenciasGeneral.filter(
-        (ev) => ev.idLote === lote.idLoteGaleria,
-      );
+      const fotosLote = evidenciasGeneral.filter((ev) => ev.idLote === lote.idLoteGaleria);
       return generarLoteGaleriaHTML(lote, fotosLote, gridClass, itemClass, captionClass);
     })
     .join('');
@@ -772,7 +729,10 @@ const generarEvidencias = (
   );
 
   // Agrupar por tipo (ANTES, DURANTE, DESPUÉS)
-  const grupos: Record<string, Array<{ url: string; caption: string; fase?: string; idLote?: number }>> = {};
+  const grupos: Record<
+    string,
+    Array<{ url: string; caption: string; fase?: string; idLote?: number }>
+  > = {};
   const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
 
   evidenciasRegulares.forEach((ev) => {
@@ -802,31 +762,44 @@ const generarEvidencias = (
 
       // ✅ FIX 20-AGO-2026: Galería por lotes — el contenedor estándar muestra
       // solo las fotos SIN lote; cada lote va en su contenedor sólido propio
-      const fotosSinLote = tipo === 'GENERAL'
-        ? evidenciasTipo.filter((ev) => !ev.idLote)
-        : evidenciasTipo;
-      const lotesHTML = tipo === 'GENERAL'
-        ? generarLotesGaleriaHTML(lotesGaleria, evidenciasTipo, 'evidencias-grid-compacto', 'evidencia-item-compacto', 'evidencia-caption-compacto')
-        : '';
+      const fotosSinLote =
+        tipo === 'GENERAL' ? evidenciasTipo.filter((ev) => !ev.idLote) : evidenciasTipo;
+      const lotesHTML =
+        tipo === 'GENERAL'
+          ? generarLotesGaleriaHTML(
+              lotesGaleria,
+              evidenciasTipo,
+              'evidencias-grid-compacto',
+              'evidencia-item-compacto',
+              'evidencia-caption-compacto',
+            )
+          : '';
       const conteoMostrar = tipo === 'GENERAL' ? fotosSinLote.length : evidenciasTipo.length;
 
       return `
       <div class="${claseGrupo}">
         <div class="evidencias-grupo-titulo">${tituloMostrar} (${conteoMostrar})</div>
-        ${tipo === 'GENERAL'
-          ? generarSubSeccionesGenerales(fotosSinLote, 'evidencias-grid-compacto', 'evidencia-item-compacto', 'evidencia-caption-compacto') + lotesHTML
-          : `<div class="evidencias-grid-compacto">
+        ${
+          tipo === 'GENERAL'
+            ? generarSubSeccionesGenerales(
+                fotosSinLote,
+                'evidencias-grid-compacto',
+                'evidencia-item-compacto',
+                'evidencia-caption-compacto',
+              ) + lotesHTML
+            : `<div class="evidencias-grid-compacto">
           ${evidenciasTipo
-          .map(
-            (ev, idx) => `
+            .map(
+              (ev, idx) => `
             <div class="evidencia-item-compacto">
               <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
               <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
             </div>
           `,
-          )
-          .join('')}
-        </div>`}
+            )
+            .join('')}
+        </div>`
+        }
       </div>
     `;
     })
@@ -853,19 +826,21 @@ const generarObservaciones = (observaciones: string): string => `
 const generarFirmas = (datos: DatosOrdenPDF): string => `
   <div class="firmas-container">
     <div class="firma-box">
-      ${datos.firmaTecnico
-    ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" /></div>`
-    : `<div class="firma-line"></div>`
-  }
+      ${
+        datos.firmaTecnico
+          ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" /></div>`
+          : `<div class="firma-line"></div>`
+      }
       <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || ''}</div>
       <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable'}</div>
       <div class="firma-label">Firma Técnico Asignado</div>
     </div>
     <div class="firma-box">
-      ${datos.firmaCliente
-    ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" /></div>`
-    : `<div class="firma-line"></div>`
-  }
+      ${
+        datos.firmaCliente
+          ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" /></div>`
+          : `<div class="firma-line"></div>`
+      }
       <div class="firma-nombre">${datos.nombreCliente || ''}</div>
       <div class="firma-cargo">${datos.cargoCliente || 'Cliente / Autorizador'}</div>
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
@@ -1026,7 +1001,10 @@ const generarEvidenciasMultiEquipo = (
 
       // Agrupar evidencias por tipo (ANTES, DURANTE, DESPUÉS)
       const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
-      const grupos: Record<string, Array<{ url: string; caption: string; fase?: string; idLote?: number }>> = {};
+      const grupos: Record<
+        string,
+        Array<{ url: string; caption: string; fase?: string; idLote?: number }>
+      > = {};
 
       evidencias.forEach((ev: any) => {
         const tipo = ev.momento || extraerTipoEvidenciaTipoB(ev.caption || '');
@@ -1048,12 +1026,18 @@ const generarEvidenciasMultiEquipo = (
           const evidenciasTipo = grupos[tipo];
 
           // ✅ FIX 20-AGO-2026: Galería por lotes en el grupo GENERAL
-          const fotosSinLote = tipo === 'GENERAL'
-            ? evidenciasTipo.filter((ev) => !ev.idLote)
-            : evidenciasTipo;
-          const lotesHTML = tipo === 'GENERAL'
-            ? generarLotesGaleriaHTML(lotesGaleria, evidenciasTipo, 'evidencias-grid', 'evidencia-item', 'evidencia-caption')
-            : '';
+          const fotosSinLote =
+            tipo === 'GENERAL' ? evidenciasTipo.filter((ev) => !ev.idLote) : evidenciasTipo;
+          const lotesHTML =
+            tipo === 'GENERAL'
+              ? generarLotesGaleriaHTML(
+                  lotesGaleria,
+                  evidenciasTipo,
+                  'evidencias-grid',
+                  'evidencia-item',
+                  'evidencia-caption',
+                )
+              : '';
           const conteoMostrar = tipo === 'GENERAL' ? fotosSinLote.length : evidenciasTipo.length;
 
           return `
@@ -1061,9 +1045,15 @@ const generarEvidenciasMultiEquipo = (
           <div style="background: linear-gradient(135deg, ${MEKANOS_COLORS.secondary} 0%, ${MEKANOS_COLORS.primary} 100%); color: white; padding: 5px 12px; font-size: 10px; font-weight: bold; border-radius: 4px 4px 0 0;">
             ${icono} ${titulo} (${conteoMostrar})
           </div>
-          ${tipo === 'GENERAL'
-            ? generarSubSeccionesGenerales(fotosSinLote as any, 'evidencias-grid', 'evidencia-item', 'evidencia-caption') + lotesHTML
-            : `<div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
+          ${
+            tipo === 'GENERAL'
+              ? generarSubSeccionesGenerales(
+                  fotosSinLote as any,
+                  'evidencias-grid',
+                  'evidencia-item',
+                  'evidencia-caption',
+                ) + lotesHTML
+              : `<div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
             ${evidenciasTipo
               .map(
                 (ev: any, idx: number) => `
@@ -1074,7 +1064,8 @@ const generarEvidenciasMultiEquipo = (
             `,
               )
               .join('')}
-          </div>`}
+          </div>`
+          }
         </div>
       `;
         })

@@ -1,13 +1,13 @@
 /**
  * Servicio de Numeración Automática
- * 
+ *
  * Genera códigos únicos secuenciales para:
  * - Órdenes de Servicio: ORD-2025-00001
  * - Cotizaciones: COT-2025-00001
  * - Informes: INF-2025-00001
  * - Contratos: CONT-2025-00001
  * - Remisiones: REM-2025-00001
- * 
+ *
  * Características:
  * - Reset automático cada año
  * - Transacción atómica (sin duplicados)
@@ -111,10 +111,10 @@ export interface GeneratedNumber {
 @Injectable()
 export class NumeracionService implements OnModuleInit {
   private readonly logger = new Logger(NumeracionService.name);
-  
+
   // Cache de secuencias en memoria (por tipo y año)
   private sequenceCache: Map<string, number> = new Map();
-  
+
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
@@ -133,12 +133,10 @@ export class NumeracionService implements OnModuleInit {
     // Usar transacción para garantizar unicidad
     const result = await this.prisma.$transaction(async (tx) => {
       // Buscar o crear el registro de secuencia
-      let sequenceRecord = await tx.sequence_counter.findUnique({
+      let sequenceRecord = await tx.sequence_counter.findFirst({
         where: {
-          type_year: {
-            type: type,
-            year: currentYear,
-          },
+          type: type,
+          year: currentYear,
         },
       });
 
@@ -148,22 +146,21 @@ export class NumeracionService implements OnModuleInit {
           data: {
             type: type,
             year: currentYear,
-            currentValue: 1,
+            current_value: 1,
+            updated_at: new Date(),
           },
         });
       } else {
         // Incrementar secuencia
         sequenceRecord = await tx.sequence_counter.update({
           where: {
-            type_year: {
-              type: type,
-              year: currentYear,
-            },
+            id: sequenceRecord.id,
           },
           data: {
-            currentValue: {
+            current_value: {
               increment: 1,
             },
+            updated_at: new Date(),
           },
         });
       }
@@ -172,14 +169,14 @@ export class NumeracionService implements OnModuleInit {
     });
 
     // Actualizar cache
-    this.sequenceCache.set(cacheKey, result.currentValue);
+    this.sequenceCache.set(cacheKey, result.current_value);
 
     // Formatear código
-    const code = this.formatCode(type, currentYear, result.currentValue);
+    const code = this.formatCode(type, currentYear, result.current_value);
 
     return {
       code,
-      sequence: result.currentValue,
+      sequence: result.current_value,
       year: currentYear,
       type,
       generatedAt: new Date(),
@@ -197,15 +194,13 @@ export class NumeracionService implements OnModuleInit {
 
     // Si no está en cache, consultar BD
     if (!this.sequenceCache.has(cacheKey)) {
-      const record = await this.prisma.sequence_counter.findUnique({
+      const record = await this.prisma.sequence_counter.findFirst({
         where: {
-          type_year: {
-            type: type,
-            year: currentYear,
-          },
+          type: type,
+          year: currentYear,
         },
       });
-      nextSequence = (record?.currentValue ?? 0) + 1;
+      nextSequence = (record?.current_value ?? 0) + 1;
     }
 
     return this.formatCode(type, currentYear, nextSequence);
@@ -217,7 +212,7 @@ export class NumeracionService implements OnModuleInit {
   validateCode(code: string, type: DocumentType): boolean {
     const config = NUMBERING_CONFIGS[type];
     const pattern = new RegExp(
-      `^${config.prefix}${config.separator}\\d{4}${config.separator}\\d{${config.digits}}$`
+      `^${config.prefix}${config.separator}\\d{4}${config.separator}\\d{${config.digits}}$`,
     );
     return pattern.test(code);
   }
@@ -241,24 +236,26 @@ export class NumeracionService implements OnModuleInit {
   /**
    * Obtiene estadísticas de numeración
    */
-  async getStatistics(type?: DocumentType): Promise<{
-    type: string;
-    year: number;
-    currentValue: number;
-    lastCode: string;
-  }[]> {
+  async getStatistics(type?: DocumentType): Promise<
+    {
+      type: string;
+      year: number;
+      currentValue: number;
+      lastCode: string;
+    }[]
+  > {
     const where = type ? { type } : {};
-    
+
     const records = await this.prisma.sequence_counter.findMany({
       where,
       orderBy: [{ year: 'desc' }, { type: 'asc' }],
     });
 
-    return records.map((r: { type: string; year: number; currentValue: number }) => ({
+    return records.map((r) => ({
       type: r.type,
       year: r.year,
-      currentValue: r.currentValue,
-      lastCode: this.formatCode(r.type as DocumentType, r.year, r.currentValue),
+      currentValue: r.current_value,
+      lastCode: this.formatCode(r.type as DocumentType, r.year, r.current_value),
     }));
   }
 
@@ -267,7 +264,7 @@ export class NumeracionService implements OnModuleInit {
    */
   async resetSequence(type: DocumentType, year?: number): Promise<void> {
     const targetYear = year ?? new Date().getFullYear();
-    
+
     await this.prisma.sequence_counter.deleteMany({
       where: {
         type: type,
@@ -285,11 +282,11 @@ export class NumeracionService implements OnModuleInit {
   private formatCode(type: DocumentType, year: number, sequence: number): string {
     const config = NUMBERING_CONFIGS[type];
     const paddedSequence = sequence.toString().padStart(config.digits, '0');
-    
+
     if (config.includeYear) {
       return `${config.prefix}${config.separator}${year}${config.separator}${paddedSequence}`;
     }
-    
+
     return `${config.prefix}${config.separator}${paddedSequence}`;
   }
 
@@ -298,14 +295,14 @@ export class NumeracionService implements OnModuleInit {
    */
   private async loadCurrentYearSequences(): Promise<void> {
     const currentYear = new Date().getFullYear();
-    
+
     try {
       const records = await this.prisma.sequence_counter.findMany({
         where: { year: currentYear },
       });
 
       for (const record of records) {
-        this.sequenceCache.set(`${record.type}-${record.year}`, record.currentValue);
+        this.sequenceCache.set(`${record.type}-${record.year}`, record.current_value);
       }
 
       this.logger.log(`Cache de secuencias cargado: ${records.length} registros`);

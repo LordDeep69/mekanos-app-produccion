@@ -62,9 +62,7 @@ export class PrismaTiposServicioRepository {
     });
 
     if (!tipoEquipo) {
-      throw new NotFoundException(
-        `Tipo de equipo con ID ${id_tipo_equipo} no encontrado`,
-      );
+      throw new NotFoundException(`Tipo de equipo con ID ${id_tipo_equipo} no encontrado`);
     }
   }
 
@@ -75,9 +73,7 @@ export class PrismaTiposServicioRepository {
     });
 
     if (!usuario) {
-      throw new NotFoundException(
-        `Usuario con ID ${id_usuario} no encontrado (campo: ${campo})`,
-      );
+      throw new NotFoundException(`Usuario con ID ${id_usuario} no encontrado (campo: ${campo})`);
     }
   }
 
@@ -88,7 +84,9 @@ export class PrismaTiposServicioRepository {
   private expandirCodigosSinonimos(codigos: string[]): string[] {
     const set = new Set<string>();
     for (const raw of codigos) {
-      const c = String(raw || '').trim().toUpperCase();
+      const c = String(raw || '')
+        .trim()
+        .toUpperCase();
       if (!c) continue;
       set.add(c);
       if (c === 'GEN' || c === 'GENERADOR') {
@@ -111,15 +109,16 @@ export class PrismaTiposServicioRepository {
    * - Si `aplica_a` tiene 1 o N códigos -> resuelve el `id_tipo_equipo` del primer código para mantener la FK principal.
    * - Si no se envió `aplica_a` pero sí `id_tipo_equipo` -> pobla `aplica_a` desde el código de ese `id_tipo_equipo`.
    */
-  private async sincronizarAlcanceArquetipos(
-    data: any,
-    isUpdate = false,
-  ): Promise<void> {
+  private async sincronizarAlcanceArquetipos(data: any, isUpdate = false): Promise<void> {
     if (Array.isArray(data.aplica_a)) {
-      const codigosLimpios = Array.from(
-        new Set(
+      const codigosLimpios: string[] = Array.from(
+        new Set<string>(
           data.aplica_a
-            .map((c: string) => String(c || '').trim().toUpperCase())
+            .map((c: string) =>
+              String(c || '')
+                .trim()
+                .toUpperCase(),
+            )
             .filter(Boolean),
         ),
       );
@@ -130,9 +129,7 @@ export class PrismaTiposServicioRepository {
             where: { id_tipo_equipo: Number(data.id_tipo_equipo) },
             select: { codigo_tipo: true },
           });
-          data.aplica_a = te?.codigo_tipo
-            ? this.expandirCodigosSinonimos([te.codigo_tipo])
-            : [];
+          data.aplica_a = te?.codigo_tipo ? this.expandirCodigosSinonimos([te.codigo_tipo]) : [];
         } else {
           data.aplica_a = [];
           data.id_tipo_equipo = null;
@@ -257,17 +254,12 @@ export class PrismaTiposServicioRepository {
     let filtroEquipoOr: any[] | null = null;
 
     if (filters?.tipoEquipoId) {
-      const { ids, codigos } = await this.resolverFiltroTipoEquipo(
-        filters.tipoEquipoId,
-      );
+      const { ids, codigos } = await this.resolverFiltroTipoEquipo(filters.tipoEquipoId);
       filtroEquipoOr = [
         { id_tipo_equipo: { in: ids } },
         ...(codigos.length > 0 ? [{ aplica_a: { hasSome: codigos } }] : []),
         {
-          AND: [
-            { id_tipo_equipo: null },
-            { aplica_a: { isEmpty: true } },
-          ],
+          AND: [{ id_tipo_equipo: null }, { aplica_a: { isEmpty: true } }],
         },
       ];
     }
@@ -301,10 +293,7 @@ export class PrismaTiposServicioRepository {
         }),
       },
       include: this.INCLUDE_RELATIONS_LIST,
-      orderBy: [
-        { orden_visualizacion: 'asc' },
-        { nombre_tipo: 'asc' },
-      ],
+      orderBy: [{ orden_visualizacion: 'asc' }, { nombre_tipo: 'asc' }],
       skip: filters?.skip,
       take: filters?.limit || 50,
     });
@@ -321,9 +310,7 @@ export class PrismaTiposServicioRepository {
     });
 
     if (!tipoServicio) {
-      throw new NotFoundException(
-        `Tipo de servicio con ID ${id} no encontrado`,
-      );
+      throw new NotFoundException(`Tipo de servicio con ID ${id} no encontrado`);
     }
 
     return tipoServicio;
@@ -332,7 +319,7 @@ export class PrismaTiposServicioRepository {
   async findByCodigo(codigo: string): Promise<any | null> {
     const codigoNormalizado = this.normalizarCodigoTipo(codigo);
 
-    return this.prisma.tipos_servicio.findUnique({
+    return this.prisma.tipos_servicio.findFirst({
       where: { codigo_tipo: codigoNormalizado },
       include: this.INCLUDE_RELATIONS_DETAIL,
     });
@@ -381,10 +368,7 @@ export class PrismaTiposServicioRepository {
   // QUERIES CUSTOM
   // ============================================================================
 
-  async findByCategoria(
-    categoria: string,
-    soloActivos: boolean = true,
-  ): Promise<any[]> {
+  async findByCategoria(categoria: string, soloActivos: boolean = true): Promise<any[]> {
     return this.prisma.tipos_servicio.findMany({
       where: {
         categoria: categoria as any,
@@ -395,10 +379,7 @@ export class PrismaTiposServicioRepository {
     });
   }
 
-  async findByTipoEquipo(
-    tipoEquipoId: number,
-    soloActivos: boolean = true,
-  ): Promise<any[]> {
+  async findByTipoEquipo(tipoEquipoId: number, soloActivos: boolean = true): Promise<any[]> {
     const { ids, codigos } = await this.resolverFiltroTipoEquipo(tipoEquipoId);
     return this.prisma.tipos_servicio.findMany({
       where: {
@@ -433,17 +414,12 @@ export class PrismaTiposServicioRepository {
     let filtroEquipoOr: any[] | null = null;
 
     if (filters?.tipoEquipoId) {
-      const { ids, codigos } = await this.resolverFiltroTipoEquipo(
-        filters.tipoEquipoId,
-      );
+      const { ids, codigos } = await this.resolverFiltroTipoEquipo(filters.tipoEquipoId);
       filtroEquipoOr = [
         { id_tipo_equipo: { in: ids } },
         ...(codigos.length > 0 ? [{ aplica_a: { hasSome: codigos } }] : []),
         {
-          AND: [
-            { id_tipo_equipo: null },
-            { aplica_a: { isEmpty: true } },
-          ],
+          AND: [{ id_tipo_equipo: null }, { aplica_a: { isEmpty: true } }],
         },
       ];
     }

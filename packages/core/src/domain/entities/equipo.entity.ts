@@ -26,6 +26,21 @@ export interface EquipoProps extends CreateEquipoProps {
   ultimoMantenimiento?: Date;
 }
 
+export interface EquipoObject {
+  id: number;
+  codigo: string;
+  marca: string;
+  modelo: string;
+  serie: string | null;
+  clienteId: number;
+  sedeId: number | null;
+  tipoEquipoId: number;
+  nombreEquipo: string | null;
+  estado: EstadoEquipoEnum;
+  fechaRegistro: Date;
+  ultimoMantenimiento: Date | null;
+}
+
 /**
  * Equipo Entity - Agregado raíz del módulo de equipos
  * Contiene la lógica de negocio relacionada con equipos
@@ -43,7 +58,7 @@ export class EquipoEntity {
     private _nombreEquipo: string | null,
     private _estado: EstadoEquipo,
     private readonly _fechaRegistro: Date,
-    private _ultimoMantenimiento: Date | null
+    private _ultimoMantenimiento: Date | null,
   ) {}
 
   /**
@@ -53,19 +68,22 @@ export class EquipoEntity {
     // Validaciones de negocio
     this.validateCreateProps(props);
 
+    const serieNorm = props.serie?.trim().toUpperCase();
+    const nombreNorm = props.nombreEquipo?.trim();
+
     return new EquipoEntity(
       EquipoId.create(), // ID autoincremental para mocks/tests
       CodigoEquipo.create(props.codigo),
       props.marca.trim().toUpperCase(),
       props.modelo.trim().toUpperCase(),
-      props.serie?.trim().toUpperCase() || null,
+      serieNorm !== undefined && serieNorm.length > 0 ? serieNorm : null,
       props.clienteId,
-      props.sedeId || null,
+      props.sedeId ?? null,
       props.tipoEquipoId,
-      props.nombreEquipo?.trim() || null,
+      nombreNorm !== undefined && nombreNorm.length > 0 ? nombreNorm : null,
       EstadoEquipo.operativo(),
       new Date(),
-      null
+      null,
     );
   }
 
@@ -78,14 +96,14 @@ export class EquipoEntity {
       CodigoEquipo.create(props.codigo),
       props.marca,
       props.modelo,
-      props.serie || null,
+      props.serie !== undefined && props.serie.length > 0 ? props.serie : null,
       props.clienteId,
-      props.sedeId || null,
+      props.sedeId ?? null,
       props.tipoEquipoId,
-      props.nombreEquipo || null,
+      props.nombreEquipo !== undefined && props.nombreEquipo.length > 0 ? props.nombreEquipo : null,
       EstadoEquipo.create(props.estado),
       props.fechaRegistro,
-      props.ultimoMantenimiento || null
+      props.ultimoMantenimiento ?? null,
     );
   }
 
@@ -93,11 +111,11 @@ export class EquipoEntity {
    * Validaciones de negocio al crear equipo
    */
   private static validateCreateProps(props: CreateEquipoProps): void {
-    if (!props.marca || props.marca.trim().length === 0) {
+    if ((props.marca ?? '').trim().length === 0) {
       throw new Error('Marca es requerida');
     }
 
-    if (!props.modelo || props.modelo.trim().length === 0) {
+    if ((props.modelo ?? '').trim().length === 0) {
       throw new Error('Modelo es requerido');
     }
 
@@ -109,7 +127,7 @@ export class EquipoEntity {
       throw new Error('TipoEquipoId inválido');
     }
 
-    if (props.sedeId && props.sedeId <= 0) {
+    if (props.sedeId !== undefined && props.sedeId <= 0) {
       throw new Error('SedeId inválido');
     }
   }
@@ -120,7 +138,7 @@ export class EquipoEntity {
   cambiarEstado(nuevoEstado: EstadoEquipo): void {
     if (!this._estado.puedeTransicionarA(nuevoEstado)) {
       throw new Error(
-        `No se puede transicionar de ${this._estado.getValue()} a ${nuevoEstado.getValue()}`
+        `No se puede transicionar de ${this._estado.getValue()} a ${nuevoEstado.getValue()}`,
       );
     }
 
@@ -185,25 +203,30 @@ export class EquipoEntity {
   /**
    * Actualizar información básica del equipo
    */
-  actualizarInformacion(marca?: string, modelo?: string, serie?: string, nombreEquipo?: string): void {
+  actualizarInformacion(
+    marca?: string,
+    modelo?: string,
+    serie?: string,
+    nombreEquipo?: string,
+  ): void {
     if (this._estado.esBaja()) {
       throw new Error('No se puede actualizar un equipo dado de baja');
     }
 
-    if (marca && marca.trim().length > 0) {
+    if (marca !== undefined && marca.trim().length > 0) {
       this._marca = marca.trim().toUpperCase();
     }
 
-    if (modelo && modelo.trim().length > 0) {
+    if (modelo !== undefined && modelo.trim().length > 0) {
       this._modelo = modelo.trim().toUpperCase();
     }
 
     if (serie !== undefined) {
-      this._serie = serie ? serie.trim().toUpperCase() : null;
+      this._serie = serie.length > 0 ? serie.trim().toUpperCase() : null;
     }
 
     if (nombreEquipo !== undefined) {
-      this._nombreEquipo = nombreEquipo ? nombreEquipo.trim() : null;
+      this._nombreEquipo = nombreEquipo.length > 0 ? nombreEquipo.trim() : null;
     }
   }
 
@@ -259,7 +282,7 @@ export class EquipoEntity {
   /**
    * Método para obtener representación simple del equipo
    */
-  toObject() {
+  toObject(): EquipoObject {
     return {
       id: this._id.getValue(),
       codigo: this._codigo.getValue(),

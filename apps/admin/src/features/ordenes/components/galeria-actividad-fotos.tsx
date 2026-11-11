@@ -1,570 +1,631 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Galería de Fotos por Actividad
- * 
+ *
  * Muestra y permite gestionar fotos ANTES/DURANTE/DESPUÉS para cada actividad.
  */
 
 'use client';
 
-import { PhotoLightbox, cleanDirectImageUrl, type LightboxImageItem } from '@/components/ui/photo-lightbox';
+import {
+  PhotoLightbox,
+  cleanDirectImageUrl,
+  type LightboxImageItem,
+} from '@/components/ui/photo-lightbox';
 import { fileToBase64, useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    Camera,
-    ChevronLeft,
-    ChevronRight,
-    Clipboard,
-    Clock,
-    Edit2,
-    Image as ImageIcon,
-    Loader2,
-    Plus,
-    Save,
-    Trash2,
-    Upload,
-    X,
-    ZoomIn
+  Camera,
+  Clipboard,
+  Edit2,
+  Image as ImageIcon,
+  Loader2,
+  Plus,
+  Save,
+  Trash2,
+  Upload,
+  X,
+  ZoomIn,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 interface Evidencia {
-    id_evidencia?: number;
-    idEvidencia?: number;
-    id_orden_equipo?: number | null;
-    idOrdenEquipo?: number | null;
-    tipo_evidencia?: 'ANTES' | 'DURANTE' | 'DESPUES' | 'INSUMOS' | 'MEDICION';
-    tipoEvidencia?: 'ANTES' | 'DURANTE' | 'DESPUES' | 'INSUMOS' | 'MEDICION';
-    ruta_archivo?: string;
-    rutaArchivo?: string;
-    descripcion?: string;
-    fecha_captura?: string;
-    fechaCaptura?: string;
+  id_evidencia?: number;
+  idEvidencia?: number;
+  id_orden_equipo?: number | null;
+  idOrdenEquipo?: number | null;
+  tipo_evidencia?: 'ANTES' | 'DURANTE' | 'DESPUES' | 'INSUMOS' | 'MEDICION';
+  tipoEvidencia?: 'ANTES' | 'DURANTE' | 'DESPUES' | 'INSUMOS' | 'MEDICION';
+  ruta_archivo?: string;
+  rutaArchivo?: string;
+  url_foto?: string;
+  urlFoto?: string;
+  url?: string;
+  foto_base64?: string;
+  fotoBase64?: string;
+  descripcion?: string;
+  fecha_captura?: string;
+  fechaCaptura?: string;
 }
 
 interface GaleriaActividadFotosProps {
-    idOrdenServicio: number;
-    idActividadEjecutada?: number;
-    // ✅ FIX 30-ABR-2026: Vincular foto al equipo correcto en órdenes multi-equipo
-    idOrdenEquipo?: number;
-    nombreActividad: string;
-    filtroDescripcion?: string;
+  idOrdenServicio: number;
+  idActividadEjecutada?: number;
+  // ✅ FIX 30-ABR-2026: Vincular foto al equipo correcto en órdenes multi-equipo
+  idOrdenEquipo?: number;
+  nombreActividad: string;
+  filtroDescripcion?: string;
 }
 
 const TIPOS_FOTO = [
-    { key: 'ANTES', label: 'Antes', color: 'bg-blue-500', bgLight: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700' },
-    { key: 'DURANTE', label: 'Durante', color: 'bg-yellow-500', bgLight: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-700' },
-    { key: 'DESPUES', label: 'Después', color: 'bg-green-500', bgLight: 'bg-green-50', border: 'border-green-200', text: 'text-green-700' },
+  {
+    key: 'ANTES',
+    label: 'Antes',
+    color: 'bg-blue-500',
+    bgLight: 'bg-blue-50',
+    border: 'border-blue-200',
+    text: 'text-blue-700',
+  },
+  {
+    key: 'DURANTE',
+    label: 'Durante',
+    color: 'bg-yellow-500',
+    bgLight: 'bg-yellow-50',
+    border: 'border-yellow-200',
+    text: 'text-yellow-700',
+  },
+  {
+    key: 'DESPUES',
+    label: 'Después',
+    color: 'bg-green-500',
+    bgLight: 'bg-green-50',
+    border: 'border-green-200',
+    text: 'text-green-700',
+  },
 ] as const;
 
 // Helpers para normalizar campos camelCase/snake_case
 function getEvidenciaId(e: Evidencia): number {
-    return e.id_evidencia ?? e.idEvidencia ?? 0;
+  return e.id_evidencia ?? e.idEvidencia ?? 0;
 }
 function getEvidenciaTipo(e: Evidencia): string {
-    return e.tipo_evidencia ?? e.tipoEvidencia ?? 'ANTES';
+  return e.tipo_evidencia ?? e.tipoEvidencia ?? 'ANTES';
 }
-function getEvidenciaUrl(e: any): string | undefined {
-    const raw = e?.ruta_archivo ?? e?.rutaArchivo ?? e?.url_foto ?? e?.urlFoto ?? e?.url;
-    if (raw && typeof raw === 'string') {
-        return cleanDirectImageUrl(raw);
-    }
-    const b64 = e?.foto_base64 ?? e?.fotoBase64;
-    if (b64 && typeof b64 === 'string') {
-        return b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
-    }
-    return undefined;
+function getEvidenciaUrl(e: Evidencia): string | undefined {
+  const raw = e?.ruta_archivo ?? e?.rutaArchivo ?? e?.url_foto ?? e?.urlFoto ?? e?.url;
+  if (raw && typeof raw === 'string') {
+    return cleanDirectImageUrl(raw);
+  }
+  const b64 = e?.foto_base64 ?? e?.fotoBase64;
+  if (b64 && typeof b64 === 'string') {
+    return b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
+  }
+  return undefined;
 }
 function getEvidenciaFecha(e: Evidencia): string | undefined {
-    return e.fecha_captura ?? e.fechaCaptura;
+  return e.fecha_captura ?? e.fechaCaptura;
 }
 function getEvidenciaIdEquipo(e: Evidencia): number | null {
-    return e.id_orden_equipo ?? e.idOrdenEquipo ?? null;
+  return e.id_orden_equipo ?? e.idOrdenEquipo ?? null;
 }
 
 function FotoThumbnail({
-    evidencia,
-    onView,
-    onDelete,
-    onEdit,
-    canDelete
+  evidencia,
+  onView,
+  onDelete,
+  onEdit,
+  canDelete,
 }: {
-    evidencia: Evidencia;
-    onView: () => void;
-    onDelete: () => void;
-    onEdit: () => void;
-    canDelete: boolean;
+  evidencia: Evidencia;
+  onView: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+  canDelete: boolean;
 }) {
-    const fotoUrl = getEvidenciaUrl(evidencia);
-    const hasDescripcion = evidencia.descripcion && evidencia.descripcion.trim();
+  const fotoUrl = getEvidenciaUrl(evidencia);
+  const hasDescripcion = evidencia.descripcion && evidencia.descripcion.trim();
 
-    return (
-        <div
-            className="group relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50 cursor-pointer"
-            onClick={onView}
-        >
-            {fotoUrl ? (
-                <>
-                    <Image
-                        src={fotoUrl}
-                        alt={evidencia.descripcion || 'Evidencia'}
-                        fill
-                        className="object-cover pointer-events-auto"
-                        unoptimized
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onView(); }}
-                            className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors pointer-events-auto"
-                            title="Ver en grande"
-                        >
-                            <ZoomIn className="h-4 w-4 text-gray-700" />
-                        </button>
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                            className="p-2 bg-blue-500 rounded-full shadow-lg hover:bg-blue-600 transition-colors pointer-events-auto"
-                            title="Editar observación"
-                        >
-                            <Edit2 className="h-4 w-4 text-white" />
-                        </button>
-                        {canDelete && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors pointer-events-auto"
-                                title="Eliminar"
-                            >
-                                <Trash2 className="h-4 w-4 text-white" />
-                            </button>
-                        )}
-                    </div>
-                    {hasDescripcion && (
-                        <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/60 to-transparent pointer-events-none">
-                            <p className="text-white text-[10px] truncate">{evidencia.descripcion}</p>
-                        </div>
-                    )}
-                </>
-            ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="h-6 w-6 text-gray-300" />
-                </div>
+  return (
+    <div
+      className="group relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50 cursor-pointer"
+      onClick={onView}
+    >
+      {fotoUrl ? (
+        <>
+          <Image
+            src={fotoUrl}
+            alt={evidencia.descripcion || 'Evidencia'}
+            fill
+            className="object-cover pointer-events-auto"
+            unoptimized
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onView();
+              }}
+              className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors pointer-events-auto"
+              title="Ver en grande"
+            >
+              <ZoomIn className="h-4 w-4 text-gray-700" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              className="p-2 bg-blue-500 rounded-full shadow-lg hover:bg-blue-600 transition-colors pointer-events-auto"
+              title="Editar observación"
+            >
+              <Edit2 className="h-4 w-4 text-white" />
+            </button>
+            {canDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors pointer-events-auto"
+                title="Eliminar"
+              >
+                <Trash2 className="h-4 w-4 text-white" />
+              </button>
             )}
+          </div>
+          {hasDescripcion && (
+            <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/60 to-transparent pointer-events-none">
+              <p className="text-white text-[10px] truncate">{evidencia.descripcion}</p>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <ImageIcon className="h-6 w-6 text-gray-300" />
         </div>
-    );
+      )}
+    </div>
+  );
 }
 
 // El antiguo LightboxModal ha sido reemplazado por el componente PhotoLightbox unificado.
 
-
 export function GaleriaActividadFotos({
-    idOrdenServicio,
-    idActividadEjecutada,
-    idOrdenEquipo,
-    nombreActividad,
-    filtroDescripcion
+  idOrdenServicio,
+  idActividadEjecutada,
+  idOrdenEquipo,
+  nombreActividad,
+  filtroDescripcion,
 }: GaleriaActividadFotosProps) {
-    const queryClient = useQueryClient();
-    const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-    const [tipoActivo, setTipoActivo] = useState<string>('ANTES');
-    const [isUploading, setIsUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState('');
+  const queryClient = useQueryClient();
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [tipoActivo, setTipoActivo] = useState<string>('ANTES');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
 
-    // ✅ FIX 02-MAY-2026: Soporte drag-drop, paste y multi-file
-    const uploadFiles = async (files: File[]) => {
-        setIsUploading(true);
-        let uploaded = 0;
-        try {
-            for (const file of files) {
-                setUploadProgress(`${uploaded + 1}/${files.length}`);
-                const base64 = await fileToBase64(file);
-                await apiClient.post('/evidencias-fotograficas/upload-base64', {
-                    idOrdenServicio,
-                    idActividadEjecutada,
-                    ...(idOrdenEquipo ? { idOrdenEquipo } : {}),
-                    tipoEvidencia: tipoActivo,
-                    descripcion: nombreActividad,
-                    nombreArchivo: file.name,
-                    base64,
-                });
-                uploaded++;
+  // ✅ FIX 02-MAY-2026: Soporte drag-drop, paste y multi-file
+  const uploadFiles = async (files: File[]) => {
+    setIsUploading(true);
+    let uploaded = 0;
+    try {
+      for (const file of files) {
+        setUploadProgress(`${uploaded + 1}/${files.length}`);
+        const base64 = await fileToBase64(file);
+        await apiClient.post('/evidencias-fotograficas/upload-base64', {
+          idOrdenServicio,
+          idActividadEjecutada,
+          ...(idOrdenEquipo ? { idOrdenEquipo } : {}),
+          tipoEvidencia: tipoActivo,
+          descripcion: nombreActividad,
+          nombreArchivo: file.name,
+          base64,
+        });
+        uploaded++;
+      }
+      queryClient.invalidateQueries({ queryKey: ['evidencias-actividad'] });
+      queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+      toast.success(
+        files.length === 1 ? 'Foto subida exitosamente' : `${uploaded} fotos subidas exitosamente`,
+      );
+    } catch (error) {
+      console.error('Error uploading:', error);
+      toast.error(
+        `Error al subir foto${files.length > 1 ? 's' : ''} (${uploaded}/${files.length} completadas)`,
+      );
+    } finally {
+      setIsUploading(false);
+      setUploadProgress('');
+    }
+  };
+
+  const { setDropZoneRef, inputProps, openFilePicker, isDragging } = useImageDropPaste({
+    onFiles: uploadFiles,
+    multiple: true,
+    disabled: isUploading,
+    onInvalidType: (name) => toast.error(`"${name}" no es una imagen válida`),
+    onMaxSizeExceeded: (name) => toast.error(`"${name}" supera el límite de 10MB`),
+  });
+
+  // ✅ FIX: Estado y mutación para editar descripción de evidencia
+  const [editingEvidenciaId, setEditingEvidenciaId] = useState<number | null>(null);
+  const [editDescripcion, setEditDescripcion] = useState('');
+
+  const updateDescripcionMutation = useMutation({
+    mutationFn: async ({ id, descripcion }: { id: number; descripcion: string }) => {
+      const res = await apiClient.put(`/evidencias-fotograficas/${id}`, { descripcion });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada],
+      });
+      queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+      queryClient.invalidateQueries({ queryKey: ['ordenes', 'evidencias'] });
+      toast.success('Observación actualizada');
+      setEditingEvidenciaId(null);
+      setEditDescripcion('');
+    },
+    onError: () => {
+      toast.error('Error al actualizar observación');
+    },
+  });
+
+  const handleEditClick = (evidencia: Evidencia) => {
+    setEditingEvidenciaId(getEvidenciaId(evidencia));
+    setEditDescripcion(evidencia.descripcion || '');
+  };
+
+  const handleSaveDescripcion = (idEvidencia: number) => {
+    if (editDescripcion.trim()) {
+      updateDescripcionMutation.mutate({ id: idEvidencia, descripcion: editDescripcion.trim() });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingEvidenciaId(null);
+    setEditDescripcion('');
+  };
+
+  // ✅ FIX 13-FEB-2026: Merge ambas fuentes (endpoint actividad + orden) para no perder fotos
+  // Las fotos de mobile pueden no tener id_actividad_ejecutada (usan descripción),
+  // mientras que las fotos subidas desde admin SÍ lo tienen. Debemos combinar ambas.
+  const { data: evidenciasData, isLoading } = useQuery({
+    queryKey: [
+      'evidencias-actividad',
+      idOrdenServicio,
+      idActividadEjecutada,
+      nombreActividad,
+      filtroDescripcion,
+      idOrdenEquipo,
+    ],
+    queryFn: async () => {
+      try {
+        const seenIds = new Set<number>();
+        const merged: Evidencia[] = [];
+
+        // 1. Obtener evidencias por id_actividad_ejecutada (endpoint específico)
+        if (idActividadEjecutada) {
+          try {
+            const res = await apiClient.get(
+              `/evidencias-fotograficas/actividad/${idActividadEjecutada}`,
+            );
+            const data = res.data;
+            const evidencias = Array.isArray(data) ? data : data.data || [];
+            for (const ev of evidencias) {
+              const evId = ev.id_evidencia ?? ev.idEvidencia ?? 0;
+              if (evId && !seenIds.has(evId)) {
+                seenIds.add(evId);
+                merged.push(ev);
+              }
             }
-            queryClient.invalidateQueries({ queryKey: ['evidencias-actividad'] });
-            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
-            toast.success(files.length === 1 ? 'Foto subida exitosamente' : `${uploaded} fotos subidas exitosamente`);
-        } catch (error) {
-            console.error('Error uploading:', error);
-            toast.error(`Error al subir foto${files.length > 1 ? 's' : ''} (${uploaded}/${files.length} completadas)`);
-        } finally {
-            setIsUploading(false);
-            setUploadProgress('');
-        }
-    };
-
-    const { setDropZoneRef, inputProps, openFilePicker, isDragging } = useImageDropPaste({
-        onFiles: uploadFiles,
-        multiple: true,
-        disabled: isUploading,
-        onInvalidType: (name) => toast.error(`"${name}" no es una imagen válida`),
-        onMaxSizeExceeded: (name) => toast.error(`"${name}" supera el límite de 10MB`),
-    });
-
-    // ✅ FIX: Estado y mutación para editar descripción de evidencia
-    const [editingEvidenciaId, setEditingEvidenciaId] = useState<number | null>(null);
-    const [editDescripcion, setEditDescripcion] = useState('');
-
-    const updateDescripcionMutation = useMutation({
-        mutationFn: async ({ id, descripcion }: { id: number; descripcion: string }) => {
-            const res = await apiClient.put(`/evidencias-fotograficas/${id}`, { descripcion });
-            return res.data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada] });
-            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
-            queryClient.invalidateQueries({ queryKey: ['ordenes', 'evidencias'] });
-            toast.success('Observación actualizada');
-            setEditingEvidenciaId(null);
-            setEditDescripcion('');
-        },
-        onError: () => {
-            toast.error('Error al actualizar observación');
-        }
-    });
-
-    const handleEditClick = (evidencia: Evidencia) => {
-        setEditingEvidenciaId(getEvidenciaId(evidencia));
-        setEditDescripcion(evidencia.descripcion || '');
-    };
-
-    const handleSaveDescripcion = (idEvidencia: number) => {
-        if (editDescripcion.trim()) {
-            updateDescripcionMutation.mutate({ id: idEvidencia, descripcion: editDescripcion.trim() });
-        }
-    };
-
-    const handleCancelEdit = () => {
-        setEditingEvidenciaId(null);
-        setEditDescripcion('');
-    };
-
-    // ✅ FIX 13-FEB-2026: Merge ambas fuentes (endpoint actividad + orden) para no perder fotos
-    // Las fotos de mobile pueden no tener id_actividad_ejecutada (usan descripción),
-    // mientras que las fotos subidas desde admin SÍ lo tienen. Debemos combinar ambas.
-    const { data: evidenciasData, isLoading } = useQuery({
-        queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada, nombreActividad, filtroDescripcion, idOrdenEquipo],
-        queryFn: async () => {
-            try {
-                const seenIds = new Set<number>();
-                const merged: any[] = [];
-
-                // 1. Obtener evidencias por id_actividad_ejecutada (endpoint específico)
-                if (idActividadEjecutada) {
-                    try {
-                        const res = await apiClient.get(
-                            `/evidencias-fotograficas/actividad/${idActividadEjecutada}`
-                        );
-                        const data = res.data;
-                        const evidencias = Array.isArray(data) ? data : (data.data || []);
-                        for (const ev of evidencias) {
-                            const evId = ev.id_evidencia ?? ev.idEvidencia ?? 0;
-                            if (evId && !seenIds.has(evId)) {
-                                seenIds.add(evId);
-                                merged.push(ev);
-                            }
-                        }
-                    } catch (err: any) {
-                        if (err?.response?.status !== 404) {
-                            console.warn('[GaleriaFotos] Error endpoint actividad:', err?.response?.status);
-                        }
-                    }
-                }
-
-                // 2. SIEMPRE buscar por orden y filtrar por descripción (para fotos mobile sin id_actividad)
-                const res2 = await apiClient.get(
-                    `/evidencias-fotograficas/orden/${idOrdenServicio}`
-                );
-                const allData = res2.data;
-                const todasEvidencias = Array.isArray(allData) ? allData : (allData.data || []);
-
-                const nombreNormalizado = nombreActividad.toLowerCase().trim();
-                const filtroNormalizado = (filtroDescripcion || '').toLowerCase().trim();
-
-                for (const e of todasEvidencias) {
-                    const evId = e.id_evidencia ?? e.idEvidencia ?? 0;
-                    if (evId && seenIds.has(evId)) continue; // ya agregada
-
-                    // ✅ FIX MULTI-EQUIPO: Excluir fotos de OTRO equipo
-                    if (idOrdenEquipo) {
-                        const evEquipo = getEvidenciaIdEquipo(e);
-                        // Si la foto pertenece a otro equipo distinto, saltarla
-                        if (evEquipo != null && evEquipo !== idOrdenEquipo) continue;
-                    }
-
-                    // Coincidencia por id_actividad_ejecutada
-                    if (idActividadEjecutada && (e.idActividadEjecutada === idActividadEjecutada ||
-                        e.id_actividad_ejecutada === idActividadEjecutada)) {
-                        seenIds.add(evId);
-                        merged.push(e);
-                        continue;
-                    }
-                    // Coincidencia por descripción (nombre de actividad o filtro)
-                    const desc = (e.descripcion || e.description || '').toLowerCase();
-                    if (filtroNormalizado && desc.includes(filtroNormalizado)) {
-                        seenIds.add(evId);
-                        merged.push(e);
-                        continue;
-                    }
-                    if (desc && nombreNormalizado && desc.includes(nombreNormalizado)) {
-                        seenIds.add(evId);
-                        merged.push(e);
-                        continue;
-                    }
-                    // Coincidencia inversa
-                    if (desc && nombreNormalizado && nombreNormalizado.includes(desc) && desc.length > 5) {
-                        seenIds.add(evId);
-                        merged.push(e);
-                    }
-                }
-
-                return { data: merged };
-            } catch (err) {
-                console.error('[GaleriaFotos] Error cargando evidencias:', err);
-                return { data: [] };
+          } catch (err: unknown) {
+            const status = (err as { response?: { status?: number } })?.response?.status;
+            if (status !== 404) {
+              console.warn('[GaleriaFotos] Error endpoint actividad:', status);
             }
-        },
-        enabled: !!idOrdenServicio && (!!idActividadEjecutada || !!filtroDescripcion || !!nombreActividad),
-    });
-
-    const evidencias: Evidencia[] = evidenciasData?.data || [];
-
-    // Agrupar por tipo (normalizar camelCase/snake_case)
-    const evidenciasPorTipo = TIPOS_FOTO.reduce((acc, tipo) => {
-        acc[tipo.key] = evidencias.filter(e => getEvidenciaTipo(e) === tipo.key);
-        return acc;
-    }, {} as Record<string, Evidencia[]>);
-
-    const evidenciasActivas = evidenciasPorTipo[tipoActivo] || [];
-    const todasLasEvidencias = evidencias;
-
-    const lightboxImages: LightboxImageItem[] = useMemo(() => {
-        return todasLasEvidencias.map((e) => ({
-            id: getEvidenciaId(e),
-            url: getEvidenciaUrl(e) || '',
-            title: nombreActividad,
-            actividad: nombreActividad,
-            badge: getEvidenciaTipo(e),
-            description: e.descripcion,
-            date: getEvidenciaFecha(e),
-        }));
-    }, [todasLasEvidencias, nombreActividad]);
-
-    // Mutación para eliminar
-    const deleteMutation = useMutation({
-        mutationFn: async (idEvidencia: number) => {
-            const res = await apiClient.delete(`/evidencias-fotograficas/${idEvidencia}`);
-            return res.data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada] });
-            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
-            queryClient.invalidateQueries({ queryKey: ['ordenes', 'evidencias'] });
-            toast.success('Evidencia eliminada');
-        },
-        onError: () => {
-            toast.error('Error al eliminar evidencia');
+          }
         }
-    });
 
-    const handleDelete = (idEvidencia: number) => {
-        if (confirm('¿Eliminar esta evidencia?')) {
-            deleteMutation.mutate(idEvidencia);
+        // 2. SIEMPRE buscar por orden y filtrar por descripción (para fotos mobile sin id_actividad)
+        const res2 = await apiClient.get(`/evidencias-fotograficas/orden/${idOrdenServicio}`);
+        const allData = res2.data;
+        const todasEvidencias = Array.isArray(allData) ? allData : allData.data || [];
+
+        const nombreNormalizado = nombreActividad.toLowerCase().trim();
+        const filtroNormalizado = (filtroDescripcion || '').toLowerCase().trim();
+
+        for (const e of todasEvidencias) {
+          const evId = e.id_evidencia ?? e.idEvidencia ?? 0;
+          if (evId && seenIds.has(evId)) continue; // ya agregada
+
+          // ✅ FIX MULTI-EQUIPO: Excluir fotos de OTRO equipo
+          if (idOrdenEquipo) {
+            const evEquipo = getEvidenciaIdEquipo(e);
+            // Si la foto pertenece a otro equipo distinto, saltarla
+            if (evEquipo != null && evEquipo !== idOrdenEquipo) continue;
+          }
+
+          // Coincidencia por id_actividad_ejecutada
+          if (
+            idActividadEjecutada &&
+            (e.idActividadEjecutada === idActividadEjecutada ||
+              e.id_actividad_ejecutada === idActividadEjecutada)
+          ) {
+            seenIds.add(evId);
+            merged.push(e);
+            continue;
+          }
+          // Coincidencia por descripción (nombre de actividad o filtro)
+          const desc = (e.descripcion || e.description || '').toLowerCase();
+          if (filtroNormalizado && desc.includes(filtroNormalizado)) {
+            seenIds.add(evId);
+            merged.push(e);
+            continue;
+          }
+          if (desc && nombreNormalizado && desc.includes(nombreNormalizado)) {
+            seenIds.add(evId);
+            merged.push(e);
+            continue;
+          }
+          // Coincidencia inversa
+          if (desc && nombreNormalizado && nombreNormalizado.includes(desc) && desc.length > 5) {
+            seenIds.add(evId);
+            merged.push(e);
+          }
         }
-    };
 
-    const handleViewLightbox = (evidencia: Evidencia) => {
-        const evId = getEvidenciaId(evidencia);
-        const idx = todasLasEvidencias.findIndex(e => getEvidenciaId(e) === evId);
-        setLightboxIndex(idx >= 0 ? idx : 0);
-    };
+        return { data: merged };
+      } catch (err) {
+        console.error('[GaleriaFotos] Error cargando evidencias:', err);
+        return { data: [] };
+      }
+    },
+    enabled:
+      !!idOrdenServicio && (!!idActividadEjecutada || !!filtroDescripcion || !!nombreActividad),
+  });
 
-    // Abrir selector de archivos
-    const handleUploadClick = () => openFilePicker();
+  const evidencias: Evidencia[] = evidenciasData?.data || [];
 
-    const tipoConfig = TIPOS_FOTO.find(t => t.key === tipoActivo) || TIPOS_FOTO[0];
+  // Agrupar por tipo (normalizar camelCase/snake_case)
+  const evidenciasPorTipo = TIPOS_FOTO.reduce(
+    (acc, tipo) => {
+      acc[tipo.key] = evidencias.filter((e) => getEvidenciaTipo(e) === tipo.key);
+      return acc;
+    },
+    {} as Record<string, Evidencia[]>,
+  );
 
-    return (
-        <div ref={setDropZoneRef} className={cn(
-            "bg-white rounded-lg border overflow-hidden transition-all relative",
-            isDragging ? "border-blue-400 border-2 ring-4 ring-blue-100" : "border-gray-200"
-        )}>
-            {/* Overlay drag-drop */}
-            {isDragging && (
-                <div className="absolute inset-0 z-20 bg-blue-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 pointer-events-none rounded-lg">
-                    <Upload className="h-8 w-8 text-blue-500 animate-bounce" />
-                    <p className="text-sm font-bold text-blue-700">Suelte las imágenes aquí</p>
-                    <p className="text-xs text-blue-500">Se subirán como fotos {tipoActivo}</p>
-                </div>
-            )}
-            {/* Header */}
-            <div className="p-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
-                <Camera className="h-4 w-4 text-gray-600" />
-                <span className="text-xs font-bold text-gray-700">Evidencias Fotográficas</span>
-                <span className="text-[10px] text-gray-400 ml-auto">
-                    {evidencias.length} foto{evidencias.length !== 1 ? 's' : ''}
-                </span>
-            </div>
+  const evidenciasActivas = evidenciasPorTipo[tipoActivo] || [];
+  const todasLasEvidencias = evidencias;
 
-            {/* Tabs de tipo */}
-            <div className="flex border-b border-gray-100">
-                {TIPOS_FOTO.map(tipo => {
-                    const count = evidenciasPorTipo[tipo.key]?.length || 0;
-                    const isActive = tipoActivo === tipo.key;
-                    return (
-                        <button
-                            key={tipo.key}
-                            onClick={() => setTipoActivo(tipo.key)}
-                            className={cn(
-                                "flex-1 px-3 py-2 text-xs font-bold transition-all border-b-2",
-                                isActive
-                                    ? `${tipo.text} border-current ${tipo.bgLight}`
-                                    : "text-gray-400 border-transparent hover:bg-gray-50"
-                            )}
-                        >
-                            {tipo.label}
-                            {count > 0 && (
-                                <span className={cn(
-                                    "ml-1.5 px-1.5 py-0.5 rounded-full text-[10px]",
-                                    isActive ? tipo.color + " text-white" : "bg-gray-200 text-gray-600"
-                                )}>
-                                    {count}
-                                </span>
-                            )}
-                        </button>
-                    );
-                })}
-            </div>
+  const lightboxImages: LightboxImageItem[] = useMemo(() => {
+    return todasLasEvidencias.map((e) => ({
+      id: getEvidenciaId(e),
+      url: getEvidenciaUrl(e) || '',
+      title: nombreActividad,
+      actividad: nombreActividad,
+      badge: getEvidenciaTipo(e),
+      description: e.descripcion,
+      date: getEvidenciaFecha(e),
+    }));
+  }, [todasLasEvidencias, nombreActividad]);
 
-            {/* Input hidden para subir archivos (multi-select habilitado) */}
-            <input {...inputProps} />
+  // Mutación para eliminar
+  const deleteMutation = useMutation({
+    mutationFn: async (idEvidencia: number) => {
+      const res = await apiClient.delete(`/evidencias-fotograficas/${idEvidencia}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada],
+      });
+      queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+      queryClient.invalidateQueries({ queryKey: ['ordenes', 'evidencias'] });
+      toast.success('Evidencia eliminada');
+    },
+    onError: () => {
+      toast.error('Error al eliminar evidencia');
+    },
+  });
 
-            {/* Grid de fotos */}
-            <div className="p-3">
-                {isLoading ? (
-                    <div className="flex justify-center py-6">
-                        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-3 gap-2">
-                        {/* Botón de agregar foto con hints de drag-drop y paste */}
-                        <button
-                            onClick={handleUploadClick}
-                            disabled={isUploading}
-                            className={cn(
-                                "aspect-square rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all",
-                                isUploading
-                                    ? "border-gray-200 bg-gray-50 cursor-wait"
-                                    : "border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer"
-                            )}
-                            title="Clic para seleccionar, arrastrar imágenes o pegar (Ctrl+V)"
-                        >
-                            {isUploading ? (
-                                <>
-                                    <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-                                    {uploadProgress && (
-                                        <span className="text-[9px] text-gray-400">{uploadProgress}</span>
-                                    )}
-                                </>
-                            ) : (
-                                <>
-                                    <Plus className="h-5 w-5 text-gray-400" />
-                                    <span className="text-[10px] text-gray-400">Agregar</span>
-                                    <span className="text-[8px] text-gray-300 flex items-center gap-0.5">
-                                        <Clipboard className="h-2.5 w-2.5" /> Ctrl+V
-                                    </span>
-                                </>
-                            )}
-                        </button>
+  const handleDelete = (idEvidencia: number) => {
+    if (confirm('¿Eliminar esta evidencia?')) {
+      deleteMutation.mutate(idEvidencia);
+    }
+  };
 
-                        {/* Fotos existentes */}
-                        {evidenciasActivas.map(evidencia => {
-                            const evId = getEvidenciaId(evidencia);
-                            const isEditing = editingEvidenciaId === evId;
-                            return (
-                                <div key={evId} className="relative">
-                                    {isEditing ? (
-                                        <div className="aspect-square rounded-lg border-2 border-blue-400 bg-blue-50 p-2 flex flex-col gap-2">
-                                            <textarea
-                                                value={editDescripcion}
-                                                onChange={(e) => setEditDescripcion(e.target.value)}
-                                                className="w-full flex-1 text-xs px-2 py-1 border border-blue-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px]"
-                                                placeholder="Observación..."
-                                                autoFocus
-                                            />
-                                            <div className="flex gap-1 justify-end">
-                                                <button
-                                                    onClick={handleCancelEdit}
-                                                    className="p-1.5 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
-                                                    title="Cancelar"
-                                                >
-                                                    <X className="h-3.5 w-3.5 text-gray-600" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleSaveDescripcion(evId)}
-                                                    disabled={updateDescripcionMutation.isPending}
-                                                    className="p-1.5 bg-blue-500 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
-                                                    title="Guardar"
-                                                >
-                                                    {updateDescripcionMutation.isPending ? (
-                                                        <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
-                                                    ) : (
-                                                        <Save className="h-3.5 w-3.5 text-white" />
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <FotoThumbnail
-                                            evidencia={evidencia}
-                                            onView={() => handleViewLightbox(evidencia)}
-                                            onDelete={() => handleDelete(evId)}
-                                            onEdit={() => handleEditClick(evidencia)}
-                                            canDelete={true}
-                                        />
-                                    )}
-                                </div>
-                            );
-                        })}
+  const handleViewLightbox = (evidencia: Evidencia) => {
+    const evId = getEvidenciaId(evidencia);
+    const idx = todasLasEvidencias.findIndex((e) => getEvidenciaId(e) === evId);
+    setLightboxIndex(idx >= 0 ? idx : 0);
+  };
 
-                        {/* Mensaje si no hay fotos */}
-                        {evidenciasActivas.length === 0 && !isUploading && (
-                            <div className="col-span-2 flex items-center justify-center text-gray-400">
-                                <p className="text-xs">Sin fotos {tipoConfig.label.toLowerCase()}</p>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
+  // Abrir selector de archivos
+  const handleUploadClick = () => openFilePicker();
 
-            {/* Visor Profesional PhotoLightbox */}
-            {lightboxIndex !== null && lightboxImages.length > 0 && (
-                <PhotoLightbox
-                    isOpen={lightboxIndex !== null}
-                    images={lightboxImages}
-                    currentIndex={lightboxIndex}
-                    onClose={() => setLightboxIndex(null)}
-                    onNavigate={(newIdx) => setLightboxIndex(newIdx)}
-                    canDelete={true}
-                    onDelete={(img) => {
-                        const evId = Number(img.id);
-                        if (evId) {
-                            setLightboxIndex(null);
-                            handleDelete(evId);
-                        }
-                    }}
-                />
-            )}
+  const tipoConfig = TIPOS_FOTO.find((t) => t.key === tipoActivo) || TIPOS_FOTO[0];
+
+  return (
+    <div
+      ref={setDropZoneRef}
+      className={cn(
+        'bg-white rounded-lg border overflow-hidden transition-all relative',
+        isDragging ? 'border-blue-400 border-2 ring-4 ring-blue-100' : 'border-gray-200',
+      )}
+    >
+      {/* Overlay drag-drop */}
+      {isDragging && (
+        <div className="absolute inset-0 z-20 bg-blue-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 pointer-events-none rounded-lg">
+          <Upload className="h-8 w-8 text-blue-500 animate-bounce" />
+          <p className="text-sm font-bold text-blue-700">Suelte las imágenes aquí</p>
+          <p className="text-xs text-blue-500">Se subirán como fotos {tipoActivo}</p>
         </div>
-    );
+      )}
+      {/* Header */}
+      <div className="p-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+        <Camera className="h-4 w-4 text-gray-600" />
+        <span className="text-xs font-bold text-gray-700">Evidencias Fotográficas</span>
+        <span className="text-[10px] text-gray-400 ml-auto">
+          {evidencias.length} foto{evidencias.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {/* Tabs de tipo */}
+      <div className="flex border-b border-gray-100">
+        {TIPOS_FOTO.map((tipo) => {
+          const count = evidenciasPorTipo[tipo.key]?.length || 0;
+          const isActive = tipoActivo === tipo.key;
+          return (
+            <button
+              key={tipo.key}
+              onClick={() => setTipoActivo(tipo.key)}
+              className={cn(
+                'flex-1 px-3 py-2 text-xs font-bold transition-all border-b-2',
+                isActive
+                  ? `${tipo.text} border-current ${tipo.bgLight}`
+                  : 'text-gray-400 border-transparent hover:bg-gray-50',
+              )}
+            >
+              {tipo.label}
+              {count > 0 && (
+                <span
+                  className={cn(
+                    'ml-1.5 px-1.5 py-0.5 rounded-full text-[10px]',
+                    isActive ? tipo.color + ' text-white' : 'bg-gray-200 text-gray-600',
+                  )}
+                >
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Input hidden para subir archivos (multi-select habilitado) */}
+      <input {...inputProps} />
+
+      {/* Grid de fotos */}
+      <div className="p-3">
+        {isLoading ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {/* Botón de agregar foto con hints de drag-drop y paste */}
+            <button
+              onClick={handleUploadClick}
+              disabled={isUploading}
+              className={cn(
+                'aspect-square rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all',
+                isUploading
+                  ? 'border-gray-200 bg-gray-50 cursor-wait'
+                  : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer',
+              )}
+              title="Clic para seleccionar, arrastrar imágenes o pegar (Ctrl+V)"
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                  {uploadProgress && (
+                    <span className="text-[9px] text-gray-400">{uploadProgress}</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Plus className="h-5 w-5 text-gray-400" />
+                  <span className="text-[10px] text-gray-400">Agregar</span>
+                  <span className="text-[8px] text-gray-300 flex items-center gap-0.5">
+                    <Clipboard className="h-2.5 w-2.5" /> Ctrl+V
+                  </span>
+                </>
+              )}
+            </button>
+
+            {/* Fotos existentes */}
+            {evidenciasActivas.map((evidencia) => {
+              const evId = getEvidenciaId(evidencia);
+              const isEditing = editingEvidenciaId === evId;
+              return (
+                <div key={evId} className="relative">
+                  {isEditing ? (
+                    <div className="aspect-square rounded-lg border-2 border-blue-400 bg-blue-50 p-2 flex flex-col gap-2">
+                      <textarea
+                        value={editDescripcion}
+                        onChange={(e) => setEditDescripcion(e.target.value)}
+                        className="w-full flex-1 text-xs px-2 py-1 border border-blue-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px]"
+                        placeholder="Observación..."
+                        autoFocus
+                      />
+                      <div className="flex gap-1 justify-end">
+                        <button
+                          onClick={handleCancelEdit}
+                          className="p-1.5 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                          title="Cancelar"
+                        >
+                          <X className="h-3.5 w-3.5 text-gray-600" />
+                        </button>
+                        <button
+                          onClick={() => handleSaveDescripcion(evId)}
+                          disabled={updateDescripcionMutation.isPending}
+                          className="p-1.5 bg-blue-500 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
+                          title="Guardar"
+                        >
+                          {updateDescripcionMutation.isPending ? (
+                            <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                          ) : (
+                            <Save className="h-3.5 w-3.5 text-white" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <FotoThumbnail
+                      evidencia={evidencia}
+                      onView={() => handleViewLightbox(evidencia)}
+                      onDelete={() => handleDelete(evId)}
+                      onEdit={() => handleEditClick(evidencia)}
+                      canDelete={true}
+                    />
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Mensaje si no hay fotos */}
+            {evidenciasActivas.length === 0 && !isUploading && (
+              <div className="col-span-2 flex items-center justify-center text-gray-400">
+                <p className="text-xs">Sin fotos {tipoConfig.label.toLowerCase()}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Visor Profesional PhotoLightbox */}
+      {lightboxIndex !== null && lightboxImages.length > 0 && (
+        <PhotoLightbox
+          isOpen={lightboxIndex !== null}
+          images={lightboxImages}
+          currentIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={(newIdx) => setLightboxIndex(newIdx)}
+          canDelete={true}
+          onDelete={(img) => {
+            const evId = Number(img.id);
+            if (evId) {
+              setLightboxIndex(null);
+              handleDelete(evId);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
 }

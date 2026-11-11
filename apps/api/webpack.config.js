@@ -27,7 +27,7 @@ module.exports = function(options, webpack) {
             {
               loader: 'ts-loader',
               options: {
-                transpileOnly: true,
+                transpileOnly: false,
                 getCustomTransformers: (program) => ({
                   before: [
                     require('@nestjs/swagger/plugin').before(

@@ -24,7 +24,7 @@ export type OpcionJsonItem =
       etiqueta?: string;
       value?: string;
       label?: string;
-      [key: string]: any;
+      [key: string]: unknown;
     };
 
 export interface UnidadMedidaEam {
@@ -62,7 +62,7 @@ export interface AtributoTecnico {
   unidad_defecto_codigo?: string | null;
   rol_semantico: string;
   opciones_json?: OpcionJsonItem[] | null;
-  validacion_json?: Record<string, any> | null;
+  validacion_json?: Record<string, unknown> | null;
   es_sistema: boolean;
   activo: boolean;
   magnitud?: MagnitudFisica | null;
@@ -190,7 +190,7 @@ export interface ArquetipoEsquemaResponse {
     prefijo_codigo?: string | null;
     formato_ficha_tecnica?: string | null;
     usa_plantilla_universal?: boolean;
-    metadata?: any;
+    metadata?: Record<string, unknown>;
   };
   modulos: Array<{
     id_modulo: number;
@@ -268,7 +268,7 @@ export interface ModeloEquipoOem {
   marca: string;
   modelo: string;
   nombre_comercial?: string | null;
-  especificaciones_base: Record<string, any>;
+  especificaciones_base: Record<string, unknown>;
   activo: boolean;
   tipo_equipo?: {
     id_tipo_equipo: number;
@@ -321,19 +321,32 @@ export async function getResumenEjecutivoEam(): Promise<ResumenEjecutivoEam> {
   return data;
 }
 
+export interface MagnitudBancoItem {
+  codigo_magnitud: string;
+  nombre_magnitud: string;
+  categoria?: string;
+  unidad_base_codigo?: string;
+  descripcion?: string;
+  activada?: boolean;
+  unidades_sugeridas?: Array<Record<string, unknown>>;
+  unidades?: Array<{
+    codigo?: string;
+    simbolo?: string;
+    nombre?: string;
+  }>;
+  [key: string]: unknown;
+}
+
 // 1. Magnitudes y Unidades UoM
-export async function getBancoMagnitudesEam(): Promise<any[]> {
-  const { data } = await apiClient.get<any[]>('/catalogos/magnitudes/banco');
+export async function getBancoMagnitudesEam(): Promise<MagnitudBancoItem[]> {
+  const { data } = await apiClient.get<MagnitudBancoItem[]>('/catalogos/magnitudes/banco');
   return data;
 }
 
-export async function activarMagnitudBancoEam(
-  codigo_magnitud: string,
-): Promise<MagnitudFisica> {
-  const { data } = await apiClient.post<MagnitudFisica>(
-    '/catalogos/magnitudes/activar-banco',
-    { codigo_magnitud },
-  );
+export async function activarMagnitudBancoEam(codigo_magnitud: string): Promise<MagnitudFisica> {
+  const { data } = await apiClient.post<MagnitudFisica>('/catalogos/magnitudes/activar-banco', {
+    codigo_magnitud,
+  });
   return data;
 }
 
@@ -359,10 +372,9 @@ export async function setActivoMagnitudEam(
   codigo: string,
   activo: boolean,
 ): Promise<MagnitudFisica> {
-  const { data } = await apiClient.patch<MagnitudFisica>(
-    `/catalogos/magnitudes/${codigo}`,
-    { activo },
-  );
+  const { data } = await apiClient.patch<MagnitudFisica>(`/catalogos/magnitudes/${codigo}`, {
+    activo,
+  });
   return data;
 }
 
@@ -403,7 +415,9 @@ export async function updateMagnitudEam(
   return data;
 }
 
-export async function deleteMagnitudEam(codigo: string): Promise<{ success: boolean; message: string }> {
+export async function deleteMagnitudEam(
+  codigo: string,
+): Promise<{ success: boolean; message: string }> {
   const { data } = await apiClient.delete<{ success: boolean; message: string }>(
     `/catalogos/magnitudes/${codigo}`,
   );
@@ -445,14 +459,13 @@ export async function updateUnidadEam(
     activo?: boolean;
   },
 ): Promise<UnidadMedidaEam> {
-  const { data } = await apiClient.patch<UnidadMedidaEam>(
-    `/catalogos/unidades/${codigo}`,
-    payload,
-  );
+  const { data } = await apiClient.patch<UnidadMedidaEam>(`/catalogos/unidades/${codigo}`, payload);
   return data;
 }
 
-export async function deleteUnidadEam(codigo: string): Promise<{ success: boolean; message: string }> {
+export async function deleteUnidadEam(
+  codigo: string,
+): Promise<{ success: boolean; message: string }> {
   const { data } = await apiClient.delete<{ success: boolean; message: string }>(
     `/catalogos/unidades/${codigo}`,
   );
@@ -495,12 +508,9 @@ export async function createAtributoEam(payload: {
   unidad_defecto_codigo?: string | null;
   rol_semantico?: string;
   opciones_json?: OpcionJsonItem[];
-  validacion_json?: Record<string, any>;
+  validacion_json?: Record<string, unknown>;
 }): Promise<AtributoTecnico> {
-  const { data } = await apiClient.post<AtributoTecnico>(
-    '/catalogos/atributos-tecnicos',
-    payload,
-  );
+  const { data } = await apiClient.post<AtributoTecnico>('/catalogos/atributos-tecnicos', payload);
   return data;
 }
 
@@ -514,7 +524,7 @@ export async function updateAtributoEam(
     unidad_defecto_codigo?: string | null;
     rol_semantico?: string;
     opciones_json?: OpcionJsonItem[];
-    validacion_json?: Record<string, any>;
+    validacion_json?: Record<string, unknown>;
     activo?: boolean;
   },
 ): Promise<AtributoTecnico> {
@@ -525,7 +535,9 @@ export async function updateAtributoEam(
   return data;
 }
 
-export async function deleteAtributoEam(codigo: string): Promise<{ success: boolean; message: string }> {
+export async function deleteAtributoEam(
+  codigo: string,
+): Promise<{ success: boolean; message: string }> {
   const { data } = await apiClient.delete<{ success: boolean; message: string }>(
     `/catalogos/atributos-tecnicos/${codigo}`,
   );
@@ -571,7 +583,9 @@ export async function updateModuloEam(
   return data;
 }
 
-export async function deleteModuloEam(codigo: string): Promise<{ success: boolean; message: string }> {
+export async function deleteModuloEam(
+  codigo: string,
+): Promise<{ success: boolean; message: string }> {
   const { data } = await apiClient.delete<{ success: boolean; message: string }>(
     `/catalogos/modulos-tecnicos/${codigo}`,
   );
@@ -689,8 +703,8 @@ export async function deleteArquetipoEam(idTipoEquipo: number): Promise<void> {
 export async function vincularModuloArquetipoEam(
   idTipoEquipo: number,
   payload: { id_modulo: number; obligatorio?: boolean },
-): Promise<any> {
-  const { data } = await apiClient.post(
+): Promise<Record<string, unknown>> {
+  const { data } = await apiClient.post<Record<string, unknown>>(
     `/catalogos/arquetipos/${idTipoEquipo}/modulos`,
     payload,
   );
@@ -739,10 +753,7 @@ export async function updatePlanArquetipoEam(
   return data;
 }
 
-export async function deletePlanArquetipoEam(
-  idTipoEquipo: number,
-  idPlan: number,
-): Promise<void> {
+export async function deletePlanArquetipoEam(idTipoEquipo: number, idPlan: number): Promise<void> {
   await apiClient.delete(`/catalogos/arquetipos/${idTipoEquipo}/planes/${idPlan}`);
 }
 
@@ -765,7 +776,7 @@ export async function createModeloOemEam(payload: {
   modelo: string;
   id_tipo_equipo: number;
   nombre_comercial?: string;
-  especificaciones_base?: Record<string, any>;
+  especificaciones_base?: Record<string, unknown>;
 }): Promise<ModeloEquipoOem> {
   const { data } = await apiClient.post<ModeloEquipoOem>('/catalogos/modelos-equipo', payload);
   return data;
@@ -778,7 +789,7 @@ export async function updateModeloOemEam(
     modelo?: string;
     id_tipo_equipo?: number;
     nombre_comercial?: string;
-    especificaciones_base?: Record<string, any>;
+    especificaciones_base?: Record<string, unknown>;
     activo?: boolean;
   },
 ): Promise<ModeloEquipoOem> {
@@ -845,4 +856,3 @@ export async function createTipoServicioEam(payload: {
   );
   return data;
 }
-

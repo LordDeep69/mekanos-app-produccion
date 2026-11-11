@@ -61,9 +61,7 @@ export class PrismaParametrosMedicionRepository {
    * @param id_parametro_medicion - ID del parámetro
    * @returns Parámetro con relaciones o null
    */
-  async findById(
-    id_parametro_medicion: number,
-  ): Promise<ParametroMedicionConRelaciones | null> {
+  async findById(id_parametro_medicion: number): Promise<ParametroMedicionConRelaciones | null> {
     return this.prisma.parametros_medicion.findUnique({
       where: { id_parametro_medicion },
       include: INCLUDE_RELATIONS_DETAIL,
@@ -75,10 +73,8 @@ export class PrismaParametrosMedicionRepository {
    * @param codigo_parametro - Código único del parámetro
    * @returns Parámetro con relaciones o null
    */
-  async findByCodigo(
-    codigo_parametro: string,
-  ): Promise<ParametroMedicionConRelaciones | null> {
-    return this.prisma.parametros_medicion.findUnique({
+  async findByCodigo(codigo_parametro: string): Promise<ParametroMedicionConRelaciones | null> {
+    return this.prisma.parametros_medicion.findFirst({
       where: { codigo_parametro },
       include: INCLUDE_RELATIONS_DETAIL,
     }) as Promise<ParametroMedicionConRelaciones | null>;
@@ -131,10 +127,7 @@ export class PrismaParametrosMedicionRepository {
       skip,
       take: limit,
       include: INCLUDE_RELATIONS_LIST,
-      orderBy: [
-        { categoria: 'asc' },
-        { codigo_parametro: 'asc' },
-      ],
+      orderBy: [{ categoria: 'asc' }, { codigo_parametro: 'asc' }],
     });
   }
 
@@ -146,10 +139,7 @@ export class PrismaParametrosMedicionRepository {
     return this.prisma.parametros_medicion.findMany({
       where: { activo: true },
       include: INCLUDE_RELATIONS_LIST,
-      orderBy: [
-        { categoria: 'asc' },
-        { codigo_parametro: 'asc' },
-      ],
+      orderBy: [{ categoria: 'asc' }, { codigo_parametro: 'asc' }],
     });
   }
 
@@ -195,9 +185,7 @@ export class PrismaParametrosMedicionRepository {
    * @param id_parametro_medicion - ID del parámetro
    * @returns Parámetro con activo=false
    */
-  async softDelete(
-    id_parametro_medicion: number,
-  ): Promise<ParametroMedicionConRelaciones> {
+  async softDelete(id_parametro_medicion: number): Promise<ParametroMedicionConRelaciones> {
     return this.prisma.parametros_medicion.update({
       where: { id_parametro_medicion },
       data: { activo: false },
@@ -210,9 +198,7 @@ export class PrismaParametrosMedicionRepository {
    * @param id_parametro_medicion - ID del parámetro
    * @returns Parámetro eliminado
    */
-  async hardDelete(
-    id_parametro_medicion: number,
-  ): Promise<parametros_medicion> {
+  async hardDelete(id_parametro_medicion: number): Promise<parametros_medicion> {
     return this.prisma.parametros_medicion.delete({
       where: { id_parametro_medicion },
     });

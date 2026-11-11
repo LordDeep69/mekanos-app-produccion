@@ -15,7 +15,7 @@ export enum EstadoOrdenEnum {
 /**
  * Value Object: EstadoOrden
  * Representa el estado de una Orden de Servicio con validación de transiciones
- * 
+ *
  * Workflow:
  * BORRADOR → PROGRAMADA → ASIGNADA → EN_PROCESO → EJECUTADA → EN_REVISION → APROBADA
  */
@@ -91,7 +91,7 @@ export class EstadoOrden {
     const estadoUpper = estado.toUpperCase();
     if (!Object.values(EstadoOrdenEnum).includes(estadoUpper as EstadoOrdenEnum)) {
       throw new Error(
-        `Estado inválido: ${estado}. Estados válidos: ${Object.values(EstadoOrdenEnum).join(', ')}`
+        `Estado inválido: ${estado}. Estados válidos: ${Object.values(EstadoOrdenEnum).join(', ')}`,
       );
     }
     return new EstadoOrden(estadoUpper as EstadoOrdenEnum);
@@ -101,8 +101,8 @@ export class EstadoOrden {
     return this.value;
   }
 
-  equals(other: EstadoOrden): boolean {
-    if (!other) return false;
+  equals(other?: EstadoOrden | null): boolean {
+    if (other == null) return false;
     return this.value === other.value;
   }
 

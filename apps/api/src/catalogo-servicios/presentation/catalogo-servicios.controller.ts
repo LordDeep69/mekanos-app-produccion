@@ -1,15 +1,15 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpCode,
-    HttpStatus,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ActualizarCatalogoServicioCommand } from '../application/commands/actualizar-catalogo-servicio.command';
@@ -19,8 +19,6 @@ import { BuscarPorCodigoQuery } from '../application/queries/buscar-por-codigo.q
 import { ListarCatalogosServicioQuery } from '../application/queries/listar-catalogos-servicio.query';
 import { ObtenerCatalogoServicioPorIdQuery } from '../application/queries/obtener-catalogo-servicio-por-id.query';
 import { ObtenerPorTipoServicioQuery } from '../application/queries/obtener-por-tipo-servicio.query';
-import { ActualizarCatalogoServicioDto } from './dto/actualizar-catalogo-servicio.dto';
-import { CrearCatalogoServicioDto } from './dto/crear-catalogo-servicio.dto';
 
 @Controller('catalogo-servicios')
 export class CatalogoServiciosController {
@@ -77,7 +75,7 @@ export class CatalogoServiciosController {
     @Query('idTipoServicio') idTipoServicio?: string,
     @Query('tipoEquipoId') tipoEquipoId?: string,
     @Query('idTipoEquipo') idTipoEquipo?: string,
-    @Query('limit') limit?: string,
+    @Query('limit') _limit?: string,
   ) {
     const sId = tipoServicioId || idTipoServicio;
     const eId = tipoEquipoId || idTipoEquipo;
@@ -118,10 +116,7 @@ export class CatalogoServiciosController {
   }
 
   @Put(':id')
-  async actualizar(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: any,
-  ) {
+  async actualizar(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
     const command = new ActualizarCatalogoServicioCommand(
       id,
       dto.nombreServicio ?? dto.nombre_servicio,

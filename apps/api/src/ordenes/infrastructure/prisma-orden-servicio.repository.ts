@@ -9,7 +9,7 @@ import {
 /**
  * Repository para ordenes_servicio
  * Implementa acceso a datos con Prisma ORM
- * 
+ *
  * CARACTERÍSTICAS:
  * - CRUD completo con includes extensos
  * - Workflow de estados (7 transiciones)
@@ -18,7 +18,7 @@ import {
  */
 @Injectable()
 export class PrismaOrdenServicioRepository {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 🔤 NORMALIZACIÓN DE TEXTO PARA BÚSQUEDAS (19-SEP-2026)
@@ -37,10 +37,14 @@ export class PrismaOrdenServicioRepository {
   // ("Casos abiertos" y "Con pendientes"). No dependen de la búsqueda, de la
   // página ni de los filtros, así que se cachean en memoria. Antes se
   // recalculaban en CADA request (2 round-trips de ~200-400 ms cada uno).
-  private globalCountersCache: { at: number; abiertos: number; conPendientes: number } | null = null;
+  private globalCountersCache: { at: number; abiertos: number; conPendientes: number } | null =
+    null;
   private static readonly GLOBAL_COUNTERS_TTL_MS = 30_000;
 
-  private async getGlobalCounters(): Promise<{ totalCasosAbiertos: number; totalConPendientes: number }> {
+  private async getGlobalCounters(): Promise<{
+    totalCasosAbiertos: number;
+    totalConPendientes: number;
+  }> {
     const now = Date.now();
     if (
       this.globalCountersCache &&
@@ -79,30 +83,37 @@ export class PrismaOrdenServicioRepository {
    * Reemplaza 6 `_count` de Prisma + 2 consultas finales (PDFs y pendientes)
    * por un único round-trip. Semántica idéntica a la implementación anterior.
    */
-  private async getOrdenAggregates(ordenIds: number[]): Promise<Map<number, {
-    emails: number;
-    actividades: number;
-    plan: number;
-    mediciones: number;
-    evidencias: number;
-    pdfs: number;
-    pendientesTotal: number;
-    pendientesActivos: number;
-  }>> {
+  private async getOrdenAggregates(ordenIds: number[]): Promise<
+    Map<
+      number,
+      {
+        emails: number;
+        actividades: number;
+        plan: number;
+        mediciones: number;
+        evidencias: number;
+        pdfs: number;
+        pendientesTotal: number;
+        pendientesActivos: number;
+      }
+    >
+  > {
     const result = new Map<number, any>();
     if (ordenIds.length === 0) return result;
 
-    const rows = await this.prisma.$queryRaw<Array<{
-      id: number;
-      emails: number;
-      actividades: number;
-      plan: number;
-      mediciones: number;
-      evidencias: number;
-      pdfs: number;
-      pendientes_total: number;
-      pendientes_activos: number;
-    }>>`
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: number;
+        emails: number;
+        actividades: number;
+        plan: number;
+        mediciones: number;
+        evidencias: number;
+        pdfs: number;
+        pendientes_total: number;
+        pendientes_activos: number;
+      }>
+    >`
       SELECT
         o.id_orden_servicio AS id,
         (SELECT COUNT(*)::int FROM historial_emails_enviados t WHERE t.id_orden_servicio = o.id_orden_servicio) AS emails,
@@ -199,7 +210,7 @@ export class PrismaOrdenServicioRepository {
     for (const [homoglyph, latin] of Object.entries(PrismaOrdenServicioRepository.HOMOGLYPH_MAP)) {
       normalized = normalized.replaceAll(homoglyph, latin);
     }
-    // 2. Eliminar diacríticos (tildes, acentos) 
+    // 2. Eliminar diacríticos (tildes, acentos)
     // NFD descompone: é → e + ´, luego removemos los combining marks
     normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     return normalized;
@@ -213,9 +224,12 @@ export class PrismaOrdenServicioRepository {
    * @param limit Límite de resultados
    * @returns Array de IDs de órdenes_servicio que matchean
    */
-  private async findOrdenIdsByUnaccentSearch(searchText: string, limit: number = 5000): Promise<number[]> {
+  private async findOrdenIdsByUnaccentSearch(
+    searchText: string,
+    limit: number = 5000,
+  ): Promise<number[]> {
     try {
-      const tokens = searchText.split(/\s+/).filter(t => t.length > 0);
+      const tokens = searchText.split(/\s+/).filter((t) => t.length > 0);
       if (tokens.length === 0) return [];
 
       // Construir condiciones para cada token (todos deben coincidir - AND)
@@ -224,7 +238,9 @@ export class PrismaOrdenServicioRepository {
       // ⚡ 04-NOV-2026: se añadieron segundo_nombre/segundo_apellido y equipos
       // para que este conjunto de IDs sea SUPERCONJUNTO de las ramas
       // multi-token de Prisma (y así poder retirarlas del WHERE).
-      const tokenConditions = tokens.map((_token, i) => `(
+      const tokenConditions = tokens
+        .map(
+          (_token, i) => `(
         unaccent(COALESCE(p.razon_social, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(p.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(p.nombre_completo, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
@@ -240,7 +256,9 @@ export class PrismaOrdenServicioRepository {
         OR unaccent(COALESCE(eq.nombre_equipo, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(eq.codigo_equipo, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR os.numero_orden ILIKE '%' || $${i + 1} || '%'
-      )`).join(' AND ');
+      )`,
+        )
+        .join(' AND ');
 
       const sql = `
         SELECT DISTINCT os.id_orden_servicio
@@ -259,7 +277,7 @@ export class PrismaOrdenServicioRepository {
       `;
 
       const results: any[] = await this.prisma.$queryRawUnsafe(sql, ...tokens);
-      return results.map(r => r.id_orden_servicio);
+      return results.map((r) => r.id_orden_servicio);
     } catch (error) {
       // Si falla (ej: unaccent no disponible), retornar vacío sin romper la búsqueda
       console.warn('⚠️ Búsqueda con unaccent no disponible, usando solo Prisma ILIKE:', error);
@@ -274,15 +292,25 @@ export class PrismaOrdenServicioRepository {
    * @param servicioTexto Texto de búsqueda (ej: "RADIADOR" o "manguera radiador")
    * @param limit Límite de IDs a retornar
    */
-  private async findOrdenIdsByServicioTexto(servicioTexto: string, limit: number = 500): Promise<number[]> {
+  private async findOrdenIdsByServicioTexto(
+    servicioTexto: string,
+    limit: number = 500,
+  ): Promise<number[]> {
     try {
-      const tokens = servicioTexto.trim().split(/\s+/).filter(t => t.length > 0);
+      const tokens = servicioTexto
+        .trim()
+        .split(/\s+/)
+        .filter((t) => t.length > 0);
       if (tokens.length === 0) return [];
 
-      const tokenConditions = tokens.map((_t, i) => `(
+      const tokenConditions = tokens
+        .map(
+          (_t, i) => `(
         unaccent(COALESCE(cs.nombre_servicio, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(cs.codigo_servicio, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-      )`).join(' AND ');
+      )`,
+        )
+        .join(' AND ');
 
       const sql = `
         SELECT DISTINCT os.id_orden_servicio
@@ -294,7 +322,7 @@ export class PrismaOrdenServicioRepository {
       `;
 
       const results: any[] = await this.prisma.$queryRawUnsafe(sql, ...tokens);
-      return results.map(r => r.id_orden_servicio);
+      return results.map((r) => r.id_orden_servicio);
     } catch (error) {
       console.warn('⚠️ Error en findOrdenIdsByServicioTexto (fallback a Prisma ILIKE):', error);
       return [];
@@ -305,10 +333,10 @@ export class PrismaOrdenServicioRepository {
    * ═══════════════════════════════════════════════════════════════════════════
    * 🚀 OPTIMIZACIÓN ENTERPRISE 05-ENE-2026: INCLUDE STRATEGIES
    * ═══════════════════════════════════════════════════════════════════════════
-   * 
+   *
    * INCLUDE_LITE: Para listados (3 relaciones esenciales) → ~200ms
    * INCLUDE_RELATIONS: Para detalle completo → ~800ms
-   * 
+   *
    * IMPACTO: Reducción de 4+ segundos en carga de lista de órdenes
    * ═══════════════════════════════════════════════════════════════════════════
    */
@@ -318,7 +346,7 @@ export class PrismaOrdenServicioRepository {
    * - Cliente (nombre)
    * - Estado (nombre, color)
    * - Tipo servicio (nombre)
-   * 
+   *
    * ✅ OPTIMIZADO: Solo 3 JOINs vs 10+ del INCLUDE_RELATIONS
    */
   private readonly INCLUDE_LITE = {
@@ -414,7 +442,7 @@ export class PrismaOrdenServicioRepository {
   /**
    * INCLUDE_RELATIONS: Completo para vista de detalle
    * Incluye todas las relaciones necesarias para ver/editar una orden
-   * 
+   *
    * ✅ FIX 15-DIC-2025: Corregidos nombres de relaciones Prisma
    * ✅ FIX 23-SEP-2026: Incluir ordenes_pendientes con relaciones
    */
@@ -434,10 +462,10 @@ export class PrismaOrdenServicioRepository {
       include: {
         equipos: {
           include: {
-            tipos_equipo: true
-          }
-        }
-      }
+            tipos_equipo: true,
+          },
+        },
+      },
     },
     informes: {
       orderBy: { fecha_generacion: 'desc' as const },
@@ -495,77 +523,85 @@ export class PrismaOrdenServicioRepository {
    * Realiza la creación de la orden y la vinculación de equipos en una transacción atómica.
    */
   async saveWithEquipos(orden: any, equiposIds: number[], serviciosIds?: number[]): Promise<any> {
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Crear la cabecera de la orden
-      const savedOrden = await tx.ordenes_servicio.create({
-        data: {
-          numero_orden: orden.numero_orden,
-          id_cliente: orden.id_cliente,
-          id_sede: orden.id_sede || null,
-          id_equipo: orden.id_equipo, // Equipo principal
-          id_tipo_servicio: orden.id_tipo_servicio || null,
-          id_cronograma: orden.id_cronograma || null,
-          fecha_programada: orden.fecha_programada || null,
-          hora_programada: orden.hora_programada || null,
-          prioridad: orden.prioridad || 'NORMAL',
-          origen_solicitud: orden.origen_solicitud || 'PROGRAMADO',
-          id_tecnico_asignado: orden.id_tecnico_asignado || null,
-          fecha_asignacion: orden.fecha_asignacion || null,
-          id_estado_actual: orden.id_estado_actual,
-          descripcion_inicial: orden.descripcion_inicial || null,
-          requiere_firma_cliente: orden.requiere_firma_cliente !== undefined ? orden.requiere_firma_cliente : true,
-          creado_por: orden.creado_por,
-        },
-      });
-
-      // 2. Vincular todos los equipos en la tabla intermedia ordenes_equipos
-      if (equiposIds && equiposIds.length > 0) {
-        // ✅ FIX 14-FEB-2026: Setear orden_secuencia correctamente (1, 2, 3, ...)
-        // Antes NO se seteaba y todos recibían el default=1, causando EQ1 para todos
-        const vinculaciones = equiposIds.map((id_equipo, index) => ({
-          id_orden_servicio: savedOrden.id_orden_servicio,
-          id_equipo,
-          orden_secuencia: index + 1,
-          creado_por: orden.creado_por,
-        }));
-
-        await tx.ordenes_equipos.createMany({
-          data: vinculaciones,
-        });
-      }
-
-      // 3. Vincular servicios específicos en detalle_servicios_orden
-      if (serviciosIds && serviciosIds.length > 0) {
-        const serviciosCat = await tx.catalogo_servicios.findMany({
-          where: { id_servicio: { in: serviciosIds } },
+    return this.prisma.$transaction(
+      async (tx) => {
+        // 1. Crear la cabecera de la orden
+        const savedOrden = await tx.ordenes_servicio.create({
+          data: {
+            numero_orden: orden.numero_orden,
+            id_cliente: orden.id_cliente,
+            id_sede: orden.id_sede || null,
+            id_equipo: orden.id_equipo, // Equipo principal
+            id_tipo_servicio: orden.id_tipo_servicio || null,
+            id_cronograma: orden.id_cronograma || null,
+            fecha_programada: orden.fecha_programada || null,
+            hora_programada: orden.hora_programada || null,
+            prioridad: orden.prioridad || 'NORMAL',
+            origen_solicitud: orden.origen_solicitud || 'PROGRAMADO',
+            id_tecnico_asignado: orden.id_tecnico_asignado || null,
+            fecha_asignacion: orden.fecha_asignacion || null,
+            id_estado_actual: orden.id_estado_actual,
+            descripcion_inicial: orden.descripcion_inicial || null,
+            requiere_firma_cliente:
+              orden.requiere_firma_cliente !== undefined ? orden.requiere_firma_cliente : true,
+            creado_por: orden.creado_por,
+          },
         });
 
-        if (serviciosCat.length > 0) {
-          const vinculacionesServicios = serviciosCat.map((serv) => ({
+        // 2. Vincular todos los equipos en la tabla intermedia ordenes_equipos
+        if (equiposIds && equiposIds.length > 0) {
+          // ✅ FIX 14-FEB-2026: Setear orden_secuencia correctamente (1, 2, 3, ...)
+          // Antes NO se seteaba y todos recibían el default=1, causando EQ1 para todos
+          const vinculaciones = equiposIds.map((id_equipo, index) => ({
             id_orden_servicio: savedOrden.id_orden_servicio,
-            id_servicio: serv.id_servicio,
-            cantidad: 1,
-            precio_unitario: serv.precio_base || 0,
-            subtotal: serv.precio_base || 0,
-            estado_servicio: 'PENDIENTE' as const,
-            registrado_por: orden.creado_por,
+            id_equipo,
+            orden_secuencia: index + 1,
+            creado_por: orden.creado_por,
           }));
 
-          await tx.detalle_servicios_orden.createMany({
-            data: vinculacionesServicios,
+          await tx.ordenes_equipos.createMany({
+            data: vinculaciones,
           });
         }
-      }
 
-      // 4. Auto-sembrar plan de actividades predeterminado
-      await this.autoSembrarPlanActividades(tx, savedOrden.id_orden_servicio, orden.id_tipo_servicio);
+        // 3. Vincular servicios específicos en detalle_servicios_orden
+        if (serviciosIds && serviciosIds.length > 0) {
+          const serviciosCat = await tx.catalogo_servicios.findMany({
+            where: { id_servicio: { in: serviciosIds } },
+          });
 
-      return savedOrden;
-    }, {
-      // ✅ FIX 06-ENE-2026: Timeout aumentado para Supabase (30s vs 5s default)
-      timeout: 30000,
-      maxWait: 10000,
-    });
+          if (serviciosCat.length > 0) {
+            const vinculacionesServicios = serviciosCat.map((serv) => ({
+              id_orden_servicio: savedOrden.id_orden_servicio,
+              id_servicio: serv.id_servicio,
+              cantidad: 1,
+              precio_unitario: serv.precio_base || 0,
+              subtotal: serv.precio_base || 0,
+              estado_servicio: 'PENDIENTE' as const,
+              registrado_por: orden.creado_por,
+            }));
+
+            await tx.detalle_servicios_orden.createMany({
+              data: vinculacionesServicios,
+            });
+          }
+        }
+
+        // 4. Auto-sembrar plan de actividades predeterminado
+        await this.autoSembrarPlanActividades(
+          tx,
+          savedOrden.id_orden_servicio,
+          orden.id_tipo_servicio,
+        );
+
+        return savedOrden;
+      },
+      {
+        // ✅ FIX 06-ENE-2026: Timeout aumentado para Supabase (30s vs 5s default)
+        timeout: 30000,
+        maxWait: 10000,
+      },
+    );
   }
 
   /**
@@ -579,222 +615,233 @@ export class PrismaOrdenServicioRepository {
     idsPendientesAResolver?: number[],
   ): Promise<any> {
     // ✅ FIX: Aumentar timeout para conexiones lentas con Supabase
-    return this.prisma.$transaction(async (tx) => {
-      // 🛡️ BLINDAJE #2: Normalización de Orden Raíz (Root Order Normalization)
-      let rootOrderId: number | null = null;
-      let numeroVisitaCaso = 1;
-      let tipoVisita = orden.tipo_visita || 'INICIAL';
-      let nombreCasoFinal: string | null = orden.nombre_caso?.trim() || null;
-      let estadoCasoFinal: string =
-        orden.estado_caso || (tipoVisita === 'AISLADA' ? 'AISLADA' : 'ABIERTO');
+    return this.prisma.$transaction(
+      async (tx) => {
+        // 🛡️ BLINDAJE #2: Normalización de Orden Raíz (Root Order Normalization)
+        let rootOrderId: number | null = null;
+        let numeroVisitaCaso = 1;
+        let tipoVisita = orden.tipo_visita || 'INICIAL';
+        let nombreCasoFinal: string | null = orden.nombre_caso?.trim() || null;
+        let estadoCasoFinal: string =
+          orden.estado_caso || (tipoVisita === 'AISLADA' ? 'AISLADA' : 'ABIERTO');
 
-      if (orden.id_orden_padre) {
-        const ordenOrigen = await tx.ordenes_servicio.findUnique({
-          where: { id_orden_servicio: Number(orden.id_orden_padre) },
-          select: {
-            id_orden_servicio: true,
-            id_orden_padre: true,
-            nombre_caso: true,
-            estado_caso: true,
-          },
-        });
-        if (ordenOrigen) {
-          rootOrderId = ordenOrigen.id_orden_padre ?? ordenOrigen.id_orden_servicio;
-          const ordenRaiz =
-            rootOrderId === ordenOrigen.id_orden_servicio
-              ? ordenOrigen
-              : await tx.ordenes_servicio.findUnique({
-                  where: { id_orden_servicio: rootOrderId },
-                  select: {
-                    id_orden_servicio: true,
-                    nombre_caso: true,
-                    estado_caso: true,
-                  },
-                });
+        if (orden.id_orden_padre) {
+          const ordenOrigen = await tx.ordenes_servicio.findUnique({
+            where: { id_orden_servicio: Number(orden.id_orden_padre) },
+            select: {
+              id_orden_servicio: true,
+              id_orden_padre: true,
+              nombre_caso: true,
+              estado_caso: true,
+            },
+          });
+          if (ordenOrigen) {
+            rootOrderId = ordenOrigen.id_orden_padre ?? ordenOrigen.id_orden_servicio;
+            const ordenRaiz =
+              rootOrderId === ordenOrigen.id_orden_servicio
+                ? ordenOrigen
+                : await tx.ordenes_servicio.findUnique({
+                    where: { id_orden_servicio: rootOrderId },
+                    select: {
+                      id_orden_servicio: true,
+                      nombre_caso: true,
+                      estado_caso: true,
+                    },
+                  });
 
-          nombreCasoFinal = nombreCasoFinal || ordenRaiz?.nombre_caso || null;
-          estadoCasoFinal = 'ABIERTO';
+            nombreCasoFinal = nombreCasoFinal || ordenRaiz?.nombre_caso || null;
+            estadoCasoFinal = 'ABIERTO';
 
-          // Asegurar que la orden raíz quede marcada como Caso Abierto y tenga nombre_caso
-          if (ordenRaiz && (ordenRaiz.estado_caso !== 'ABIERTO' || (!ordenRaiz.nombre_caso && nombreCasoFinal))) {
-            await tx.ordenes_servicio.update({
-              where: { id_orden_servicio: rootOrderId },
-              data: {
-                estado_caso: 'ABIERTO',
-                ...(nombreCasoFinal && !ordenRaiz.nombre_caso ? { nombre_caso: nombreCasoFinal } : {}),
+            // Asegurar que la orden raíz quede marcada como Caso Abierto y tenga nombre_caso
+            if (
+              ordenRaiz &&
+              (ordenRaiz.estado_caso !== 'ABIERTO' || (!ordenRaiz.nombre_caso && nombreCasoFinal))
+            ) {
+              await tx.ordenes_servicio.update({
+                where: { id_orden_servicio: rootOrderId },
+                data: {
+                  estado_caso: 'ABIERTO',
+                  ...(nombreCasoFinal && !ordenRaiz.nombre_caso
+                    ? { nombre_caso: nombreCasoFinal }
+                    : {}),
+                },
+              });
+            }
+
+            const totalVisitasHilo = await tx.ordenes_servicio.count({
+              where: {
+                OR: [{ id_orden_servicio: rootOrderId }, { id_orden_padre: rootOrderId }],
               },
             });
+            numeroVisitaCaso = totalVisitasHilo + 1;
+            if (!orden.tipo_visita || orden.tipo_visita === 'INICIAL') {
+              tipoVisita = 'CONTINUACION';
+            }
           }
+        } else if (estadoCasoFinal === 'ABIERTO' && !nombreCasoFinal) {
+          // Si se abre como un Caso Raíz (Opción A) y no enviaron título explícito, generar uno descriptivo
+          const [tipoServ, eqPrincipal] = await Promise.all([
+            orden.id_tipo_servicio
+              ? tx.tipos_servicio.findUnique({
+                  where: { id_tipo_servicio: Number(orden.id_tipo_servicio) },
+                  select: { nombre_tipo: true },
+                })
+              : Promise.resolve(null),
+            orden.id_equipo
+              ? tx.equipos.findUnique({
+                  where: { id_equipo: Number(orden.id_equipo) },
+                  select: { codigo_equipo: true, nombre_equipo: true },
+                })
+              : Promise.resolve(null),
+          ]);
+          const descLimpia = orden.descripcion_inicial?.trim()?.split('\n')[0]?.slice(0, 140);
+          const eqTag = eqPrincipal?.codigo_equipo || eqPrincipal?.nombre_equipo || '';
+          nombreCasoFinal =
+            descLimpia ||
+            `${tipoServ?.nombre_tipo || 'Expediente Técnico'}${eqTag ? ` — ${eqTag}` : ''}`;
+        }
 
-          const totalVisitasHilo = await tx.ordenes_servicio.count({
-            where: {
-              OR: [
-                { id_orden_servicio: rootOrderId },
-                { id_orden_padre: rootOrderId },
-              ],
+        // 1. Crear la cabecera de la orden
+        const savedOrden = await tx.ordenes_servicio.create({
+          data: {
+            numero_orden: orden.numero_orden,
+            id_cliente: orden.id_cliente,
+            id_sede: orden.id_sede || null,
+            id_equipo: orden.id_equipo,
+            id_tipo_servicio: orden.id_tipo_servicio || null,
+            id_cronograma: orden.id_cronograma || null,
+            fecha_programada: orden.fecha_programada || null,
+            hora_programada: orden.hora_programada || null,
+            prioridad: orden.prioridad || 'NORMAL',
+            origen_solicitud: orden.origen_solicitud || 'PROGRAMADO',
+            id_tecnico_asignado: orden.id_tecnico_asignado || null,
+            fecha_asignacion: orden.fecha_asignacion || null,
+            id_estado_actual: orden.id_estado_actual,
+            descripcion_inicial: orden.descripcion_inicial || null,
+            requiere_firma_cliente:
+              orden.requiere_firma_cliente !== undefined ? orden.requiere_firma_cliente : true,
+            creado_por: orden.creado_por,
+            id_orden_padre: rootOrderId,
+            tipo_visita: tipoVisita,
+            numero_visita_caso: numeroVisitaCaso,
+            nombre_caso: nombreCasoFinal,
+            estado_caso: estadoCasoFinal,
+            fecha_modificacion: new Date(), // ✅ FIX 23-ENE-2026: Sync delta necesita esta fecha
+          },
+          // ✅ INCLUDE LITE: Solo datos esenciales para respuesta inmediata
+          include: this.INCLUDE_LITE,
+        });
+
+        // 1b. Registrar en historial de estados de orden (creación)
+        try {
+          await tx.historial_estados_orden.create({
+            data: {
+              id_orden_servicio: savedOrden.id_orden_servicio,
+              id_estado_anterior: null,
+              id_estado_nuevo: orden.id_estado_actual,
+              motivo_cambio: 'Creación de orden de servicio',
+              observaciones: 'Orden registrada en estado inicial.',
+              accion: 'CREACION',
+              realizado_por: orden.creado_por || 1,
+              fecha_cambio: new Date(),
             },
           });
-          numeroVisitaCaso = totalVisitasHilo + 1;
-          if (!orden.tipo_visita || orden.tipo_visita === 'INICIAL') {
-            tipoVisita = 'CONTINUACION';
-          }
+        } catch (errHistorial) {
+          // Fallback silencioso para no interrumpir la creación
         }
-      } else if (estadoCasoFinal === 'ABIERTO' && !nombreCasoFinal) {
-        // Si se abre como un Caso Raíz (Opción A) y no enviaron título explícito, generar uno descriptivo
-        const [tipoServ, eqPrincipal] = await Promise.all([
-          orden.id_tipo_servicio
-            ? tx.tipos_servicio.findUnique({
-                where: { id_tipo_servicio: Number(orden.id_tipo_servicio) },
-                select: { nombre_tipo: true },
-              })
-            : Promise.resolve(null),
-          orden.id_equipo
-            ? tx.equipos.findUnique({
-                where: { id_equipo: Number(orden.id_equipo) },
-                select: { codigo_equipo: true, nombre_equipo: true },
-              })
-            : Promise.resolve(null),
-        ]);
-        const descLimpia = orden.descripcion_inicial?.trim()?.split('\n')[0]?.slice(0, 140);
-        const eqTag = eqPrincipal?.codigo_equipo || eqPrincipal?.nombre_equipo || '';
-        nombreCasoFinal =
-          descLimpia ||
-          `${tipoServ?.nombre_tipo || 'Expediente Técnico'}${eqTag ? ` — ${eqTag}` : ''}`;
-      }
 
-      // 1. Crear la cabecera de la orden
-      const savedOrden = await tx.ordenes_servicio.create({
-        data: {
-          numero_orden: orden.numero_orden,
-          id_cliente: orden.id_cliente,
-          id_sede: orden.id_sede || null,
-          id_equipo: orden.id_equipo,
-          id_tipo_servicio: orden.id_tipo_servicio || null,
-          id_cronograma: orden.id_cronograma || null,
-          fecha_programada: orden.fecha_programada || null,
-          hora_programada: orden.hora_programada || null,
-          prioridad: orden.prioridad || 'NORMAL',
-          origen_solicitud: orden.origen_solicitud || 'PROGRAMADO',
-          id_tecnico_asignado: orden.id_tecnico_asignado || null,
-          fecha_asignacion: orden.fecha_asignacion || null,
-          id_estado_actual: orden.id_estado_actual,
-          descripcion_inicial: orden.descripcion_inicial || null,
-          requiere_firma_cliente: orden.requiere_firma_cliente !== undefined ? orden.requiere_firma_cliente : true,
-          creado_por: orden.creado_por,
-          id_orden_padre: rootOrderId,
-          tipo_visita: tipoVisita,
-          numero_visita_caso: numeroVisitaCaso,
-          nombre_caso: nombreCasoFinal,
-          estado_caso: estadoCasoFinal,
-          fecha_modificacion: new Date(), // ✅ FIX 23-ENE-2026: Sync delta necesita esta fecha
-        },
-        // ✅ INCLUDE LITE: Solo datos esenciales para respuesta inmediata
-        include: this.INCLUDE_LITE,
-      });
-
-      // 1b. Registrar en historial de estados de orden (creación)
-      try {
-        await tx.historial_estados_orden.create({
-          data: {
+        // 2. Vincular todos los equipos en la tabla intermedia ordenes_equipos
+        if (equiposIds && equiposIds.length > 0) {
+          // ✅ FIX 14-FEB-2026: Setear orden_secuencia correctamente (1, 2, 3, ...)
+          const vinculaciones = equiposIds.map((id_equipo, index) => ({
             id_orden_servicio: savedOrden.id_orden_servicio,
-            id_estado_anterior: null,
-            id_estado_nuevo: orden.id_estado_actual,
-            motivo_cambio: 'Creación de orden de servicio',
-            observaciones: 'Orden registrada en estado inicial.',
-            accion: 'CREACION',
-            realizado_por: orden.creado_por || 1,
-            fecha_cambio: new Date(),
-          },
-        });
-      } catch (errHistorial) {
-        // Fallback silencioso para no interrumpir la creación
-      }
-
-      // 2. Vincular todos los equipos en la tabla intermedia ordenes_equipos
-      if (equiposIds && equiposIds.length > 0) {
-        // ✅ FIX 14-FEB-2026: Setear orden_secuencia correctamente (1, 2, 3, ...)
-        const vinculaciones = equiposIds.map((id_equipo, index) => ({
-          id_orden_servicio: savedOrden.id_orden_servicio,
-          id_equipo,
-          orden_secuencia: index + 1,
-          creado_por: orden.creado_por,
-        }));
-
-        await tx.ordenes_equipos.createMany({
-          data: vinculaciones,
-        });
-      }
-
-      // 3. Vincular servicios específicos en detalle_servicios_orden
-      if (serviciosIds && serviciosIds.length > 0) {
-        const serviciosCat = await tx.catalogo_servicios.findMany({
-          where: { id_servicio: { in: serviciosIds } },
-        });
-
-        if (serviciosCat.length > 0) {
-          const vinculacionesServicios = serviciosCat.map((serv) => ({
-            id_orden_servicio: savedOrden.id_orden_servicio,
-            id_servicio: serv.id_servicio,
-            cantidad: 1,
-            precio_unitario: serv.precio_base || 0,
-            subtotal: serv.precio_base || 0,
-            estado_servicio: 'PENDIENTE' as const,
-            registrado_por: orden.creado_por,
+            id_equipo,
+            orden_secuencia: index + 1,
+            creado_por: orden.creado_por,
           }));
 
-          await tx.detalle_servicios_orden.createMany({
-            data: vinculacionesServicios,
+          await tx.ordenes_equipos.createMany({
+            data: vinculaciones,
           });
         }
-      }
 
-      // 4. Vincular pendientes seleccionados para resolverse en esta visita (pasan a EN_GESTION)
-      if (idsPendientesAResolver && Array.isArray(idsPendientesAResolver) && idsPendientesAResolver.length > 0) {
-        await tx.ordenes_pendientes.updateMany({
-          where: { id_orden_pendiente: { in: idsPendientesAResolver } },
-          data: {
-            id_orden_resolucion: savedOrden.id_orden_servicio,
-            estado: 'EN_GESTION',
-          },
-        });
-      } else if (rootOrderId) {
-        // 🛡️ BLINDAJE AUTOMÁTICO DE HERENCIA: Si es una visita de seguimiento (rootOrderId != null)
-        // y no se enviaron IDs explícitos de pendientes, heredar automáticamente todos los pendientes
-        // abiertos (PENDIENTE o EN_GESTION) pertenecientes al hilo raíz del caso.
-        const ordenesDelCaso = await tx.ordenes_servicio.findMany({
-          where: {
-            OR: [
-              { id_orden_servicio: rootOrderId },
-              { id_orden_padre: rootOrderId },
-            ],
-          },
-          select: { id_orden_servicio: true },
-        });
-        const idsOrdenesCaso = ordenesDelCaso.map((o) => o.id_orden_servicio);
-        if (idsOrdenesCaso.length > 0) {
+        // 3. Vincular servicios específicos en detalle_servicios_orden
+        if (serviciosIds && serviciosIds.length > 0) {
+          const serviciosCat = await tx.catalogo_servicios.findMany({
+            where: { id_servicio: { in: serviciosIds } },
+          });
+
+          if (serviciosCat.length > 0) {
+            const vinculacionesServicios = serviciosCat.map((serv) => ({
+              id_orden_servicio: savedOrden.id_orden_servicio,
+              id_servicio: serv.id_servicio,
+              cantidad: 1,
+              precio_unitario: serv.precio_base || 0,
+              subtotal: serv.precio_base || 0,
+              estado_servicio: 'PENDIENTE' as const,
+              registrado_por: orden.creado_por,
+            }));
+
+            await tx.detalle_servicios_orden.createMany({
+              data: vinculacionesServicios,
+            });
+          }
+        }
+
+        // 4. Vincular pendientes seleccionados para resolverse en esta visita (pasan a EN_GESTION)
+        if (
+          idsPendientesAResolver &&
+          Array.isArray(idsPendientesAResolver) &&
+          idsPendientesAResolver.length > 0
+        ) {
           await tx.ordenes_pendientes.updateMany({
-            where: {
-              id_orden_servicio: { in: idsOrdenesCaso },
-              estado: { in: ['PENDIENTE', 'EN_GESTION'] },
-            },
+            where: { id_orden_pendiente: { in: idsPendientesAResolver } },
             data: {
               id_orden_resolucion: savedOrden.id_orden_servicio,
               estado: 'EN_GESTION',
             },
           });
+        } else if (rootOrderId) {
+          // 🛡️ BLINDAJE AUTOMÁTICO DE HERENCIA: Si es una visita de seguimiento (rootOrderId != null)
+          // y no se enviaron IDs explícitos de pendientes, heredar automáticamente todos los pendientes
+          // abiertos (PENDIENTE o EN_GESTION) pertenecientes al hilo raíz del caso.
+          const ordenesDelCaso = await tx.ordenes_servicio.findMany({
+            where: {
+              OR: [{ id_orden_servicio: rootOrderId }, { id_orden_padre: rootOrderId }],
+            },
+            select: { id_orden_servicio: true },
+          });
+          const idsOrdenesCaso = ordenesDelCaso.map((o) => o.id_orden_servicio);
+          if (idsOrdenesCaso.length > 0) {
+            await tx.ordenes_pendientes.updateMany({
+              where: {
+                id_orden_servicio: { in: idsOrdenesCaso },
+                estado: { in: ['PENDIENTE', 'EN_GESTION'] },
+              },
+              data: {
+                id_orden_resolucion: savedOrden.id_orden_servicio,
+                estado: 'EN_GESTION',
+              },
+            });
+          }
         }
-      }
 
-      // 5. Auto-sembrar plan de actividades predeterminado para el tipo de servicio
-      await this.autoSembrarPlanActividades(tx, savedOrden.id_orden_servicio, orden.id_tipo_servicio);
+        // 5. Auto-sembrar plan de actividades predeterminado para el tipo de servicio
+        await this.autoSembrarPlanActividades(
+          tx,
+          savedOrden.id_orden_servicio,
+          orden.id_tipo_servicio,
+        );
 
-      // ✅ Retornar directamente sin consulta adicional
-      return savedOrden;
-    }, {
-      // ✅ FIX 06-ENE-2026: Timeout aumentado para Supabase (30s vs 5s default)
-      timeout: 30000,
-      maxWait: 10000,
-    });
+        // ✅ Retornar directamente sin consulta adicional
+        return savedOrden;
+      },
+      {
+        // ✅ FIX 06-ENE-2026: Timeout aumentado para Supabase (30s vs 5s default)
+        timeout: 30000,
+        maxWait: 10000,
+      },
+    );
   }
 
   /**
@@ -836,29 +883,26 @@ export class PrismaOrdenServicioRepository {
    * Crear o actualizar orden de servicio
    * ✅ ENTERPRISE: Validación de integridad atómica pre-guardado
    */
-  async save(
-    data: any,
-    auditoriaObservacionesCierre?: AuditoriaObservacionesCierre,
-  ): Promise<any> {
+  async save(data: any, auditoriaObservacionesCierre?: AuditoriaObservacionesCierre): Promise<any> {
     // Convertir entity a plain object si es necesario
     const plainData = data.toObject ? data.toObject() : data;
 
     // Mapear campos de entity a schema database
     const dbData = plainData.numeroOrden
       ? {
-        numero_orden: plainData.numeroOrden?.value || plainData.numeroOrden,
-        id_cliente: plainData.clienteId,
-        id_equipo: plainData.equipoId,
-        id_tipo_servicio: plainData.tipoServicioId,
-        id_sede: plainData.sedeClienteId || null,
-        descripcion_inicial: plainData.descripcion || null,
-        fecha_programada: plainData.fechaProgramada || null,
-        prioridad: plainData.prioridad?.value || plainData.prioridad || 'NORMAL',
-        origen_solicitud: 'PROGRAMADO',
-        id_estado_actual: 1,
-        requiere_firma_cliente: true,
-        creado_por: plainData.creado_por || data.creado_por,
-      }
+          numero_orden: plainData.numeroOrden?.value || plainData.numeroOrden,
+          id_cliente: plainData.clienteId,
+          id_equipo: plainData.equipoId,
+          id_tipo_servicio: plainData.tipoServicioId,
+          id_sede: plainData.sedeClienteId || null,
+          descripcion_inicial: plainData.descripcion || null,
+          fecha_programada: plainData.fechaProgramada || null,
+          prioridad: plainData.prioridad?.value || plainData.prioridad || 'NORMAL',
+          origen_solicitud: 'PROGRAMADO',
+          id_estado_actual: 1,
+          requiere_firma_cliente: true,
+          creado_por: plainData.creado_por || data.creado_por,
+        }
       : plainData;
 
     // --- VALIDACIÓN DE INTEGRIDAD ATÓMICA (ENTERPRISE) ---
@@ -866,33 +910,53 @@ export class PrismaOrdenServicioRepository {
       const [clienteValido, equipoValido, tipoServicioValido] = await Promise.all([
         this.prisma.clientes.findUnique({ where: { id_cliente: dbData.id_cliente } }),
         this.prisma.equipos.findUnique({ where: { id_equipo: dbData.id_equipo } }),
-        this.prisma.tipos_servicio.findUnique({ where: { id_tipo_servicio: dbData.id_tipo_servicio } })
+        this.prisma.tipos_servicio.findUnique({
+          where: { id_tipo_servicio: dbData.id_tipo_servicio },
+        }),
       ]);
 
-      if (!clienteValido) throw new Error(`Integridad fallida: El cliente ${dbData.id_cliente} no existe.`);
-      if (!equipoValido) throw new Error(`Integridad fallida: El equipo ${dbData.id_equipo} no existe.`);
-      if (!tipoServicioValido) throw new Error(`Integridad fallida: El tipo de servicio ${dbData.id_tipo_servicio} no existe.`);
+      if (!clienteValido)
+        throw new Error(`Integridad fallida: El cliente ${dbData.id_cliente} no existe.`);
+      if (!equipoValido)
+        throw new Error(`Integridad fallida: El equipo ${dbData.id_equipo} no existe.`);
+      if (!tipoServicioValido)
+        throw new Error(
+          `Integridad fallida: El tipo de servicio ${dbData.id_tipo_servicio} no existe.`,
+        );
 
       // Validar que el equipo pertenezca al cliente
       if (equipoValido.id_cliente !== dbData.id_cliente) {
-        throw new Error(`Integridad fallida: El equipo ${dbData.id_equipo} no pertenece al cliente ${dbData.id_cliente}.`);
+        throw new Error(
+          `Integridad fallida: El equipo ${dbData.id_equipo} no pertenece al cliente ${dbData.id_cliente}.`,
+        );
       }
 
       // Validar que la sede pertenezca al cliente (si se especificó sede)
       if (dbData.id_sede) {
-        const sedeValida = await this.prisma.sedes_cliente.findUnique({ where: { id_sede: dbData.id_sede } });
+        const sedeValida = await this.prisma.sedes_cliente.findUnique({
+          where: { id_sede: dbData.id_sede },
+        });
         if (!sedeValida || sedeValida.id_cliente !== dbData.id_cliente) {
-          throw new Error(`Integridad fallida: La sede ${dbData.id_sede} no pertenece al cliente ${dbData.id_cliente}.`);
+          throw new Error(
+            `Integridad fallida: La sede ${dbData.id_sede} no pertenece al cliente ${dbData.id_cliente}.`,
+          );
         }
         // Validar que el equipo esté en esa sede
         if (equipoValido.id_sede !== dbData.id_sede) {
-          throw new Error(`Integridad fallida: El equipo ${dbData.id_equipo} no pertenece a la sede ${dbData.id_sede}.`);
+          throw new Error(
+            `Integridad fallida: El equipo ${dbData.id_equipo} no pertenece a la sede ${dbData.id_sede}.`,
+          );
         }
       }
 
       // Validar que el servicio sea compatible con el tipo de equipo
-      if (tipoServicioValido.id_tipo_equipo && tipoServicioValido.id_tipo_equipo !== equipoValido.id_tipo_equipo) {
-        throw new Error(`Integridad fallida: El servicio ${tipoServicioValido.nombre_tipo} no es aplicable al equipo tipo ${equipoValido.id_tipo_equipo}.`);
+      if (
+        tipoServicioValido.id_tipo_equipo &&
+        tipoServicioValido.id_tipo_equipo !== equipoValido.id_tipo_equipo
+      ) {
+        throw new Error(
+          `Integridad fallida: El servicio ${tipoServicioValido.nombre_tipo} no es aplicable al equipo tipo ${equipoValido.id_tipo_equipo}.`,
+        );
       }
     }
     // ----------------------------------------------------
@@ -972,7 +1036,7 @@ export class PrismaOrdenServicioRepository {
         if (codigo === 'ASIGNADA' || codigo === 'EN_PROCESO' || codigo === 'EN_ESPERA_REPUESTO') {
           throw new BadRequestException(
             `No se puede dejar la orden en estado ${codigo} sin técnico asignado. ` +
-            `Desasigne el técnico solo si la orden está en PROGRAMADA.`,
+              `Desasigne el técnico solo si la orden está en PROGRAMADA.`,
           );
         }
       }
@@ -1002,15 +1066,12 @@ export class PrismaOrdenServicioRepository {
         this.prisma.historial_estados_orden.create({
           data: {
             id_orden_servicio,
-            id_estado_anterior:
-              auditoriaObservacionesCierre.idEstadoAnterior ?? null,
+            id_estado_anterior: auditoriaObservacionesCierre.idEstadoAnterior ?? null,
             id_estado_nuevo: auditoriaObservacionesCierre.idEstadoNuevo,
             accion: ACCION_MODIFICAR_OBSERVACIONES_CIERRE,
             motivo_cambio:
-              auditoriaObservacionesCierre.motivo ??
-              'Edición de observaciones de cierre',
-            observaciones:
-              auditoriaObservacionesCierre.observacionNueva ?? null,
+              auditoriaObservacionesCierre.motivo ?? 'Edición de observaciones de cierre',
+            observaciones: auditoriaObservacionesCierre.observacionNueva ?? null,
             realizado_por: auditoriaObservacionesCierre.realizadoPor,
             fecha_cambio: fechaModificacion,
             metadata: crearMetadataObservacionesCierre({
@@ -1042,7 +1103,8 @@ export class PrismaOrdenServicioRepository {
           id_supervisor: dbData.id_supervisor || null,
           id_estado_actual: dbData.id_estado_actual,
           descripcion_inicial: dbData.descripcion_inicial || null,
-          requiere_firma_cliente: dbData.requiere_firma_cliente !== undefined ? dbData.requiere_firma_cliente : true,
+          requiere_firma_cliente:
+            dbData.requiere_firma_cliente !== undefined ? dbData.requiere_firma_cliente : true,
           creado_por: dbData.creado_por,
           fecha_modificacion: new Date(), // ✅ FIX 23-ENE-2026: Sync delta necesita esta fecha
         },
@@ -1055,7 +1117,7 @@ export class PrismaOrdenServicioRepository {
    * Buscar orden por ID
    * @param id_orden_servicio ID de la orden
    * @returns Orden con relaciones completas o null
-   * 
+   *
    * ✅ FIX 15-DIC-2025: Corregidos nombres de relaciones según schema.prisma
    */
   async findById(id_orden_servicio: number): Promise<any | null> {
@@ -1096,7 +1158,7 @@ export class PrismaOrdenServicioRepository {
    * cuando el usuario cambia de pestaña, NO en la carga inicial
    */
   async findByIdOptimizado(id_orden_servicio: number): Promise<any | null> {
-    return this.prisma.ordenes_servicio.findUnique({
+    const orden = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio },
       include: {
         // Datos esenciales para la cabecera
@@ -1119,8 +1181,8 @@ export class PrismaOrdenServicioRepository {
         // Multi-equipos (necesario para mostrar lista de equipos)
         ordenes_equipos: {
           include: {
-            equipos: { include: { tipos_equipo: true } }
-          }
+            equipos: { include: { tipos_equipo: true } },
+          },
         },
         // Informes (para botón de PDF) - incluir documentos_generados para obtener ruta_archivo
         informes: {
@@ -1141,13 +1203,13 @@ export class PrismaOrdenServicioRepository {
               },
             },
             ordenes_equipos: {
-          select: {
-            id_orden_equipo: true,
-            orden_secuencia: true,
-            nombre_sistema: true,
-          },
-        },
-        catalogo_pendientes: true,
+              select: {
+                id_orden_equipo: true,
+                orden_secuencia: true,
+                nombre_sistema: true,
+              },
+            },
+            catalogo_pendientes: true,
             orden_resolucion: {
               select: {
                 id_orden_servicio: true,
@@ -1251,7 +1313,9 @@ export class PrismaOrdenServicioRepository {
         if (userAuth) {
           (orden as any).edicion_tecnico_autorizada_por_nombre =
             userAuth.persona?.nombre_completo?.trim() ||
-            [userAuth.persona?.primer_nombre, userAuth.persona?.primer_apellido].filter(Boolean).join(' ') ||
+            [userAuth.persona?.primer_nombre, userAuth.persona?.primer_apellido]
+              .filter(Boolean)
+              .join(' ') ||
             (userAuth.id_usuario === 1 ? 'Administrador del Sistema' : userAuth.email);
         }
       } catch (errUser) {
@@ -1271,10 +1335,7 @@ export class PrismaOrdenServicioRepository {
 
     const visitas = await this.prisma.ordenes_servicio.findMany({
       where: {
-        OR: [
-          { id_orden_servicio: rootOrderId },
-          { id_orden_padre: rootOrderId },
-        ],
+        OR: [{ id_orden_servicio: rootOrderId }, { id_orden_padre: rootOrderId }],
       },
       select: {
         id_orden_servicio: true,
@@ -1312,10 +1373,7 @@ export class PrismaOrdenServicioRepository {
           },
         },
       },
-      orderBy: [
-        { numero_visita_caso: 'asc' },
-        { id_orden_servicio: 'asc' },
-      ],
+      orderBy: [{ numero_visita_caso: 'asc' }, { id_orden_servicio: 'asc' }],
     });
 
     const visitasIds = visitas.map((v) => v.id_orden_servicio);
@@ -1430,11 +1488,13 @@ export class PrismaOrdenServicioRepository {
       pendientes_totales: pendientesCaso.length,
       pendientes_resueltos: pendientesCaso.filter((p) => p.estado === 'RESUELTO').length,
       pendientes_en_gestion: pendientesCaso.filter((p) => p.estado === 'EN_GESTION').length,
-      pendientes_abiertos: pendientesCaso.filter((p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION').length,
+      pendientes_abiertos: pendientesCaso.filter(
+        (p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION',
+      ).length,
       pendientes_caso: pendientesCaso,
       visitas: visitas.map((v, idx) => ({
         ...v,
-        numero_visita_caso: v.numero_visita_caso || (idx + 1),
+        numero_visita_caso: v.numero_visita_caso || idx + 1,
         tipo_visita: v.tipo_visita || (idx === 0 ? 'INICIAL' : 'CONTINUACION'),
         total_general: Number(v.total_general || 0),
         es_actual: v.id_orden_servicio === orden.id_orden_servicio,
@@ -1475,7 +1535,12 @@ export class PrismaOrdenServicioRepository {
     filtroCorreo?: string; // ✅ 'CON' | 'SIN'
     filtroPdf?: string; // ✅ 'CON' | 'SIN'
     filtroPendientes?: string; // ✅ 'CON' | 'SIN'
-  }): Promise<{ items: any[]; total: number; totalCasosAbiertos?: number; totalConPendientes?: number }> {
+  }): Promise<{
+    items: any[];
+    total: number;
+    totalCasosAbiertos?: number;
+    totalConPendientes?: number;
+  }> {
     const where: any = {};
 
     // ✅ BÚSQUEDA INTELIGENTE MULTI-CRITERIO (MEJORADA 19-SEP-2026):
@@ -1532,8 +1597,20 @@ export class PrismaOrdenServicioRepository {
           { clientes: { nombre_sede: { contains: term, mode: 'insensitive' } } },
           { clientes: { persona: { nombre_comercial: { contains: term, mode: 'insensitive' } } } },
           { clientes: { persona: { razon_social: { contains: term, mode: 'insensitive' } } } },
-          { clientes: { cliente_principal: { persona: { nombre_comercial: { contains: term, mode: 'insensitive' } } } } },
-          { clientes: { cliente_principal: { persona: { razon_social: { contains: term, mode: 'insensitive' } } } } }
+          {
+            clientes: {
+              cliente_principal: {
+                persona: { nombre_comercial: { contains: term, mode: 'insensitive' } },
+              },
+            },
+          },
+          {
+            clientes: {
+              cliente_principal: {
+                persona: { razon_social: { contains: term, mode: 'insensitive' } },
+              },
+            },
+          },
         );
       }
 
@@ -1541,25 +1618,64 @@ export class PrismaOrdenServicioRepository {
       // 1. Cadena tal cual
       orConditions.push(
         { clientes: { persona: { numero_identificacion: { contains: s, mode: 'insensitive' } } } },
-        { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: s, mode: 'insensitive' } } } } }
+        {
+          clientes: {
+            cliente_principal: {
+              persona: { numero_identificacion: { contains: s, mode: 'insensitive' } },
+            },
+          },
+        },
       );
 
       // 2. Dígitos limpios si tiene al menos 3 dígitos
       if (cleanDigits.length >= 3) {
         orConditions.push(
-          { clientes: { persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } } } },
-          { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } } } } }
+          {
+            clientes: {
+              persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } },
+            },
+          },
+          {
+            clientes: {
+              cliente_principal: {
+                persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } },
+              },
+            },
+          },
         );
 
         // Si tiene 8+ dígitos (base de NIT o NIT con DV)
         if (cleanDigits.length >= 8) {
-          const nitBase = cleanDigits.length === 10 ? cleanDigits.slice(0, 9) : cleanDigits.slice(0, -1);
+          const nitBase =
+            cleanDigits.length === 10 ? cleanDigits.slice(0, 9) : cleanDigits.slice(0, -1);
           const nitConGuion = cleanDigits.slice(0, -1) + '-' + cleanDigits.slice(-1);
           orConditions.push(
-            { clientes: { persona: { numero_identificacion: { contains: nitBase, mode: 'insensitive' } } } },
-            { clientes: { persona: { numero_identificacion: { contains: nitConGuion, mode: 'insensitive' } } } },
-            { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: nitBase, mode: 'insensitive' } } } } },
-            { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: nitConGuion, mode: 'insensitive' } } } } }
+            {
+              clientes: {
+                persona: { numero_identificacion: { contains: nitBase, mode: 'insensitive' } },
+              },
+            },
+            {
+              clientes: {
+                persona: { numero_identificacion: { contains: nitConGuion, mode: 'insensitive' } },
+              },
+            },
+            {
+              clientes: {
+                cliente_principal: {
+                  persona: { numero_identificacion: { contains: nitBase, mode: 'insensitive' } },
+                },
+              },
+            },
+            {
+              clientes: {
+                cliente_principal: {
+                  persona: {
+                    numero_identificacion: { contains: nitConGuion, mode: 'insensitive' },
+                  },
+                },
+              },
+            },
           );
         }
       }
@@ -1569,27 +1685,39 @@ export class PrismaOrdenServicioRepository {
         const parteAntesGuion = s.split('-')[0].replace(/[^0-9]/g, '');
         if (parteAntesGuion.length >= 4) {
           orConditions.push(
-            { clientes: { persona: { numero_identificacion: { contains: parteAntesGuion, mode: 'insensitive' } } } },
-            { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: parteAntesGuion, mode: 'insensitive' } } } } }
+            {
+              clientes: {
+                persona: {
+                  numero_identificacion: { contains: parteAntesGuion, mode: 'insensitive' },
+                },
+              },
+            },
+            {
+              clientes: {
+                cliente_principal: {
+                  persona: {
+                    numero_identificacion: { contains: parteAntesGuion, mode: 'insensitive' },
+                  },
+                },
+              },
+            },
           );
         }
       }
 
       // Búsqueda por técnico asignado (cadena completa normalizada)
-      orConditions.push(
-        {
-          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
-            persona: {
-              OR: [
-                { primer_nombre: { contains: s, mode: 'insensitive' } },
-                { segundo_nombre: { contains: s, mode: 'insensitive' } },
-                { primer_apellido: { contains: s, mode: 'insensitive' } },
-                { segundo_apellido: { contains: s, mode: 'insensitive' } },
-              ]
-            }
-          }
-        }
-      );
+      orConditions.push({
+        empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+          persona: {
+            OR: [
+              { primer_nombre: { contains: s, mode: 'insensitive' } },
+              { segundo_nombre: { contains: s, mode: 'insensitive' } },
+              { primer_apellido: { contains: s, mode: 'insensitive' } },
+              { segundo_apellido: { contains: s, mode: 'insensitive' } },
+            ],
+          },
+        },
+      });
 
       // ⚡ OPTIMIZACIÓN 04-NOV-2026: las ramas multi-token de Prisma se retiraron.
       // Eran la causa de la explosión de LEFT JOINs (búsquedas de 2+ palabras
@@ -1602,13 +1730,12 @@ export class PrismaOrdenServicioRepository {
       // Si la búsqueda con unaccent encontró IDs adicionales, incluirlos en el OR
       if (unaccentIds.length > 0) {
         orConditions.push({
-          id_orden_servicio: { in: unaccentIds }
+          id_orden_servicio: { in: unaccentIds },
         });
       }
 
       where.OR = orConditions;
     }
-
 
     // Filtros opcionales
     if (filters?.id_cliente) where.id_cliente = filters.id_cliente;
@@ -1637,7 +1764,7 @@ export class PrismaOrdenServicioRepository {
     // y sin importar tildes (usando unaccent + Prisma ILIKE).
     if (filters?.servicioTexto) {
       const s = filters.servicioTexto.trim();
-      const tokens = s.split(/\s+/).filter(t => t.length > 0);
+      const tokens = s.split(/\s+/).filter((t) => t.length > 0);
 
       const matchingOrdenIds = await this.findOrdenIdsByServicioTexto(s);
 
@@ -1645,31 +1772,26 @@ export class PrismaOrdenServicioRepository {
         detalle_servicios_orden: {
           some: {
             catalogo_servicios: {
-              AND: tokens.map(token => ({
+              AND: tokens.map((token) => ({
                 OR: [
                   { nombre_servicio: { contains: token, mode: 'insensitive' as const } },
                   { codigo_servicio: { contains: token, mode: 'insensitive' as const } },
-                ]
-              }))
-            }
-          }
-        }
+                ],
+              })),
+            },
+          },
+        },
       };
 
-      const servicioCondition = matchingOrdenIds.length > 0
-        ? {
-            OR: [
-              prismaCondition,
-              { id_orden_servicio: { in: matchingOrdenIds } }
-            ]
-          }
-        : prismaCondition;
+      const servicioCondition =
+        matchingOrdenIds.length > 0
+          ? {
+              OR: [prismaCondition, { id_orden_servicio: { in: matchingOrdenIds } }],
+            }
+          : prismaCondition;
 
       if (where.AND) {
-        where.AND = [
-          ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
-          servicioCondition
-        ];
+        where.AND = [...(Array.isArray(where.AND) ? where.AND : [where.AND]), servicioCondition];
       } else {
         where.AND = [servicioCondition];
       }
@@ -1700,7 +1822,11 @@ export class PrismaOrdenServicioRepository {
           { numero_visita_caso: { gt: 1 } },
           { orden_padre: { estado_caso: 'ABIERTO' } },
           { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
-          { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          {
+            pendientes_asignados_resolver: {
+              some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } },
+            },
+          },
         ],
       };
       if (where.AND) {
@@ -1712,7 +1838,11 @@ export class PrismaOrdenServicioRepository {
       const pendientesCondition = {
         OR: [
           { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
-          { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          {
+            pendientes_asignados_resolver: {
+              some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } },
+            },
+          },
         ],
       };
       if (where.AND) {
@@ -1726,10 +1856,16 @@ export class PrismaOrdenServicioRepository {
     // 1. CORREO ('CON' | 'SIN')
     if (filters?.filtroCorreo === 'CON') {
       const condition = { historial_emails_enviados: { some: {} } };
-      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), condition];
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        condition,
+      ];
     } else if (filters?.filtroCorreo === 'SIN') {
       const condition = { historial_emails_enviados: { none: {} } };
-      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), condition];
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        condition,
+      ];
     }
 
     // 2. PDF ('CON' | 'SIN')
@@ -1738,29 +1874,51 @@ export class PrismaOrdenServicioRepository {
         SELECT DISTINCT id_referencia FROM documentos_generados WHERE tipo_documento = 'INFORME_SERVICIO'::tipo_documento_enum
       `;
       const idsConPdf = docsRows.map((r: any) => r.id_referencia);
-      const pdfCondition = filters.filtroPdf === 'CON'
-        ? { id_orden_servicio: { in: idsConPdf } }
-        : { id_orden_servicio: { notIn: idsConPdf } };
-      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), pdfCondition];
+      const pdfCondition =
+        filters.filtroPdf === 'CON'
+          ? { id_orden_servicio: { in: idsConPdf } }
+          : { id_orden_servicio: { notIn: idsConPdf } };
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        pdfCondition,
+      ];
     }
 
     // 3. PENDIENTES ('CON' | 'SIN')
-    if (filters?.filtroPendientes === 'CON' && filters?.filtroCaso !== 'CON_PENDIENTES' && !filters?.conPendientes) {
+    if (
+      filters?.filtroPendientes === 'CON' &&
+      filters?.filtroCaso !== 'CON_PENDIENTES' &&
+      !filters?.conPendientes
+    ) {
       const pendientesCondition = {
         OR: [
           { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
-          { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          {
+            pendientes_asignados_resolver: {
+              some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } },
+            },
+          },
         ],
       };
-      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), pendientesCondition];
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        pendientesCondition,
+      ];
     } else if (filters?.filtroPendientes === 'SIN') {
       const sinPendientesCondition = {
         AND: [
           { ordenes_pendientes: { none: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
-          { pendientes_asignados_resolver: { none: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          {
+            pendientes_asignados_resolver: {
+              none: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } },
+            },
+          },
         ],
       };
-      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), sinPendientesCondition];
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        sinPendientesCondition,
+      ];
     }
 
     // ENTERPRISE: Ordenamiento dinámico
@@ -1816,7 +1974,8 @@ export class PrismaOrdenServicioRepository {
       const medicionesCount = agg?.mediciones || 0;
       const fotosCount = agg?.evidencias || 0;
       const totalActs = actsPlan > 0 ? actsPlan : Math.max(actsEjecutadas, 10);
-      const pctActs = totalActs > 0 ? Math.min(100, Math.round((actsEjecutadas / totalActs) * 100)) : 0;
+      const pctActs =
+        totalActs > 0 ? Math.min(100, Math.round((actsEjecutadas / totalActs) * 100)) : 0;
       const tieneFirmaTecnico = Boolean(orden.id_firma_tecnico);
       const tieneFirmaCliente = Boolean(orden.id_firma_cliente);
       const totalFirmas = (tieneFirmaTecnico ? 1 : 0) + (tieneFirmaCliente ? 1 : 0);
@@ -1831,15 +1990,18 @@ export class PrismaOrdenServicioRepository {
         const pctMeds = medicionesCount > 0 ? Math.min(100, medicionesCount * 12.5) : 0;
         const pctFotos = Math.min(100, Math.round((fotosCount / 3) * 100));
         const pctFirmas = totalFirmas * 50;
-        pctGlobal = Math.min(99, Math.round(pctActs * 0.40 + pctMeds * 0.25 + pctFotos * 0.15 + pctFirmas * 0.20));
+        pctGlobal = Math.min(
+          99,
+          Math.round(pctActs * 0.4 + pctMeds * 0.25 + pctFotos * 0.15 + pctFirmas * 0.2),
+        );
       }
 
       // Telemetría última actividad
       const dateRef = orden.fecha_modificacion
         ? new Date(orden.fecha_modificacion)
         : orden.fecha_cambio_estado
-        ? new Date(orden.fecha_cambio_estado)
-        : null;
+          ? new Date(orden.fecha_cambio_estado)
+          : null;
       const now = new Date();
       const minutosInactividad = dateRef
         ? Math.max(0, Math.floor((now.getTime() - dateRef.getTime()) / (1000 * 60)))
@@ -1981,10 +2143,10 @@ export class PrismaOrdenServicioRepository {
     } catch (err) {
       this.logger.warn(
         `[Tombstone] No se pudo registrar la lápida de reasignación de la orden ${numero_orden} ` +
-        `(ID ${id_orden_servicio}). La reasignación continuará. ` +
-        `Causa probable: la tabla 'ordenes_eliminadas' no existe en la base de datos ` +
-        `(aplicar packages/database/prisma/migrations/20260929_ordenes_eliminadas_tombstones.sql). ` +
-        `Detalle: ${(err as Error)?.message}`,
+          `(ID ${id_orden_servicio}). La reasignación continuará. ` +
+          `Causa probable: la tabla 'ordenes_eliminadas' no existe en la base de datos ` +
+          `(aplicar packages/database/prisma/migrations/20260929_ordenes_eliminadas_tombstones.sql). ` +
+          `Detalle: ${(err as Error)?.message}`,
       );
     }
   }
@@ -2017,8 +2179,8 @@ export class PrismaOrdenServicioRepository {
     } catch (err) {
       this.logger.warn(
         `[Historial] No se pudo asentar el cambio de estado de la orden ${data.id_orden_servicio} ` +
-        `en historial_estados_orden. La actualización de la orden NO se revierte. ` +
-        `Detalle: ${(err as Error)?.message}`,
+          `en historial_estados_orden. La actualización de la orden NO se revierte. ` +
+          `Detalle: ${(err as Error)?.message}`,
       );
     }
   }
@@ -2039,7 +2201,10 @@ export class PrismaOrdenServicioRepository {
       select: { id_tecnico_asignado: true, numero_orden: true, id_estado_actual: true },
     });
 
-    if (ordenActual?.id_tecnico_asignado && ordenActual.id_tecnico_asignado !== id_tecnico_asignado) {
+    if (
+      ordenActual?.id_tecnico_asignado &&
+      ordenActual.id_tecnico_asignado !== id_tecnico_asignado
+    ) {
       await this.registrarTombstoneReasignacion(
         id_orden_servicio,
         ordenActual.numero_orden,
@@ -2068,7 +2233,9 @@ export class PrismaOrdenServicioRepository {
       id_orden_servicio,
       id_estado_anterior: ordenActual?.id_estado_actual || null,
       id_estado_nuevo: id_estado_asignada,
-      motivo_cambio: ordenActual?.id_tecnico_asignado ? 'Reasignación de técnico' : 'Asignación de técnico',
+      motivo_cambio: ordenActual?.id_tecnico_asignado
+        ? 'Reasignación de técnico'
+        : 'Asignación de técnico',
       observaciones: `Técnico asignado ID: ${id_tecnico_asignado}`,
       accion: 'ASIGNAR_TECNICO',
       realizado_por: modificado_por,

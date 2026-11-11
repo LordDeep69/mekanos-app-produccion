@@ -1,7 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Servicio API para Tipos de Servicio
- * 
+ *
  * Backend: @Controller('tipos-servicio')
  */
 
@@ -11,169 +11,174 @@ const BASE = '/tipos-servicio';
 
 // Categorías de servicio (desde backend ENUM)
 export type CategoriaServicio =
-    | 'PREVENTIVO'
-    | 'CORRECTIVO'
-    | 'EMERGENCIA'
-    | 'INSPECCION'
-    | 'ESPECIALIZADO'
-    | 'DIAGNOSTICO';
+  | 'PREVENTIVO'
+  | 'CORRECTIVO'
+  | 'EMERGENCIA'
+  | 'INSPECCION'
+  | 'ESPECIALIZADO'
+  | 'DIAGNOSTICO';
 
 export const CATEGORIAS_SERVICIO: { value: CategoriaServicio; label: string; color: string }[] = [
-    { value: 'PREVENTIVO', label: 'Preventivo', color: 'bg-green-100 text-green-800' },
-    { value: 'CORRECTIVO', label: 'Correctivo', color: 'bg-orange-100 text-orange-800' },
-    { value: 'EMERGENCIA', label: 'Emergencia', color: 'bg-red-100 text-red-800' },
-    { value: 'INSPECCION', label: 'Inspección', color: 'bg-blue-100 text-blue-800' },
-    { value: 'ESPECIALIZADO', label: 'Especializado', color: 'bg-purple-100 text-purple-800' },
-    { value: 'DIAGNOSTICO', label: 'Diagnóstico', color: 'bg-cyan-100 text-cyan-800' },
+  { value: 'PREVENTIVO', label: 'Preventivo', color: 'bg-green-100 text-green-800' },
+  { value: 'CORRECTIVO', label: 'Correctivo', color: 'bg-orange-100 text-orange-800' },
+  { value: 'EMERGENCIA', label: 'Emergencia', color: 'bg-red-100 text-red-800' },
+  { value: 'INSPECCION', label: 'Inspección', color: 'bg-blue-100 text-blue-800' },
+  { value: 'ESPECIALIZADO', label: 'Especializado', color: 'bg-purple-100 text-purple-800' },
+  { value: 'DIAGNOSTICO', label: 'Diagnóstico', color: 'bg-cyan-100 text-cyan-800' },
 ];
 
 export interface TipoServicio {
-    id_tipo_servicio: number;
+  id_tipo_servicio: number;
+  codigo_tipo: string;
+  nombre_tipo: string;
+  descripcion?: string;
+  categoria: CategoriaServicio;
+  id_tipo_equipo?: number | null;
+  aplica_a?: string[];
+  tiene_checklist: boolean;
+  tiene_plantilla_informe: boolean;
+  requiere_mediciones: boolean;
+  duracion_estimada_horas?: number;
+  orden_visualizacion?: number;
+  icono?: string;
+  color_hex?: string;
+  activo: boolean;
+  observaciones?: string;
+  plantilla_observacion?: string;
+  fecha_creacion?: string;
+  tipos_equipo?: {
+    id_tipo_equipo: number;
     codigo_tipo: string;
     nombre_tipo: string;
-    descripcion?: string;
-    categoria: CategoriaServicio;
-    id_tipo_equipo?: number | null;
-    aplica_a?: string[];
-    tiene_checklist: boolean;
-    tiene_plantilla_informe: boolean;
-    requiere_mediciones: boolean;
-    duracion_estimada_horas?: number;
-    orden_visualizacion?: number;
-    icono?: string;
-    color_hex?: string;
-    activo: boolean;
-    observaciones?: string;
-    plantilla_observacion?: string;
-    fecha_creacion?: string;
-    tipos_equipo?: {
-        id_tipo_equipo: number;
-        codigo_tipo: string;
-        nombre_tipo: string;
-    };
-    _count?: {
-        catalogo_actividades?: number;
-    };
+  };
+  _count?: {
+    catalogo_actividades?: number;
+  };
 }
 
 export interface TiposServicioResponse {
-    success: boolean;
-    message: string;
-    data: TipoServicio[];
-    meta?: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-    };
+  success: boolean;
+  message: string;
+  data: TipoServicio[];
+  meta?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export interface TiposServicioQueryParams {
-    page?: number;
-    limit?: number;
-    search?: string;
-    categoria?: CategoriaServicio;
-    tipoEquipoId?: number;
-    activo?: boolean | 'all' | string;
+  page?: number;
+  limit?: number;
+  search?: string;
+  categoria?: CategoriaServicio;
+  tipoEquipoId?: number;
+  activo?: boolean | 'all' | string;
 }
 
 export interface CreateTipoServicioDto {
-    codigoTipo: string;
-    nombreTipo: string;
-    descripcion?: string;
-    categoria: CategoriaServicio;
-    tipoEquipoId?: number | null;
-    aplicaA?: string[];
-    aplica_a?: string[];
-    tieneChecklist?: boolean;
-    tienePlantillaInforme?: boolean;
-    requiereMediciones?: boolean;
-    duracionEstimadaHoras?: number;
-    ordenVisualizacion?: number;
-    icono?: string;
-    colorHex?: string;
-    activo?: boolean;
-    observaciones?: string;
-    plantillaObservacion?: string;
-    plantilla_observacion?: string;
+  codigoTipo: string;
+  nombreTipo: string;
+  descripcion?: string;
+  categoria: CategoriaServicio;
+  tipoEquipoId?: number | null;
+  aplicaA?: string[];
+  aplica_a?: string[];
+  tieneChecklist?: boolean;
+  tienePlantillaInforme?: boolean;
+  requiereMediciones?: boolean;
+  duracionEstimadaHoras?: number;
+  ordenVisualizacion?: number;
+  icono?: string;
+  colorHex?: string;
+  activo?: boolean;
+  observaciones?: string;
+  plantillaObservacion?: string | null;
+  plantilla_observacion?: string | null;
 }
 
-export interface UpdateTipoServicioDto extends Partial<CreateTipoServicioDto> { }
+export type UpdateTipoServicioDto = Partial<CreateTipoServicioDto>;
 
 /**
  * Obtener lista de tipos de servicio
  */
 export async function getTiposServicio(
-    params?: TiposServicioQueryParams
+  params?: TiposServicioQueryParams,
 ): Promise<TiposServicioResponse> {
-    const queryParams = new URLSearchParams();
+  const queryParams = new URLSearchParams();
 
-    if (params?.page !== undefined) queryParams.append('page', String(params.page));
-    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
-    if (params?.search) queryParams.append('search', params.search);
-    if (params?.categoria) queryParams.append('categoria', params.categoria);
-    if (params?.tipoEquipoId !== undefined) queryParams.append('tipoEquipoId', String(params.tipoEquipoId));
-    if (params?.activo !== undefined) queryParams.append('activo', String(params.activo));
+  if (params?.page !== undefined) queryParams.append('page', String(params.page));
+  if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
+  if (params?.search) queryParams.append('search', params.search);
+  if (params?.categoria) queryParams.append('categoria', params.categoria);
+  if (params?.tipoEquipoId !== undefined)
+    queryParams.append('tipoEquipoId', String(params.tipoEquipoId));
+  if (params?.activo !== undefined) queryParams.append('activo', String(params.activo));
 
-    const url = queryParams.toString() ? `${BASE}?${queryParams.toString()}` : BASE;
-    const response = await apiClient.get<TiposServicioResponse>(url);
-    return response.data;
+  const url = queryParams.toString() ? `${BASE}?${queryParams.toString()}` : BASE;
+  const response = await apiClient.get<TiposServicioResponse>(url);
+  return response.data;
 }
 
 /**
  * Obtener tipo de servicio por ID
  */
-export async function getTipoServicio(id: number): Promise<{ success: boolean; data: TipoServicio }> {
-    const response = await apiClient.get<{ success: boolean; data: TipoServicio }>(`${BASE}/${id}`);
-    return response.data;
+export async function getTipoServicio(
+  id: number,
+): Promise<{ success: boolean; data: TipoServicio }> {
+  const response = await apiClient.get<{ success: boolean; data: TipoServicio }>(`${BASE}/${id}`);
+  return response.data;
 }
 
 /**
  * Crear nuevo tipo de servicio
  */
 export async function createTipoServicio(
-    data: CreateTipoServicioDto
+  data: CreateTipoServicioDto,
 ): Promise<{ success: boolean; message: string; data: TipoServicio }> {
-    const response = await apiClient.post<{ success: boolean; message: string; data: TipoServicio }>(
-        BASE,
-        data
-    );
-    return response.data;
+  const response = await apiClient.post<{ success: boolean; message: string; data: TipoServicio }>(
+    BASE,
+    data,
+  );
+  return response.data;
 }
 
 /**
  * Actualizar tipo de servicio
  */
 export async function updateTipoServicio(
-    id: number,
-    data: UpdateTipoServicioDto
+  id: number,
+  data: UpdateTipoServicioDto,
 ): Promise<{ success: boolean; message: string; data: TipoServicio }> {
-    const response = await apiClient.put<{ success: boolean; message: string; data: TipoServicio }>(
-        `${BASE}/${id}`,
-        data
-    );
-    return response.data;
+  const response = await apiClient.put<{ success: boolean; message: string; data: TipoServicio }>(
+    `${BASE}/${id}`,
+    data,
+  );
+  return response.data;
 }
 
 /**
  * Eliminar (soft delete) tipo de servicio
  */
-export async function deleteTipoServicio(id: number): Promise<{ success: boolean; message: string }> {
-    const response = await apiClient.delete<{ success: boolean; message: string }>(`${BASE}/${id}`);
-    return response.data;
+export async function deleteTipoServicio(
+  id: number,
+): Promise<{ success: boolean; message: string }> {
+  const response = await apiClient.delete<{ success: boolean; message: string }>(`${BASE}/${id}`);
+  return response.data;
 }
 
 /**
  * Obtener tipos de servicio por categoría
  */
 export async function getTiposServicioByCategoria(
-    categoria: CategoriaServicio,
-    soloActivos: boolean = true
+  categoria: CategoriaServicio,
+  soloActivos: boolean = true,
 ): Promise<{ success: boolean; data: TipoServicio[] }> {
-    const response = await apiClient.get<{ success: boolean; data: TipoServicio[] }>(
-        `${BASE}/categoria/${categoria}?soloActivos=${soloActivos}`
-    );
-    return response.data;
+  const response = await apiClient.get<{ success: boolean; data: TipoServicio[] }>(
+    `${BASE}/categoria/${categoria}?soloActivos=${soloActivos}`,
+  );
+  return response.data;
 }
 
 // ============================================================================
@@ -181,90 +186,90 @@ export async function getTiposServicioByCategoria(
 // ============================================================================
 
 export interface ActividadDetalle {
-    id_actividad_catalogo: number;
-    codigo_actividad: string;
-    descripcion_actividad: string;
-    tipo_actividad: string;
-    orden_ejecucion?: number;
-    id_sistema?: number | null;
-    id_tipo_equipo?: number | null;
-    id_plantilla_origen?: number | null;
-    es_obligatoria: boolean;
-    tiempo_estimado_minutos?: number | null;
-    instrucciones?: string | null;
-    precauciones?: string | null;
-    observaciones?: string | null;
-    id_parametro_medicion?: number | null;
-    naturaleza_personalizada?: string | null;
-    tipo_control_input?: string | null;
-    config_input_json?: any;
-    rol_semantico?: string | null;
-    parametro_medicion?: {
-        id: number;
-        codigo?: string;
-        nombre: string;
-        unidad: string;
-        rango_min?: number;
-        rango_max?: number;
-        min_critico?: number;
-        max_critico?: number;
-        ideal?: number;
-    } | null;
+  id_actividad_catalogo: number;
+  codigo_actividad: string;
+  descripcion_actividad: string;
+  tipo_actividad: string;
+  orden_ejecucion?: number;
+  id_sistema?: number | null;
+  id_tipo_equipo?: number | null;
+  id_plantilla_origen?: number | null;
+  es_obligatoria: boolean;
+  tiempo_estimado_minutos?: number | null;
+  instrucciones?: string | null;
+  precauciones?: string | null;
+  observaciones?: string | null;
+  id_parametro_medicion?: number | null;
+  naturaleza_personalizada?: string | null;
+  tipo_control_input?: string | null;
+  config_input_json?: unknown;
+  rol_semantico?: string | null;
+  parametro_medicion?: {
+    id: number;
+    codigo?: string;
+    nombre: string;
+    unidad: string;
+    rango_min?: number;
+    rango_max?: number;
+    min_critico?: number;
+    max_critico?: number;
+    ideal?: number;
+  } | null;
 }
 
 export interface SistemaDisponibleDetalle {
-    id_sistema: number;
-    codigo_sistema: string;
-    nombre_sistema: string;
-    orden_visualizacion: number;
-    id_modulo?: number | null;
-    aplica_a?: string[];
+  id_sistema: number;
+  codigo_sistema: string;
+  nombre_sistema: string;
+  orden_visualizacion: number;
+  id_modulo?: number | null;
+  aplica_a?: string[];
 }
 
 export interface SistemaConActividades {
-    id_sistema: number | null;
-    nombre_sistema: string;
-    codigo_sistema: string;
-    actividades: ActividadDetalle[];
-    total_actividades: number;
+  id_sistema: number | null;
+  nombre_sistema: string;
+  codigo_sistema: string;
+  actividades: ActividadDetalle[];
+  total_actividades: number;
 }
 
 export interface TipoServicioDetalleCompleto {
-    id_tipo_servicio: number;
-    codigo_tipo: string;
-    nombre_tipo: string;
-    descripcion?: string;
-    plantilla_observacion?: string | null;
-    activo?: boolean;
-    categoria: CategoriaServicio;
-    color_hex?: string;
-    icono?: string;
-    tiene_checklist: boolean;
-    duracion_estimada_horas?: number;
-    id_tipo_equipo?: number | null;
-    aplica_a?: string[];
-    tipo_equipo?: {
-        id: number;
-        codigo?: string;
-        nombre: string;
-    } | null;
-    estadisticas: {
-        total_actividades: number;
-        total_ordenes_historicas: number;
-        total_sistemas: number;
-    };
-    sistemas_disponibles?: SistemaDisponibleDetalle[];
-    sistemas_con_actividades: SistemaConActividades[];
+  id_tipo_servicio: number;
+  codigo_tipo: string;
+  nombre_tipo: string;
+  descripcion?: string;
+  plantilla_observacion?: string | null;
+  activo?: boolean;
+  categoria: CategoriaServicio;
+  color_hex?: string;
+  icono?: string;
+  tiene_checklist: boolean;
+  duracion_estimada_horas?: number;
+  id_tipo_equipo?: number | null;
+  aplica_a?: string[];
+  tipo_equipo?: {
+    id: number;
+    codigo?: string;
+    nombre: string;
+  } | null;
+  estadisticas: {
+    total_actividades: number;
+    total_ordenes_historicas: number;
+    total_sistemas: number;
+  };
+  sistemas_disponibles?: SistemaDisponibleDetalle[];
+  sistemas_con_actividades: SistemaConActividades[];
 }
 
 /**
  * Obtener detalle completo del tipo de servicio con actividades agrupadas por sistema
  */
 export async function getTipoServicioDetalleCompleto(
-    id: number
+  id: number,
 ): Promise<{ success: boolean; data: TipoServicioDetalleCompleto }> {
-    const response = await apiClient.get<{ success: boolean; data: TipoServicioDetalleCompleto }>(
-        `${BASE}/${id}/detalle-completo`
-    );
-    return response.data;
+  const response = await apiClient.get<{ success: boolean; data: TipoServicioDetalleCompleto }>(
+    `${BASE}/${id}/detalle-completo`,
+  );
+  return response.data;
 }

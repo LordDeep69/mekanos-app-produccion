@@ -12,29 +12,20 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { CommandBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ArticulosService } from './articulos.service';
 import { CreateArticuloMaestroDto } from './dto/create-articulo-maestro.dto';
 import { UpdateCatalogoComponenteDto } from './dto/update-catalogo-componente.dto';
-import {
-  VincularProveedorDto,
-  ActualizarPrecioProveedorDto,
-} from './dto/sourcing-proveedor.dto';
+import { VincularProveedorDto, ActualizarPrecioProveedorDto } from './dto/sourcing-proveedor.dto';
 import { FiltrosArticulosDto } from './dto/filtros-articulos.dto';
-import { ActualizarCatalogoComponenteCommand } from './application/commands/actualizar-catalogo-componente.command';
-import { DesactivarCatalogoComponenteCommand } from './application/commands/desactivar-catalogo-componente.command';
 
 @ApiTags('Catálogo Maestro y Abastecimiento')
 @ApiBearerAuth()
 @Controller('catalogo-componentes')
 @UseGuards(JwtAuthGuard)
 export class CatalogoComponentesController {
-  constructor(
-    private readonly articulosService: ArticulosService,
-    private readonly commandBus: CommandBus,
-  ) {}
+  constructor(private readonly articulosService: ArticulosService) {}
 
   /**
    * =========================================================================
@@ -47,13 +38,13 @@ export class CatalogoComponentesController {
     description:
       'Inserta el recurso base en la tabla maestra, enlaza sus proveedores iniciales en la matriz de referencias cruzadas y genera de forma automática la primera entrada en la bitácora inmutable de costos.',
   })
-  @ApiResponse({ status: 201, description: 'Artículo maestro creado exitosamente con sus relaciones.' })
+  @ApiResponse({
+    status: 201,
+    description: 'Artículo maestro creado exitosamente con sus relaciones.',
+  })
   @ApiResponse({ status: 400, description: 'Datos de validación inválidos.' })
   @ApiResponse({ status: 409, description: 'Código interno o referencia en conflicto.' })
-  async create(
-    @Body() dto: CreateArticuloMaestroDto,
-    @CurrentUser() user: any,
-  ) {
+  async create(@Body() dto: CreateArticuloMaestroDto, @CurrentUser() user: any) {
     const idUsuario = user?.id_usuario || user?.sub || 1;
     return this.articulosService.create(dto, idUsuario);
   }
@@ -66,7 +57,8 @@ export class CatalogoComponentesController {
   @Get()
   @ApiOperation({
     summary: 'Listar artículos del catálogo con filtros avanzados',
-    description: 'Permite filtrar por destino operativo (arquetipo), categoría técnica, proveedor, marca y búsqueda textual (SKU, nombre, referencia).',
+    description:
+      'Permite filtrar por destino operativo (arquetipo), categoría técnica, proveedor, marca y búsqueda textual (SKU, nombre, referencia).',
   })
   async findAll(@Query() filtros: FiltrosArticulosDto) {
     return this.articulosService.findAll(filtros);
@@ -80,7 +72,8 @@ export class CatalogoComponentesController {
   @Get('resumen')
   @ApiOperation({
     summary: 'Obtener métricas y KPIs consolidados del catálogo de componentes',
-    description: 'Calcula en tiempo real totales, existencias críticas, valorización de inventario y distribución de arquetipos.',
+    description:
+      'Calcula en tiempo real totales, existencias críticas, valorización de inventario y distribución de arquetipos.',
   })
   async getResumen() {
     return this.articulosService.getResumen();
@@ -99,7 +92,8 @@ export class CatalogoComponentesController {
   @Get('siguiente-sku')
   @ApiOperation({
     summary: 'Obtener el siguiente SKU sugerido sin colisiones',
-    description: 'Calcula el próximo código formal correlativo basándose en sequence_counter y los registros existentes del año actual.',
+    description:
+      'Calcula el próximo código formal correlativo basándose en sequence_counter y los registros existentes del año actual.',
   })
   async getSiguienteSku() {
     return this.articulosService.obtenerSiguienteSku();
@@ -108,7 +102,8 @@ export class CatalogoComponentesController {
   @Get('validar-codigo')
   @ApiOperation({
     summary: 'Validar disponibilidad de un código interno o SKU en tiempo real',
-    description: 'Comprueba si un código interno ya existe en el catálogo maestro, excluyendo opcionalmente el artículo actual en edición.',
+    description:
+      'Comprueba si un código interno ya existe en el catálogo maestro, excluyendo opcionalmente el artículo actual en edición.',
   })
   @ApiQuery({ name: 'codigo', required: true, type: String })
   @ApiQuery({ name: 'id_componente', required: false, type: Number })
@@ -149,10 +144,7 @@ export class CatalogoComponentesController {
    */
   @Delete(':id')
   @ApiOperation({ summary: 'Desactivar un artículo del catálogo con guardas de integridad' })
-  async remove(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
-  ) {
+  async remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
     const idUsuario = user?.id_usuario || user?.sub || 1;
     return this.articulosService.desactivar(id, idUsuario);
   }
@@ -164,10 +156,7 @@ export class CatalogoComponentesController {
    */
   @Patch(':id/reactivar')
   @ApiOperation({ summary: 'Reactivar un artículo previamente archivado' })
-  async reactivar(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
-  ) {
+  async reactivar(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
     const idUsuario = user?.id_usuario || user?.sub || 1;
     return this.articulosService.reactivar(id, idUsuario);
   }
@@ -180,7 +169,8 @@ export class CatalogoComponentesController {
   @Get(':id/proveedores')
   @ApiOperation({
     summary: 'Listar proveedores y referencias cruzadas de un artículo',
-    description: 'Devuelve todas las fuentes de suministro vinculadas, con sus SKUs, costos negociados, escalas y proveedor preferido.',
+    description:
+      'Devuelve todas las fuentes de suministro vinculadas, con sus SKUs, costos negociados, escalas y proveedor preferido.',
   })
   async getFuentesSuministro(@Param('id', ParseIntPipe) id: number) {
     return this.articulosService.getFuentesSuministro(id);
@@ -189,7 +179,8 @@ export class CatalogoComponentesController {
   @Post(':id/proveedores')
   @ApiOperation({
     summary: 'Vincular un nuevo proveedor a un artículo (Cross-referencing)',
-    description: 'Asocia una oferta de proveedor (SKU, costo, escalas) y registra la auditoría correspondiente en la bitácora.',
+    description:
+      'Asocia una oferta de proveedor (SKU, costo, escalas) y registra la auditoría correspondiente en la bitácora.',
   })
   async vincularProveedor(
     @Param('id', ParseIntPipe) id: number,
@@ -203,7 +194,8 @@ export class CatalogoComponentesController {
   @Put(':id/proveedores/:idProveedor/precio')
   @ApiOperation({
     summary: 'Actualizar costo pactado de un proveedor con registro de auditoría inmutable',
-    description: 'Actualiza el costo de adquisición de un proveedor para este artículo, calcula la variación porcentual y anota el registro en la bitácora histórica.',
+    description:
+      'Actualiza el costo de adquisición de un proveedor para este artículo, calcula la variación porcentual y anota el registro en la bitácora histórica.',
   })
   async actualizarPrecioProveedor(
     @Param('id', ParseIntPipe) id: number,
@@ -232,7 +224,8 @@ export class CatalogoComponentesController {
   @Get(':id/historial-costos')
   @ApiOperation({
     summary: 'Obtener historial cronológico inmutable de costos de compra',
-    description: 'Devuelve la bitácora completa de cambios de costos, fechas, facturas asociadas y usuarios que realizaron los registros.',
+    description:
+      'Devuelve la bitácora completa de cambios de costos, fechas, facturas asociadas y usuarios que realizaron los registros.',
   })
   @ApiQuery({ name: 'idProveedor', required: false, type: Number })
   async getHistorialCostos(

@@ -16,13 +16,15 @@ export function useClientesSelector() {
     queryKey: ['clientes', 'selector'],
     queryFn: async () => {
       const response = await getClientes({ take: 1000 });
-      return response.data.map(c => {
-        const baseName = c.persona?.nombre_comercial || c.persona?.razon_social || `Cliente ${c.id_cliente}`;
+      return response.data.map((c) => {
+        const baseName =
+          c.persona?.nombre_comercial || c.persona?.razon_social || `Cliente ${c.id_cliente}`;
         // ✅ MULTI-SEDE: Si es sede, mostrar "NombreSede (NombrePrincipal)"
-        const label = (c as any).nombre_sede
-          ? `${(c as any).nombre_sede} (${baseName})`
-          : baseName;
-        const nit = (c.persona as any)?.numero_documento || '';
+        const label = c.nombre_sede ? `${c.nombre_sede} (${baseName})` : baseName;
+        const personaExt = c.persona as
+          | (typeof c.persona & { numero_documento?: string | null })
+          | undefined;
+        const nit = personaExt?.numero_documento || c.persona?.numero_identificacion || '';
         return { value: c.id_cliente.toString(), label, nit };
       });
     },
@@ -39,7 +41,7 @@ export function useSedesSelector(idCliente?: number) {
     queryFn: async () => {
       if (!idCliente) return [];
       const data = await sedesService.listarSedesPorCliente(idCliente);
-      return data.map(s => ({
+      return data.map((s) => ({
         value: s.id_sede.toString(),
         label: s.nombre_sede,
       }));
@@ -57,7 +59,7 @@ export function useTiposEquipoSelector() {
     queryKey: ['tipos-equipo', 'selector'],
     queryFn: async () => {
       const data = await tiposEquipoService.listarTodos();
-      return data.map(t => ({
+      return data.map((t) => ({
         value: t.id_tipo_equipo.toString(),
         label: t.nombre_tipo,
       }));

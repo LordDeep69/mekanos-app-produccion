@@ -1,13 +1,13 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Cliente API Base - Axios Configuration
- * 
+ *
  * ZERO TRUST: Esta es la ÚNICA forma de comunicación con el backend.
  * Todos los hooks y servicios DEBEN usar este cliente.
- * 
+ *
  * ARQUITECTURA: El token JWT se inyecta dinámicamente desde NextAuth.
  * La UI NUNCA debe saber sobre tokens - es responsabilidad de este módulo.
- * 
+ *
  * ═══════════════════════════════════════════════════════════════════════════
  * 🚀 OPTIMIZACIÓN 05-ENE-2026: TOKEN CACHE
  * ═══════════════════════════════════════════════════════════════════════════
@@ -17,16 +17,11 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-import axios, {
-  AxiosError,
-  AxiosInstance,
-  InternalAxiosRequestConfig,
-} from 'axios';
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { getSession, signOut } from 'next-auth/react';
 
 // Configuración base
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 // ✅ FIX 22-ENE-2026: Aumentado a 120s para operaciones de PDF que toman ~18-25s
 const API_TIMEOUT = 120000; // 120 segundos
 
@@ -41,6 +36,8 @@ interface TokenCache {
 
 let tokenCache: TokenCache | null = null;
 const TOKEN_CACHE_TTL = 5 * 60 * 1000; // 5 minutos en ms
+const NULL_TOKEN_CACHE_TTL = 2 * 1000; // Evita ráfagas a /api/auth/session cuando aún no hay token
+let nullTokenCheckedAt = 0;
 let tokenFetchPromise: Promise<string | null> | null = null;
 let isSigningOut = false;
 
@@ -56,6 +53,11 @@ async function getCachedAuthToken(): Promise<string | null> {
     return tokenCache.token;
   }
 
+  // 1.5 Evitar ráfagas de getSession() consecutivas cuando la sesión aún es null
+  if (nullTokenCheckedAt && Date.now() - nullTokenCheckedAt < NULL_TOKEN_CACHE_TTL) {
+    return null;
+  }
+
   // 2. Si ya hay una petición en curso, esperar a esa
   if (tokenFetchPromise) {
     return tokenFetchPromise;
@@ -65,16 +67,17 @@ async function getCachedAuthToken(): Promise<string | null> {
   tokenFetchPromise = (async () => {
     try {
       const session = await getSession();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const accessToken = (session as any)?.accessToken;
+      const accessToken = (session as { accessToken?: string } | null)?.accessToken;
 
       if (accessToken) {
+        nullTokenCheckedAt = 0;
         tokenCache = {
           token: accessToken,
           expiresAt: Date.now() + TOKEN_CACHE_TTL,
         };
         return accessToken;
       }
+      nullTokenCheckedAt = Date.now();
       return null;
     } finally {
       tokenFetchPromise = null;
@@ -89,6 +92,7 @@ async function getCachedAuthToken(): Promise<string | null> {
  */
 export function invalidateTokenCache(): void {
   tokenCache = null;
+  nullTokenCheckedAt = 0;
   tokenFetchPromise = null;
 }
 
@@ -109,7 +113,7 @@ export const apiClient: AxiosInstance = axios.create({
 
 /**
  * Interceptor de Request: Inyecta token JWT con CACHE
- * 
+ *
  * ✅ OPTIMIZADO 05-ENE-2026: Usa cache de token en memoria
  * - Primera llamada: ~200ms (obtiene de getSession)
  * - Llamadas siguientes: ~0ms (usa cache)
@@ -133,21 +137,19 @@ apiClient.interceptors.request.use(
     // Log en desarrollo
     if (process.env.NODE_ENV === 'development') {
       const hasAuth = !!config.headers?.Authorization;
-      console.log(
-        `[API] ${config.method?.toUpperCase()} ${config.url} ${hasAuth ? '🔐' : '🔓'}`
-      );
+      console.log(`[API] ${config.method?.toUpperCase()} ${config.url} ${hasAuth ? '🔐' : '🔓'}`);
     }
 
     return config;
   },
   (error: AxiosError) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 /**
  * Interceptor de Response: Manejo de errores PROACTIVO
- * 
+ *
  * SEGURIDAD PROACTIVA: Si recibe 401, cierra sesión inmediatamente.
  * No esperamos a que el usuario vea errores - actuamos.
  */
@@ -159,7 +161,8 @@ apiClient.interceptors.response.use(
 
       switch (status) {
         case 400: {
-          const rawMsg = (error.response?.data as any)?.message;
+          const rawMsg = (error.response?.data as { message?: string | string[] } | undefined)
+            ?.message;
           const exactMsg = Array.isArray(rawMsg) ? rawMsg.join(', ') : rawMsg;
           console.error('[API] 400 Solicitud inválida:', exactMsg ?? error.response?.data);
           if (exactMsg && typeof exactMsg === 'string') {
@@ -211,16 +214,19 @@ apiClient.interceptors.response.use(
       // Log detallado del error para debugging
       if (error.response?.data) {
         if (typeof Blob !== 'undefined' && error.response.data instanceof Blob) {
-          error.response.data.text().then((text: string) => {
-            try {
-              const parsed = JSON.parse(text);
-              console.error('[API] Detalle del error (Blob decodificado):', parsed);
-            } catch {
-              console.error('[API] Detalle del error (Blob texto):', text);
-            }
-          }).catch(() => {
-            console.error('[API] Detalle del error:', error.response?.data);
-          });
+          error.response.data
+            .text()
+            .then((text: string) => {
+              try {
+                const parsed = JSON.parse(text);
+                console.error('[API] Detalle del error (Blob decodificado):', parsed);
+              } catch {
+                console.error('[API] Detalle del error (Blob texto):', text);
+              }
+            })
+            .catch(() => {
+              console.error('[API] Detalle del error:', error.response?.data);
+            });
         } else {
           console.error('[API] Detalle del error:', error.response.data);
         }
@@ -230,7 +236,7 @@ apiClient.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 /**

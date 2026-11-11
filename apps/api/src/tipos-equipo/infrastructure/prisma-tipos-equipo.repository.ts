@@ -2,11 +2,11 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { tipos_equipo } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import {
-    ActualizarTipoEquipoData,
-    CrearTipoEquipoData,
-    ITiposEquipoRepository,
-    TipoEquipoEntity,
-    TiposEquipoFilters,
+  ActualizarTipoEquipoData,
+  CrearTipoEquipoData,
+  ITiposEquipoRepository,
+  TipoEquipoEntity,
+  TiposEquipoFilters,
 } from '../domain/tipos-equipo.repository.interface';
 
 @Injectable()
@@ -31,9 +31,13 @@ export class PrismaTiposEquipoRepository implements ITiposEquipoRepository {
       permite_mantenimiento_tipo_a: tipo.permite_mantenimiento_tipo_a ?? false,
       permite_mantenimiento_tipo_b: tipo.permite_mantenimiento_tipo_b ?? false,
       intervalo_tipo_a_dias: tipo.intervalo_tipo_a_dias ?? undefined,
-      intervalo_tipo_a_horas: tipo.intervalo_tipo_a_horas ? Number(tipo.intervalo_tipo_a_horas) : undefined,
+      intervalo_tipo_a_horas: tipo.intervalo_tipo_a_horas
+        ? Number(tipo.intervalo_tipo_a_horas)
+        : undefined,
       intervalo_tipo_b_dias: tipo.intervalo_tipo_b_dias ?? undefined,
-      intervalo_tipo_b_horas: tipo.intervalo_tipo_b_horas ? Number(tipo.intervalo_tipo_b_horas) : undefined,
+      intervalo_tipo_b_horas: tipo.intervalo_tipo_b_horas
+        ? Number(tipo.intervalo_tipo_b_horas)
+        : undefined,
       criterio_intervalo: tipo.criterio_intervalo ?? undefined,
       formato_ficha_tecnica: tipo.formato_ficha_tecnica,
       formato_mantenimiento_tipo_a: tipo.formato_mantenimiento_tipo_a ?? undefined,
@@ -51,14 +55,12 @@ export class PrismaTiposEquipoRepository implements ITiposEquipoRepository {
 
   async crear(data: CrearTipoEquipoData): Promise<TipoEquipoEntity> {
     // Validar código único
-    const existe = await this.prisma.tipos_equipo.findUnique({
+    const existe = await this.prisma.tipos_equipo.findFirst({
       where: { codigo_tipo: data.codigo_tipo },
     });
 
     if (existe) {
-      throw new ConflictException(
-        `Ya existe un tipo de equipo con código ${data.codigo_tipo}`,
-      );
+      throw new ConflictException(`Ya existe un tipo de equipo con código ${data.codigo_tipo}`);
     }
 
     const tipoEquipo = await this.prisma.tipos_equipo.create({
@@ -93,10 +95,7 @@ export class PrismaTiposEquipoRepository implements ITiposEquipoRepository {
     return this.toEntity(tipoEquipo);
   }
 
-  async actualizar(
-    id: number,
-    data: ActualizarTipoEquipoData,
-  ): Promise<TipoEquipoEntity> {
+  async actualizar(id: number, data: ActualizarTipoEquipoData): Promise<TipoEquipoEntity> {
     // Verificar que existe
     const existe = await this.prisma.tipos_equipo.findUnique({
       where: { id_tipo_equipo: id },
@@ -166,7 +165,7 @@ export class PrismaTiposEquipoRepository implements ITiposEquipoRepository {
   }
 
   async findByCodigo(codigo: string): Promise<TipoEquipoEntity | null> {
-    const tipoEquipo = await this.prisma.tipos_equipo.findUnique({
+    const tipoEquipo = await this.prisma.tipos_equipo.findFirst({
       where: { codigo_tipo: codigo },
     });
 
@@ -210,7 +209,7 @@ export class PrismaTiposEquipoRepository implements ITiposEquipoRepository {
     ]);
 
     return {
-      data: data.map(tipo => this.toEntity(tipo)),
+      data: data.map((tipo) => this.toEntity(tipo)),
       total,
       page,
       totalPages: Math.ceil(total / limit),

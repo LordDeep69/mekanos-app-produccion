@@ -1,5 +1,5 @@
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 
 /**
  * Utilidad para combinar clases de Tailwind de forma segura
@@ -18,7 +18,7 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function formatDateSafe(
   dateString: string | null | undefined,
-  options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' }
+  options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' },
 ): string {
   if (!dateString) return 'Sin fecha';
 
@@ -38,4 +38,33 @@ export function formatDateSafe(
   const localDate = new Date(Number(year), Number(month) - 1, Number(day));
 
   return localDate.toLocaleDateString('es-CO', options);
+}
+
+/**
+ * Extrae el mensaje legible desde un error desconocido (Axios, Error estándar o payload API).
+ */
+export function getApiErrorMessage(error: unknown, fallback = 'Error inesperado'): string {
+  if (typeof error === 'object' && error !== null) {
+    const record = error as {
+      response?: { data?: { message?: string | string[]; error?: string } };
+      message?: string;
+    };
+    const apiMsg = record.response?.data?.message;
+    if (Array.isArray(apiMsg) && apiMsg.length > 0) {
+      return apiMsg.join(', ');
+    }
+    if (typeof apiMsg === 'string' && apiMsg.trim().length > 0) {
+      return apiMsg;
+    }
+    if (
+      typeof record.response?.data?.error === 'string' &&
+      record.response.data.error.trim().length > 0
+    ) {
+      return record.response.data.error;
+    }
+    if (typeof record.message === 'string' && record.message.trim().length > 0) {
+      return record.message;
+    }
+  }
+  return fallback;
 }

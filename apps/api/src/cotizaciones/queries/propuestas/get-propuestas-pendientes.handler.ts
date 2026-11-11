@@ -42,13 +42,13 @@ export class GetPropuestasPendientesHandler implements IQueryHandler<GetPropuest
       skip,
       take,
       include: {
-        orden_servicio: {
+        ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio: {
           select: {
             id_orden_servicio: true,
             numero_orden: true,
           },
         },
-        cliente: {
+        clientes: {
           include: {
             persona: {
               select: {
@@ -59,13 +59,13 @@ export class GetPropuestasPendientesHandler implements IQueryHandler<GetPropuest
             },
           },
         },
-        equipo: {
+        equipos: {
           select: {
             id_equipo: true,
             nombre_equipo: true,
           },
         },
-        estado: {
+        estados_cotizacion: {
           select: {
             nombre_estado: true,
           },
@@ -79,28 +79,33 @@ export class GetPropuestasPendientesHandler implements IQueryHandler<GetPropuest
     });
 
     return {
-      propuestas: propuestas.map((p) => ({
-        id_propuesta: p.id_propuesta,
-        numero_propuesta: p.numero_propuesta,
-        categoria: p.categoria,
-        descripcion_problema: p.descripcion_problema,
-        solucion_propuesta: p.solucion_propuesta,
-        prioridad: p.prioridad,
-        fecha_propuesta: p.fecha_propuesta,
-        fecha_vencimiento: p.fecha_vencimiento,
-        subtotal_servicios: p.subtotal_servicios,
-        subtotal_componentes: p.subtotal_componentes,
-        total_propuesta: p.total_propuesta,
-        estado: p.estado.nombre_estado,
-        orden_servicio: {
-          id_orden_servicio: p.orden_servicio.id_orden_servicio,
-          numero_orden: p.orden_servicio.numero_orden,
-        },
-        cliente: p.cliente.persona.razon_social || 
-                 `${p.cliente.persona.primer_nombre} ${p.cliente.persona.primer_apellido}`,
-        equipo: p.equipo?.nombre_equipo,
-        convertida_a_orden: !!p.id_orden_servicio_generada,
-      })),
+      propuestas: propuestas.map((p) => {
+        const ordenOrigen =
+          p.ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio;
+        return {
+          id_propuesta: p.id_propuesta,
+          numero_propuesta: p.numero_propuesta,
+          categoria: p.categoria,
+          descripcion_problema: p.descripcion_problema,
+          solucion_propuesta: p.solucion_propuesta,
+          prioridad: p.prioridad,
+          fecha_propuesta: p.fecha_propuesta,
+          fecha_vencimiento: p.fecha_vencimiento,
+          subtotal_servicios: p.subtotal_servicios,
+          subtotal_componentes: p.subtotal_componentes,
+          total_propuesta: p.total_propuesta,
+          estado: p.estados_cotizacion.nombre_estado,
+          orden_servicio: {
+            id_orden_servicio: ordenOrigen.id_orden_servicio,
+            numero_orden: ordenOrigen.numero_orden,
+          },
+          cliente:
+            p.clientes.persona.razon_social ||
+            `${p.clientes.persona.primer_nombre} ${p.clientes.persona.primer_apellido}`,
+          equipo: p.equipos?.nombre_equipo,
+          convertida_a_orden: !!p.id_orden_servicio_generada,
+        };
+      }),
       pagination: {
         total,
         skip,

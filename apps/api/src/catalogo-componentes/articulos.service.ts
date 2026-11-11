@@ -12,24 +12,13 @@ import {
   ArticuloProveedorInicialDto,
 } from './dto/create-articulo-maestro.dto';
 import { UpdateCatalogoComponenteDto } from './dto/update-catalogo-componente.dto';
-import {
-  VincularProveedorDto,
-  ActualizarPrecioProveedorDto,
-} from './dto/sourcing-proveedor.dto';
+import { VincularProveedorDto, ActualizarPrecioProveedorDto } from './dto/sourcing-proveedor.dto';
 import { FiltrosArticulosDto } from './dto/filtros-articulos.dto';
-import {
-  destino_articulo_enum,
-  origen_costo_enum,
-  Prisma,
-} from '@prisma/client';
+import { destino_articulo_enum, origen_costo_enum, Prisma } from '@prisma/client';
 
 @Injectable()
 export class ArticulosService {
   private readonly logger = new Logger(ArticulosService.name);
-
-  /** Código del tipo legacy comodín (la taxonomía real vive en categorias_componente). */
-  private static readonly CODIGO_TIPO_GENERAL = 'GENERAL';
-
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -263,10 +252,7 @@ export class ArticulosService {
    * 3. Registra automáticamente la primera entrada inmutable en `historial_costos_compra`.
    * Todo ejecutado en una única transacción de Prisma ($transaction).
    */
-  async create(
-    dto: CreateArticuloMaestroDto,
-    idUsuario?: number,
-  ): Promise<any> {
+  async create(dto: CreateArticuloMaestroDto, idUsuario?: number): Promise<any> {
     this.logger.log(
       `Iniciando creación de artículo maestro: ${dto.referencia_fabricante} (${dto.destino_articulo})`,
     );
@@ -375,8 +361,7 @@ export class ArticulosService {
         }
 
         // PASO 1: Insertar Recurso Base en la Tabla Maestra con llaves foráneas normalizadas
-        const esInventariable =
-          dto.es_inventariable !== undefined ? dto.es_inventariable : true;
+        const esInventariable = dto.es_inventariable !== undefined ? dto.es_inventariable : true;
         const stockInicial = esInventariable ? Math.max(0, dto.stock_actual ?? 0) : 0;
 
         const componenteCreado = await tx.catalogo_componentes.create({
@@ -403,8 +388,10 @@ export class ArticulosService {
             numero_serie_activo: dto.numero_serie_activo?.trim() || null,
             placa_inventario: dto.placa_inventario?.trim() || null,
             frecuencia_mantenimiento_meses: dto.frecuencia_mantenimiento_meses || null,
-            precio_compra: dto.precio_compra !== undefined ? new Prisma.Decimal(dto.precio_compra) : null,
-            precio_venta: dto.precio_venta !== undefined ? new Prisma.Decimal(dto.precio_venta) : null,
+            precio_compra:
+              dto.precio_compra !== undefined ? new Prisma.Decimal(dto.precio_compra) : null,
+            precio_venta:
+              dto.precio_venta !== undefined ? new Prisma.Decimal(dto.precio_venta) : null,
             margen_utilidad_porcentaje:
               dto.margen_utilidad_porcentaje !== undefined
                 ? new Prisma.Decimal(dto.margen_utilidad_porcentaje)
@@ -540,7 +527,10 @@ export class ArticulosService {
         });
       });
     } catch (error: any) {
-      this.logger.error(`Error en creación atómica de artículo maestro: ${error?.message || error}`, error?.stack);
+      this.logger.error(
+        `Error en creación atómica de artículo maestro: ${error?.message || error}`,
+        error?.stack,
+      );
       if (error instanceof ConflictException || error instanceof NotFoundException) {
         throw error;
       }
@@ -555,11 +545,7 @@ export class ArticulosService {
    * VINCULAR UN NUEVO PROVEEDOR A UN ARTÍCULO EXISTENTE (CROSS-REFERENCING)
    * =========================================================================
    */
-  async vincularProveedor(
-    idComponente: number,
-    dto: VincularProveedorDto,
-    idUsuario?: number,
-  ) {
+  async vincularProveedor(idComponente: number, dto: VincularProveedorDto, idUsuario?: number) {
     const articulo = await this.prisma.catalogo_componentes.findUnique({
       where: { id_componente: idComponente },
     });
@@ -692,9 +678,10 @@ export class ArticulosService {
 
     return await this.prisma.$transaction(async (tx) => {
       // 1. Si se marca como preferido, desmarcar los anteriores del mismo componente
-      const esPreferido = dto.es_proveedor_preferido !== undefined
-        ? dto.es_proveedor_preferido
-        : vinculoExistente.es_proveedor_preferido;
+      const esPreferido =
+        dto.es_proveedor_preferido !== undefined
+          ? dto.es_proveedor_preferido
+          : vinculoExistente.es_proveedor_preferido;
 
       if (dto.es_proveedor_preferido === true) {
         await tx.articulos_proveedores.updateMany({
@@ -714,15 +701,37 @@ export class ArticulosService {
         data: {
           costo_actual: new Prisma.Decimal(nuevoCosto),
           moneda: dto.moneda || vinculoExistente.moneda,
-          referencia_proveedor: dto.referencia_proveedor?.trim() || vinculoExistente.referencia_proveedor,
-          nombre_segun_proveedor: dto.nombre_segun_proveedor !== undefined ? (dto.nombre_segun_proveedor.trim() || null) : vinculoExistente.nombre_segun_proveedor,
-          marca_ofrecida: dto.marca_ofrecida !== undefined ? (dto.marca_ofrecida.trim() || null) : vinculoExistente.marca_ofrecida,
-          id_marca_ofrecida: dto.id_marca_ofrecida !== undefined ? dto.id_marca_ofrecida : vinculoExistente.id_marca_ofrecida,
-          cantidad_minima_compra: dto.cantidad_minima_compra !== undefined ? new Prisma.Decimal(dto.cantidad_minima_compra) : vinculoExistente.cantidad_minima_compra,
-          tiempo_entrega_dias: dto.tiempo_entrega_dias !== undefined ? dto.tiempo_entrega_dias : vinculoExistente.tiempo_entrega_dias,
+          referencia_proveedor:
+            dto.referencia_proveedor?.trim() || vinculoExistente.referencia_proveedor,
+          nombre_segun_proveedor:
+            dto.nombre_segun_proveedor !== undefined
+              ? dto.nombre_segun_proveedor.trim() || null
+              : vinculoExistente.nombre_segun_proveedor,
+          marca_ofrecida:
+            dto.marca_ofrecida !== undefined
+              ? dto.marca_ofrecida.trim() || null
+              : vinculoExistente.marca_ofrecida,
+          id_marca_ofrecida:
+            dto.id_marca_ofrecida !== undefined
+              ? dto.id_marca_ofrecida
+              : vinculoExistente.id_marca_ofrecida,
+          cantidad_minima_compra:
+            dto.cantidad_minima_compra !== undefined
+              ? new Prisma.Decimal(dto.cantidad_minima_compra)
+              : vinculoExistente.cantidad_minima_compra,
+          tiempo_entrega_dias:
+            dto.tiempo_entrega_dias !== undefined
+              ? dto.tiempo_entrega_dias
+              : vinculoExistente.tiempo_entrega_dias,
           es_proveedor_preferido: esPreferido,
-          url_producto_proveedor: dto.url_producto_proveedor !== undefined ? (dto.url_producto_proveedor.trim() || null) : vinculoExistente.url_producto_proveedor,
-          notas: (dto.observaciones || dto.notas) !== undefined ? ((dto.observaciones || dto.notas || '').trim() || null) : vinculoExistente.notas,
+          url_producto_proveedor:
+            dto.url_producto_proveedor !== undefined
+              ? dto.url_producto_proveedor.trim() || null
+              : vinculoExistente.url_producto_proveedor,
+          notas:
+            (dto.observaciones || dto.notas) !== undefined
+              ? (dto.observaciones || dto.notas || '').trim() || null
+              : vinculoExistente.notas,
           escalas_precios: dto.escalas_precios ? (dto.escalas_precios as any) : undefined,
           modificado_por: idUsuario || null,
         },
@@ -865,11 +874,7 @@ export class ArticulosService {
    * Modifica los atributos del recurso base, validando e inyectando las nuevas
    * llaves foráneas (id_marca, codigo_unidad_medida, id_categoria) en una transacción.
    */
-  async update(
-    id: number,
-    dto: UpdateCatalogoComponenteDto,
-    idUsuario?: number,
-  ) {
+  async update(id: number, dto: UpdateCatalogoComponenteDto, idUsuario?: number) {
     this.logger.log(`Iniciando actualización de artículo maestro ID ${id}`);
 
     // 1. Verificar existencia del artículo
@@ -905,9 +910,7 @@ export class ArticulosService {
           where: { id_marca: dto.id_marca },
         });
         if (!marcaEntity) {
-          throw new NotFoundException(
-            `La marca con ID ${dto.id_marca} no existe en el sistema.`,
-          );
+          throw new NotFoundException(`La marca con ID ${dto.id_marca} no existe en el sistema.`);
         }
         if (!marcaTexto) {
           marcaTexto = marcaEntity.nombre;
@@ -984,9 +987,7 @@ export class ArticulosService {
       }
 
       if (dto.id_marca !== undefined) {
-        data.marcas = dto.id_marca
-          ? { connect: { id_marca: dto.id_marca } }
-          : { disconnect: true };
+        data.marcas = dto.id_marca ? { connect: { id_marca: dto.id_marca } } : { disconnect: true };
       }
 
       if (dto.codigo_unidad_medida !== undefined) {
@@ -1036,14 +1037,19 @@ export class ArticulosService {
       if (dto.es_comprable !== undefined) data.es_comprable = dto.es_comprable;
       if (dto.es_inventariable !== undefined) data.es_inventariable = dto.es_inventariable;
       if (dto.es_facturable !== undefined) data.es_facturable = dto.es_facturable;
-      if (dto.requiere_serializacion !== undefined) data.requiere_serializacion = dto.requiere_serializacion;
+      if (dto.requiere_serializacion !== undefined)
+        data.requiere_serializacion = dto.requiere_serializacion;
       if (dto.es_activo_fijo !== undefined) data.es_activo_fijo = dto.es_activo_fijo;
-      if (dto.numero_serie_activo !== undefined) data.numero_serie_activo = dto.numero_serie_activo?.trim() || null;
-      if (dto.placa_inventario !== undefined) data.placa_inventario = dto.placa_inventario?.trim() || null;
-      if (dto.frecuencia_mantenimiento_meses !== undefined) data.frecuencia_mantenimiento_meses = dto.frecuencia_mantenimiento_meses;
+      if (dto.numero_serie_activo !== undefined)
+        data.numero_serie_activo = dto.numero_serie_activo?.trim() || null;
+      if (dto.placa_inventario !== undefined)
+        data.placa_inventario = dto.placa_inventario?.trim() || null;
+      if (dto.frecuencia_mantenimiento_meses !== undefined)
+        data.frecuencia_mantenimiento_meses = dto.frecuencia_mantenimiento_meses;
 
       if (dto.precio_compra !== undefined) {
-        data.precio_compra = dto.precio_compra !== null ? new Prisma.Decimal(dto.precio_compra) : null;
+        data.precio_compra =
+          dto.precio_compra !== null ? new Prisma.Decimal(dto.precio_compra) : null;
       }
 
       if (dto.precio_venta !== undefined) {
@@ -1051,17 +1057,23 @@ export class ArticulosService {
       }
 
       if (dto.margen_utilidad_porcentaje !== undefined) {
-        data.margen_utilidad_porcentaje = dto.margen_utilidad_porcentaje !== null
-          ? new Prisma.Decimal(dto.margen_utilidad_porcentaje)
-          : null;
+        data.margen_utilidad_porcentaje =
+          dto.margen_utilidad_porcentaje !== null
+            ? new Prisma.Decimal(dto.margen_utilidad_porcentaje)
+            : null;
       }
 
       if (dto.moneda !== undefined) data.moneda = dto.moneda || 'COP';
-      if (dto.id_proveedor_principal !== undefined) data.id_proveedor_principal = dto.id_proveedor_principal;
+      if (dto.id_proveedor_principal !== undefined) {
+        data.proveedores = dto.id_proveedor_principal
+          ? { connect: { id_proveedor: dto.id_proveedor_principal } }
+          : { disconnect: true };
+      }
       if (dto.stock_minimo !== undefined) data.stock_minimo = dto.stock_minimo;
       if (unidadTexto !== undefined) data.unidad_medida = unidadTexto;
       if (dto.observaciones !== undefined) data.observaciones = dto.observaciones?.trim() || null;
-      if (dto.notas_instalacion !== undefined) data.notas_instalacion = dto.notas_instalacion?.trim() || null;
+      if (dto.notas_instalacion !== undefined)
+        data.notas_instalacion = dto.notas_instalacion?.trim() || null;
 
       await tx.catalogo_componentes.update({
         where: { id_componente: id },
@@ -1120,9 +1132,7 @@ export class ArticulosService {
 
     if (filtros.id_categoria) {
       // Incluye la categoría seleccionada y TODAS sus subcategorías (coherente con el árbol)
-      const idsCategoria = await this.obtenerIdsCategoriaConDescendientes(
-        filtros.id_categoria,
-      );
+      const idsCategoria = await this.obtenerIdsCategoriaConDescendientes(filtros.id_categoria);
       where.id_categoria = { in: idsCategoria };
     }
 
@@ -1185,12 +1195,7 @@ export class ArticulosService {
 
     const page = filtros.page ? Math.max(1, filtros.page) : undefined;
     const limit = filtros.limit ? Math.max(1, filtros.limit) : 50;
-    const skip =
-      filtros.skip !== undefined
-        ? filtros.skip
-        : page
-        ? (page - 1) * limit
-        : 0;
+    const skip = filtros.skip !== undefined ? filtros.skip : page ? (page - 1) * limit : 0;
 
     const [items, total] = await Promise.all([
       this.prisma.catalogo_componentes.findMany({
@@ -1291,7 +1296,16 @@ export class ArticulosService {
               take: 1,
               orderBy: { fecha_movimiento: 'desc' },
               include: {
-                ubicaciones_bodega: { select: { id_ubicacion: true, codigo_ubicacion: true, zona: true, pasillo: true, estante: true, nivel: true } },
+                ubicaciones_bodega: {
+                  select: {
+                    id_ubicacion: true,
+                    codigo_ubicacion: true,
+                    zona: true,
+                    pasillo: true,
+                    estante: true,
+                    nivel: true,
+                  },
+                },
               },
             },
           },
@@ -1348,10 +1362,7 @@ export class ArticulosService {
     const ocActivas = articulo.ordenes_compra_detalle.filter((det) => {
       const estado = det.ordenes_compra?.estado;
       return (
-        estado &&
-        ['BORRADOR', 'PENDIENTE', 'APROBADA', 'EN_TRANSITO'].includes(
-          estado as string,
-        )
+        estado && ['BORRADOR', 'PENDIENTE', 'APROBADA', 'EN_TRANSITO'].includes(estado as string)
       );
     });
 

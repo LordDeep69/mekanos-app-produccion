@@ -66,18 +66,18 @@ import {
   Wind,
   Zap,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface DynamicModularSpecsEditorProps {
   idTipoEquipo: number | null;
   codigoTipo?: string | null;
-  modulosValues: Record<string, Record<string, any>>;
+  modulosValues: Record<string, Record<string, unknown>>;
   origenAtributos: Record<string, 'MODELO' | 'CUSTOM'>;
   unidadesPersonalizadas: Record<string, string>;
   onChangeValor: (
     codigoModulo: string,
     codigoAtributo: string,
-    nuevoValor: any,
+    nuevoValor: unknown,
     origen?: 'MODELO' | 'CUSTOM',
   ) => void;
   onChangeUnidad: (
@@ -162,11 +162,7 @@ function getSubsystemVisuals(codigoModulo?: string | null) {
       border: 'border-rose-200',
     };
   }
-  if (
-    code.includes('motor_electrico') ||
-    code.includes('electrico') ||
-    code.includes('potencia')
-  ) {
+  if (code.includes('motor_electrico') || code.includes('electrico') || code.includes('potencia')) {
     return {
       Icon: Zap,
       color: 'text-blue-600',
@@ -235,28 +231,33 @@ export function DynamicModularSpecsEditor({
   }, [idTipoEquipo, codigoTipo, arquetipos]);
 
   const { data: esquema, isLoading } = useArquetipoEsquemaEam(effectiveIdTipo);
-  const [activeModuloCode, setActiveModuloCode] = useState<string>('');
+  const [activeModuloCodeRaw, setActiveModuloCode] = useState<string>('');
 
   const modulos = useMemo(() => esquema?.modulos || [], [esquema]);
-
-  useEffect(() => {
-    if (modulos.length > 0 && !modulos.some((m) => m.codigo_modulo === activeModuloCode)) {
-      setActiveModuloCode(modulos[0].codigo_modulo);
-    }
-  }, [modulos, activeModuloCode]);
+  const activeModuloCode = modulos.some((m) => m.codigo_modulo === activeModuloCodeRaw)
+    ? activeModuloCodeRaw
+    : modulos[0]?.codigo_modulo || '';
 
   // Herencia automática en tiempo real: Encabezado Modelo OEM -> Subsistemas
+  const modulosValuesRef = useRef(modulosValues);
+  const onChangeValorRef = useRef(onChangeValor);
   useEffect(() => {
-    if (!modeloOemActivo || !esquema?.modulos) return;
-    const marcaOem = modeloOemActivo.marca?.trim().toUpperCase();
-    const modeloOem = modeloOemActivo.modelo?.trim();
+    modulosValuesRef.current = modulosValues;
+    onChangeValorRef.current = onChangeValor;
+  });
+
+  const marcaOem = modeloOemActivo?.marca?.trim().toUpperCase() || '';
+  const modeloOem = modeloOemActivo?.modelo?.trim() || '';
+
+  useEffect(() => {
+    if ((!marcaOem && !modeloOem) || !esquema?.modulos) return;
 
     for (const mod of esquema.modulos) {
       for (const grp of mod.grupos) {
         for (const attr of grp.atributos) {
           const cMod = mod.codigo_modulo;
           const cAttr = attr.codigo_atributo;
-          const val = modulosValues[cMod]?.[cAttr];
+          const val = modulosValuesRef.current[cMod]?.[cAttr];
 
           const isMarca =
             cAttr === 'marca' ||
@@ -269,16 +270,16 @@ export function DynamicModularSpecsEditor({
             attr.rol_semantico === 'MODELO_PRINCIPAL';
 
           if (isMarca && marcaOem && (val === '' || val === undefined || val === null)) {
-            onChangeValor(cMod, cAttr, marcaOem, 'MODELO');
+            onChangeValorRef.current(cMod, cAttr, marcaOem, 'MODELO');
           }
 
           if (isModelo && modeloOem && (val === '' || val === undefined || val === null)) {
-            onChangeValor(cMod, cAttr, modeloOem, 'MODELO');
+            onChangeValorRef.current(cMod, cAttr, modeloOem, 'MODELO');
           }
         }
       }
     }
-  }, [esquema, modeloOemActivo?.marca, modeloOemActivo?.modelo]);
+  }, [esquema, marcaOem, modeloOem]);
 
   // Diccionario de factores afines combinando magnitudes del Hub + respaldo
   const mapaUnidades = useMemo(() => {
@@ -341,21 +342,19 @@ export function DynamicModularSpecsEditor({
           Este tipo de equipo aún no tiene partes o subsistemas vinculados en el Hub EAM
         </p>
         <p className="text-xs text-amber-700">
-          Puedes vincularle partes (Motor, Generador, Bomba, Compresor, Refrigeración, etc.) desde Configuración → Catálogo de Equipos Maestros.
+          Puedes vincularle partes (Motor, Generador, Bomba, Compresor, Refrigeración, etc.) desde
+          Configuración → Catálogo de Equipos Maestros.
         </p>
       </div>
     );
   }
 
-  const moduloActivo =
-    modulos.find((m) => m.codigo_modulo === activeModuloCode) || modulos[0];
+  const moduloActivo = modulos.find((m) => m.codigo_modulo === activeModuloCode) || modulos[0];
 
   // Contar campos diligenciados por módulo
   const contarDiligenciados = (codigoMod: string) => {
     const vals = modulosValues[codigoMod] || {};
-    return Object.values(vals).filter(
-      (v) => v !== undefined && v !== null && v !== '',
-    ).length;
+    return Object.values(vals).filter((v) => v !== undefined && v !== null && v !== '').length;
   };
 
   const totalAtributosModulo = (mod: (typeof modulos)[number]) =>
@@ -380,7 +379,8 @@ export function DynamicModularSpecsEditor({
                 </span>
               </div>
               <p className="text-xs text-indigo-800/80 mt-0.5">
-                Los campos marcados con <strong>🏭 De fábrica</strong> provienen de esta plantilla. Puedes modificar o complementar cualquier valor para este equipo.
+                Los campos marcados con <strong>🏭 De fábrica</strong> provienen de esta plantilla.
+                Puedes modificar o complementar cualquier valor para este equipo.
               </p>
             </div>
           </div>
@@ -521,14 +521,16 @@ export function DynamicModularSpecsEditor({
                     isMarcaField &&
                       modeloOemActivo?.marca &&
                       valActual &&
-                      String(valActual).trim().toUpperCase() === modeloOemActivo.marca.trim().toUpperCase(),
+                      String(valActual).trim().toUpperCase() ===
+                        modeloOemActivo.marca.trim().toUpperCase(),
                   );
 
                   const isVinculadoOemModelo = Boolean(
                     isModeloField &&
                       modeloOemActivo?.modelo &&
                       valActual &&
-                      String(valActual).trim().toUpperCase() === modeloOemActivo.modelo.trim().toUpperCase(),
+                      String(valActual).trim().toUpperCase() ===
+                        modeloOemActivo.modelo.trim().toUpperCase(),
                   );
 
                   const isVinculadoOem = isVinculadoOemMarca || isVinculadoOemModelo;
@@ -569,15 +571,18 @@ export function DynamicModularSpecsEditor({
                               Vinculado al Modelo OEM
                             </span>
                           )}
-                          {!isVinculadoOem && isMarcaField && valActual && modeloOemActivo?.marca && (
-                            <span
-                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 shadow-2xs"
-                              title="Marca personalizada específica para este subsistema"
-                            >
-                              <Pencil className="h-2.5 w-2.5 text-amber-600" />
-                              Personalizado
-                            </span>
-                          )}
+                          {!isVinculadoOem &&
+                            isMarcaField &&
+                            valActual &&
+                            modeloOemActivo?.marca && (
+                              <span
+                                className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 shadow-2xs"
+                                title="Marca personalizada específica para este subsistema"
+                              >
+                                <Pencil className="h-2.5 w-2.5 text-amber-600" />
+                                Personalizado
+                              </span>
+                            )}
                           {attr.es_kpi && (
                             <span
                               className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-0.5 shadow-2xs"
@@ -596,15 +601,18 @@ export function DynamicModularSpecsEditor({
                               De fábrica
                             </span>
                           )}
-                          {origen === 'CUSTOM' && !isMarcaField && valActual !== '' && modeloOemActivo && (
-                            <span
-                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5"
-                              title="Valor ajustado manualmente para este equipo"
-                            >
-                              <Pencil className="h-2.5 w-2.5" />
-                              Personalizado
-                            </span>
-                          )}
+                          {origen === 'CUSTOM' &&
+                            !isMarcaField &&
+                            valActual !== '' &&
+                            modeloOemActivo && (
+                              <span
+                                className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5"
+                                title="Valor ajustado manualmente para este equipo"
+                              >
+                                <Pencil className="h-2.5 w-2.5" />
+                                Personalizado
+                              </span>
+                            )}
                         </div>
                       </div>
 
@@ -617,7 +625,9 @@ export function DynamicModularSpecsEditor({
                               type="number"
                               step="any"
                               value={
-                                valActual === null || valActual === undefined ? '' : valActual
+                                typeof valActual === 'string' || typeof valActual === 'number'
+                                  ? valActual
+                                  : ''
                               }
                               onChange={(e) => {
                                 const raw = e.target.value;
@@ -669,7 +679,11 @@ export function DynamicModularSpecsEditor({
                         <input
                           type="number"
                           step="any"
-                          value={valActual === null || valActual === undefined ? '' : valActual}
+                          value={
+                            typeof valActual === 'string' || typeof valActual === 'number'
+                              ? valActual
+                              : ''
+                          }
                           onChange={(e) => {
                             const raw = e.target.value;
                             const parsed = raw === '' ? '' : Number(raw);
@@ -710,35 +724,61 @@ export function DynamicModularSpecsEditor({
                             <span>No</span>
                           </button>
                         </div>
-                      ) : ctrlHumano.value === 'SELECTOR' && opciones.length > 0 ? (() => {
-                        const matchOption = (v1: unknown, v2: unknown) => {
-                          if (v1 === v2) return true;
-                          const s1 = String(v1 ?? '').toUpperCase().trim();
-                          const s2 = String(v2 ?? '').toUpperCase().trim();
-                          if (s1 === s2) return true;
-                          if ((s1 === 'H' && s2 === 'CLASE_H') || (s1 === 'CLASE_H' && s2 === 'H')) return true;
-                          if ((s1 === 'F' && s2 === 'CLASE_F') || (s1 === 'CLASE_F' && s2 === 'F')) return true;
-                          if ((s1 === 'B' && s2 === 'CLASE_B') || (s1 === 'CLASE_B' && s2 === 'B')) return true;
-                          if ((s1 === 'A' && s2 === 'CLASE_A') || (s1 === 'CLASE_A' && s2 === 'A')) return true;
-                          return false;
-                        };
-                        const matchedOp = opciones.find((op) => matchOption(valActual, op.value));
-                        const selectVal = matchedOp ? matchedOp.value : (valActual === null || valActual === undefined ? '' : String(valActual));
+                      ) : ctrlHumano.value === 'SELECTOR' && opciones.length > 0 ? (
+                        (() => {
+                          const matchOption = (v1: unknown, v2: unknown) => {
+                            if (v1 === v2) return true;
+                            const s1 = String(v1 ?? '')
+                              .toUpperCase()
+                              .trim();
+                            const s2 = String(v2 ?? '')
+                              .toUpperCase()
+                              .trim();
+                            if (s1 === s2) return true;
+                            if (
+                              (s1 === 'H' && s2 === 'CLASE_H') ||
+                              (s1 === 'CLASE_H' && s2 === 'H')
+                            )
+                              return true;
+                            if (
+                              (s1 === 'F' && s2 === 'CLASE_F') ||
+                              (s1 === 'CLASE_F' && s2 === 'F')
+                            )
+                              return true;
+                            if (
+                              (s1 === 'B' && s2 === 'CLASE_B') ||
+                              (s1 === 'CLASE_B' && s2 === 'B')
+                            )
+                              return true;
+                            if (
+                              (s1 === 'A' && s2 === 'CLASE_A') ||
+                              (s1 === 'CLASE_A' && s2 === 'A')
+                            )
+                              return true;
+                            return false;
+                          };
+                          const matchedOp = opciones.find((op) => matchOption(valActual, op.value));
+                          const selectVal = matchedOp
+                            ? matchedOp.value
+                            : valActual === null || valActual === undefined
+                              ? ''
+                              : String(valActual);
 
-                        return (
-                          <EamSelect
-                            value={selectVal}
-                            onChange={(val) =>
-                              onChangeValor(codigoMod, codigoAttr, val, 'CUSTOM')
-                            }
-                            options={opciones.map((op) => ({
-                              value: op.value,
-                              label: op.label,
-                            }))}
-                            placeholder="Seleccionar opción..."
-                          />
-                        );
-                      })() : isMarcaField ? (
+                          return (
+                            <EamSelect
+                              value={selectVal}
+                              onChange={(val) =>
+                                onChangeValor(codigoMod, codigoAttr, val, 'CUSTOM')
+                              }
+                              options={opciones.map((op) => ({
+                                value: op.value,
+                                label: op.label,
+                              }))}
+                              placeholder="Seleccionar opción..."
+                            />
+                          );
+                        })()
+                      ) : isMarcaField ? (
                         <MarcaCombobox
                           size="sm"
                           value={valActual ? String(valActual) : ''}
@@ -751,7 +791,9 @@ export function DynamicModularSpecsEditor({
                         <div className="space-y-1">
                           <input
                             type="text"
-                            value={valActual === null || valActual === undefined ? '' : String(valActual)}
+                            value={
+                              valActual === null || valActual === undefined ? '' : String(valActual)
+                            }
                             onChange={(e) =>
                               onChangeValor(codigoMod, codigoAttr, e.target.value, 'CUSTOM')
                             }
@@ -765,7 +807,12 @@ export function DynamicModularSpecsEditor({
                               <button
                                 type="button"
                                 onClick={() =>
-                                  onChangeValor(codigoMod, codigoAttr, modeloOemActivo.modelo, 'MODELO')
+                                  onChangeValor(
+                                    codigoMod,
+                                    codigoAttr,
+                                    modeloOemActivo.modelo,
+                                    'MODELO',
+                                  )
                                 }
                                 className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer transition-colors"
                                 title="Copiar el modelo comercial del encabezado a este subsistema"

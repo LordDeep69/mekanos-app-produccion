@@ -1,14 +1,13 @@
 import { PrismaService } from '@mekanos/database';
 import {
-    BadRequestException,
-    ConflictException,
-    Injectable,
-    InternalServerErrorException,
-    NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { origen_costo_enum, Prisma } from '@prisma/client';
 import { CrearProveedorDto } from './dto/create-proveedor.dto';
-import { UpdateProveedoresDto } from './dto/update-proveedores.dto';
 import {
   HomologarArticuloProveedorDto,
   ActualizarArticuloProveedorDto,
@@ -27,7 +26,9 @@ export class ProveedoresService {
         const razonSocial = (createDto.razon_social || createDto.nombre_comercial || '').trim();
 
         if (!razonSocial) {
-          throw new BadRequestException('Se requiere la Razón Social o Nombre Comercial de la empresa');
+          throw new BadRequestException(
+            'Se requiere la Razón Social o Nombre Comercial de la empresa',
+          );
         }
 
         // Buscar si ya existe la persona por identificación
@@ -49,7 +50,8 @@ export class ProveedoresService {
             where: { id_persona: personaId },
             data: {
               es_proveedor: true,
-              representante_legal: createDto.persona_contacto?.trim() || personaExistente.representante_legal,
+              representante_legal:
+                createDto.persona_contacto?.trim() || personaExistente.representante_legal,
               url_ubicacion: createDto.url_ubicacion?.trim() || personaExistente.url_ubicacion,
             },
           });
@@ -110,10 +112,13 @@ export class ProveedoresService {
 
       // Formatear observaciones compuestas
       const obsPartes: string[] = [];
-      if (createDto.terminos_credito) obsPartes.push(`Plazo de pago: ${createDto.terminos_credito}`);
-      if (createDto.email_facturacion) obsPartes.push(`Facturación: ${createDto.email_facturacion}`);
+      if (createDto.terminos_credito)
+        obsPartes.push(`Plazo de pago: ${createDto.terminos_credito}`);
+      if (createDto.email_facturacion)
+        obsPartes.push(`Facturación: ${createDto.email_facturacion}`);
       if (createDto.sitio_web) obsPartes.push(`Web: ${createDto.sitio_web}`);
-      if (createDto.observaciones_despacho) obsPartes.push(`Logística: ${createDto.observaciones_despacho}`);
+      if (createDto.observaciones_despacho)
+        obsPartes.push(`Logística: ${createDto.observaciones_despacho}`);
       if (createDto.observaciones) obsPartes.push(createDto.observaciones);
       const observacionesFinal = obsPartes.join(' | ') || null;
 
@@ -138,7 +143,11 @@ export class ProveedoresService {
         },
       });
     } catch (error: unknown) {
-      if (error instanceof NotFoundException || error instanceof ConflictException || error instanceof BadRequestException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
       throw new InternalServerErrorException(
@@ -150,7 +159,7 @@ export class ProveedoresService {
   async findAll(page: number = 1, limit: number = 10) {
     try {
       const skip = (page - 1) * limit;
-      
+
       const [data, total] = await Promise.all([
         this.prisma.proveedores.findMany({
           skip,
@@ -274,10 +283,13 @@ export class ProveedoresService {
         updateDto.observaciones_despacho
       ) {
         const obsPartes: string[] = [];
-        if (updateDto.terminos_credito) obsPartes.push(`Plazo de pago: ${updateDto.terminos_credito}`);
-        if (updateDto.email_facturacion) obsPartes.push(`Facturación: ${updateDto.email_facturacion}`);
+        if (updateDto.terminos_credito)
+          obsPartes.push(`Plazo de pago: ${updateDto.terminos_credito}`);
+        if (updateDto.email_facturacion)
+          obsPartes.push(`Facturación: ${updateDto.email_facturacion}`);
         if (updateDto.sitio_web) obsPartes.push(`Web: ${updateDto.sitio_web}`);
-        if (updateDto.observaciones_despacho) obsPartes.push(`Logística: ${updateDto.observaciones_despacho}`);
+        if (updateDto.observaciones_despacho)
+          obsPartes.push(`Logística: ${updateDto.observaciones_despacho}`);
         if (updateDto.observaciones && !updateDto.observaciones.startsWith('Plazo de pago:')) {
           obsPartes.push(updateDto.observaciones);
         }
@@ -286,17 +298,26 @@ export class ProveedoresService {
 
       // Preparar datos propios de proveedores
       const proveedorData: any = {};
-      if (updateDto.codigo_proveedor !== undefined) proveedorData.codigo_proveedor = updateDto.codigo_proveedor;
-      if (updateDto.categoria_proveedor !== undefined) proveedorData.categoria_proveedor = updateDto.categoria_proveedor;
-      if (updateDto.tipo_proveedor !== undefined) proveedorData.tipo_proveedor = updateDto.tipo_proveedor;
-      if (updateDto.responsable_iva !== undefined) proveedorData.responsable_iva = updateDto.responsable_iva;
-      if (updateDto.tiempo_entrega_dias !== undefined) proveedorData.tiempo_entrega_dias = updateDto.tiempo_entrega_dias;
-      if (serviciosOfrecidosFinal !== undefined) proveedorData.servicios_ofrecidos = serviciosOfrecidosFinal;
-      if (updateDto.realiza_entregas !== undefined) proveedorData.realiza_entregas = updateDto.realiza_entregas;
+      if (updateDto.codigo_proveedor !== undefined)
+        proveedorData.codigo_proveedor = updateDto.codigo_proveedor;
+      if (updateDto.categoria_proveedor !== undefined)
+        proveedorData.categoria_proveedor = updateDto.categoria_proveedor;
+      if (updateDto.tipo_proveedor !== undefined)
+        proveedorData.tipo_proveedor = updateDto.tipo_proveedor;
+      if (updateDto.responsable_iva !== undefined)
+        proveedorData.responsable_iva = updateDto.responsable_iva;
+      if (updateDto.tiempo_entrega_dias !== undefined)
+        proveedorData.tiempo_entrega_dias = updateDto.tiempo_entrega_dias;
+      if (serviciosOfrecidosFinal !== undefined)
+        proveedorData.servicios_ofrecidos = serviciosOfrecidosFinal;
+      if (updateDto.realiza_entregas !== undefined)
+        proveedorData.realiza_entregas = updateDto.realiza_entregas;
       if (updateDto.etiquetas_secundarias !== undefined || updateDto.zona_cobertura !== undefined) {
-        proveedorData.zona_cobertura = updateDto.etiquetas_secundarias || updateDto.zona_cobertura || null;
+        proveedorData.zona_cobertura =
+          updateDto.etiquetas_secundarias || updateDto.zona_cobertura || null;
       }
-      if (updateDto.proveedor_activo !== undefined) proveedorData.proveedor_activo = updateDto.proveedor_activo;
+      if (updateDto.proveedor_activo !== undefined)
+        proveedorData.proveedor_activo = updateDto.proveedor_activo;
       if (observacionesFinal !== undefined) proveedorData.observaciones = observacionesFinal;
 
       return await this.prisma.proveedores.update({
@@ -366,13 +387,14 @@ export class ProveedoresService {
 
     let montoComprometido = 0;
     let montoEnBorrador = 0;
-    let ordenesCompletadas = 0;
 
     for (const o of ordenes) {
       const estadoStr = String(o.estado || '').toUpperCase();
       let totalOrden = 0;
       for (const d of o.ordenes_compra_detalle) {
-        const sub = d.subtotal ? Number(d.subtotal) : Number(d.cantidad) * Number(d.precio_unitario);
+        const sub = d.subtotal
+          ? Number(d.subtotal)
+          : Number(d.cantidad) * Number(d.precio_unitario);
         totalOrden += sub;
       }
 
@@ -381,10 +403,6 @@ export class ProveedoresService {
         montoComprometido += totalOrden;
       } else if (estadoStr === 'BORRADOR') {
         montoEnBorrador += totalOrden;
-      }
-
-      if (['COMPLETADA', 'RECIBIDA'].includes(estadoStr)) {
-        ordenesCompletadas++;
       }
     }
 
@@ -411,9 +429,10 @@ export class ProveedoresService {
 
     // Cumplimiento en muelle determinista: (Unidades Aceptadas / Total Unidades Recibidas) * 100
     // Si no registra recepciones físicas, se retorna null (Sin evaluar / Sin recepciones)
-    const cumplimientoMuelle = totalRecibidoMuelle > 0
-      ? Math.round((totalAceptadoMuelle / totalRecibidoMuelle) * 100)
-      : null;
+    const cumplimientoMuelle =
+      totalRecibidoMuelle > 0
+        ? Math.round((totalAceptadoMuelle / totalRecibidoMuelle) * 100)
+        : null;
 
     return {
       proveedor,
@@ -471,10 +490,7 @@ export class ProveedoresService {
         },
         marcas: true,
       },
-      orderBy: [
-        { es_proveedor_preferido: 'desc' },
-        { fecha_actualizacion: 'desc' },
-      ],
+      orderBy: [{ es_proveedor_preferido: 'desc' }, { fecha_actualizacion: 'desc' }],
     });
   }
 
@@ -495,7 +511,9 @@ export class ProveedoresService {
     });
 
     if (!componente) {
-      throw new NotFoundException(`El artículo ID ${dto.id_componente} no existe en el catálogo maestro.`);
+      throw new NotFoundException(
+        `El artículo ID ${dto.id_componente} no existe en el catálogo maestro.`,
+      );
     }
 
     const ref = dto.referencia_proveedor.trim();
@@ -538,7 +556,10 @@ export class ProveedoresService {
           costo_actual: new Prisma.Decimal(dto.costo_actual),
           moneda: 'COP',
           tiempo_entrega_dias: dto.tiempo_entrega_dias ?? 1,
-          cantidad_minima_compra: dto.cantidad_minima_compra !== undefined ? new Prisma.Decimal(dto.cantidad_minima_compra) : new Prisma.Decimal(1),
+          cantidad_minima_compra:
+            dto.cantidad_minima_compra !== undefined
+              ? new Prisma.Decimal(dto.cantidad_minima_compra)
+              : new Prisma.Decimal(1),
           url_producto_proveedor: dto.url_producto_proveedor?.trim() || null,
           es_proveedor_preferido: dto.es_proveedor_preferido ?? false,
           activo: true,
@@ -547,12 +568,18 @@ export class ProveedoresService {
         },
         update: {
           referencia_proveedor: ref,
-          nombre_segun_proveedor: dto.nombre_segun_proveedor !== undefined ? dto.nombre_segun_proveedor.trim() || null : undefined,
+          nombre_segun_proveedor:
+            dto.nombre_segun_proveedor !== undefined
+              ? dto.nombre_segun_proveedor.trim() || null
+              : undefined,
           marca_ofrecida: dto.marca_ofrecida?.trim() || componente.marca || null,
           id_marca_ofrecida: dto.id_marca_ofrecida || undefined,
           costo_actual: new Prisma.Decimal(dto.costo_actual),
           tiempo_entrega_dias: dto.tiempo_entrega_dias ?? 1,
-          cantidad_minima_compra: dto.cantidad_minima_compra !== undefined ? new Prisma.Decimal(dto.cantidad_minima_compra) : undefined,
+          cantidad_minima_compra:
+            dto.cantidad_minima_compra !== undefined
+              ? new Prisma.Decimal(dto.cantidad_minima_compra)
+              : undefined,
           url_producto_proveedor: dto.url_producto_proveedor?.trim() || null,
           es_proveedor_preferido: dto.es_proveedor_preferido ?? false,
           activo: true,
@@ -644,16 +671,38 @@ export class ProveedoresService {
           },
         },
         data: {
-          referencia_proveedor: dto.referencia_proveedor?.trim() || vinculoExistente.referencia_proveedor,
-          nombre_segun_proveedor: dto.nombre_segun_proveedor !== undefined ? (dto.nombre_segun_proveedor.trim() || null) : vinculoExistente.nombre_segun_proveedor,
-          marca_ofrecida: dto.marca_ofrecida !== undefined ? (dto.marca_ofrecida.trim() || null) : vinculoExistente.marca_ofrecida,
-          id_marca_ofrecida: dto.id_marca_ofrecida !== undefined ? dto.id_marca_ofrecida : vinculoExistente.id_marca_ofrecida,
-          cantidad_minima_compra: dto.cantidad_minima_compra !== undefined ? new Prisma.Decimal(dto.cantidad_minima_compra) : vinculoExistente.cantidad_minima_compra,
+          referencia_proveedor:
+            dto.referencia_proveedor?.trim() || vinculoExistente.referencia_proveedor,
+          nombre_segun_proveedor:
+            dto.nombre_segun_proveedor !== undefined
+              ? dto.nombre_segun_proveedor.trim() || null
+              : vinculoExistente.nombre_segun_proveedor,
+          marca_ofrecida:
+            dto.marca_ofrecida !== undefined
+              ? dto.marca_ofrecida.trim() || null
+              : vinculoExistente.marca_ofrecida,
+          id_marca_ofrecida:
+            dto.id_marca_ofrecida !== undefined
+              ? dto.id_marca_ofrecida
+              : vinculoExistente.id_marca_ofrecida,
+          cantidad_minima_compra:
+            dto.cantidad_minima_compra !== undefined
+              ? new Prisma.Decimal(dto.cantidad_minima_compra)
+              : vinculoExistente.cantidad_minima_compra,
           costo_actual: new Prisma.Decimal(nuevoCosto),
-          tiempo_entrega_dias: dto.tiempo_entrega_dias !== undefined ? dto.tiempo_entrega_dias : vinculoExistente.tiempo_entrega_dias,
+          tiempo_entrega_dias:
+            dto.tiempo_entrega_dias !== undefined
+              ? dto.tiempo_entrega_dias
+              : vinculoExistente.tiempo_entrega_dias,
           es_proveedor_preferido: esPreferido,
-          url_producto_proveedor: dto.url_producto_proveedor !== undefined ? (dto.url_producto_proveedor.trim() || null) : vinculoExistente.url_producto_proveedor,
-          notas: dto.observaciones !== undefined ? (dto.observaciones.trim() || null) : vinculoExistente.notas,
+          url_producto_proveedor:
+            dto.url_producto_proveedor !== undefined
+              ? dto.url_producto_proveedor.trim() || null
+              : vinculoExistente.url_producto_proveedor,
+          notas:
+            dto.observaciones !== undefined
+              ? dto.observaciones.trim() || null
+              : vinculoExistente.notas,
           modificado_por: userId || null,
         },
         include: {
@@ -756,11 +805,7 @@ export class ProveedoresService {
           },
         },
       },
-      orderBy: [
-        { fecha_solicitud: 'desc' },
-        { id_orden_compra: 'desc' },
-      ],
+      orderBy: [{ fecha_solicitud: 'desc' }, { id_orden_compra: 'desc' }],
     });
   }
 }
-

@@ -34,7 +34,7 @@ class EvidenciasScreen extends ConsumerStatefulWidget {
 }
 
 class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
-  TipoEvidencia _tipoSeleccionado = TipoEvidencia.ANTES;
+  TipoEvidencia _tipoSeleccionado = TipoEvidencia.antes;
   List<Evidencia> _evidencias = [];
   bool _isLoading = true;
   Map<TipoEvidencia, int> _conteo = {};
@@ -68,7 +68,7 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
 
   List<Evidencia> get _evidenciasFiltradas {
     return _evidencias
-        .where((e) => e.tipoEvidencia == _tipoSeleccionado.name)
+        .where((e) => e.tipoEvidencia == _tipoSeleccionado.codigo)
         .toList();
   }
 
@@ -347,7 +347,7 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
           evidencias: _evidencias,
           initialIndex: _evidencias.indexOf(evidencia),
           titulo:
-              '${widget.numeroOrden ?? 'Evidencias'} (${_tipoSeleccionado.name})',
+              '${widget.numeroOrden ?? 'Evidencias'} (${_tipoSeleccionado.codigo})',
           onEvidenciasModificadas: _cargarEvidencias,
         ),
       ),
@@ -384,7 +384,7 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
         backgroundColor: Colors.amber.shade700,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_a_photo),
-        label: Text('Agregar ${_tipoSeleccionado.name}'),
+        label: Text('Agregar ${_tipoSeleccionado.codigo}'),
       ),
     );
   }
@@ -397,18 +397,18 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
         child: SegmentedButton<TipoEvidencia>(
           segments: [
             ButtonSegment(
-              value: TipoEvidencia.ANTES,
-              label: Text('ANTES (${_conteo[TipoEvidencia.ANTES] ?? 0})'),
+              value: TipoEvidencia.antes,
+              label: Text('ANTES (${_conteo[TipoEvidencia.antes] ?? 0})'),
               icon: const Icon(Icons.history, size: 18),
             ),
             ButtonSegment(
-              value: TipoEvidencia.DURANTE,
-              label: Text('DURANTE (${_conteo[TipoEvidencia.DURANTE] ?? 0})'),
+              value: TipoEvidencia.durante,
+              label: Text('DURANTE (${_conteo[TipoEvidencia.durante] ?? 0})'),
               icon: const Icon(Icons.build, size: 18),
             ),
             ButtonSegment(
-              value: TipoEvidencia.DESPUES,
-              label: Text('DESPUES (${_conteo[TipoEvidencia.DESPUES] ?? 0})'),
+              value: TipoEvidencia.despues,
+              label: Text('DESPUES (${_conteo[TipoEvidencia.despues] ?? 0})'),
               icon: const Icon(Icons.check_circle, size: 18),
             ),
             // ✅ FIX: Removido tab GENERAL - Las fotos generales deben ser ANTES/DURANTE/DESPUES
@@ -434,7 +434,7 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
           Icon(Icons.photo_camera, size: 80, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           Text(
-            'No hay fotos ${_tipoSeleccionado.name}',
+            'No hay fotos ${_tipoSeleccionado.codigo}',
             style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
           ),
           const SizedBox(height: 8),

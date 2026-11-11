@@ -11,18 +11,12 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  AlertCircle,
   ArrowLeft,
   Building2,
   Calendar,
-  Check,
   CheckCircle2,
   Clock,
-  Coins,
   FileCheck,
-  FilePlus,
-  FileText,
-  HelpCircle,
   Info,
   Loader2,
   Package,
@@ -33,14 +27,13 @@ import {
   Sparkles,
   Tag,
   Trash2,
-  Truck,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -104,10 +97,14 @@ function NuevaOrdenCompraContent() {
   // Datos maestros
   const [proveedores, setProveedores] = useState<ProveedorCompleto[]>([]);
   const [catalogoArticulos, setCatalogoArticulos] = useState<ArticuloMaestro[]>([]);
-  const [sourcingProveedor, setSourcingProveedor] = useState<Map<number, ArticuloSourcing>>(new Map());
+  const [sourcingProveedor, setSourcingProveedor] = useState<Map<number, ArticuloSourcing>>(
+    new Map(),
+  );
 
   // Formulario cabecera (preseleccionado automáticamente si viene en searchParams)
-  const [idProveedorSeleccionado, setIdProveedorSeleccionado] = useState<number | null>(initialProveedorId);
+  const [idProveedorSeleccionado, setIdProveedorSeleccionado] = useState<number | null>(
+    initialProveedorId,
+  );
   const [numeroOrdenPersonalizado, setNumeroOrdenPersonalizado] = useState<string>('');
   const [esNumeroAutomatico, setEsNumeroAutomatico] = useState<boolean>(true);
   const [fechaNecesidad, setFechaNecesidad] = useState<string>('');
@@ -138,8 +135,8 @@ function NuevaOrdenCompraContent() {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
-      minimumFractionDigits: (forceDecimals || hasDecimals) ? 2 : 0,
-      maximumFractionDigits: (forceDecimals || hasDecimals) ? 2 : 0,
+      minimumFractionDigits: forceDecimals || hasDecimals ? 2 : 0,
+      maximumFractionDigits: forceDecimals || hasDecimals ? 2 : 0,
     }).format(num);
   };
 
@@ -179,14 +176,25 @@ function NuevaOrdenCompraContent() {
             if (comp) {
               // 1. Determinar proveedor sugerido (preferente o primer homologado)
               let provSugeridoId = initialProveedorId;
-              let provData: any = null;
+              let provData: {
+                id_proveedor?: number;
+                nombre_proveedor?: string;
+                costo_actual?: number | string;
+                cantidad_minima_compra?: number | string;
+                referencia_proveedor?: string | null;
+                marca_ofrecida?: string | null;
+              } | null = null;
 
               if (comp.proveedores_homologados && comp.proveedores_homologados.length > 0) {
-                const pref = comp.proveedores_homologados.find((p) => p.es_proveedor_preferido) || comp.proveedores_homologados[0];
+                const pref =
+                  comp.proveedores_homologados.find((p) => p.es_proveedor_preferido) ||
+                  comp.proveedores_homologados[0];
                 if (!provSugeridoId) {
                   provSugeridoId = pref.id_proveedor;
                 }
-                provData = comp.proveedores_homologados.find((p) => p.id_proveedor === provSugeridoId) || pref;
+                provData =
+                  comp.proveedores_homologados.find((p) => p.id_proveedor === provSugeridoId) ||
+                  pref;
               } else if (comp.proveedor) {
                 if (!provSugeridoId) {
                   provSugeridoId = comp.proveedor.id;
@@ -237,7 +245,8 @@ function NuevaOrdenCompraContent() {
                 precio_original: precioUnitario,
                 es_pactado: Boolean(provData?.costo_actual),
                 vincular_proveedor: !provData?.costo_actual,
-                codigo_proveedor: provData?.referencia_proveedor || comp.codigo_interno || undefined,
+                codigo_proveedor:
+                  provData?.referencia_proveedor || comp.codigo_interno || undefined,
                 marca_ofrecida: provData?.marca_ofrecida || comp.marca || undefined,
                 observaciones: `Abastecimiento automático desde Inventario (Déficit: ${deficit > 0 ? deficit : 0} ${comp.unidad_medida || 'UND'})`,
               };
@@ -254,7 +263,8 @@ function NuevaOrdenCompraContent() {
         }
 
         setProveedores(provList);
-        const articulos = (resArt as any)?.items || (resArt as any)?.data || [];
+        const resArtTyped = resArt as { items?: ArticuloMaestro[]; data?: ArticuloMaestro[] };
+        const articulos = resArtTyped?.items || resArtTyped?.data || [];
         setCatalogoArticulos(articulos);
       } catch (e) {
         console.error('Error al inicializar formulario:', e);
@@ -270,7 +280,10 @@ function NuevaOrdenCompraContent() {
   // Cerrar menú de autocompletado si hace clic afuera
   useEffect(() => {
     const handleClickAfuera = (event: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
         setMenuArticulosAbierto(false);
       }
     };
@@ -304,7 +317,9 @@ function NuevaOrdenCompraContent() {
   // Al seleccionar un artículo del buscador, calcular precio sugerido y auto-vinculación
   const seleccionarArticuloParaAgregar = (art: ArticuloMaestro) => {
     setArticuloSeleccionado(art);
-    setBusquedaArticulo(`${art.codigo_interno ? `[${art.codigo_interno}] ` : ''}${art.descripcion_corta}`);
+    setBusquedaArticulo(
+      `${art.codigo_interno ? `[${art.codigo_interno}] ` : ''}${art.descripcion_corta}`,
+    );
     setMenuArticulosAbierto(false);
 
     const pactado = sourcingProveedor.get(art.id_componente);
@@ -439,8 +454,9 @@ function NuevaOrdenCompraContent() {
     const nuevaLinea: LineaOrdenCompra = {
       id_temp: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       id_componente: articuloSeleccionado.id_componente,
-      codigo_interno: articuloSeleccionado.codigo_interno,
-      descripcion_corta: articuloSeleccionado.descripcion_corta,
+      codigo_interno: articuloSeleccionado.codigo_interno ?? null,
+      descripcion_corta:
+        articuloSeleccionado.descripcion_corta || articuloSeleccionado.referencia_fabricante || '',
       referencia_fabricante: articuloSeleccionado.referencia_fabricante || '',
       unidad_medida: articuloSeleccionado.unidad_medida || 'UND',
       cantidad: cantidadParaAgregar,
@@ -556,7 +572,9 @@ function NuevaOrdenCompraContent() {
       const payload: CrearOrdenCompraPayload = {
         id_proveedor: idProveedorSeleccionado,
         fecha_necesidad: fechaNecesidad ? fechaNecesidad : undefined,
-        observaciones: observacionesGenerales ? observacionesGenerales.normalize('NFC').trim() : undefined,
+        observaciones: observacionesGenerales
+          ? observacionesGenerales.normalize('NFC').trim()
+          : undefined,
         items: lineas.map((l) => ({
           id_componente: l.id_componente,
           cantidad: l.cantidad,
@@ -588,9 +606,10 @@ function NuevaOrdenCompraContent() {
 
       // Redirigir al listado
       router.push('/compras/ordenes');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Error al guardar orden:', e);
-      const msg = e.response?.data?.message || 'Error al procesar la orden de compra';
+      const apiErr = e as { response?: { data?: { message?: string } } };
+      const msg = apiErr.response?.data?.message || 'Error al procesar la orden de compra';
       toast.error(msg);
     } finally {
       setGuardando(false);
@@ -631,7 +650,8 @@ function NuevaOrdenCompraContent() {
               </Badge>
             </div>
             <p className="mt-0.5 text-sm text-slate-500">
-              Correlativo determinista formal, sourcing de cotizaciones y liquidación comercial en vivo.
+              Correlativo determinista formal, sourcing de cotizaciones y liquidación comercial en
+              vivo.
             </p>
           </div>
         </div>
@@ -744,7 +764,10 @@ function NuevaOrdenCompraContent() {
                   <span className="flex items-center gap-2 font-bold text-blue-700">
                     <FileCheck className="w-4 h-4 text-blue-600" /> OC-2026-XXXX
                   </span>
-                  <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 font-semibold">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 font-semibold"
+                  >
                     Determinista Atómico
                   </Badge>
                 </div>
@@ -804,7 +827,8 @@ function NuevaOrdenCompraContent() {
             2. Selección de Artículos del Catálogo Maestro
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Buscador interactivo unificado por SKU, referencia o descripción. El sistema precarga cotizaciones pactadas o precios base.
+            Buscador interactivo unificado por SKU, referencia o descripción. El sistema precarga
+            cotizaciones pactadas o precios base.
           </p>
         </div>
 
@@ -871,7 +895,8 @@ function NuevaOrdenCompraContent() {
                             {articulosPactados.map((art) => {
                               const pact = sourcingProveedor.get(art.id_componente);
                               const skuProveedor = pact?.referencia_proveedor;
-                              const precioPactado = pact?.costo_actual ?? Number(art.precio_compra || 0);
+                              const precioPactado =
+                                pact?.costo_actual ?? Number(art.precio_compra || 0);
 
                               return (
                                 <div
@@ -882,7 +907,9 @@ function NuevaOrdenCompraContent() {
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                                        {art.codigo_interno || art.referencia_fabricante || `ID-${art.id_componente}`}
+                                        {art.codigo_interno ||
+                                          art.referencia_fabricante ||
+                                          `ID-${art.id_componente}`}
                                       </span>
                                       {skuProveedor && (
                                         <span className="font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -906,7 +933,10 @@ function NuevaOrdenCompraContent() {
                                         </span>
                                         {pact.marca_ofrecida && (
                                           <span className="text-[10px] text-slate-500 font-normal shrink-0">
-                                            • Marca: <strong className="text-slate-700 font-semibold">{pact.marca_ofrecida}</strong>
+                                            • Marca:{' '}
+                                            <strong className="text-slate-700 font-semibold">
+                                              {pact.marca_ofrecida}
+                                            </strong>
                                           </span>
                                         )}
                                       </div>
@@ -914,8 +944,12 @@ function NuevaOrdenCompraContent() {
 
                                     <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
                                       <span>Unidad: {art.unidad_medida || 'UND'}</span>
-                                      {art.referencia_fabricante && <span>• Ref Fab: {art.referencia_fabricante}</span>}
-                                      {pact?.tiempo_entrega_dias && <span>• Entrega: {pact.tiempo_entrega_dias}d</span>}
+                                      {art.referencia_fabricante && (
+                                        <span>• Ref Fab: {art.referencia_fabricante}</span>
+                                      )}
+                                      {pact?.tiempo_entrega_dias && (
+                                        <span>• Entrega: {pact.tiempo_entrega_dias}d</span>
+                                      )}
                                     </div>
                                   </div>
 
@@ -923,8 +957,17 @@ function NuevaOrdenCompraContent() {
                                     <div className="font-mono font-bold text-slate-900 text-sm">
                                       {formatCOP(precioPactado)}
                                     </div>
-                                    <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold mt-0.5 inline-flex items-center gap-1">
-                                      ✓ Pactado{pact?.tiempo_entrega_dias ? ` • Entrega: ${pact.tiempo_entrega_dias}d` : ''}{pact?.cantidad_minima_compra ? ` • MOQ: ${pact.cantidad_minima_compra}` : ''}
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold mt-0.5 inline-flex items-center gap-1"
+                                    >
+                                      ✓ Pactado
+                                      {pact?.tiempo_entrega_dias
+                                        ? ` • Entrega: ${pact.tiempo_entrega_dias}d`
+                                        : ''}
+                                      {pact?.cantidad_minima_compra
+                                        ? ` • MOQ: ${pact.cantidad_minima_compra}`
+                                        : ''}
                                     </Badge>
                                   </div>
                                 </div>
@@ -960,7 +1003,9 @@ function NuevaOrdenCompraContent() {
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                       <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                                        {art.codigo_interno || art.referencia_fabricante || `ID-${art.id_componente}`}
+                                        {art.codigo_interno ||
+                                          art.referencia_fabricante ||
+                                          `ID-${art.id_componente}`}
                                       </span>
                                       <span className="font-semibold text-slate-800 truncate">
                                         {art.descripcion_corta}
@@ -968,7 +1013,9 @@ function NuevaOrdenCompraContent() {
                                     </div>
                                     <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
                                       <span>Unidad: {art.unidad_medida || 'UND'}</span>
-                                      {art.referencia_fabricante && <span>• Ref: {art.referencia_fabricante}</span>}
+                                      {art.referencia_fabricante && (
+                                        <span>• Ref: {art.referencia_fabricante}</span>
+                                      )}
                                     </div>
                                   </div>
 
@@ -976,7 +1023,10 @@ function NuevaOrdenCompraContent() {
                                     <div className="font-mono font-bold text-slate-800">
                                       {formatCOP(precioBase)}
                                     </div>
-                                    <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-600 border-slate-200 font-medium mt-0.5">
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] bg-slate-100 text-slate-600 border-slate-200 font-medium mt-0.5"
+                                    >
                                       Base Catálogo: {formatCOP(precioBase)}
                                     </Badge>
                                   </div>
@@ -996,18 +1046,30 @@ function NuevaOrdenCompraContent() {
             {articuloSeleccionado && (
               <div className="space-y-3 pt-3 border-t border-slate-200">
                 {/* Banner de confirmación de artículo homologado y denominación del proveedor */}
-                {sourcingProveedor.get(articuloSeleccionado.id_componente)?.nombre_segun_proveedor && (
+                {sourcingProveedor.get(articuloSeleccionado.id_componente)
+                  ?.nombre_segun_proveedor && (
                   <div className="p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200 flex items-center justify-between gap-3 text-xs">
                     <div className="flex items-center gap-2 truncate">
                       <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                         Denominación Proveedor:
                       </span>
                       <span className="italic font-semibold text-emerald-950 truncate">
-                        &ldquo;{sourcingProveedor.get(articuloSeleccionado.id_componente)?.nombre_segun_proveedor}&rdquo;
+                        &ldquo;
+                        {
+                          sourcingProveedor.get(articuloSeleccionado.id_componente)
+                            ?.nombre_segun_proveedor
+                        }
+                        &rdquo;
                       </span>
-                      {sourcingProveedor.get(articuloSeleccionado.id_componente)?.marca_ofrecida && (
+                      {sourcingProveedor.get(articuloSeleccionado.id_componente)
+                        ?.marca_ofrecida && (
                         <span className="text-[11px] text-emerald-700 font-medium shrink-0">
-                          (Marca: {sourcingProveedor.get(articuloSeleccionado.id_componente)?.marca_ofrecida})
+                          (Marca:{' '}
+                          {
+                            sourcingProveedor.get(articuloSeleccionado.id_componente)
+                              ?.marca_ofrecida
+                          }
+                          )
                         </span>
                       )}
                     </div>
@@ -1021,10 +1083,18 @@ function NuevaOrdenCompraContent() {
                   {/* Cantidad */}
                   <div className="sm:col-span-3 space-y-1">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs font-semibold text-slate-700">Cantidad Requerida:</Label>
-                      {esPrecioPactadoItem && sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra ? (
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Cantidad Requerida:
+                      </Label>
+                      {esPrecioPactadoItem &&
+                      sourcingProveedor.get(articuloSeleccionado.id_componente)
+                        ?.cantidad_minima_compra ? (
                         <span className="text-[10px] font-semibold text-slate-500">
-                          MOQ: {sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra}
+                          MOQ:{' '}
+                          {
+                            sourcingProveedor.get(articuloSeleccionado.id_componente)
+                              ?.cantidad_minima_compra
+                          }
                         </span>
                       ) : null}
                     </div>
@@ -1036,17 +1106,32 @@ function NuevaOrdenCompraContent() {
                       onChange={(e) => setCantidadParaAgregar(parseFloat(e.target.value) || 0)}
                       className={`bg-white text-slate-900 text-xs font-mono h-10 rounded-lg ${
                         esPrecioPactadoItem &&
-                        sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra &&
-                        cantidadParaAgregar < Number(sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra)
+                        sourcingProveedor.get(articuloSeleccionado.id_componente)
+                          ?.cantidad_minima_compra &&
+                        cantidadParaAgregar <
+                          Number(
+                            sourcingProveedor.get(articuloSeleccionado.id_componente)
+                              ?.cantidad_minima_compra,
+                          )
                           ? 'border-amber-400 ring-1 ring-amber-300'
                           : 'border-slate-200'
                       }`}
                     />
                     {esPrecioPactadoItem &&
-                      sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra &&
-                      cantidadParaAgregar < Number(sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra) && (
+                      sourcingProveedor.get(articuloSeleccionado.id_componente)
+                        ?.cantidad_minima_compra &&
+                      cantidadParaAgregar <
+                        Number(
+                          sourcingProveedor.get(articuloSeleccionado.id_componente)
+                            ?.cantidad_minima_compra,
+                        ) && (
                         <p className="text-[10px] font-semibold text-amber-700 flex items-center gap-1 mt-0.5">
-                          ⚠️ MOQ pactado: {sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra} und
+                          ⚠️ MOQ pactado:{' '}
+                          {
+                            sourcingProveedor.get(articuloSeleccionado.id_componente)
+                              ?.cantidad_minima_compra
+                          }{' '}
+                          und
                         </p>
                       )}
                   </div>
@@ -1054,13 +1139,21 @@ function NuevaOrdenCompraContent() {
                   {/* Precio Unitario */}
                   <div className="sm:col-span-4 space-y-1">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs font-semibold text-slate-700">Precio Unitario (COP):</Label>
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Precio Unitario (COP):
+                      </Label>
                       {esPrecioPactadoItem ? (
-                        <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold"
+                        >
                           Pactado Proveedor
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-600 border-slate-200">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] bg-slate-100 text-slate-600 border-slate-200"
+                        >
                           Base Catálogo
                         </Badge>
                       )}
@@ -1083,7 +1176,9 @@ function NuevaOrdenCompraContent() {
 
                   {/* Subtotal preliminar */}
                   <div className="sm:col-span-3 space-y-1">
-                    <Label className="text-xs font-semibold text-slate-500">Subtotal Estimado:</Label>
+                    <Label className="text-xs font-semibold text-slate-500">
+                      Subtotal Estimado:
+                    </Label>
                     <div className="h-10 px-3 rounded-lg bg-white border border-slate-200 flex items-center font-mono text-xs font-bold text-slate-900 shadow-xs">
                       {formatCOP(cantidadParaAgregar * precioParaAgregar)}
                     </div>
@@ -1131,7 +1226,10 @@ function NuevaOrdenCompraContent() {
                     <div className="pt-2 border-t border-blue-200/80 flex flex-col sm:flex-row sm:items-center gap-3">
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center justify-between">
-                          <Label htmlFor="input-ref-comercial-prov" className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                          <Label
+                            htmlFor="input-ref-comercial-prov"
+                            className="text-xs font-bold text-blue-950 flex items-center gap-1.5"
+                          >
                             <Tag className="w-3.5 h-3.5 text-blue-600" />
                             Ref. Comercial del Proveedor: <span className="text-rose-500">*</span>
                           </Label>
@@ -1166,7 +1264,9 @@ function NuevaOrdenCompraContent() {
               </span>
               <span>
                 Subtotal parcial:{' '}
-                <strong className="text-slate-900 font-mono text-sm">{formatCOP(liquidacion.subtotal)}</strong>
+                <strong className="text-slate-900 font-mono text-sm">
+                  {formatCOP(liquidacion.subtotal)}
+                </strong>
               </span>
             </div>
 
@@ -1188,7 +1288,9 @@ function NuevaOrdenCompraContent() {
                     <tr>
                       <td colSpan={7} className="py-10 text-center text-slate-500">
                         <ShoppingBag className="w-9 h-9 mx-auto mb-2 text-slate-300" />
-                        <p className="font-semibold text-slate-700">No ha agregado artículos a la orden aún</p>
+                        <p className="font-semibold text-slate-700">
+                          No ha agregado artículos a la orden aún
+                        </p>
                         <p className="text-[11px] text-slate-400 mt-0.5">
                           Use el buscador superior para buscar y añadir componentes del catálogo.
                         </p>
@@ -1200,14 +1302,17 @@ function NuevaOrdenCompraContent() {
                         <td className="py-3 px-3 font-mono text-slate-400">{index + 1}</td>
                         <td className="py-3 px-3 font-mono text-slate-700 font-semibold text-xs">
                           {linea.codigo_interno || linea.referencia_fabricante || '—'}
-                          {linea.codigo_proveedor && linea.codigo_proveedor !== linea.codigo_interno && (
-                            <div className="text-[10px] text-emerald-700 font-mono font-medium">
-                              Prov: {linea.codigo_proveedor}
-                            </div>
-                          )}
+                          {linea.codigo_proveedor &&
+                            linea.codigo_proveedor !== linea.codigo_interno && (
+                              <div className="text-[10px] text-emerald-700 font-mono font-medium">
+                                Prov: {linea.codigo_proveedor}
+                              </div>
+                            )}
                         </td>
                         <td className="py-3 px-3">
-                          <div className="font-semibold text-slate-900">{linea.descripcion_corta}</div>
+                          <div className="font-semibold text-slate-900">
+                            {linea.descripcion_corta}
+                          </div>
                           {linea.nombre_segun_proveedor && (
                             <div className="text-[11px] text-slate-600 font-medium italic mt-0.5 flex items-center gap-1.5 flex-wrap">
                               <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 not-italic">
@@ -1224,7 +1329,8 @@ function NuevaOrdenCompraContent() {
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             {linea.es_pactado ? (
                               <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cotización pactada con proveedor
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cotización
+                                pactada con proveedor
                               </span>
                             ) : (
                               <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
@@ -1232,7 +1338,10 @@ function NuevaOrdenCompraContent() {
                               </span>
                             )}
                             {linea.vincular_proveedor && (
-                              <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 py-0 px-1 font-semibold">
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 py-0 px-1 font-semibold"
+                              >
                                 Auto-vinculación activa
                               </Badge>
                             )}
@@ -1244,10 +1353,18 @@ function NuevaOrdenCompraContent() {
                                 <input
                                   type="checkbox"
                                   checked={linea.vincular_proveedor}
-                                  onChange={(e) => handleToggleVincularLinea(index, e.target.checked)}
+                                  onChange={(e) =>
+                                    handleToggleVincularLinea(index, e.target.checked)
+                                  }
                                   className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
                                 />
-                                <span className={linea.vincular_proveedor ? "text-blue-800 font-semibold group-hover:text-blue-900" : "text-slate-500 group-hover:text-slate-700"}>
+                                <span
+                                  className={
+                                    linea.vincular_proveedor
+                                      ? 'text-blue-800 font-semibold group-hover:text-blue-900'
+                                      : 'text-slate-500 group-hover:text-slate-700'
+                                  }
+                                >
                                   Vincular este artículo y precio a la matriz del proveedor
                                 </span>
                               </label>
@@ -1261,7 +1378,9 @@ function NuevaOrdenCompraContent() {
                                   type="text"
                                   placeholder="Ej: FIL-JD-884..."
                                   value={linea.codigo_proveedor || ''}
-                                  onChange={(e) => handleCambiarCodigoProveedor(index, e.target.value)}
+                                  onChange={(e) =>
+                                    handleCambiarCodigoProveedor(index, e.target.value)
+                                  }
                                   className="h-7 px-2.5 text-xs font-mono bg-white border border-blue-300 rounded-md text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 w-52 shadow-2xs"
                                 />
                               </div>
@@ -1273,18 +1392,28 @@ function NuevaOrdenCompraContent() {
                             type="number"
                             min="1"
                             value={linea.cantidad}
-                            onChange={(e) => handleCambiarCantidad(index, parseFloat(e.target.value) || 0)}
+                            onChange={(e) =>
+                              handleCambiarCantidad(index, parseFloat(e.target.value) || 0)
+                            }
                             className={`h-8 text-right font-mono text-xs bg-white text-slate-900 rounded-md focus:ring-1 focus:ring-blue-500 ${
                               sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra &&
-                              linea.cantidad < Number(sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra)
+                              linea.cantidad <
+                                Number(
+                                  sourcingProveedor.get(linea.id_componente)
+                                    ?.cantidad_minima_compra,
+                                )
                                 ? 'border-amber-400 ring-1 ring-amber-300'
                                 : 'border-slate-200'
                             }`}
                           />
                           {sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra &&
-                            linea.cantidad < Number(sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra) && (
+                            linea.cantidad <
+                              Number(
+                                sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra,
+                              ) && (
                               <span className="text-[10px] text-amber-700 font-bold block mt-0.5 whitespace-nowrap">
-                                ⚠️ MOQ: {sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra}
+                                ⚠️ MOQ:{' '}
+                                {sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra}
                               </span>
                             )}
                         </td>
@@ -1294,7 +1423,9 @@ function NuevaOrdenCompraContent() {
                             min="0"
                             step="100"
                             value={linea.precio_unitario}
-                            onChange={(e) => handleCambiarPrecio(index, parseFloat(e.target.value) || 0)}
+                            onChange={(e) =>
+                              handleCambiarPrecio(index, parseFloat(e.target.value) || 0)
+                            }
                             className="h-8 text-right font-mono text-xs bg-white border-slate-200 text-slate-900 rounded-md focus:ring-1 focus:ring-blue-500"
                           />
                         </td>
@@ -1330,13 +1461,17 @@ function NuevaOrdenCompraContent() {
             Condiciones del Ciclo Comercial
           </div>
           <p>
-            • Los valores financieros se calculan con base en las cantidades pactadas y el IVA estándar vigente (19%).
+            • Los valores financieros se calculan con base en las cantidades pactadas y el IVA
+            estándar vigente (19%).
           </p>
           <p>
-            • Guardar como <strong>Borrador</strong> permite modificaciones posteriores antes de la notificación formal al proveedor.
+            • Guardar como <strong>Borrador</strong> permite modificaciones posteriores antes de la
+            notificación formal al proveedor.
           </p>
           <p>
-            • Al presionar <strong>Emitir y Enviar</strong>, la orden se sella atómicamente, reserva su número formal en <code>sequence_counter</code> y queda disponible para recepción en almacén.
+            • Al presionar <strong>Emitir y Enviar</strong>, la orden se sella atómicamente, reserva
+            su número formal en <code>sequence_counter</code> y queda disponible para recepción en
+            almacén.
           </p>
         </div>
 
@@ -1348,7 +1483,9 @@ function NuevaOrdenCompraContent() {
           </div>
           <div className="flex justify-between text-slate-600">
             <span>Base Gravable:</span>
-            <span className="font-semibold text-slate-800">{formatCOP(liquidacion.baseGravable)}</span>
+            <span className="font-semibold text-slate-800">
+              {formatCOP(liquidacion.baseGravable)}
+            </span>
           </div>
           <div className="flex justify-between text-slate-600">
             <span>IVA ({liquidacion.porcentajeIva}%):</span>
@@ -1366,7 +1503,10 @@ function NuevaOrdenCompraContent() {
       {/* BARRA DE ACCIONES INFERIOR */}
       <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
         <Link href="/compras/ordenes">
-          <Button variant="outline" className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-xs">
+          <Button
+            variant="outline"
+            className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-xs"
+          >
             Cancelar
           </Button>
         </Link>

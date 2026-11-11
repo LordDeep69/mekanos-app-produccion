@@ -5,12 +5,9 @@ import { UpdateFirmasAdministrativasDto } from './dto/update-firmas-administrati
 
 @Injectable()
 export class FirmasAdministrativasService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
-  async create(
-    createDto: CreateFirmasAdministrativasDto,
-    userId: number,
-  ) {
+  async create(createDto: CreateFirmasAdministrativasDto, userId: number) {
     return this.prisma.firmas_administrativas.create({
       data: {
         nombre_de_firma: createDto.nombre_de_firma,
@@ -34,49 +31,54 @@ export class FirmasAdministrativasService {
   }) {
     const { firma_activa, skip = 0, take = 50, includeClientes = false } = params || {};
 
-    return this.prisma.firmas_administrativas.findMany({
+    const firmas = await this.prisma.firmas_administrativas.findMany({
       where: {
         ...(firma_activa !== undefined && { firma_activa }),
-      },
-      include: {
-        ...(includeClientes && {
-          clientes: {
-            include: {
-              persona: true,
-            },
-          },
-        }),
       },
       skip,
       take,
       orderBy: { fecha_creacion: 'desc' },
     });
+
+    if (!includeClientes || firmas.length === 0) {
+      return firmas;
+    }
+
+    const firmaIds = firmas.map((f) => f.id_firma_administrativa);
+    const clientesAsociados = await this.prisma.clientes.findMany({
+      where: { id_firma_administrativa: { in: firmaIds } },
+      include: { persona: true },
+    });
+
+    return firmas.map((f) => ({
+      ...f,
+      clientes: clientesAsociados.filter(
+        (c) => c.id_firma_administrativa === f.id_firma_administrativa,
+      ),
+    }));
   }
 
   async findOne(id: number) {
     const firma = await this.prisma.firmas_administrativas.findUnique({
       where: { id_firma_administrativa: id },
-      include: {
-        clientes: {
-          include: {
-            persona: true,
-          },
-        },
-      },
     });
 
     if (!firma) {
       throw new Error(`Firma administrativa con ID ${id} no encontrada`);
     }
 
-    return firma;
+    const clientes = await this.prisma.clientes.findMany({
+      where: { id_firma_administrativa: id },
+      include: { persona: true },
+    });
+
+    return {
+      ...firma,
+      clientes,
+    };
   }
 
-  async update(
-    id: number,
-    updateDto: UpdateFirmasAdministrativasDto,
-    userId: number,
-  ) {
+  async update(id: number, updateDto: UpdateFirmasAdministrativasDto, userId: number) {
     await this.findOne(id);
 
     return this.prisma.firmas_administrativas.update({

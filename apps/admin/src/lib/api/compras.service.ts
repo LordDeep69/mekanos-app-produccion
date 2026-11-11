@@ -19,15 +19,17 @@ import {
   FiltrosArticulos,
   HistorialCostoCompra,
   HomologarArticuloPayload,
+  KardexMovimientoItem,
   Marca,
+  OrdenCompraProveedorItem,
   ProveedorCompleto,
   ProveedorFicha360Response,
   ResumenCatalogo,
+  SaveProveedorPayload,
   TipoComponente,
   UnidadMedida,
   VincularProveedorPayload,
 } from '@/types/compras.types';
-
 
 export const comprasService = {
   /**
@@ -45,21 +47,25 @@ export const comprasService = {
     const params = new URLSearchParams();
     if (filtros.q) params.append('q', filtros.q);
     if (filtros.destino_articulo) params.append('destino_articulo', filtros.destino_articulo);
-    if (filtros.id_tipo_componente) params.append('id_tipo_componente', String(filtros.id_tipo_componente));
+    if (filtros.id_tipo_componente)
+      params.append('id_tipo_componente', String(filtros.id_tipo_componente));
     if (filtros.id_proveedor) params.append('id_proveedor', String(filtros.id_proveedor));
     if (filtros.marca) params.append('marca', filtros.marca);
     if (filtros.id_marca) params.append('id_marca', String(filtros.id_marca));
     if (filtros.id_categoria) params.append('id_categoria', String(filtros.id_categoria));
-    if (filtros.codigo_unidad_medida) params.append('codigo_unidad_medida', filtros.codigo_unidad_medida);
-    if (filtros.es_comprable !== undefined) params.append('es_comprable', String(filtros.es_comprable));
-    if (filtros.es_inventariable !== undefined) params.append('es_inventariable', String(filtros.es_inventariable));
+    if (filtros.codigo_unidad_medida)
+      params.append('codigo_unidad_medida', filtros.codigo_unidad_medida);
+    if (filtros.es_comprable !== undefined)
+      params.append('es_comprable', String(filtros.es_comprable));
+    if (filtros.es_inventariable !== undefined)
+      params.append('es_inventariable', String(filtros.es_inventariable));
     if (filtros.activo !== undefined) params.append('activo', String(filtros.activo));
     if (filtros.page !== undefined) params.append('page', String(filtros.page));
     if (filtros.skip !== undefined) params.append('skip', String(filtros.skip));
     if (filtros.limit !== undefined) params.append('limit', String(filtros.limit));
 
     const response = await apiClient.get<ArticulosResponse>(
-      `/catalogo-componentes?${params.toString()}`
+      `/catalogo-componentes?${params.toString()}`,
     );
     return response.data;
   },
@@ -76,26 +82,28 @@ export const comprasService = {
    * Creación atómica de un recurso maestro con proveedores y auditoría
    */
   async createArticulo(payload: CreateArticuloMaestroPayload): Promise<ArticuloMaestro> {
-    const response = await apiClient.post<ArticuloMaestro>(
-      '/catalogo-componentes',
-      payload
-    );
+    const response = await apiClient.post<ArticuloMaestro>('/catalogo-componentes', payload);
     return response.data;
   },
 
   /**
    * Actualizar especificaciones del recurso maestro
    */
-  async updateArticulo(id: number, payload: Partial<CreateArticuloMaestroPayload>): Promise<any> {
-    const response = await apiClient.put(`/catalogo-componentes/${id}`, payload);
+  async updateArticulo(
+    id: number,
+    payload: Partial<CreateArticuloMaestroPayload>,
+  ): Promise<ArticuloMaestro> {
+    const response = await apiClient.put<ArticuloMaestro>(`/catalogo-componentes/${id}`, payload);
     return response.data;
   },
 
   /**
    * Desactivar un artículo con guardas de integridad
    */
-  async deleteArticulo(id: number): Promise<any> {
-    const response = await apiClient.delete(`/catalogo-componentes/${id}`);
+  async deleteArticulo(id: number): Promise<{ success?: boolean; message?: string }> {
+    const response = await apiClient.delete<{ success?: boolean; message?: string }>(
+      `/catalogo-componentes/${id}`,
+    );
     return response.data;
   },
 
@@ -103,7 +111,9 @@ export const comprasService = {
    * Reactivar un artículo archivado
    */
   async reactivarArticulo(id: number): Promise<ArticuloMaestro> {
-    const response = await apiClient.patch<ArticuloMaestro>(`/catalogo-componentes/${id}/reactivar`);
+    const response = await apiClient.patch<ArticuloMaestro>(
+      `/catalogo-componentes/${id}/reactivar`,
+    );
     return response.data;
   },
 
@@ -112,7 +122,7 @@ export const comprasService = {
    */
   async getFuentesSuministro(idComponente: number): Promise<ArticuloProveedor[]> {
     const response = await apiClient.get<ArticuloProveedor[]>(
-      `/catalogo-componentes/${idComponente}/proveedores`
+      `/catalogo-componentes/${idComponente}/proveedores`,
     );
     return response.data;
   },
@@ -122,11 +132,11 @@ export const comprasService = {
    */
   async vincularProveedor(
     idComponente: number,
-    payload: VincularProveedorPayload
+    payload: VincularProveedorPayload,
   ): Promise<ArticuloProveedor> {
     const response = await apiClient.post<ArticuloProveedor>(
       `/catalogo-componentes/${idComponente}/proveedores`,
-      payload
+      payload,
     );
     return response.data;
   },
@@ -137,11 +147,15 @@ export const comprasService = {
   async actualizarPrecioProveedor(
     idComponente: number,
     idProveedor: number,
-    payload: ActualizarPrecioProveedorPayload
-  ): Promise<{ vinculo: ArticuloProveedor; historial: HistorialCostoCompra; variacion_porcentual: number }> {
+    payload: ActualizarPrecioProveedorPayload,
+  ): Promise<{
+    vinculo: ArticuloProveedor;
+    historial: HistorialCostoCompra;
+    variacion_porcentual: number;
+  }> {
     const response = await apiClient.put(
       `/catalogo-componentes/${idComponente}/proveedores/${idProveedor}/precio`,
-      payload
+      payload,
     );
     return response.data;
   },
@@ -149,9 +163,12 @@ export const comprasService = {
   /**
    * Desvincular proveedor de un artículo
    */
-  async desvincularProveedor(idComponente: number, idProveedor: number): Promise<any> {
-    const response = await apiClient.delete(
-      `/catalogo-componentes/${idComponente}/proveedores/${idProveedor}`
+  async desvincularProveedor(
+    idComponente: number,
+    idProveedor: number,
+  ): Promise<{ success?: boolean; message?: string }> {
+    const response = await apiClient.delete<{ success?: boolean; message?: string }>(
+      `/catalogo-componentes/${idComponente}/proveedores/${idProveedor}`,
     );
     return response.data;
   },
@@ -161,11 +178,11 @@ export const comprasService = {
    */
   async getHistorialCostos(
     idComponente: number,
-    idProveedor?: number
+    idProveedor?: number,
   ): Promise<HistorialCostoCompra[]> {
     const params = idProveedor ? `?idProveedor=${idProveedor}` : '';
     const response = await apiClient.get<HistorialCostoCompra[]>(
-      `/catalogo-componentes/${idComponente}/historial-costos${params}`
+      `/catalogo-componentes/${idComponente}/historial-costos${params}`,
     );
     return response.data;
   },
@@ -173,18 +190,20 @@ export const comprasService = {
   /**
    * Obtener listado de proveedores activos para selects
    */
-  async getProveedores(): Promise<any[]> {
+  async getProveedores(): Promise<ProveedorCompleto[]> {
     try {
-      const response = await apiClient.get('/proveedores');
+      const response = await apiClient.get<
+        ProveedorCompleto[] | { data?: ProveedorCompleto[]; items?: ProveedorCompleto[] }
+      >('/proveedores');
       // Soporta respuesta array directa o { data: [] } o { items: [] }
       if (Array.isArray(response.data)) return response.data;
-      if (Array.isArray((response.data as any)?.data)) return (response.data as any).data;
-      if (Array.isArray((response.data as any)?.items)) return (response.data as any).items;
+      if (Array.isArray(response.data?.data)) return response.data.data;
+      if (Array.isArray(response.data?.items)) return response.data.items;
       return [];
     } catch (e) {
       // Fallback a /inventario/proveedores si /proveedores no está disponible
       try {
-        const fallback = await apiClient.get('/inventario/proveedores');
+        const fallback = await apiClient.get<ProveedorCompleto[]>('/inventario/proveedores');
         if (Array.isArray(fallback.data)) return fallback.data;
       } catch {
         // Ignorar
@@ -199,19 +218,23 @@ export const comprasService = {
    */
   async getTiposComponente(): Promise<TipoComponente[]> {
     try {
-      const response = await apiClient.get('/tipos-componente', {
+      const response = await apiClient.get<
+        TipoComponente[] | { data?: TipoComponente[]; items?: TipoComponente[] }
+      >('/tipos-componente', {
         params: { page: 1, limit: 100, activo: true },
       });
       if (Array.isArray(response.data)) return response.data;
-      if (Array.isArray((response.data as any)?.data)) return (response.data as any).data;
-      if (Array.isArray((response.data as any)?.items)) return (response.data as any).items;
+      if (Array.isArray(response.data?.data)) return response.data.data;
+      if (Array.isArray(response.data?.items)) return response.data.items;
       return [];
     } catch (e) {
       // Fallback a /inventario/tipos-componente para resiliencia total
       try {
-        const fallback = await apiClient.get('/inventario/tipos-componente');
+        const fallback = await apiClient.get<
+          Array<{ id: number; codigo?: string; nombre: string }>
+        >('/inventario/tipos-componente');
         if (Array.isArray(fallback.data)) {
-          return fallback.data.map((t: any) => ({
+          return fallback.data.map((t) => ({
             id_tipo_componente: t.id,
             codigo_tipo: t.codigo,
             nombre_componente: t.nombre,
@@ -304,7 +327,10 @@ export const comprasService = {
   /**
    * Actualizar categoría taxonómica existente
    */
-  async updateCategoria(id: number, payload: Partial<CreateCategoriaPayload>): Promise<CategoriaNodo> {
+  async updateCategoria(
+    id: number,
+    payload: Partial<CreateCategoriaPayload>,
+  ): Promise<CategoriaNodo> {
     const response = await apiClient.put<CategoriaNodo>(`/categorias-componente/${id}`, payload);
     return response.data;
   },
@@ -315,11 +341,11 @@ export const comprasService = {
   async getUnidadesMedida(tipo_magnitud?: string): Promise<UnidadMedida[]> {
     try {
       const params = tipo_magnitud ? `?tipo_magnitud=${tipo_magnitud}` : '';
-      const response = await apiClient.get<any[]>(`/unidades-medida${params}`);
+      const response = await apiClient.get<UnidadMedida[]>(`/unidades-medida${params}`);
       const data = Array.isArray(response.data) ? response.data : [];
       return data.map((u) => ({
         ...u,
-        codigo: u.codigo || u.codigo_unidad,
+        codigo: u.codigo || u.codigo_unidad || '',
         codigo_unidad: u.codigo || u.codigo_unidad,
       }));
     } catch (e) {
@@ -344,7 +370,10 @@ export const comprasService = {
   /**
    * Validar disponibilidad de un código interno o SKU en tiempo real
    */
-  async validarCodigoInterno(codigo: string, idComponente?: number): Promise<{
+  async validarCodigoInterno(
+    codigo: string,
+    idComponente?: number,
+  ): Promise<{
     disponible: boolean;
     codigo: string;
     motivo: string;
@@ -358,14 +387,22 @@ export const comprasService = {
     const params = new URLSearchParams();
     params.append('codigo', codigo);
     if (idComponente) params.append('id_componente', String(idComponente));
-    const response = await apiClient.get(`/catalogo-componentes/validar-codigo?${params.toString()}`);
+    const response = await apiClient.get(
+      `/catalogo-componentes/validar-codigo?${params.toString()}`,
+    );
     return response.data;
   },
 
   /**
    * Directorio de Proveedores con paginación
    */
-  async getProveedoresDirectorio(page = 1, limit = 50): Promise<{ data: ProveedorCompleto[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
+  async getProveedoresDirectorio(
+    page = 1,
+    limit = 50,
+  ): Promise<{
+    data: ProveedorCompleto[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
     try {
       const response = await apiClient.get('/proveedores', {
         params: { page, limit },
@@ -380,7 +417,7 @@ export const comprasService = {
   /**
    * Crear proveedor
    */
-  async createProveedor(payload: any): Promise<ProveedorCompleto> {
+  async createProveedor(payload: SaveProveedorPayload): Promise<ProveedorCompleto> {
     const response = await apiClient.post<ProveedorCompleto>('/proveedores', payload);
     return response.data;
   },
@@ -388,7 +425,10 @@ export const comprasService = {
   /**
    * Actualizar proveedor
    */
-  async updateProveedor(id: number, payload: any): Promise<ProveedorCompleto> {
+  async updateProveedor(
+    id: number,
+    payload: Partial<SaveProveedorPayload>,
+  ): Promise<ProveedorCompleto> {
     const response = await apiClient.put<ProveedorCompleto>(`/proveedores/${id}`, payload);
     return response.data;
   },
@@ -413,9 +453,12 @@ export const comprasService = {
    */
   async getArticulosProveedor(id: number, search?: string): Promise<ArticuloHomologadoProveedor[]> {
     const params = search ? { search } : undefined;
-    const response = await apiClient.get<ArticuloHomologadoProveedor[]>(`/proveedores/${id}/articulos`, {
-      params,
-    });
+    const response = await apiClient.get<ArticuloHomologadoProveedor[]>(
+      `/proveedores/${id}/articulos`,
+      {
+        params,
+      },
+    );
     return response.data;
   },
 
@@ -440,8 +483,8 @@ export const comprasService = {
     idProveedor: number,
     idComponente: number,
     payload: ActualizarArticuloProveedorPayload,
-  ): Promise<any> {
-    const response = await apiClient.put(
+  ): Promise<ArticuloProveedor> {
+    const response = await apiClient.put<ArticuloProveedor>(
       `/proveedores/${idProveedor}/articulos/${idComponente}`,
       payload,
     );
@@ -451,28 +494,26 @@ export const comprasService = {
   /**
    * Desvincular artículo de la matriz de sourcing del proveedor
    */
-  async desvincularArticuloProveedor(
-    idProveedor: number,
-    idComponente: number,
-  ): Promise<void> {
+  async desvincularArticuloProveedor(idProveedor: number, idComponente: number): Promise<void> {
     await apiClient.delete(`/proveedores/${idProveedor}/articulos/${idComponente}`);
   },
 
   /**
    * Obtener historial de órdenes de compra del proveedor
    */
-  async getOrdenesProveedor(id: number): Promise<any[]> {
-    const response = await apiClient.get<any[]>(`/proveedores/${id}/ordenes`);
+  async getOrdenesProveedor(id: number): Promise<OrdenCompraProveedorItem[]> {
+    const response = await apiClient.get<OrdenCompraProveedorItem[]>(`/proveedores/${id}/ordenes`);
     return response.data;
   },
-
 
   /**
    * Obtener movimientos de Kardex con saldos acumulados de un componente
    */
-  async getKardexComponente(idComponente: number): Promise<any[]> {
+  async getKardexComponente(idComponente: number): Promise<KardexMovimientoItem[]> {
     try {
-      const response = await apiClient.get(`/movimientos-inventario/kardex/${idComponente}`);
+      const response = await apiClient.get<{ data?: KardexMovimientoItem[] }>(
+        `/movimientos-inventario/kardex/${idComponente}`,
+      );
       return response.data?.data || [];
     } catch (e) {
       console.error('Error al obtener kardex:', e);
@@ -483,11 +524,17 @@ export const comprasService = {
   /**
    * Obtener historial reciente de movimientos de inventario de un componente
    */
-  async getMovimientosComponente(idComponente: number, limit = 20): Promise<any[]> {
+  async getMovimientosComponente(
+    idComponente: number,
+    limit = 20,
+  ): Promise<KardexMovimientoItem[]> {
     try {
-      const response = await apiClient.get('/movimientos-inventario', {
-        params: { id_componente: idComponente, limit },
-      });
+      const response = await apiClient.get<{ data?: KardexMovimientoItem[] }>(
+        '/movimientos-inventario',
+        {
+          params: { id_componente: idComponente, limit },
+        },
+      );
       return response.data?.data || [];
     } catch (e) {
       console.error('Error al obtener movimientos de inventario:', e);

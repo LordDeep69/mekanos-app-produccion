@@ -1,7 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Servicio API para Catálogo Maestro de Pendientes Técnicos
- * 
+ *
  * Backend: @Controller('ordenes') -> /api/ordenes/catalogo-pendientes
  */
 
@@ -36,7 +36,7 @@ export interface CreateCatalogoPendienteDto {
   activo?: boolean;
 }
 
-export interface UpdateCatalogoPendienteDto extends Partial<CreateCatalogoPendienteDto> {}
+export type UpdateCatalogoPendienteDto = Partial<CreateCatalogoPendienteDto>;
 
 export interface CatalogoPendientesQueryParams {
   idTipoEquipo?: number;
@@ -49,7 +49,7 @@ export interface CatalogoPendientesQueryParams {
  * Obtener lista de pendientes del catálogo maestro
  */
 export async function getCatalogoPendientes(
-  params?: CatalogoPendientesQueryParams
+  params?: CatalogoPendientesQueryParams,
 ): Promise<{ success: boolean; data: CatalogoPendiente[] }> {
   const queryParams = new URLSearchParams();
 
@@ -75,7 +75,7 @@ export async function getCatalogoPendientes(
  * Crear nuevo ítem en el catálogo
  */
 export async function createCatalogoPendiente(
-  data: CreateCatalogoPendienteDto
+  data: CreateCatalogoPendienteDto,
 ): Promise<{ success: boolean; data: CatalogoPendiente }> {
   const response = await apiClient.post<{ success: boolean; data: CatalogoPendiente }>(BASE, data);
   return response.data;
@@ -86,9 +86,12 @@ export async function createCatalogoPendiente(
  */
 export async function updateCatalogoPendiente(
   id: number,
-  data: UpdateCatalogoPendienteDto
+  data: UpdateCatalogoPendienteDto,
 ): Promise<{ success: boolean; data: CatalogoPendiente }> {
-  const response = await apiClient.put<{ success: boolean; data: CatalogoPendiente }>(`${BASE}/${id}`, data);
+  const response = await apiClient.put<{ success: boolean; data: CatalogoPendiente }>(
+    `${BASE}/${id}`,
+    data,
+  );
   return response.data;
 }
 
@@ -97,10 +100,15 @@ export async function updateCatalogoPendiente(
  */
 export async function deleteCatalogoPendiente(
   id: number,
-  hard: boolean = false
+  hard: boolean = false,
 ): Promise<{ success: boolean; message: string; desactivado?: boolean; eliminado?: boolean }> {
   const url = hard ? `${BASE}/${id}?hard=true` : `${BASE}/${id}`;
-  const response = await apiClient.delete<{ success: boolean; message: string; desactivado?: boolean; eliminado?: boolean }>(url);
+  const response = await apiClient.delete<{
+    success: boolean;
+    message: string;
+    desactivado?: boolean;
+    eliminado?: boolean;
+  }>(url);
   return response.data;
 }
 
@@ -109,7 +117,7 @@ export async function deleteCatalogoPendiente(
  */
 export async function toggleActivoCatalogoPendiente(
   id: number,
-  activo: boolean
+  activo: boolean,
 ): Promise<{ success: boolean; data: CatalogoPendiente }> {
   return updateCatalogoPendiente(id, { activo });
 }

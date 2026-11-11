@@ -1,7 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * PhotoLightbox: Visor Profesional y Ultra-Moderno de Imágenes
- * 
+ *
  * Características:
  * - Atajos de teclado completos (Flechas, Esc, +, -, 0, R, L, F, T)
  * - Zoom focal inteligente (50% a 500%) con rueda de ratón (wheel) y botones
@@ -18,7 +18,6 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 import {
   ChevronLeft,
   ChevronRight,
@@ -40,7 +39,7 @@ import {
   ZoomOut,
   Clock,
   Layers,
-  Sparkles
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -55,7 +54,7 @@ export interface LightboxImageItem {
   date?: string;
   actividad?: string;
   equipo?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   downloadUrl?: string;
 }
 
@@ -105,7 +104,10 @@ export function cleanDirectImageUrl(url: string | undefined | null): string {
   clean = clean.replace(/([?&])(download|dl)=(true|1|yes)&?/gi, '$1');
 
   // Asegurar que Content-Disposition sea inline en CDNs compatibles (S3 / R2)
-  clean = clean.replace(/response-content-disposition=attachment[^&]*/gi, 'response-content-disposition=inline');
+  clean = clean.replace(
+    /response-content-disposition=attachment[^&]*/gi,
+    'response-content-disposition=inline',
+  );
 
   // Limpiar caracteres huérfanos al final de la URL
   clean = clean.replace(/[?&]$/, '').replace(/(\?|&)($|&)/g, '$1');
@@ -117,7 +119,7 @@ const BADGE_COLORS: Record<string, { bg: string; text: string; border: string }>
   ANTES: { bg: 'bg-blue-500/90', text: 'text-white', border: 'border-blue-400' },
   DURANTE: { bg: 'bg-amber-500/90', text: 'text-white', border: 'border-amber-400' },
   DESPUES: { bg: 'bg-emerald-500/90', text: 'text-white', border: 'border-emerald-400' },
-  'DESPUÉS': { bg: 'bg-emerald-500/90', text: 'text-white', border: 'border-emerald-400' },
+  DESPUÉS: { bg: 'bg-emerald-500/90', text: 'text-white', border: 'border-emerald-400' },
   GENERAL: { bg: 'bg-purple-500/90', text: 'text-white', border: 'border-purple-400' },
   INSUMOS: { bg: 'bg-orange-500/90', text: 'text-white', border: 'border-orange-400' },
   MEDICION: { bg: 'bg-indigo-500/90', text: 'text-white', border: 'border-indigo-400' },
@@ -167,14 +169,17 @@ export function PhotoLightbox({
   }, []);
 
   // Navegar a otra foto
-  const goToIndex = useCallback((newIdx: number) => {
-    if (images.length === 0) return;
-    const bounded = (newIdx + images.length) % images.length;
-    setIndex(bounded);
-    resetTransform();
-    setIsLoadingImage(true);
-    onNavigate?.(bounded);
-  }, [images.length, onNavigate, resetTransform]);
+  const goToIndex = useCallback(
+    (newIdx: number) => {
+      if (images.length === 0) return;
+      const bounded = (newIdx + images.length) % images.length;
+      setIndex(bounded);
+      resetTransform();
+      setIsLoadingImage(true);
+      onNavigate?.(bounded);
+    },
+    [images.length, onNavigate, resetTransform],
+  );
 
   const goNext = useCallback(() => goToIndex(index + 1), [goToIndex, index]);
   const goPrev = useCallback(() => goToIndex(index - 1), [goToIndex, index]);
@@ -206,15 +211,18 @@ export function PhotoLightbox({
   }, []);
 
   // Doble clic para alternar zoom (Fit <-> 2x)
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    if (zoom > 1) {
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
-    } else {
-      setZoom(2);
-    }
-  }, [zoom]);
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      if (zoom > 1) {
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+      } else {
+        setZoom(2);
+      }
+    },
+    [zoom],
+  );
 
   // Zoom con rueda de ratón (Wheel)
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -228,23 +236,29 @@ export function PhotoLightbox({
   }, []);
 
   // Paneo (Mouse Drag)
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // IMPORTANTE: Solo permitir drag con el botón izquierdo principal (button === 0)
-    // El botón derecho (button === 2) pasa directamente para el menú contextual nativo del navegador
-    if (e.button !== 0) return;
-    if (zoom <= 1) return;
-    e.preventDefault();
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  }, [pan.x, pan.y, zoom]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // IMPORTANTE: Solo permitir drag con el botón izquierdo principal (button === 0)
+      // El botón derecho (button === 2) pasa directamente para el menú contextual nativo del navegador
+      if (e.button !== 0) return;
+      if (zoom <= 1) return;
+      e.preventDefault();
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    },
+    [pan.x, pan.y, zoom],
+  );
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging || zoom <= 1) return;
-    setPan({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y,
-    });
-  }, [dragStart.x, dragStart.y, isDragging, zoom]);
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isDragging || zoom <= 1) return;
+      setPan({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      });
+    },
+    [dragStart.x, dragStart.y, isDragging, zoom],
+  );
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -300,7 +314,7 @@ export function PhotoLightbox({
           setIsFullscreen(false);
         }
       }
-    } catch (err) {
+    } catch {
       // Ignorar restricciones del navegador si las hay
     }
   }, []);
@@ -409,7 +423,9 @@ export function PhotoLightbox({
         canvas.height = img.naturalHeight || img.height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0);
-        const pngBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+        const pngBlob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, 'image/png'),
+        );
         if (pngBlob) {
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
         }
@@ -595,7 +611,7 @@ export function PhotoLightbox({
                 'px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider border shadow-sm',
                 badgeStyle.bg,
                 badgeStyle.text,
-                badgeStyle.border
+                badgeStyle.border,
               )}
             >
               {currentImage.badge}
@@ -651,7 +667,7 @@ export function PhotoLightbox({
             onClick={handleFlipH}
             className={cn(
               'p-2 hover:bg-white/15 rounded-xl transition-all',
-              flipH && 'bg-blue-600/40 text-blue-300'
+              flipH && 'bg-blue-600/40 text-blue-300',
             )}
             title="Voltear horizontal"
           >
@@ -673,7 +689,7 @@ export function PhotoLightbox({
             onClick={() => setShowHelp((prev) => !prev)}
             className={cn(
               'p-2 hover:bg-white/15 rounded-xl transition-all text-white/80',
-              showHelp && 'bg-white/20 text-white'
+              showHelp && 'bg-white/20 text-white',
             )}
             title="Atajos de teclado (?)"
           >
@@ -684,7 +700,7 @@ export function PhotoLightbox({
             onClick={() => setShowThumbnails((prev) => !prev)}
             className={cn(
               'p-2 hover:bg-white/15 rounded-xl transition-all text-white/80',
-              showThumbnails && 'bg-white/20 text-white'
+              showThumbnails && 'bg-white/20 text-white',
             )}
             title="Alternar tira de miniaturas (T)"
           >
@@ -728,11 +744,7 @@ export function PhotoLightbox({
             className="p-2 hover:bg-white/15 rounded-xl transition-all text-white/80 hover:text-white"
             title="Pantalla completa (F)"
           >
-            {isFullscreen ? (
-              <Minimize2 className="h-4 w-4" />
-            ) : (
-              <Maximize2 className="h-4 w-4" />
-            )}
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
 
           <div className="w-px h-5 bg-white/20 mx-1" />
@@ -773,7 +785,7 @@ export function PhotoLightbox({
       <div
         className={cn(
           'relative flex-1 flex items-center justify-center overflow-hidden',
-          zoom > 1 ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'
+          zoom > 1 ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default',
         )}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
@@ -841,28 +853,50 @@ export function PhotoLightbox({
               <span className="font-bold flex items-center gap-1.5 text-blue-400">
                 <Keyboard className="h-4 w-4" /> Atajos de Teclado
               </span>
-              <button
-                onClick={() => setShowHelp(false)}
-                className="text-white/60 hover:text-white"
-              >
+              <button onClick={() => setShowHelp(false)} className="text-white/60 hover:text-white">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
             <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-white/80 font-mono">
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">←</kbd> / <kbd className="px-1.5 py-0.5 bg-white/10 rounded">→</kbd> Anterior / Siguiente</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">+</kbd> / <kbd className="px-1.5 py-0.5 bg-white/10 rounded">-</kbd> Zoom In / Out</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">R</kbd> Rotar 90° horario</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">L</kbd> Rotar antihorario</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">O</kbd> Abrir en pestaña</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">C</kbd> Copiar imagen</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">D</kbd> Descargar foto</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">0</kbd> Restablecer zoom</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">F</kbd> Pantalla completa</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">T</kbd> Ver / Ocultar tirilla</div>
-              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">Esc</kbd> Salir del visor</div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">←</kbd> /{' '}
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">→</kbd> Anterior / Siguiente
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">+</kbd> /{' '}
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">-</kbd> Zoom In / Out
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">R</kbd> Rotar 90° horario
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">L</kbd> Rotar antihorario
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">O</kbd> Abrir en pestaña
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">C</kbd> Copiar imagen
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">D</kbd> Descargar foto
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">0</kbd> Restablecer zoom
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">F</kbd> Pantalla completa
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">T</kbd> Ver / Ocultar tirilla
+              </div>
+              <div>
+                <kbd className="px-1.5 py-0.5 bg-white/10 rounded">Esc</kbd> Salir del visor
+              </div>
             </div>
             <p className="text-[10px] text-white/50 pt-1 border-t border-white/10">
-              💡 Tip: Click derecho sobre la foto permite &apos;Copiar imagen&apos; y &apos;Abrir en nueva pestaña&apos; nativamente.
+              💡 Tip: Click derecho sobre la foto permite &apos;Copiar imagen&apos; y &apos;Abrir en
+              nueva pestaña&apos; nativamente.
             </p>
           </div>
         )}
@@ -937,7 +971,7 @@ export function PhotoLightbox({
                   'relative h-16 w-20 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all duration-200 group focus:outline-none',
                   isActive
                     ? 'border-blue-400 ring-2 ring-blue-500/50 scale-105 shadow-xl'
-                    : 'border-white/20 opacity-50 hover:opacity-100 hover:border-white/60'
+                    : 'border-white/20 opacity-50 hover:opacity-100 hover:border-white/60',
                 )}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -957,7 +991,7 @@ export function PhotoLightbox({
                     className={cn(
                       'absolute top-0.5 left-0.5 px-1 rounded text-[8px] font-bold uppercase',
                       subBadge.bg,
-                      subBadge.text
+                      subBadge.text,
                     )}
                   >
                     {img.badge}

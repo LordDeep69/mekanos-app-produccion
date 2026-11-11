@@ -36,7 +36,6 @@ class _PdfViewerScreenState extends ConsumerState<PdfViewerScreen> {
   String? _error;
   int _currentPage = 0;
   int _totalPages = 0;
-  PDFViewController? _pdfController;
 
   @override
   void initState() {
@@ -259,18 +258,16 @@ class _PdfViewerScreenState extends ConsumerState<PdfViewerScreen> {
         });
       },
       onError: (error) {
-        print('❌ Error al renderizar PDF: $error');
+        debugPrint('❌ Error al renderizar PDF: $error');
         setState(() {
           _error =
               'No se pudo mostrar el PDF. Puede estar dañado o incompleto.';
         });
       },
       onPageError: (page, error) {
-        print('❌ Error en página $page: $error');
+        debugPrint('❌ Error en página $page: $error');
       },
-      onViewCreated: (controller) {
-        _pdfController = controller;
-      },
+      onViewCreated: (_) {},
       onPageChanged: (page, total) {
         setState(() {
           _currentPage = page ?? 0;

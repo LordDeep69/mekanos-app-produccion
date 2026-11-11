@@ -23,6 +23,11 @@ export interface FiltrosOrdenesCompra {
   limit?: number;
 }
 
+interface ApiDataResponse<T> {
+  data?: T;
+  meta?: OrdenesCompraPaginatedResponse['meta'];
+}
+
 export const ordenesCompraService = {
   /**
    * Listar órdenes de compra con filtros y paginación
@@ -37,12 +42,19 @@ export const ordenesCompraService = {
     if (filtros.page) params.append('page', String(filtros.page));
     if (filtros.limit) params.append('limit', String(filtros.limit));
 
-    const response = await apiClient.get<any>(`/ordenes-compra?${params.toString()}`);
+    const response = await apiClient.get<ApiDataResponse<OrdenCompra[]>>(
+      `/ordenes-compra?${params.toString()}`,
+    );
     // Desempaquetar ApiResponse estándar { success, message, data, meta }
     if (response.data && response.data.data) {
       return {
         data: response.data.data,
-        meta: response.data.meta || { total: response.data.data.length, page: 1, limit: 10, totalPages: 1 },
+        meta: response.data.meta || {
+          total: response.data.data.length,
+          page: 1,
+          limit: 10,
+          totalPages: 1,
+        },
       };
     }
     return { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } };
@@ -53,11 +65,13 @@ export const ordenesCompraService = {
    */
   async getResumenKpis(): Promise<OrdenesCompraKpis> {
     try {
-      const response = await apiClient.get<any>('/ordenes-compra/resumen');
-      if (response.data?.data) {
+      const response = await apiClient.get<ApiDataResponse<OrdenesCompraKpis> | OrdenesCompraKpis>(
+        '/ordenes-compra/resumen',
+      );
+      if (response.data && 'data' in response.data && response.data.data) {
         return response.data.data;
       }
-      return response.data;
+      return response.data as OrdenesCompraKpis;
     } catch (e) {
       console.error('Error al obtener KPIs de órdenes de compra:', e);
       return {
@@ -76,34 +90,44 @@ export const ordenesCompraService = {
    * Obtener detalle completo de una orden de compra
    */
   async getOrdenById(id: number): Promise<OrdenCompra> {
-    const response = await apiClient.get<any>(`/ordenes-compra/${id}`);
-    return response.data?.data || response.data;
+    const response = await apiClient.get<ApiDataResponse<OrdenCompra> | OrdenCompra>(
+      `/ordenes-compra/${id}`,
+    );
+    return (response.data as ApiDataResponse<OrdenCompra>)?.data || (response.data as OrdenCompra);
   },
 
   /**
    * Crear nueva orden de compra (Borrador con cálculo automático)
    */
   async createOrden(payload: CrearOrdenCompraPayload): Promise<OrdenCompra> {
-    const response = await apiClient.post<any>('/ordenes-compra', payload);
-    return response.data?.data || response.data;
+    const response = await apiClient.post<ApiDataResponse<OrdenCompra> | OrdenCompra>(
+      '/ordenes-compra',
+      payload,
+    );
+    return (response.data as ApiDataResponse<OrdenCompra>)?.data || (response.data as OrdenCompra);
   },
 
   /**
    * Enviar/Emitir orden de compra al proveedor (BORRADOR -> ENVIADA)
    */
   async enviarOrden(id: number): Promise<OrdenCompra> {
-    const response = await apiClient.put<any>(`/ordenes-compra/${id}/enviar`);
-    return response.data?.data || response.data;
+    const response = await apiClient.put<ApiDataResponse<OrdenCompra> | OrdenCompra>(
+      `/ordenes-compra/${id}/enviar`,
+    );
+    return (response.data as ApiDataResponse<OrdenCompra>)?.data || (response.data as OrdenCompra);
   },
 
   /**
    * Cancelar orden de compra con motivo
    */
   async cancelarOrden(id: number, motivo: string): Promise<OrdenCompra> {
-    const response = await apiClient.put<any>(`/ordenes-compra/${id}/cancelar`, {
-      motivo_cancelacion: motivo,
-    });
-    return response.data?.data || response.data;
+    const response = await apiClient.put<ApiDataResponse<OrdenCompra> | OrdenCompra>(
+      `/ordenes-compra/${id}/cancelar`,
+      {
+        motivo_cancelacion: motivo,
+      },
+    );
+    return (response.data as ApiDataResponse<OrdenCompra>)?.data || (response.data as OrdenCompra);
   },
 
   /**
@@ -111,8 +135,12 @@ export const ordenesCompraService = {
    */
   async getSourcingProveedor(idProveedor: number): Promise<ArticuloSourcing[]> {
     try {
-      const response = await apiClient.get<any>(`/ordenes-compra/proveedor/${idProveedor}/sourcing`);
-      return response.data?.data || response.data || [];
+      const response = await apiClient.get<
+        ApiDataResponse<ArticuloSourcing[]> | ArticuloSourcing[]
+      >(`/ordenes-compra/proveedor/${idProveedor}/sourcing`);
+      const body = response.data;
+      if (Array.isArray(body)) return body;
+      return body?.data || [];
     } catch (e) {
       console.error('Error al obtener sourcing del proveedor:', e);
       return [];
@@ -122,10 +150,18 @@ export const ordenesCompraService = {
   /**
    * Consultar costo pactado o base para un componente específico de un proveedor
    */
-  async getCostoSourcing(idProveedor: number, idComponente: number): Promise<CostoSourcingResponse> {
-    const response = await apiClient.get<any>('/ordenes-compra/sourcing/costo', {
+  async getCostoSourcing(
+    idProveedor: number,
+    idComponente: number,
+  ): Promise<CostoSourcingResponse> {
+    const response = await apiClient.get<
+      ApiDataResponse<CostoSourcingResponse> | CostoSourcingResponse
+    >('/ordenes-compra/sourcing/costo', {
       params: { id_proveedor: idProveedor, id_componente: idComponente },
     });
-    return response.data?.data || response.data;
+    return (
+      (response.data as ApiDataResponse<CostoSourcingResponse>)?.data ||
+      (response.data as CostoSourcingResponse)
+    );
   },
 };

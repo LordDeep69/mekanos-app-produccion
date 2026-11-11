@@ -1,8 +1,8 @@
 /**
  * MEKANOS S.A.S - Motor Universal de Activos EAM
- * 
+ *
  * FASE 5: SUITE DE PRUEBAS AUTOMATIZADAS NUCLEAR ZERO-TRUST
- * 
+ *
  * Verifica:
  * 1. Despacho Zero-Trust de plantillas PDF (Generadores y Bombas preservan Golden Master,
  *    Compresores, Motores y arquetipos dinámicos despachan UNIVERSAL_EAM).
@@ -11,10 +11,9 @@
  * 3. Cascada de parámetros de medición en 3 niveles (Equipo >> Modelo OEM >> Catálogo).
  */
 
-import { PdfService, TipoInforme } from './pdf.service';
+import { PdfService } from './pdf.service';
 import { generarTipoUniversalEamHTML } from './templates/tipo-universal-eam.template';
 import { DatosOrdenPDF } from './templates/mekanos-base.template';
-import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
 
 describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
   let pdfService: PdfService;
@@ -202,13 +201,16 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
           caption: 'DESPUES: Equipo limpio y lubricado operando a 122 PSI',
         },
       ],
-      observaciones: 'El compresor opera de manera suave y silenciosa. Presión de carga y descarga calibradas correctamente.',
+      observaciones:
+        'El compresor opera de manera suave y silenciosa. Presión de carga y descarga calibradas correctamente.',
       nombreTecnico: 'Carlos Mendoza',
       cargoTecnico: 'Especialista en Sistemas Neumáticos',
       nombreCliente: 'Ing. Fernando Gómez',
       cargoCliente: 'Jefe de Planta',
-      firmaTecnico: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-      firmaCliente: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      firmaTecnico:
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      firmaCliente:
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     };
 
     it('debe generar HTML válido conteniendo todas las secciones de ingeniería', () => {
@@ -298,8 +300,18 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
           potenciaPrincipal: '20 TR',
           alimentacionElectrica: '220V · 60 Hz · 3F',
           kpis: [
-            { clave: 'capacidad_enfriamiento', etiqueta: 'Capacidad de Enfriamiento', valor: '20 TR', destacado: true },
-            { clave: 'gas_refrigerante', etiqueta: 'Gas Refrigerante', valor: 'R410A', destacado: true },
+            {
+              clave: 'capacidad_enfriamiento',
+              etiqueta: 'Capacidad de Enfriamiento',
+              valor: '20 TR',
+              destacado: true,
+            },
+            {
+              clave: 'gas_refrigerante',
+              etiqueta: 'Gas Refrigerante',
+              valor: 'R410A',
+              destacado: true,
+            },
           ],
           subsistemas: [],
         },
@@ -359,7 +371,7 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
       expect(html).toContain('PROTOCOLO DE INSPECCIÓN Y ACTIVIDADES PREVENTIVAS (2 TAREAS)');
       expect(html).toContain('INSPECCIÓN VISUAL DE SERPENTÍN EVAPORADOR Y CONDENSADOR');
       expect(html).toContain('LIMPIEZA Y DESINFECCIÓN DE SERPENTINES');
-      
+
       const checklistIdx = html.indexOf('PROTOCOLO DE INSPECCIÓN Y ACTIVIDADES PREVENTIVAS');
       const medicionesIdx = html.indexOf('PARÁMETROS OPERATIVOS');
       const checklistPart = html.substring(checklistIdx, medicionesIdx);
@@ -386,7 +398,7 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
       // Nivel 2: Plantilla de modelo OEM (e.g. Doosan P126TI)
       const plantillaModeloOem = {
         temperatura_max: 100, // Doosan soporta hasta 100°C
-        presion_min: 30,      // Doosan exige min 30 PSI
+        presion_min: 30, // Doosan exige min 30 PSI
       };
 
       // Nivel 1: Configuración específica de la máquina (e.g. cuarto caluroso)
@@ -402,7 +414,7 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
       };
 
       expect(configResuelta.temperatura_max).toBe(105); // De la máquina
-      expect(configResuelta.presion_min).toBe(30);       // Del modelo OEM (la máquina no lo sobreescribió)
+      expect(configResuelta.presion_min).toBe(30); // Del modelo OEM (la máquina no lo sobreescribió)
     });
   });
 });

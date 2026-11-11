@@ -52,11 +52,7 @@ interface CuentaEmailFormDialogProps {
   cuenta?: CuentaEmail | null;
 }
 
-export function CuentaEmailFormDialog({
-  open,
-  onOpenChange,
-  cuenta,
-}: CuentaEmailFormDialogProps) {
+export function CuentaEmailFormDialog({ open, onOpenChange, cuenta }: CuentaEmailFormDialogProps) {
   const queryClient = useQueryClient();
   const isEditing = !!cuenta;
   const [showClientSecret, setShowClientSecret] = useState(false);
@@ -107,8 +103,9 @@ export function CuentaEmailFormDialog({
       onOpenChange(false);
       form.reset();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Error al crear la cuenta');
+    onError: (error: unknown) => {
+      const apiErr = error as { response?: { data?: { message?: string } } };
+      toast.error(apiErr.response?.data?.message || 'Error al crear la cuenta');
     },
   });
 
@@ -121,8 +118,9 @@ export function CuentaEmailFormDialog({
       onOpenChange(false);
       form.reset();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Error al actualizar la cuenta');
+    onError: (error: unknown) => {
+      const apiErr = error as { response?: { data?: { message?: string } } };
+      toast.error(apiErr.response?.data?.message || 'Error al actualizar la cuenta');
     },
   });
 
@@ -171,9 +169,7 @@ export function CuentaEmailFormDialog({
                   <FormControl>
                     <Input placeholder="Ej: Cuenta Principal Mekanos" {...field} />
                   </FormControl>
-                  <FormDescription>
-                    Nombre descriptivo para identificar la cuenta
-                  </FormDescription>
+                  <FormDescription>Nombre descriptivo para identificar la cuenta</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -186,15 +182,9 @@ export function CuentaEmailFormDialog({
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="correo@gmail.com"
-                      {...field}
-                    />
+                    <Input type="email" placeholder="correo@gmail.com" {...field} />
                   </FormControl>
-                  <FormDescription>
-                    Dirección de email de la cuenta Gmail
-                  </FormDescription>
+                  <FormDescription>Dirección de email de la cuenta Gmail</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -203,8 +193,8 @@ export function CuentaEmailFormDialog({
             <div className="border-t pt-4">
               <h4 className="text-sm font-medium mb-3">Credenciales Gmail API</h4>
               <p className="text-xs text-muted-foreground mb-4">
-                Obtén estas credenciales desde Google Cloud Console y OAuth2 Playground.
-                Consulta la guía en <code>docs/GUIA-GMAIL-API-OAUTH2.md</code>
+                Obtén estas credenciales desde Google Cloud Console y OAuth2 Playground. Consulta la
+                guía en <code>docs/GUIA-GMAIL-API-OAUTH2.md</code>
               </p>
 
               <FormField
@@ -214,10 +204,7 @@ export function CuentaEmailFormDialog({
                   <FormItem>
                     <FormLabel>Client ID {isEditing && '(opcional)'}</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="xxx.apps.googleusercontent.com"
-                        {...field}
-                      />
+                      <Input placeholder="xxx.apps.googleusercontent.com" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -304,10 +291,7 @@ export function CuentaEmailFormDialog({
                       </FormDescription>
                     </div>
                     <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}
@@ -325,10 +309,7 @@ export function CuentaEmailFormDialog({
                       </FormDescription>
                     </div>
                     <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}

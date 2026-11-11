@@ -676,7 +676,7 @@ class _ResumenFinalizacionScreenState
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -845,6 +845,7 @@ class _ResumenFinalizacionScreenState
       text: _razonFallaActual ?? '',
     );
 
+    if (!mounted) return;
     final resultado = await showDialog<Map<String, String>>(
       context: context,
       barrierDismissible: false,
@@ -1153,6 +1154,7 @@ class _ResumenFinalizacionScreenState
       )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
 
       if (orden == null || orden.idBackend == null) {
+        if (!mounted) return;
         Navigator.of(context).pop(); // Cerrar loading
         _mostrarError('No se pudo obtener la información de la orden');
         return;
@@ -1177,6 +1179,7 @@ class _ResumenFinalizacionScreenState
         esResubida: orden.permiteEdicionTecnico,
       );
 
+      if (!mounted) return;
       Navigator.of(context).pop(); // Cerrar loading
 
       if (resultado.success) {
@@ -1190,6 +1193,7 @@ class _ResumenFinalizacionScreenState
         _mostrarError(errorTexto);
       }
     } catch (e) {
+      if (!mounted) return;
       Navigator.of(context).pop(); // Cerrar loading
       _mostrarError(
         mensajeAmigable(e, contexto: 'finalizar la orden'),
@@ -1393,11 +1397,11 @@ class _ResumenSyncProgressDialog extends ConsumerWidget {
               ],
               _buildStep(SyncStep.preparando, progress, Icons.settings),
               _buildStep(SyncStep.validando, progress, Icons.verified_user),
-              _buildStep(SyncStep.obteniendo_orden, progress, Icons.cloud_download),
-              _buildStep(SyncStep.limpieza_residuales, progress, Icons.cleaning_services),
+              _buildStep(SyncStep.obteniendoOrden, progress, Icons.cloud_download),
+              _buildStep(SyncStep.limpiezaResiduales, progress, Icons.cleaning_services),
               _buildStep(SyncStep.evidencias, progress, Icons.photo_camera),
               _buildStep(SyncStep.firmas, progress, Icons.draw),
-              _buildStep(SyncStep.actualizando_estado, progress, Icons.cloud_done),
+              _buildStep(SyncStep.actualizandoEstado, progress, Icons.cloud_done),
               if (progress.pasoActual == SyncStep.error &&
                   progress.mensajeError != null) ...[
                 const SizedBox(height: 16),

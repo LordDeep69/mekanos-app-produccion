@@ -34,13 +34,11 @@ import {
 import { cn } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Activity,
   ArrowDown,
   ArrowLeft,
   ArrowUp,
   BookOpen,
   Check,
-  CheckCircle2,
   ClipboardList,
   Edit3,
   Eye,
@@ -149,7 +147,7 @@ export function FastProtocolBuilder({
   const detalle: TipoServicioDetalleCompleto | undefined = detalleResp?.data;
 
   // 2. Catálogos de soporte (Servicios para switcher, Unidades UoM, Parámetros existentes, Banco Universal)
-  const { data: serviciosResp } = useTiposServicio({ activo: 'all' as any, limit: 100 });
+  const { data: serviciosResp } = useTiposServicio({ activo: 'all', limit: 100 });
   const { data: arquetipos = [] } = useArquetiposEam();
   const { data: unidadesDb = [] } = useUnidadesEam();
   const { data: bancoMagnitudes = [] } = useBancoMagnitudesEam();
@@ -167,7 +165,9 @@ export function FastProtocolBuilder({
   const [quickTaskType, setQuickTaskType] = useState<Record<string, string>>({});
   const [quickCustomNature, setQuickCustomNature] = useState<Record<string, string>>({});
   const [quickControlType, setQuickControlType] = useState<Record<string, string>>({});
-  const [quickControlConfig, setQuickControlConfig] = useState<Record<string, ConfigInputDeclarativo | null>>({});
+  const [quickControlConfig, setQuickControlConfig] = useState<
+    Record<string, ConfigInputDeclarativo | null>
+  >({});
   const [quickRolSemantico, setQuickRolSemantico] = useState<Record<string, string>>({});
   const [savingSubsystemKey, setSavingSubsystemKey] = useState<string | null>(null);
   const quickInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -220,7 +220,7 @@ export function FastProtocolBuilder({
     for (const f of UNIDADES_FRECUENTES) {
       map.set(f.value.toUpperCase(), f);
     }
-    for (const u of unidadesDb as any[]) {
+    for (const u of unidadesDb) {
       const sym = (u.simbolo || u.codigo || '').trim();
       if (!sym) continue;
       const key = sym.toUpperCase();
@@ -232,7 +232,7 @@ export function FastProtocolBuilder({
         });
       }
     }
-    for (const mag of bancoMagnitudes as any[]) {
+    for (const mag of bancoMagnitudes) {
       for (const u of mag.unidades || []) {
         const sym = (u.simbolo || u.codigo || '').trim();
         if (!sym) continue;
@@ -240,7 +240,7 @@ export function FastProtocolBuilder({
         if (!map.has(key)) {
           map.set(key, {
             value: sym,
-            label: `${sym} — ${u.nombre}`,
+            label: `${sym} — ${u.nombre ?? sym}`,
             badge: mag.nombre_magnitud,
           });
         }
@@ -295,9 +295,7 @@ export function FastProtocolBuilder({
         });
       }
       const target = map.get(key)!;
-      const cualitativas = (grp.actividades || []).filter(
-        (a) => a.tipo_actividad !== 'MEDICION',
-      );
+      const cualitativas = (grp.actividades || []).filter((a) => a.tipo_actividad !== 'MEDICION');
       target.tareasCualitativas.push(...cualitativas);
     }
 
@@ -391,10 +389,7 @@ export function FastProtocolBuilder({
   };
 
   // Acción: Quick-Add de Tarea Cualitativa en un Subsistema (Zona A) con Enter
-  const handleQuickAddTask = async (
-    sectionKey: string,
-    idSistema: number | null,
-  ) => {
+  const handleQuickAddTask = async (sectionKey: string, idSistema: number | null) => {
     const rawDesc = (quickTaskText[sectionKey] || '').trim();
     if (!rawDesc || !detalle) return;
 
@@ -409,7 +404,7 @@ export function FastProtocolBuilder({
     const tipoAct: TipoActividad = isCustomNature ? 'INSPECCION' : (rawTipo as TipoActividad);
     const tipoControlInput = quickControlType[sectionKey] || 'ESCALA_ESTADO';
     const configInputJson =
-      tipoControlInput === 'PERSONALIZADO' ? quickControlConfig[sectionKey] ?? null : null;
+      tipoControlInput === 'PERSONALIZADO' ? (quickControlConfig[sectionKey] ?? null) : null;
     const rolSemantico = (quickRolSemantico[sectionKey] || '').trim() || null;
 
     setSavingSubsystemKey(sectionKey);
@@ -438,9 +433,15 @@ export function FastProtocolBuilder({
       setTimeout(() => {
         quickInputRefs.current[sectionKey]?.focus();
       }, 30);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message;
-      toast.error(Array.isArray(msg) ? msg.join(', ') : msg || err?.message || 'Error al agregar tarea');
+    } catch (err: unknown) {
+      const apiErr = err as {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      };
+      const msg = apiErr?.response?.data?.message;
+      toast.error(
+        Array.isArray(msg) ? msg.join(', ') : msg || apiErr?.message || 'Error al agregar tarea',
+      );
     } finally {
       setSavingSubsystemKey(null);
     }
@@ -469,7 +470,7 @@ export function FastProtocolBuilder({
     try {
       const idTipoEquipo = detalle.id_tipo_equipo ?? detalle.tipo_equipo?.id ?? undefined;
       const existentes = parametrosResp?.data || [];
-      let paramMatch = existentes.find(
+      const paramMatch = existentes.find(
         (p) =>
           p.nombre_parametro.trim().toLowerCase() === rawNombre.toLowerCase() &&
           p.unidad_medida.trim().toLowerCase() === medUnidad.trim().toLowerCase(),
@@ -488,7 +489,7 @@ export function FastProtocolBuilder({
         const stamp = Date.now().toString(36).toUpperCase().slice(-4);
         const codigoParametro = `PAR_${slug}_${stamp}`.slice(0, 50);
 
-        const createdParam: any = await createParametroMedicion({
+        const createdParam = (await createParametroMedicion({
           codigoParametro,
           nombreParametro: rawNombre,
           unidadMedida: medUnidad.trim().slice(0, 20),
@@ -500,11 +501,10 @@ export function FastProtocolBuilder({
           esObligatorio: true,
           decimalesPrecision: 2,
           activo: true,
-        });
+        })) as { id_parametro_medicion?: number; data?: { id_parametro_medicion?: number } };
 
         idParametroMedicion =
-          createdParam?.id_parametro_medicion ??
-          createdParam?.data?.id_parametro_medicion;
+          createdParam?.id_parametro_medicion ?? createdParam?.data?.id_parametro_medicion;
       } else if (
         minVal !== undefined &&
         maxVal !== undefined &&
@@ -541,8 +541,9 @@ export function FastProtocolBuilder({
       setTimeout(() => {
         medNombreInputRef.current?.focus();
       }, 30);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message;
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string | string[] } } };
+      const msg = apiErr?.response?.data?.message;
       toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Error al crear la medición');
     } finally {
       setSavingMedicion(false);
@@ -580,8 +581,12 @@ export function FastProtocolBuilder({
   const startEditTask = (act: ActividadDetalle) => {
     setEditingTaskId(act.id_actividad_catalogo);
     setEditDesc(act.descripcion_actividad);
-    const hasCustomNat = Boolean(act.naturaleza_personalizada && act.naturaleza_personalizada.trim());
-    setEditTipo(hasCustomNat ? 'OTRA_PERSONALIZADA' : (act.tipo_actividad as TipoActividad) || 'INSPECCION');
+    const hasCustomNat = Boolean(
+      act.naturaleza_personalizada && act.naturaleza_personalizada.trim(),
+    );
+    setEditTipo(
+      hasCustomNat ? 'OTRA_PERSONALIZADA' : (act.tipo_actividad as TipoActividad) || 'INSPECCION',
+    );
     setEditCustomNature(act.naturaleza_personalizada || '');
     setEditControlType(act.tipo_control_input || 'ESCALA_ESTADO');
     setEditControlConfig(act.config_input_json ?? null);
@@ -682,8 +687,9 @@ export function FastProtocolBuilder({
       setIsNewSistemaOpen(false);
       await refreshAll();
       toast.success(`Subsistema "${newSistemaNombre.trim()}" creado y vinculado al equipo`);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message;
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string | string[] } } };
+      const msg = apiErr?.response?.data?.message;
       toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Error al crear subsistema');
     } finally {
       setSavingNewSistema(false);
@@ -704,7 +710,7 @@ export function FastProtocolBuilder({
     for (const item of rawList) {
       const desc = (item.descripcionActividad || item.descripcion_actividad || '').trim();
       if (!desc) continue;
-      const key = `${(item.tipoActividad || item.tipo_actividad || 'INSPECCION')}_${desc.toLowerCase()}`;
+      const key = `${item.tipoActividad || item.tipo_actividad || 'INSPECCION'}_${desc.toLowerCase()}`;
       // Preferir plantilla maestra (idTipoServicio == null) si existe
       if (!dedupMap.has(key) || (item.idTipoServicio == null && item.id_tipo_servicio == null)) {
         dedupMap.set(key, item);
@@ -731,7 +737,11 @@ export function FastProtocolBuilder({
           if (itemEqId !== null && itemEqId !== targetEqId) return false;
         } else if (importEquipoFilter === 'UNIVERSAL') {
           if (itemEqId !== null) return false;
-        } else if (importEquipoFilter && importEquipoFilter !== 'ALL' && importEquipoFilter !== 'CURRENT') {
+        } else if (
+          importEquipoFilter &&
+          importEquipoFilter !== 'ALL' &&
+          importEquipoFilter !== 'CURRENT'
+        ) {
           const eqFilterNum = Number(importEquipoFilter);
           if (!Number.isNaN(eqFilterNum) && itemEqId !== eqFilterNum) return false;
         }
@@ -779,8 +789,9 @@ export function FastProtocolBuilder({
       setSelectedImportIds([]);
       setIsImportModalOpen(false);
       await refreshAll();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message;
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string | string[] } } };
+      const msg = apiErr?.response?.data?.message;
       toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Error al importar lote');
     } finally {
       setSavingImport(false);
@@ -845,7 +856,8 @@ export function FastProtocolBuilder({
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
                   <Layers className="h-3.5 w-3.5" />
                   <span>
-                    {detalle.tipo_equipo.nombre} ({detalle.tipo_equipo.codigo || detalle.aplica_a?.[0]})
+                    {detalle.tipo_equipo.nombre} (
+                    {detalle.tipo_equipo.codigo || detalle.aplica_a?.[0]})
                   </span>
                 </span>
               ) : (
@@ -885,8 +897,8 @@ export function FastProtocolBuilder({
               <kbd className="px-1.5 py-0.5 rounded bg-white/15 text-white font-mono text-[10px]">
                 Enter
               </kbd>{' '}
-              en cada subsistema del equipo o registra mediciones cuantitativas con Unidad UoM y Rango{' '}
-              <span className="font-mono text-indigo-200">[Mín — Máx]</span>.
+              en cada subsistema del equipo o registra mediciones cuantitativas con Unidad UoM y
+              Rango <span className="font-mono text-indigo-200">[Mín — Máx]</span>.
             </p>
           </div>
 
@@ -917,7 +929,7 @@ export function FastProtocolBuilder({
                 onClick={() => {
                   setSelectedImportIds([]);
                   setImportEquipoFilter(
-                    detalle.id_tipo_equipo ?? detalle.tipo_equipo?.id ? 'CURRENT' : 'ALL',
+                    (detalle.id_tipo_equipo ?? detalle.tipo_equipo?.id) ? 'CURRENT' : 'ALL',
                   );
                   setIsImportModalOpen(true);
                 }}
@@ -994,7 +1006,8 @@ export function FastProtocolBuilder({
                 </span>
               </div>
               <p className="text-xs text-slate-600">
-                Las Partes y Subsistemas del Tipo de Equipo aparecen sincronizadas automáticamente. Escribe al pie de cada subsistema y presiona{' '}
+                Las Partes y Subsistemas del Tipo de Equipo aparecen sincronizadas automáticamente.
+                Escribe al pie de cada subsistema y presiona{' '}
                 <strong className="text-slate-900">Enter</strong>.
               </p>
             </div>
@@ -1049,7 +1062,8 @@ export function FastProtocolBuilder({
                     <div className="px-5 py-4 text-xs text-slate-400 italic flex items-center gap-2">
                       <Sparkles className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                       <span>
-                        Aún no hay tareas en «{sec.nombre_sistema}». Usa la barra rápida de abajo y presiona Enter para agregar la primera.
+                        Aún no hay tareas en «{sec.nombre_sistema}». Usa la barra rápida de abajo y
+                        presiona Enter para agregar la primera.
                       </span>
                     </div>
                   ) : (
@@ -1092,7 +1106,9 @@ export function FastProtocolBuilder({
                                       {t.label}
                                     </option>
                                   ))}
-                                  <option value="OTRA_PERSONALIZADA">+ Otra naturaleza personalizada...</option>
+                                  <option value="OTRA_PERSONALIZADA">
+                                    + Otra naturaleza personalizada...
+                                  </option>
                                 </select>
                                 {editTipo === 'OTRA_PERSONALIZADA' && (
                                   <input
@@ -1216,12 +1232,16 @@ export function FastProtocolBuilder({
                                   title="Modo de respuesta configurado para Mobile y Web"
                                   className={cn(
                                     'hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] font-mono border max-w-[200px] truncate',
-                                    act.tipo_control_input && act.tipo_control_input !== 'ESCALA_ESTADO'
+                                    act.tipo_control_input &&
+                                      act.tipo_control_input !== 'ESCALA_ESTADO'
                                       ? 'font-bold text-indigo-700 bg-indigo-50 border-indigo-200'
                                       : 'text-slate-500 bg-slate-50 border-slate-200',
                                   )}
                                 >
-                                  {getModoRespuestaBadgeLabel(act.tipo_control_input, act.config_input_json)}
+                                  {getModoRespuestaBadgeLabel(
+                                    act.tipo_control_input,
+                                    act.config_input_json,
+                                  )}
                                 </span>
                                 <button
                                   type="button"
@@ -1312,8 +1332,14 @@ export function FastProtocolBuilder({
                       configInputJson={quickControlConfig[sec.key] ?? null}
                       rolSemantico={quickRolSemantico[sec.key] || ''}
                       onChange={(next) => {
-                        setQuickControlType((prev) => ({ ...prev, [sec.key]: next.tipoControlInput }));
-                        setQuickControlConfig((prev) => ({ ...prev, [sec.key]: next.configInputJson }));
+                        setQuickControlType((prev) => ({
+                          ...prev,
+                          [sec.key]: next.tipoControlInput,
+                        }));
+                        setQuickControlConfig((prev) => ({
+                          ...prev,
+                          [sec.key]: next.configInputJson,
+                        }));
                         setQuickRolSemantico((prev) => ({ ...prev, [sec.key]: next.rolSemantico }));
                       }}
                     />
@@ -1358,7 +1384,9 @@ export function FastProtocolBuilder({
                 </span>
               </div>
               <p className="text-xs text-slate-600">
-                Mediciones numéricas que el técnico captura en campo con su Unidad de Medida (60 Magnitudes / 263 Unidades) y Rango Operativo Normal. Se sincronizan automáticamente con{' '}
+                Mediciones numéricas que el técnico captura en campo con su Unidad de Medida (60
+                Magnitudes / 263 Unidades) y Rango Operativo Normal. Se sincronizan automáticamente
+                con{' '}
                 <code className="font-mono text-[11px] text-purple-700">parametros_medicion</code>.
               </p>
             </div>
@@ -1526,7 +1554,8 @@ export function FastProtocolBuilder({
             <div className="text-[11px] font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-purple-600" />
               <span>
-                Agregar Parámetro Operativo / Medición Cuantitativa Rápida (Sincroniza con UoM y Rango Normal)
+                Agregar Parámetro Operativo / Medición Cuantitativa Rápida (Sincroniza con UoM y
+                Rango Normal)
               </span>
             </div>
 
@@ -1714,7 +1743,8 @@ export function FastProtocolBuilder({
                     Importar en Lote desde el Banco Universal de Actividades
                   </h3>
                   <p className="text-xs text-slate-300">
-                    Selecciona múltiples tareas o mediciones del diccionario maestro para vincularlas a «{detalle.nombre_tipo}».
+                    Selecciona múltiples tareas o mediciones del diccionario maestro para
+                    vincularlas a «{detalle.nombre_tipo}».
                   </p>
                 </div>
               </div>
@@ -1754,7 +1784,7 @@ export function FastProtocolBuilder({
                   )}
                   <option value="ALL">Todos los equipos (Banco completo)</option>
                   <option value="UNIVERSAL">Solo Universal (Sin equipo fijo)</option>
-                  {arquetipos.map((a: any) => (
+                  {arquetipos.map((a) => (
                     <option key={a.id_tipo_equipo} value={String(a.id_tipo_equipo)}>
                       {a.nombre_tipo} ({a.codigo_tipo})
                     </option>
@@ -1810,8 +1840,7 @@ export function FastProtocolBuilder({
                     item.catalogo_sistemas?.nombre_sistema ||
                     'General';
                   const uom =
-                    item.parametroMedicion?.unidadMedida ||
-                    item.parametros_medicion?.unidad_medida;
+                    item.parametroMedicion?.unidadMedida || item.parametros_medicion?.unidad_medida;
 
                   return (
                     <label
@@ -1911,7 +1940,8 @@ export function FastProtocolBuilder({
                     Simulación Visual 1:1 — Reporte Técnico PDF Universal EAM
                   </h3>
                   <p className="text-xs text-slate-300">
-                    Así se renderizarán la Tabla de Checklist Cualitativo y las Tarjetas de Telemetría UoM al generar el PDF de la orden.
+                    Así se renderizarán la Tabla de Checklist Cualitativo y las Tarjetas de
+                    Telemetría UoM al generar el PDF de la orden.
                   </p>
                 </div>
               </div>
@@ -1976,13 +2006,20 @@ export function FastProtocolBuilder({
                                   <div>{t.descripcion_actividad}</div>
                                   {(t.naturaleza_personalizada || t.rol_semantico) && (
                                     <div className="text-[10px] text-slate-400 mt-0.5">
-                                      {t.naturaleza_personalizada ? `${t.naturaleza_personalizada} ` : ''}
+                                      {t.naturaleza_personalizada
+                                        ? `${t.naturaleza_personalizada} `
+                                        : ''}
                                       {t.rol_semantico ? `· ${t.rol_semantico}` : ''}
                                     </div>
                                   )}
                                 </td>
                                 <td className="px-3 py-1.5 w-44 text-center font-mono text-[10px] text-indigo-800 bg-indigo-50/70 font-bold">
-                                  [ {getModoRespuestaBadgeLabel(t.tipo_control_input, t.config_input_json)} ]
+                                  [{' '}
+                                  {getModoRespuestaBadgeLabel(
+                                    t.tipo_control_input,
+                                    t.config_input_json,
+                                  )}{' '}
+                                  ]
                                 </td>
                               </tr>
                             ))}

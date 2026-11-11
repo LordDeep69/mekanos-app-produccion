@@ -1,7 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Sidebar Component - Enterprise Design
- * 
+ *
  * Estilo profesional, desplegable / colapsable de forma sutil y prémium.
  */
 
@@ -15,12 +15,10 @@ import {
   Boxes,
   Calendar,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   ClipboardList,
   Cpu,
   FileBarChart,
-  Gauge,
   HardDrive,
   Layers,
   LayoutGrid,
@@ -41,7 +39,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 interface NavSection {
   label: string;
@@ -89,9 +87,7 @@ const navSections: NavSection[] = [
   },
   {
     label: 'Análisis',
-    items: [
-      { title: 'Reportes', href: '/reportes', icon: FileBarChart },
-    ],
+    items: [{ title: 'Reportes', href: '/reportes', icon: FileBarChart }],
   },
   {
     label: 'Configuración',
@@ -107,14 +103,34 @@ const navSections: NavSection[] = [
         href: '/configuracion/catalogos',
         icon: HardDrive,
         children: [
-          { title: 'Tipos de Servicio y Protocolos', href: '/configuracion/catalogos/tipos-servicio', icon: Activity },
-          { title: 'Banco Universal de Actividades', href: '/configuracion/catalogos/actividades', icon: ClipboardList },
+          {
+            title: 'Tipos de Servicio y Protocolos',
+            href: '/configuracion/catalogos/tipos-servicio',
+            icon: Activity,
+          },
+          {
+            title: 'Banco Universal de Actividades',
+            href: '/configuracion/catalogos/actividades',
+            icon: ClipboardList,
+          },
           { title: 'Servicios Específicos', href: '/configuracion/catalogos/servicios', icon: Tag },
-          { title: 'Estados de Orden', href: '/configuracion/catalogos/estados', icon: CheckCircle2 },
-          { title: 'Pendientes Técnicos', href: '/configuracion/catalogos/pendientes', icon: ListTodo },
+          {
+            title: 'Estados de Orden',
+            href: '/configuracion/catalogos/estados',
+            icon: CheckCircle2,
+          },
+          {
+            title: 'Pendientes Técnicos',
+            href: '/configuracion/catalogos/pendientes',
+            icon: ListTodo,
+          },
         ],
       },
-      { title: 'Firmas Administrativas', href: '/configuracion/firmas-administrativas', icon: Building2 },
+      {
+        title: 'Firmas Administrativas',
+        href: '/configuracion/firmas-administrativas',
+        icon: Building2,
+      },
       { title: 'Cuentas de Email', href: '/configuracion/cuentas-email', icon: Mail },
       { title: 'Sistema', href: '/configuracion', icon: Settings2 },
     ],
@@ -124,27 +140,37 @@ const navSections: NavSection[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const { isCollapsed, toggle } = useSidebar();
-  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+  const [manualMenus, setManualMenus] = useState<string[]>([]);
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (
-      pathname === '/configuracion/catalogos' ||
-      pathname?.startsWith('/configuracion/catalogos/')
-    ) {
-      setExpandedMenus((prev) =>
-        prev.includes('/configuracion/catalogos') ? prev : [...prev, '/configuracion/catalogos']
-      );
-    }
-    if (pathname?.startsWith('/compras')) {
-      setExpandedMenus((prev) =>
-        prev.includes('/compras') ? prev : [...prev, '/compras']
-      );
-    }
-  }, [pathname]);
+  const autoExpandedHref =
+    pathname === '/configuracion/catalogos' || pathname?.startsWith('/configuracion/catalogos/')
+      ? '/configuracion/catalogos'
+      : pathname?.startsWith('/compras')
+        ? '/compras'
+        : null;
+
+  const isAutoDismissed =
+    autoExpandedHref !== null && dismissedKey === `${pathname}::${autoExpandedHref}`;
+
+  const expandedMenus =
+    autoExpandedHref && !isAutoDismissed && !manualMenus.includes(autoExpandedHref)
+      ? [...manualMenus, autoExpandedHref]
+      : manualMenus;
 
   const toggleMenu = (href: string) => {
-    setExpandedMenus((prev) =>
-      prev.includes(href) ? prev.filter((h) => h !== href) : [...prev, href]
+    if (href === autoExpandedHref) {
+      if (expandedMenus.includes(href)) {
+        setDismissedKey(`${pathname}::${href}`);
+        setManualMenus((prev) => prev.filter((h) => h !== href));
+      } else {
+        setDismissedKey(null);
+        setManualMenus((prev) => (prev.includes(href) ? prev : [...prev, href]));
+      }
+      return;
+    }
+    setManualMenus((prev) =>
+      prev.includes(href) ? prev.filter((h) => h !== href) : [...prev, href],
     );
   };
 
@@ -154,7 +180,7 @@ export function Sidebar() {
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 h-screen flex flex-col bg-slate-900 border-r border-slate-800/80 transition-all duration-300 ease-in-out select-none shadow-xl',
-        isCollapsed ? 'w-[72px]' : 'w-64'
+        isCollapsed ? 'w-[72px]' : 'w-64',
       )}
     >
       {/* Header con Logo y botón de alternancia */}
@@ -168,8 +194,12 @@ export function Sidebar() {
               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base font-bold text-white tracking-tight leading-tight">MEKANOS</h1>
-              <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Portal Admin</p>
+              <h1 className="text-base font-bold text-white tracking-tight leading-tight">
+                MEKANOS
+              </h1>
+              <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
+                Portal Admin
+              </p>
             </div>
           </Link>
           <button
@@ -208,7 +238,7 @@ export function Sidebar() {
       <nav
         className={cn(
           'flex-1 overflow-y-auto overflow-x-hidden py-3 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent',
-          isCollapsed ? 'px-2 space-y-3' : 'px-3 space-y-5'
+          isCollapsed ? 'px-2 space-y-3' : 'px-3 space-y-5',
         )}
       >
         {navSections.map((section, idx) => (
@@ -244,7 +274,7 @@ export function Sidebar() {
                             'w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-150',
                             isActive || isExpanded
                               ? 'bg-slate-800 text-blue-400 ring-1 ring-slate-700 shadow-sm'
-                              : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                              : 'text-slate-400 hover:bg-slate-800 hover:text-white',
                           )}
                           title={item.title}
                         >
@@ -254,7 +284,9 @@ export function Sidebar() {
                         {/* Flyout flotante con submenú al hacer hover */}
                         <div className="absolute left-full top-0 ml-3 w-56 bg-slate-900/95 backdrop-blur-md border border-slate-700/90 rounded-2xl shadow-2xl p-2 opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:pointer-events-auto transition-all duration-200 z-50 space-y-1">
                           <div className="px-3 py-1.5 border-b border-slate-800 mb-1">
-                            <span className="text-xs font-bold text-white tracking-wide">{item.title}</span>
+                            <span className="text-xs font-bold text-white tracking-wide">
+                              {item.title}
+                            </span>
                           </div>
                           {item.children!.map((child) => {
                             const isChildActive = pathname === child.href;
@@ -267,7 +299,7 @@ export function Sidebar() {
                                   'flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors',
                                   isChildActive
                                     ? 'bg-blue-600 text-white font-bold'
-                                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                    : 'text-slate-300 hover:bg-slate-800 hover:text-white',
                                 )}
                               >
                                 <ChildIcon className="h-3.5 w-3.5 shrink-0" />
@@ -288,7 +320,7 @@ export function Sidebar() {
                           'w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-150',
                           isActive
                             ? 'bg-gradient-to-br from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 ring-1 ring-blue-400/40'
-                            : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                            : 'text-slate-400 hover:bg-slate-800 hover:text-white',
                         )}
                         title={item.title}
                       >
@@ -318,7 +350,7 @@ export function Sidebar() {
                           'group w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
                           isActive || isExpanded
                             ? 'bg-slate-800 text-white'
-                            : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                            : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200',
                         )}
                       >
                         <span className="flex items-center gap-3">
@@ -327,7 +359,7 @@ export function Sidebar() {
                               'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
                               isActive || isExpanded
                                 ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-slate-800 text-slate-500 group-hover:text-slate-400'
+                                : 'bg-slate-800 text-slate-500 group-hover:text-slate-400',
                             )}
                           >
                             <Icon className="h-4 w-4" />
@@ -337,7 +369,7 @@ export function Sidebar() {
                         <ChevronRight
                           className={cn(
                             'h-4 w-4 text-slate-600 transition-transform duration-200',
-                            isExpanded && 'rotate-90'
+                            isExpanded && 'rotate-90',
                           )}
                         />
                       </button>
@@ -345,7 +377,7 @@ export function Sidebar() {
                       <div
                         className={cn(
                           'overflow-hidden transition-all duration-200',
-                          isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                          isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0',
                         )}
                       >
                         <div className="ml-5 mt-1 pl-4 border-l-2 border-slate-700/50 space-y-0.5">
@@ -360,7 +392,7 @@ export function Sidebar() {
                                   'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
                                   isChildActive
                                     ? 'bg-blue-500/10 text-blue-400 border-l-2 border-blue-400 -ml-[2px] pl-[14px]'
-                                    : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'
+                                    : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300',
                                 )}
                               >
                                 <ChildIcon className="h-3.5 w-3.5" />
@@ -382,13 +414,15 @@ export function Sidebar() {
                       'group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
                       isActive
                         ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/25'
-                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200',
                     )}
                   >
                     <div
                       className={cn(
                         'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
-                        isActive ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-500 group-hover:text-slate-400'
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-800 text-slate-500 group-hover:text-slate-400',
                       )}
                     >
                       <Icon className="h-4 w-4" />
@@ -398,7 +432,7 @@ export function Sidebar() {
                       <span
                         className={cn(
                           'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
-                          isActive ? 'bg-white/20 text-white' : 'bg-blue-500/10 text-blue-400'
+                          isActive ? 'bg-white/20 text-white' : 'bg-blue-500/10 text-blue-400',
                         )}
                       >
                         {item.badge}

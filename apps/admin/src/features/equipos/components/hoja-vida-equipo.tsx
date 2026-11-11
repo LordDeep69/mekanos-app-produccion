@@ -1,7 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Componente: Hoja de Vida y Trazabilidad Operativa del Equipo
- * 
+ *
  * Muestra la cronología técnica de intervenciones sobre la máquina:
  * preventivos realizados, correctivos específicos (batería, fugas, sensores, sellos),
  * mediciones críticas capturadas, técnicos responsables y acceso a informes PDF.
@@ -17,18 +17,13 @@ import {
   AlertCircle,
   AlertTriangle,
   Calendar,
-  CheckCircle2,
-  Clock,
   ExternalLink,
   FileText,
   Gauge,
   History,
   Layers,
-  Sparkles,
-  Timer,
   User,
   Wrench,
-  Zap
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTrazabilidadEquipo } from '../lib/equipos.service';
@@ -43,10 +38,11 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
   const intervenciones = data?.intervenciones || [];
 
   const totalPreventivos = intervenciones.filter(
-    (i) => i.tipos_servicio?.categoria === 'PREVENTIVO'
+    (i) => i.tipos_servicio?.categoria === 'PREVENTIVO',
   ).length;
   const totalCorrectivos = intervenciones.filter(
-    (i) => i.tipos_servicio?.categoria === 'CORRECTIVO' || i.tipos_servicio?.categoria === 'EMERGENCIA'
+    (i) =>
+      i.tipos_servicio?.categoria === 'CORRECTIVO' || i.tipos_servicio?.categoria === 'EMERGENCIA',
   ).length;
 
   return (
@@ -61,12 +57,16 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 Bitácora Cronológica de Intervenciones Técnicas
-                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-bold">
+                <Badge
+                  variant="outline"
+                  className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-bold"
+                >
                   {intervenciones.length} intervenciones
                 </Badge>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Línea de tiempo detallada con diagnósticos, actividades ejecutadas, mediciones de campo e informes PDF.
+                Línea de tiempo detallada con diagnósticos, actividades ejecutadas, mediciones de
+                campo e informes PDF.
               </p>
             </div>
           </div>
@@ -94,7 +94,9 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
         <div className="p-8 text-center bg-red-50 rounded-2xl border border-red-200 text-red-700">
           <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-500" />
           <p className="font-bold">Error al cargar la hoja de vida del equipo</p>
-          <p className="text-xs text-red-600 mt-1">{(error as Error)?.message || 'Error desconocido'}</p>
+          <p className="text-xs text-red-600 mt-1">
+            {(error as Error)?.message || 'Error desconocido'}
+          </p>
           <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-4 bg-white">
             Reintentar
           </Button>
@@ -102,21 +104,27 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
       ) : intervenciones.length === 0 ? (
         <div className="p-12 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
           <Wrench className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-          <p className="font-bold text-slate-700">No hay intervenciones registradas para este equipo</p>
+          <p className="font-bold text-slate-700">
+            No hay intervenciones registradas para este equipo
+          </p>
           <p className="text-xs text-slate-400 mt-1">
-            Cada vez que se ejecute una orden de servicio donde participe esta máquina, quedará grabada aquí su trazabilidad.
+            Cada vez que se ejecute una orden de servicio donde participe esta máquina, quedará
+            grabada aquí su trazabilidad.
           </p>
         </div>
       ) : (
         <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 sm:before:left-4 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
           {intervenciones.map((item) => {
             const fechaIntervencion = item.fecha_programada || item.fecha_creacion;
-            const docGen: any = item.informes?.[0]?.documentos_generados;
+            const docGen = item.informes?.[0]?.documentos_generados;
             const pdfDoc = Array.isArray(docGen)
-              ? (docGen[0]?.ruta_archivo || docGen[0]?.url_documento)
-              : (docGen?.ruta_archivo || docGen?.url_documento);
-            const tieneCorrectivosEspecificos = item.detalle_servicios_orden && item.detalle_servicios_orden.length > 0;
-            const esCorrectivo = item.tipos_servicio?.categoria === 'CORRECTIVO' || item.tipos_servicio?.categoria === 'EMERGENCIA';
+              ? docGen[0]?.ruta_archivo || docGen[0]?.url_documento
+              : docGen?.ruta_archivo || docGen?.url_documento;
+            const tieneCorrectivosEspecificos =
+              item.detalle_servicios_orden && item.detalle_servicios_orden.length > 0;
+            const esCorrectivo =
+              item.tipos_servicio?.categoria === 'CORRECTIVO' ||
+              item.tipos_servicio?.categoria === 'EMERGENCIA';
 
             return (
               <div key={item.id_orden_servicio} className="relative group">
@@ -124,7 +132,7 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
                 <div
                   className={cn(
                     'absolute -left-6 sm:-left-8 top-4 w-4 h-4 rounded-full border-4 border-white shadow-sm transition-transform group-hover:scale-125',
-                    esCorrectivo ? 'bg-orange-500' : 'bg-blue-600'
+                    esCorrectivo ? 'bg-orange-500' : 'bg-blue-600',
                   )}
                 />
 
@@ -142,7 +150,7 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
                             'font-bold text-xs',
                             esCorrectivo
                               ? 'bg-orange-50 text-orange-700 border-orange-200'
-                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200',
                           )}
                         >
                           {item.tipos_servicio.nombre_tipo}
@@ -165,7 +173,13 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
                         <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        <span>{formatDateSafe(fechaIntervencion, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                        <span>
+                          {formatDateSafe(fechaIntervencion, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
                       </div>
                       <Link
                         href={`/ordenes/${item.id_orden_servicio}`}
@@ -183,7 +197,8 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
                       <div className="flex items-center gap-1.5">
                         <Layers className="h-4 w-4 text-orange-600" />
                         <p className="text-xs font-black uppercase tracking-wider text-orange-900">
-                          Intervenciones Específicas Realizadas ({item.detalle_servicios_orden?.length})
+                          Intervenciones Específicas Realizadas (
+                          {item.detalle_servicios_orden?.length})
                         </p>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -205,21 +220,26 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
                   ) : null}
 
                   {/* Diagnóstico y Trabajo Realizado */}
-                  {(item.descripcion_inicial || item.diagnostico_tecnico || item.trabajo_realizado) && (
+                  {(item.descripcion_inicial ||
+                    item.diagnostico_tecnico ||
+                    item.trabajo_realizado) && (
                     <div className="text-xs space-y-1.5 bg-slate-50 p-3 rounded-xl">
                       {item.descripcion_inicial && (
                         <p className="text-slate-700">
-                          <strong className="text-slate-900">Motivo / Requerimiento:</strong> {item.descripcion_inicial}
+                          <strong className="text-slate-900">Motivo / Requerimiento:</strong>{' '}
+                          {item.descripcion_inicial}
                         </p>
                       )}
                       {item.diagnostico_tecnico && (
                         <p className="text-slate-700">
-                          <strong className="text-slate-900">Diagnóstico técnico:</strong> {item.diagnostico_tecnico}
+                          <strong className="text-slate-900">Diagnóstico técnico:</strong>{' '}
+                          {item.diagnostico_tecnico}
                         </p>
                       )}
                       {item.trabajo_realizado && (
                         <p className="text-slate-700">
-                          <strong className="text-slate-900">Trabajo realizado:</strong> {item.trabajo_realizado}
+                          <strong className="text-slate-900">Trabajo realizado:</strong>{' '}
+                          {item.trabajo_realizado}
                         </p>
                       )}
                     </div>
@@ -229,7 +249,8 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
                   {item.mediciones_servicio && item.mediciones_servicio.length > 0 && (
                     <div className="space-y-1.5">
                       <p className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
-                        <Gauge className="h-3.5 w-3.5 text-blue-500" /> Mediciones Registradas ({item.mediciones_servicio.length})
+                        <Gauge className="h-3.5 w-3.5 text-blue-500" /> Mediciones Registradas (
+                        {item.mediciones_servicio.length})
                       </p>
                       <div className="flex flex-wrap gap-2">
                         {item.mediciones_servicio.map((m) => (
@@ -239,7 +260,7 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
                               'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium',
                               m.es_critico || m.fuera_de_rango
                                 ? 'bg-red-50 text-red-700 border-red-200'
-                                : 'bg-slate-50 text-slate-700 border-slate-200'
+                                : 'bg-slate-50 text-slate-700 border-slate-200',
                             )}
                           >
                             <span>{m.parametros_medicion?.nombre_parametro}:</span>
@@ -261,7 +282,13 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
                       {item.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona ? (
                         <div className="flex items-center gap-1 text-slate-700 font-medium">
                           <User className="h-3.5 w-3.5 text-slate-400" />
-                          <span>Técnico: {item.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.nombre_completo}</span>
+                          <span>
+                            Técnico:{' '}
+                            {
+                              item.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona
+                                .nombre_completo
+                            }
+                          </span>
                         </div>
                       ) : (
                         <span className="text-slate-400">Sin técnico asignado</span>

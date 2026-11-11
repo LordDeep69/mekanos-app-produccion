@@ -8,7 +8,10 @@
 
 'use client';
 
-import { useComponentesStock } from '@/features/inventario/api/inventario-motor.service';
+import {
+  useComponentesStock,
+  type ComponenteStock,
+} from '@/features/inventario/api/inventario-motor.service';
 import { cn } from '@/lib/utils';
 import {
   AlertCircle,
@@ -43,29 +46,53 @@ import {
 
 const cop = (v: number) => `$${Math.round(v || 0).toLocaleString('es-CO')}`;
 const fecha = (v?: string | null) =>
-  v ? new Date(v).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  v
+    ? new Date(v).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—';
 
 /**
  * Infiere automáticamente la categoría del BOM analizando el nombre/descripción del artículo.
  */
-function inferirCategoriaDesdeComponente(c: any): string {
+function inferirCategoriaDesdeComponente(c: ComponenteStock): string {
   const texto = `${c.nombre || ''} ${c.referencia || ''} ${c.descripcion || ''}`.toLowerCase();
-  if (texto.includes('filtro') && (texto.includes('aceite') || texto.includes('oil'))) return 'FILTRO_ACEITE';
+  if (texto.includes('filtro') && (texto.includes('aceite') || texto.includes('oil')))
+    return 'FILTRO_ACEITE';
   if (
     texto.includes('filtro') &&
-    (texto.includes('combustible') || texto.includes('diesel') || texto.includes('diésel') || texto.includes('gasolina') || texto.includes('fuel'))
+    (texto.includes('combustible') ||
+      texto.includes('diesel') ||
+      texto.includes('diésel') ||
+      texto.includes('gasolina') ||
+      texto.includes('fuel'))
   )
     return 'FILTRO_COMBUSTIBLE';
-  if ((texto.includes('separador') || texto.includes('trampa')) && (texto.includes('agua') || texto.includes('water')))
-    return 'FILTRO_SEPARADOR_AGUA';
-  if (texto.includes('filtro') && (texto.includes('aire') || texto.includes('air'))) return 'FILTRO_AIRE';
   if (
-    (texto.includes('aceite') || texto.includes('lubricante') || texto.includes('deo') || texto.includes('rimula')) &&
-    (texto.includes('15w40') || texto.includes('10w30') || texto.includes('motor') || texto.includes('cárter') || texto.includes('carter'))
+    (texto.includes('separador') || texto.includes('trampa')) &&
+    (texto.includes('agua') || texto.includes('water'))
+  )
+    return 'FILTRO_SEPARADOR_AGUA';
+  if (texto.includes('filtro') && (texto.includes('aire') || texto.includes('air')))
+    return 'FILTRO_AIRE';
+  if (
+    (texto.includes('aceite') ||
+      texto.includes('lubricante') ||
+      texto.includes('deo') ||
+      texto.includes('rimula')) &&
+    (texto.includes('15w40') ||
+      texto.includes('10w30') ||
+      texto.includes('motor') ||
+      texto.includes('cárter') ||
+      texto.includes('carter'))
   )
     return 'LUBRICANTE_MOTOR';
-  if (texto.includes('refrigerante') || texto.includes('coolant') || texto.includes('anticongelante')) return 'REFRIGERANTE';
-  if (texto.includes('correa') || texto.includes('banda') || texto.includes('belt')) return 'CORREA';
+  if (
+    texto.includes('refrigerante') ||
+    texto.includes('coolant') ||
+    texto.includes('anticongelante')
+  )
+    return 'REFRIGERANTE';
+  if (texto.includes('correa') || texto.includes('banda') || texto.includes('belt'))
+    return 'CORREA';
   if (
     texto.includes('bateria') ||
     texto.includes('batería') ||
@@ -74,8 +101,10 @@ function inferirCategoriaDesdeComponente(c: any): string {
     texto.includes('willard')
   )
     return 'BATERIA';
-  if (texto.includes('sello') || texto.includes('empaquetadura') || texto.includes('retenedor')) return 'SELLO_MECANICO';
-  if (texto.includes('rodamiento') || texto.includes('balinera') || texto.includes('cojinete')) return 'RODAMIENTO';
+  if (texto.includes('sello') || texto.includes('empaquetadura') || texto.includes('retenedor'))
+    return 'SELLO_MECANICO';
+  if (texto.includes('rodamiento') || texto.includes('balinera') || texto.includes('cojinete'))
+    return 'RODAMIENTO';
   return 'REPUESTO_GENERAL';
 }
 
@@ -87,7 +116,10 @@ function StockBadge({ item }: { item: BomItem }) {
           <Package className="h-3 w-3 text-blue-600 shrink-0" /> Bajo Pedido / Cotizar (0 en bodega)
         </span>
         <span className="text-[10px] font-medium text-slate-500">
-          Referencia para cotizar: <strong>{item.cantidad_requerida} {item.unidad}</strong>
+          Referencia para cotizar:{' '}
+          <strong>
+            {item.cantidad_requerida} {item.unidad}
+          </strong>
         </span>
       </div>
     );
@@ -98,7 +130,8 @@ function StockBadge({ item }: { item: BomItem }) {
       <div className="flex flex-col gap-1 items-start">
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300 whitespace-nowrap shadow-2xs">
           <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
-          Stock Parcial: {item.stock_actual} de {item.cantidad_requerida} {item.unidad} (Faltan {item.faltante})
+          Stock Parcial: {item.stock_actual} de {item.cantidad_requerida} {item.unidad} (Faltan{' '}
+          {item.faltante})
         </span>
         {item.bodegas.length > 0 && (
           <div className="flex flex-wrap gap-1">
@@ -124,7 +157,7 @@ function StockBadge({ item }: { item: BomItem }) {
           'inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold border whitespace-nowrap shadow-2xs',
           item.estado_stock === 'BAJO'
             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            : 'bg-emerald-50 text-emerald-800 border-emerald-200',
         )}
       >
         <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
@@ -162,7 +195,7 @@ function ModalVincularBom({
   const [busqueda, setBusqueda] = useState('');
   const [debounced, setDebounced] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [seleccionado, setSeleccionado] = useState<any | null>(null);
+  const [seleccionado, setSeleccionado] = useState<ComponenteStock | null>(null);
   const [categoria, setCategoria] = useState('FILTRO_ACEITE');
   const [rolRepuesto, setRolRepuesto] = useState<RolRepuestoBom>('TITULAR');
   const [cantidad, setCantidad] = useState('1');
@@ -189,7 +222,7 @@ function ModalVincularBom({
   const { data, isLoading } = useComponentesStock({ busqueda: debounced || undefined, limit: 12 });
   const resultados = useMemo(() => data?.data || [], [data]);
 
-  const handleSeleccionarArticulo = (c: any) => {
+  const handleSeleccionarArticulo = (c: ComponenteStock) => {
     setSeleccionado(c);
     setShowDropdown(false);
     // Inferencia inteligente de aplicación
@@ -225,8 +258,9 @@ function ModalVincularBom({
       });
       toast.success('Repuesto vinculado al BOM del equipo');
       onClose();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'No se pudo vincular el repuesto');
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      setError(apiErr?.response?.data?.message || 'No se pudo vincular el repuesto');
     }
   };
 
@@ -243,11 +277,19 @@ function ModalVincularBom({
               <Link2 className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Vincular Referencia Técnica al BOM</h2>
-              <p className="text-xs text-slate-500">Relación de referenciación técnica y comercial (no exige ni descuenta stock físico)</p>
+              <h2 className="text-base font-bold text-slate-900">
+                Vincular Referencia Técnica al BOM
+              </h2>
+              <p className="text-xs text-slate-500">
+                Relación de referenciación técnica y comercial (no exige ni descuenta stock físico)
+              </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -262,27 +304,39 @@ function ModalVincularBom({
             )}
 
             <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-[11px] text-blue-900">
-              <strong>Referenciación Técnica y Comercial:</strong> Puede vincular cualquier artículo del Catálogo Maestro aunque hoy tenga <strong>0 stock</strong> en bodega, para saber qué referencia cotizar o comprar cuando se abra la ficha del equipo.
+              <strong>Referenciación Técnica y Comercial:</strong> Puede vincular cualquier artículo
+              del Catálogo Maestro aunque hoy tenga <strong>0 stock</strong> en bodega, para saber
+              qué referencia cotizar o comprar cuando se abra la ficha del equipo.
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">Artículo del Catálogo Maestro *</label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Artículo del Catálogo Maestro *
+              </label>
               {seleccionado ? (
                 <div className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <span className="font-mono text-xs font-bold text-slate-800 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300/60">
                       {seleccionado.codigo || `ART-${seleccionado.id_componente}`}
                     </span>
-                    <p className="text-sm font-bold text-slate-900 mt-1.5">{seleccionado.nombre || seleccionado.referencia}</p>
+                    <p className="text-sm font-bold text-slate-900 mt-1.5">
+                      {seleccionado.nombre || seleccionado.referencia}
+                    </p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Ref: {seleccionado.referencia} • Marca: {seleccionado.marca || 'N/A'} • Costo ref:{' '}
-                      <strong>{cop(Number(seleccionado.precio_compra || 0))}</strong> • En bodega:{' '}
-                      <strong>{seleccionado.stock_actual} {seleccionado.unidad || 'UND'}</strong>
+                      Ref: {seleccionado.referencia} • Marca: {seleccionado.marca || 'N/A'} • Costo
+                      ref: <strong>{cop(Number(seleccionado.precio_compra || 0))}</strong> • En
+                      bodega:{' '}
+                      <strong>
+                        {seleccionado.stock_actual} {seleccionado.unidad || 'UND'}
+                      </strong>
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => { setSeleccionado(null); setBusqueda(''); }}
+                    onClick={() => {
+                      setSeleccionado(null);
+                      setBusqueda('');
+                    }}
                     className="px-2.5 py-1 bg-white hover:bg-slate-100 text-blue-700 border border-slate-200 rounded-lg text-xs font-semibold shrink-0 cursor-pointer"
                   >
                     Cambiar
@@ -295,7 +349,10 @@ function ModalVincularBom({
                     type="text"
                     placeholder="Buscar por código ART-2026, referencia o descripción (Ej: Filtro, Aceite)..."
                     value={busqueda}
-                    onChange={(e) => { setBusqueda(e.target.value); setShowDropdown(true); }}
+                    onChange={(e) => {
+                      setBusqueda(e.target.value);
+                      setShowDropdown(true);
+                    }}
                     onFocus={() => setShowDropdown(true)}
                     className={cn(inputCls, 'pl-10')}
                   />
@@ -306,9 +363,11 @@ function ModalVincularBom({
                           <Loader2 className="h-4 w-4 animate-spin" /> Consultando catálogo...
                         </div>
                       ) : resultados.length === 0 ? (
-                        <p className="p-4 text-xs text-slate-500 text-center font-medium">No se encontraron artículos</p>
+                        <p className="p-4 text-xs text-slate-500 text-center font-medium">
+                          No se encontraron artículos
+                        </p>
                       ) : (
-                        resultados.map((c: any) => {
+                        resultados.map((c) => {
                           const ya = yaVinculados.has(c.id_componente);
                           return (
                             <button
@@ -323,14 +382,30 @@ function ModalVincularBom({
                                   <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                                     {c.codigo || `ART-${c.id_componente}`}
                                   </span>
-                                  <p className="text-xs font-bold text-slate-900 truncate">{c.nombre || c.referencia}</p>
+                                  <p className="text-xs font-bold text-slate-900 truncate">
+                                    {c.nombre || c.referencia}
+                                  </p>
                                 </div>
                                 <p className="text-[11px] text-slate-500 mt-0.5">
-                                  REF: {c.referencia} • Marca: {c.marca || 'S/M'} • Costo: {cop(Number(c.precio_compra || 0))}
+                                  REF: {c.referencia} • Marca: {c.marca || 'S/M'} • Costo:{' '}
+                                  {cop(Number(c.precio_compra || 0))}
                                 </p>
                               </div>
-                              <span className={cn('text-xs font-bold shrink-0 whitespace-nowrap', ya ? 'text-slate-500' : c.stock_actual > 0 ? 'text-emerald-700' : 'text-blue-700')}>
-                                {ya ? 'Ya vinculado' : c.stock_actual > 0 ? `En bodega: ${c.stock_actual} ${c.unidad || 'UND'}` : 'Bajo pedido (0 en bodega)'}
+                              <span
+                                className={cn(
+                                  'text-xs font-bold shrink-0 whitespace-nowrap',
+                                  ya
+                                    ? 'text-slate-500'
+                                    : c.stock_actual > 0
+                                      ? 'text-emerald-700'
+                                      : 'text-blue-700',
+                                )}
+                              >
+                                {ya
+                                  ? 'Ya vinculado'
+                                  : c.stock_actual > 0
+                                    ? `En bodega: ${c.stock_actual} ${c.unidad || 'UND'}`
+                                    : 'Bajo pedido (0 en bodega)'}
                               </span>
                             </button>
                           );
@@ -344,7 +419,9 @@ function ModalVincularBom({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Aplicación en la máquina *</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Aplicación en la máquina *
+                </label>
                 <EamSelect
                   value={categoria}
                   onChange={(val) => setCategoria(val)}
@@ -353,7 +430,9 @@ function ModalVincularBom({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Rol en el Kit del Equipo *</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Rol en el Kit del Equipo *
+                </label>
                 <EamSelect
                   value={rolRepuesto}
                   onChange={(val) => setRolRepuesto(val as RolRepuestoBom)}
@@ -371,26 +450,54 @@ function ModalVincularBom({
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Cantidad por servicio * {seleccionado?.unidad ? `(${seleccionado.unidad})` : ''}
                 </label>
-                <input type="number" min="0.01" step="any" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className={inputCls} required />
+                <input
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  value={cantidad}
+                  onChange={(e) => setCantidad(e.target.value)}
+                  className={inputCls}
+                  required
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Frecuencia de cambio (horas) <span className="text-slate-400 normal-case font-medium">— opc.</span>
+                  Frecuencia de cambio (horas){' '}
+                  <span className="text-slate-400 normal-case font-medium">— opc.</span>
                 </label>
-                <input type="number" min="1" step="1" placeholder="Ej: 250" value={frecuencia} onChange={(e) => setFrecuencia(e.target.value)} className={inputCls} />
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Ej: 250"
+                  value={frecuencia}
+                  onChange={(e) => setFrecuencia(e.target.value)}
+                  className={inputCls}
+                />
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                Notas técnicas <span className="text-slate-400 normal-case font-medium">— opcional</span>
+                Notas técnicas{' '}
+                <span className="text-slate-400 normal-case font-medium">— opcional</span>
               </label>
-              <input type="text" placeholder="Ej: Cárter 30 L (≈ 7.9 GAL), SAE 15W40" value={notas} onChange={(e) => setNotas(e.target.value)} className={inputCls} />
+              <input
+                type="text"
+                placeholder="Ej: Cárter 30 L (≈ 7.9 GAL), SAE 15W40"
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+                className={inputCls}
+              />
             </div>
           </div>
 
           <div className="px-5 py-3 bg-slate-50/90 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+            >
               Cancelar
             </button>
             <button
@@ -398,7 +505,11 @@ function ModalVincularBom({
               disabled={vincular.isPending || !seleccionado}
               className="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              {vincular.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+              {vincular.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Link2 className="h-3.5 w-3.5" />
+              )}
               Vincular al BOM
             </button>
           </div>
@@ -423,7 +534,9 @@ function ModalEditarBom({
   const [categoria, setCategoria] = useState(item.categoria_aplicacion || 'REPUESTO_GENERAL');
   const [rolRepuesto, setRolRepuesto] = useState<RolRepuestoBom>(item.rol_repuesto || 'TITULAR');
   const [cantidad, setCantidad] = useState(String(item.cantidad_requerida || 1));
-  const [frecuencia, setFrecuencia] = useState(item.frecuencia_cambio_horas ? String(item.frecuencia_cambio_horas) : '');
+  const [frecuencia, setFrecuencia] = useState(
+    item.frecuencia_cambio_horas ? String(item.frecuencia_cambio_horas) : '',
+  );
   const [notas, setNotas] = useState(item.notas_tecnicas || '');
   const [error, setError] = useState<string | null>(null);
   const actualizar = useActualizarBomEquipo(idEquipo);
@@ -455,8 +568,9 @@ function ModalEditarBom({
       });
       toast.success('Repuesto del BOM actualizado correctamente');
       onClose();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'No se pudo actualizar el repuesto');
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      setError(apiErr?.response?.data?.message || 'No se pudo actualizar el repuesto');
     }
   };
 
@@ -474,10 +588,16 @@ function ModalEditarBom({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">Editar Especificación en BOM</h2>
-              <p className="text-xs text-slate-500">Ajusta aplicación, cantidad por servicio, frecuencia o notas de este repuesto</p>
+              <p className="text-xs text-slate-500">
+                Ajusta aplicación, cantidad por servicio, frecuencia o notas de este repuesto
+              </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -506,7 +626,9 @@ function ModalEditarBom({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Aplicación en la máquina *</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Aplicación en la máquina *
+                </label>
                 <EamSelect
                   value={categoria}
                   onChange={(val) => setCategoria(val)}
@@ -515,7 +637,9 @@ function ModalEditarBom({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Rol en el Kit del Equipo *</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Rol en el Kit del Equipo *
+                </label>
                 <EamSelect
                   value={rolRepuesto}
                   onChange={(val) => setRolRepuesto(val as RolRepuestoBom)}
@@ -533,26 +657,54 @@ function ModalEditarBom({
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Cantidad por servicio * ({item.unidad})
                 </label>
-                <input type="number" min="0.01" step="any" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className={inputCls} required />
+                <input
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  value={cantidad}
+                  onChange={(e) => setCantidad(e.target.value)}
+                  className={inputCls}
+                  required
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Frecuencia de cambio (horas) <span className="text-slate-400 normal-case font-medium">— opc.</span>
+                  Frecuencia de cambio (horas){' '}
+                  <span className="text-slate-400 normal-case font-medium">— opc.</span>
                 </label>
-                <input type="number" min="1" step="1" placeholder="Ej: 250" value={frecuencia} onChange={(e) => setFrecuencia(e.target.value)} className={inputCls} />
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Ej: 250"
+                  value={frecuencia}
+                  onChange={(e) => setFrecuencia(e.target.value)}
+                  className={inputCls}
+                />
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                Notas técnicas <span className="text-slate-400 normal-case font-medium">— opcional</span>
+                Notas técnicas{' '}
+                <span className="text-slate-400 normal-case font-medium">— opcional</span>
               </label>
-              <input type="text" placeholder="Ej: Cárter Doosan 30 L (≈ 7.9 GAL), SAE 15W40" value={notas} onChange={(e) => setNotas(e.target.value)} className={inputCls} />
+              <input
+                type="text"
+                placeholder="Ej: Cárter Doosan 30 L (≈ 7.9 GAL), SAE 15W40"
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+                className={inputCls}
+              />
             </div>
           </div>
 
           <div className="px-5 py-3 bg-slate-50/90 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+            >
               Cancelar
             </button>
             <button
@@ -560,7 +712,11 @@ function ModalEditarBom({
               disabled={actualizar.isPending}
               className="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              {actualizar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
+              {actualizar.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Pencil className="h-3.5 w-3.5" />
+              )}
               Guardar Cambios
             </button>
           </div>
@@ -591,13 +747,19 @@ export function EquipoRepuestosTab({
   const [aDesvincular, setADesvincular] = useState<BomItem | null>(null);
   const desvincular = useDesvincularBomEquipo(idEquipo);
 
-  const bom = ficha?.repuestos_compatibles ?? [];
+  const bom = useMemo(() => ficha?.repuestos_compatibles ?? [], [ficha?.repuestos_compatibles]);
   const instalados = ficha?.repuestos_instalados ?? [];
   const yaVinculados = useMemo(() => new Set(bom.map((b) => b.id_componente)), [bom]);
 
   // Indicadores de Referenciación Técnica y Comercial (Zero-Stress)
-  const bomTitulares = useMemo(() => bom.filter((b) => b.rol_repuesto !== 'ALTERNATIVO').length, [bom]);
-  const bomAlternativos = useMemo(() => bom.filter((b) => b.rol_repuesto === 'ALTERNATIVO').length, [bom]);
+  const bomTitulares = useMemo(
+    () => bom.filter((b) => b.rol_repuesto !== 'ALTERNATIVO').length,
+    [bom],
+  );
+  const bomAlternativos = useMemo(
+    () => bom.filter((b) => b.rol_repuesto === 'ALTERNATIVO').length,
+    [bom],
+  );
   const bomEnBodega = useMemo(() => bom.filter((b) => b.stock_actual > 0).length, [bom]);
   const bomBajoPedido = useMemo(() => bom.filter((b) => b.stock_actual <= 0).length, [bom]);
 
@@ -613,7 +775,10 @@ export function EquipoRepuestosTab({
       <div className="p-8 text-center bg-red-50 rounded-2xl border border-red-200 text-red-700">
         <AlertCircle className="h-8 w-8 mx-auto mb-2" />
         <p className="font-bold">No se pudo cargar el expediente logístico del activo</p>
-        <button onClick={onRetry} className="mt-3 px-3 py-1.5 text-xs font-semibold bg-white border border-red-200 rounded-lg hover:bg-red-100 cursor-pointer">
+        <button
+          onClick={onRetry}
+          className="mt-3 px-3 py-1.5 text-xs font-semibold bg-white border border-red-200 rounded-lg hover:bg-red-100 cursor-pointer"
+        >
           Reintentar
         </button>
       </div>
@@ -626,8 +791,9 @@ export function EquipoRepuestosTab({
       await desvincular.mutateAsync(aDesvincular.id_componente_equipo);
       toast.success('Repuesto desvinculado del BOM');
       setADesvincular(null);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'No se pudo desvincular el repuesto');
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      toast.error(apiErr?.response?.data?.message || 'No se pudo desvincular el repuesto');
     }
   };
 
@@ -671,7 +837,8 @@ export function EquipoRepuestosTab({
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Catálogo de repuestos e insumos homologados para cotización, compra y mantenimiento de este activo (consulta de stock WMS en vivo sin exigencia de inventario físico)
+              Catálogo de repuestos e insumos homologados para cotización, compra y mantenimiento de
+              este activo (consulta de stock WMS en vivo sin exigencia de inventario físico)
             </p>
           </div>
           <button
@@ -687,9 +854,12 @@ export function EquipoRepuestosTab({
         {bom.length === 0 ? (
           <div className="text-center py-10 px-4 text-slate-500">
             <Package className="h-11 w-11 mx-auto mb-2.5 text-slate-300" />
-            <p className="font-semibold text-slate-700 text-sm">Este equipo aún no tiene referencias técnicas homologadas</p>
+            <p className="font-semibold text-slate-700 text-sm">
+              Este equipo aún no tiene referencias técnicas homologadas
+            </p>
             <p className="text-xs mt-0.5 max-w-md mx-auto">
-              Vincule filtros, lubricantes, correas y baterías del Catálogo Maestro (con o sin stock actual) para saber qué cotizar o sugerir al abrir una Orden de Servicio.
+              Vincule filtros, lubricantes, correas y baterías del Catálogo Maestro (con o sin stock
+              actual) para saber qué cotizar o sugerir al abrir una Orden de Servicio.
             </p>
           </div>
         ) : (
@@ -709,7 +879,10 @@ export function EquipoRepuestosTab({
                 {bom.map((b) => {
                   const esAlt = b.rol_repuesto === 'ALTERNATIVO';
                   return (
-                    <tr key={b.id_componente_equipo} className="hover:bg-slate-50/70 transition-colors align-top">
+                    <tr
+                      key={b.id_componente_equipo}
+                      className="hover:bg-slate-50/70 transition-colors align-top"
+                    >
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 whitespace-nowrap">
@@ -718,7 +891,9 @@ export function EquipoRepuestosTab({
                           <span className="text-sm font-bold text-slate-900">{b.descripcion}</span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                          {b.referencia_fabricante ? `Ref: ${b.referencia_fabricante}` : 'Ref: Estándar'}
+                          {b.referencia_fabricante
+                            ? `Ref: ${b.referencia_fabricante}`
+                            : 'Ref: Estándar'}
                           {b.marca ? ` • Marca: ${b.marca}` : ''}
                           {b.notas_tecnicas ? ` • ${b.notas_tecnicas}` : ''}
                         </p>
@@ -733,24 +908,33 @@ export function EquipoRepuestosTab({
                               'inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border whitespace-nowrap',
                               esAlt
                                 ? 'bg-violet-50 text-violet-800 border-violet-200'
-                                : 'bg-blue-50 text-blue-800 border-blue-200'
+                                : 'bg-blue-50 text-blue-800 border-blue-200',
                             )}
                           >
                             {esAlt ? '⇄ Homólogo' : '★ Titular'}
                           </span>
                         </div>
                         {b.frecuencia_cambio_horas && (
-                          <p className="text-[10px] text-slate-400 mt-1 whitespace-nowrap">Cada {b.frecuencia_cambio_horas.toLocaleString('es-CO')} hrs</p>
+                          <p className="text-[10px] text-slate-400 mt-1 whitespace-nowrap">
+                            Cada {b.frecuencia_cambio_horas.toLocaleString('es-CO')} hrs
+                          </p>
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-right text-sm font-bold text-slate-900 whitespace-nowrap">
-                        {b.cantidad_requerida} <span className="text-[10px] font-semibold text-slate-500">{b.unidad}</span>
+                        {b.cantidad_requerida}{' '}
+                        <span className="text-[10px] font-semibold text-slate-500">{b.unidad}</span>
                       </td>
-                      <td className="px-4 py-3.5"><StockBadge item={b} /></td>
+                      <td className="px-4 py-3.5">
+                        <StockBadge item={b} />
+                      </td>
                       <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                        <div className="text-sm font-mono font-bold text-slate-800">{cop(b.precio_compra)}</div>
+                        <div className="text-sm font-mono font-bold text-slate-800">
+                          {cop(b.precio_compra)}
+                        </div>
                         {b.precio_venta && b.precio_venta > 0 ? (
-                          <div className="text-[10px] font-mono text-emerald-700">Venta: {cop(b.precio_venta)}</div>
+                          <div className="text-[10px] font-mono text-emerald-700">
+                            Venta: {cop(b.precio_venta)}
+                          </div>
                         ) : (
                           <div className="text-[10px] text-slate-400">Costo ref.</div>
                         )}
@@ -816,15 +1000,21 @@ export function EquipoRepuestosTab({
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Consolidado automático desde las Órdenes de Servicio ejecutadas sobre este activo (Despachos WMS, Compras Directas y Suministros del Cliente)
+            Consolidado automático desde las Órdenes de Servicio ejecutadas sobre este activo
+            (Despachos WMS, Compras Directas y Suministros del Cliente)
           </p>
         </div>
 
         {instalados.length === 0 ? (
           <div className="text-center py-10 px-4 text-slate-500">
             <Package className="h-11 w-11 mx-auto mb-2.5 text-slate-300" />
-            <p className="font-semibold text-slate-700 text-sm">Sin repuestos imputados a este equipo</p>
-            <p className="text-xs mt-0.5">Los despachos o registros hechos en sus Órdenes de Servicio aparecerán aquí automáticamente.</p>
+            <p className="font-semibold text-slate-700 text-sm">
+              Sin repuestos imputados a este equipo
+            </p>
+            <p className="text-xs mt-0.5">
+              Los despachos o registros hechos en sus Órdenes de Servicio aparecerán aquí
+              automáticamente.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -842,8 +1032,13 @@ export function EquipoRepuestosTab({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {instalados.map((r) => (
-                  <tr key={r.id_componente_usado} className="hover:bg-slate-50/70 transition-colors align-top">
-                    <td className="px-4 py-3.5 text-xs text-slate-600 whitespace-nowrap">{fecha(r.fecha_uso)}</td>
+                  <tr
+                    key={r.id_componente_usado}
+                    className="hover:bg-slate-50/70 transition-colors align-top"
+                  >
+                    <td className="px-4 py-3.5 text-xs text-slate-600 whitespace-nowrap">
+                      {fecha(r.fecha_uso)}
+                    </td>
                     <td className="px-4 py-3.5">
                       <Link
                         href={`/ordenes/${r.id_orden_servicio}`}
@@ -863,11 +1058,15 @@ export function EquipoRepuestosTab({
                             {r.sku || `ART-${r.id_componente}`}
                           </Link>
                         ) : (
-                          <span className="font-mono text-[10px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">MANUAL</span>
+                          <span className="font-mono text-[10px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                            MANUAL
+                          </span>
                         )}
                         <span className="text-sm font-bold text-slate-900">{r.descripcion}</span>
                       </div>
-                      {r.marca && <p className="text-[11px] text-slate-500 mt-0.5">Marca: {r.marca}</p>}
+                      {r.marca && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">Marca: {r.marca}</p>
+                      )}
                     </td>
                     <td className="px-4 py-3.5">
                       {r.origen_componente === 'BODEGA' ? (
@@ -897,13 +1096,18 @@ export function EquipoRepuestosTab({
                           KARDEX #{r.id_movimiento_inventario}
                         </span>
                       ) : r.origen_componente === 'CLIENTE' ? (
-                        <span className="text-[11px] text-violet-700 font-medium whitespace-nowrap">Trazabilidad técnica (Sin costo Mekanos)</span>
+                        <span className="text-[11px] text-violet-700 font-medium whitespace-nowrap">
+                          Trazabilidad técnica (Sin costo Mekanos)
+                        </span>
                       ) : (
-                        <span className="text-[11px] text-slate-500 italic whitespace-nowrap">Sin descuento de stock WMS</span>
+                        <span className="text-[11px] text-slate-500 italic whitespace-nowrap">
+                          Sin descuento de stock WMS
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-right text-sm font-bold text-slate-900 whitespace-nowrap">
-                      {r.cantidad} <span className="text-[10px] font-semibold text-slate-500">{r.unidad}</span>
+                      {r.cantidad}{' '}
+                      <span className="text-[10px] font-semibold text-slate-500">{r.unidad}</span>
                     </td>
                     <td className="px-4 py-3.5 text-right text-sm font-mono font-bold text-emerald-800 whitespace-nowrap">
                       {r.origen_componente === 'CLIENTE' ? (
@@ -921,7 +1125,11 @@ export function EquipoRepuestosTab({
       </div>
 
       {showVincular && (
-        <ModalVincularBom idEquipo={idEquipo} yaVinculados={yaVinculados} onClose={() => setShowVincular(false)} />
+        <ModalVincularBom
+          idEquipo={idEquipo}
+          yaVinculados={yaVinculados}
+          onClose={() => setShowVincular(false)}
+        />
       )}
 
       {aEditar && (
@@ -930,7 +1138,10 @@ export function EquipoRepuestosTab({
 
       {aDesvincular && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs" onClick={() => setADesvincular(null)} />
+          <div
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs"
+            onClick={() => setADesvincular(null)}
+          />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 overflow-hidden">
             <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200">
               <div className="p-2.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-200">
@@ -940,15 +1151,23 @@ export function EquipoRepuestosTab({
             </div>
             <div className="p-5 space-y-4">
               <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
-                <span className="font-mono text-[10px] font-bold text-slate-500">{aDesvincular.sku}</span>
+                <span className="font-mono text-[10px] font-bold text-slate-500">
+                  {aDesvincular.sku}
+                </span>
                 <p className="text-sm font-bold text-slate-900">{aDesvincular.descripcion}</p>
                 <p className="text-xs text-slate-500">{aDesvincular.aplicacion_label}</p>
               </div>
               <p className="text-xs text-slate-600">
-                El artículo dejará de sugerirse como compatible con esta máquina. No se modifica el inventario ni los consumos ya registrados.
+                El artículo dejará de sugerirse como compatible con esta máquina. No se modifica el
+                inventario ni los consumos ya registrados.
               </p>
               <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
-                <button type="button" onClick={() => setADesvincular(null)} disabled={desvincular.isPending} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => setADesvincular(null)}
+                  disabled={desvincular.isPending}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
                   Cancelar
                 </button>
                 <button
@@ -957,7 +1176,11 @@ export function EquipoRepuestosTab({
                   disabled={desvincular.isPending}
                   className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
-                  {desvincular.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  {desvincular.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
                   Desvincular
                 </button>
               </div>

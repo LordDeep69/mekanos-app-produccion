@@ -15,7 +15,6 @@ import '../errors/user_friendly_error.dart';
 import 'connectivity_service.dart';
 import 'offline_sync_service.dart';
 import 'sse/sse_event_reader.dart';
-import 'sync_notification_service.dart';
 import 'sync_progress.dart';
 
 /// ✅ 24-OCT-2026: Compresión previa a la subida.
@@ -75,14 +74,12 @@ final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
   final apiClient = ref.watch(apiClientProvider);
   final connectivity = ref.watch(connectivityServiceProvider);
   final offlineSync = ref.watch(offlineSyncServiceProvider);
-  final notificationService = ref.watch(syncNotificationServiceProvider);
   final progressNotifier = ref.watch(syncProgressProvider.notifier);
   return SyncUploadService(
     db,
     apiClient.dio,
     connectivity,
     offlineSync,
-    notificationService,
     progressNotifier,
   );
 });
@@ -122,7 +119,6 @@ class SyncUploadService {
   final Dio _apiClient;
   final ConnectivityService _connectivity;
   final OfflineSyncService _offlineSync;
-  final SyncNotificationService _notificationService;
   final SyncProgressNotifier _progressNotifier;
 
   SyncUploadService(
@@ -130,7 +126,6 @@ class SyncUploadService {
     this._apiClient,
     this._connectivity,
     this._offlineSync,
-    this._notificationService,
     this._progressNotifier,
   );
 
@@ -215,7 +210,7 @@ class SyncUploadService {
       // Si las incluimos aquí, aparecen DUPLICADAS (checklist vacío + mediciones)
       final actividades = await _db.getActividadesByOrden(idOrdenLocal);
 
-      dynamic _decodeRespJson(String? raw) {
+      dynamic decodeRespJson(String? raw) {
         if (raw == null || raw.trim().isEmpty) return null;
         try {
           return jsonDecode(raw);
@@ -248,7 +243,7 @@ class SyncUploadService {
               a.observacionTecnico,
             ),
             if (a.respuestaJson != null && a.respuestaJson!.isNotEmpty)
-              'respuestaJson': _decodeRespJson(a.respuestaJson),
+              'respuestaJson': decodeRespJson(a.respuestaJson),
           });
         }
 
@@ -287,7 +282,7 @@ class SyncUploadService {
                 ),
                 'idOrdenEquipo': a.idOrdenEquipo,
                 if (a.respuestaJson != null && a.respuestaJson!.isNotEmpty)
-                  'respuestaJson': _decodeRespJson(a.respuestaJson),
+                  'respuestaJson': decodeRespJson(a.respuestaJson),
               },
             )
             .toList();
@@ -307,7 +302,7 @@ class SyncUploadService {
                   a.observacionTecnico,
                 ),
                 if (a.respuestaJson != null && a.respuestaJson!.isNotEmpty)
-                  'respuestaJson': _decodeRespJson(a.respuestaJson),
+                  'respuestaJson': decodeRespJson(a.respuestaJson),
               },
             )
             .toList();
@@ -1505,8 +1500,8 @@ class SyncUploadService {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         _progressNotifier.completarPaso(SyncStep.validando);
-        _progressNotifier.avanzar(SyncStep.actualizando_estado);
-        _progressNotifier.completarPaso(SyncStep.actualizando_estado);
+        _progressNotifier.avanzar(SyncStep.actualizandoEstado);
+        _progressNotifier.completarPaso(SyncStep.actualizandoEstado);
 
         Map<String, dynamic>? datos;
         if (response.data is Map) {

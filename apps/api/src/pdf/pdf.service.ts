@@ -1,13 +1,13 @@
 /**
  * PDF Service - MEKANOS S.A.S
- * 
+ *
  * Generación de PDFs profesionales con Puppeteer + Templates HTML
- * 
+ *
  * Templates disponibles:
  * - GENERADOR_A: Preventivo Tipo A para Generadores
  * - GENERADOR_B: Preventivo Tipo B (Cambio de filtros)
  * - BOMBA_A: Preventivo para Bombas
- * 
+ *
  * Colores MEKANOS:
  * #244673 - Azul Oscuro (principal)
  * #3290A6 - Azul Claro (secundario)
@@ -15,9 +15,16 @@
  * #9EC23D - Verde Claro (destacados)
  */
 
-import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import * as path from 'path';
 import * as puppeteer from 'puppeteer';
 import {
   DatosCorrectivoOrdenPDF,
@@ -34,7 +41,16 @@ import {
 } from './templates';
 import { DatosEstructuradosCorrectivoPorEquipo } from './templates/tipo-correctivo.template';
 
-export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'UNIVERSAL_EAM' | 'CORRECTIVO' | 'COTIZACION' | 'PROPUESTA_CORRECTIVO' | 'REMISION' | 'ORDEN_COMPRA';
+export type TipoInforme =
+  | 'GENERADOR_A'
+  | 'GENERADOR_B'
+  | 'BOMBA_A'
+  | 'UNIVERSAL_EAM'
+  | 'CORRECTIVO'
+  | 'COTIZACION'
+  | 'PROPUESTA_CORRECTIVO'
+  | 'REMISION'
+  | 'ORDEN_COMPRA';
 
 export interface GenerarPDFOptions {
   tipoInforme: TipoInforme;
@@ -69,7 +85,6 @@ export interface OrdenPdfData {
 export class PdfService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PdfService.name);
   private browser: puppeteer.Browser | null = null;
-  private browserInitPromise: Promise<void> | null = null;
 
   /**
    * ✅ FIX 23-ENE-2026: NO pre-inicializar browser para ahorrar memoria
@@ -86,7 +101,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    */
   async generarPDF(options: GenerarPDFOptions): Promise<PDFResult> {
     const startTime = Date.now();
-    this.logger.log(`🖨️ Generando PDF tipo ${options.tipoInforme} para orden ${options.datos.numeroOrden}`);
+    this.logger.log(
+      `🖨️ Generando PDF tipo ${options.tipoInforme} para orden ${options.datos.numeroOrden}`,
+    );
 
     try {
       // Obtener el HTML según el tipo de informe
@@ -107,7 +124,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         });
 
         // ✅ FIX 27-MAR-2026: Capturar mensajes de consola para diagnóstico de imágenes
-        page.on('console', msg => {
+        page.on('console', (msg) => {
           if (msg.type() === 'error' || msg.text().includes('Error cargando imagen')) {
             this.logger.warn(`🌐 Browser console [${msg.type()}]: ${msg.text()}`);
           }
@@ -116,7 +133,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         // Inyectar meta http-equiv para reforzar encoding UTF-8
         const htmlConEncoding = html.replace(
           '<meta charset="UTF-8">',
-          '<meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8">'
+          '<meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8">',
         );
 
         // 🔧 FIX 02-ENE-2026: Revertir a 'networkidle0' - Las imágenes son URLs de Cloudinary
@@ -131,7 +148,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         // ✅ FIX 27-MAR-2026: Espera adicional para asegurar que las imágenes de Cloudinary carguen
         // Las imágenes externas a veces necesitan más tiempo para renderizarse
         this.logger.log('⏳ Esperando carga de imágenes (2s)...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Verificar que las imágenes se cargaron (opcional, para debug)
         const imagenesCargadas = await page.evaluate(() => {
@@ -139,10 +156,12 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           return {
             total: imgs.length,
             completadas: imgs.filter((img: any) => img.complete && img.naturalWidth > 0).length,
-            fallidas: imgs.filter((img: any) => !img.complete || img.naturalWidth === 0).length
+            fallidas: imgs.filter((img: any) => !img.complete || img.naturalWidth === 0).length,
           };
         });
-        this.logger.log(`📷 Estado de imágenes: ${imagenesCargadas.completadas}/${imagenesCargadas.total} cargadas (${imagenesCargadas.fallidas} fallidas)`);
+        this.logger.log(
+          `📷 Estado de imágenes: ${imagenesCargadas.completadas}/${imagenesCargadas.total} cargadas (${imagenesCargadas.fallidas} fallidas)`,
+        );
 
         // Generar PDF
         const pdfBuffer = await page.pdf({
@@ -260,20 +279,44 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     // 3. Placeholders o cadenas sin significado real
     const upperFinal = limpio.toUpperCase();
     const placeholders = [
-      '.', '..', '...', '-', '--', '---', '/',
-      'N/A', 'NA', 'NO APLICA', 'S/N', 'S.N.',
-      '(SIN INFORMACIÓN)', '(SIN INFORMACION)', 'SIN INFORMACION', 'SIN INFORMACIÓN',
-      '(NINGUNO)', '(NINGUNA)', 'NINGUNO', 'NINGUNA', 'NINGUN',
-      'SIN PENDIENTES', 'NO PRESENTA PENDIENTES', 'NO HAY PENDIENTES', 'SIN TRABAJOS PENDIENTES',
-      'SIN RECOMENDACIONES', 'NO PRESENTA RECOMENDACIONES', 'NO HAY RECOMENDACIONES',
-      'SIN NOVEDAD', 'SIN NOVEDADES',
-      'NULL', 'UNDEFINED',
+      '.',
+      '..',
+      '...',
+      '-',
+      '--',
+      '---',
+      '/',
+      'N/A',
+      'NA',
+      'NO APLICA',
+      'S/N',
+      'S.N.',
+      '(SIN INFORMACIÓN)',
+      '(SIN INFORMACION)',
+      'SIN INFORMACION',
+      'SIN INFORMACIÓN',
+      '(NINGUNO)',
+      '(NINGUNA)',
+      'NINGUNO',
+      'NINGUNA',
+      'NINGUN',
+      'SIN PENDIENTES',
+      'NO PRESENTA PENDIENTES',
+      'NO HAY PENDIENTES',
+      'SIN TRABAJOS PENDIENTES',
+      'SIN RECOMENDACIONES',
+      'NO PRESENTA RECOMENDACIONES',
+      'NO HAY RECOMENDACIONES',
+      'SIN NOVEDAD',
+      'SIN NOVEDADES',
+      'NULL',
+      'UNDEFINED',
     ];
 
     if (placeholders.includes(upperFinal)) return true;
 
     // Si solo contiene puntos, guiones, asteriscos, barras o espacios
-    if (/^[\.\-_\s\*\/\\]+$/.test(limpio)) return true;
+    if (/^[._\s*/\\-]+$/.test(limpio)) return true;
 
     return false;
   }
@@ -288,7 +331,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     // PASO 1: Extraer datos estructurados de observaciones de actividades
     // Los widgets móviles guardan datos con prefijos: ESTADO_INICIAL:, PROBLEMA:, etc.
     // ═══════════════════════════════════════════════════════════════════════════
-    const obsParaParsear = [datos.observaciones, datos.observaciones_tecnico].filter(Boolean).join('\n') || undefined;
+    const obsParaParsear =
+      [datos.observaciones, datos.observaciones_tecnico].filter(Boolean).join('\n') || undefined;
     const ext = this.extraerDatosEstructuradosCorrectivo(datos.actividades || [], obsParaParsear);
 
     // ✅ MULTI-EQUIPO: Extraer datos estructurados POR equipo
@@ -296,7 +340,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     // sobreescribe los valores de cada equipo (queda solo el último). Debemos procesar
     // cada grupo de actividadesPorEquipo por separado.
     let datosPorEquipo: DatosEstructuradosCorrectivoPorEquipo[] | undefined = undefined;
-    const esMulti = datos.esMultiEquipo && datos.actividadesPorEquipo && datos.actividadesPorEquipo.length > 1;
+    const esMulti =
+      datos.esMultiEquipo && datos.actividadesPorEquipo && datos.actividadesPorEquipo.length > 1;
     if (esMulti && datos.actividadesPorEquipo) {
       datosPorEquipo = datos.actividadesPorEquipo.map((grupo) => {
         const extEquipo = this.extraerDatosEstructuradosCorrectivo(
@@ -309,28 +354,67 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         );
         return {
           equipo: grupo.equipo,
-          estadoInicial: this.esTextoVacioOSinContenido(extEquipo.estadoInicial) ? undefined : extEquipo.estadoInicial,
-          estadoFinal: this.esTextoVacioOSinContenido(extEquipo.estadoFinal) ? undefined : extEquipo.estadoFinal,
-          problemaReportado: this.esTextoVacioOSinContenido(extEquipo.problema) ? undefined : extEquipo.problema,
-          fallasObservadas: this.esTextoVacioOSinContenido(extEquipo.sintomas) ? undefined : extEquipo.sintomas,
-          diagnosticoTecnico: this.esTextoVacioOSinContenido(extEquipo.diagnostico) ? undefined : extEquipo.diagnostico,
-          trabajosRealizados: this.esTextoVacioOSinContenido(extEquipo.trabajos) ? undefined : extEquipo.trabajos,
-          trabajosPendientes: this.esTextoVacioOSinContenido(extEquipo.pendientes) ? undefined : extEquipo.pendientes,
-          recomendaciones: this.esTextoVacioOSinContenido(extEquipo.recomendaciones) ? undefined : extEquipo.recomendaciones,
-          sistemasAfectados: extEquipo.sistemasAfectados.length > 0 ? extEquipo.sistemasAfectados : undefined,
+          estadoInicial: this.esTextoVacioOSinContenido(extEquipo.estadoInicial)
+            ? undefined
+            : extEquipo.estadoInicial,
+          estadoFinal: this.esTextoVacioOSinContenido(extEquipo.estadoFinal)
+            ? undefined
+            : extEquipo.estadoFinal,
+          problemaReportado: this.esTextoVacioOSinContenido(extEquipo.problema)
+            ? undefined
+            : extEquipo.problema,
+          fallasObservadas: this.esTextoVacioOSinContenido(extEquipo.sintomas)
+            ? undefined
+            : extEquipo.sintomas,
+          diagnosticoTecnico: this.esTextoVacioOSinContenido(extEquipo.diagnostico)
+            ? undefined
+            : extEquipo.diagnostico,
+          trabajosRealizados: this.esTextoVacioOSinContenido(extEquipo.trabajos)
+            ? undefined
+            : extEquipo.trabajos,
+          trabajosPendientes: this.esTextoVacioOSinContenido(extEquipo.pendientes)
+            ? undefined
+            : extEquipo.pendientes,
+          recomendaciones: this.esTextoVacioOSinContenido(extEquipo.recomendaciones)
+            ? undefined
+            : extEquipo.recomendaciones,
+          sistemasAfectados:
+            extEquipo.sistemasAfectados.length > 0 ? extEquipo.sistemasAfectados : undefined,
           repuestosUtilizados: extEquipo.repuestos.length > 0 ? extEquipo.repuestos : undefined,
           materialesUtilizados: extEquipo.materiales.length > 0 ? extEquipo.materiales : undefined,
-          obsEstadoInicial: this.esTextoVacioOSinContenido(extEquipo.obsEstadoInicial) ? undefined : extEquipo.obsEstadoInicial,
-          obsEstadoFinal: this.esTextoVacioOSinContenido(extEquipo.obsEstadoFinal) ? undefined : extEquipo.obsEstadoFinal,
-          obsProblema: this.esTextoVacioOSinContenido(extEquipo.obsProblema) ? undefined : extEquipo.obsProblema,
-          obsFallas: this.esTextoVacioOSinContenido(extEquipo.obsFallas) ? undefined : extEquipo.obsFallas,
-          obsDiagnostico: this.esTextoVacioOSinContenido(extEquipo.obsDiagnostico) ? undefined : extEquipo.obsDiagnostico,
-          obsTrabajos: this.esTextoVacioOSinContenido(extEquipo.obsTrabajos) ? undefined : extEquipo.obsTrabajos,
-          obsPendientes: this.esTextoVacioOSinContenido(extEquipo.obsPendientes) ? undefined : extEquipo.obsPendientes,
-          obsRecomendaciones: this.esTextoVacioOSinContenido(extEquipo.obsRecomendaciones) ? undefined : extEquipo.obsRecomendaciones,
-          obsRepuestos: this.esTextoVacioOSinContenido(extEquipo.obsRepuestos) ? undefined : extEquipo.obsRepuestos,
-          obsMateriales: this.esTextoVacioOSinContenido(extEquipo.obsMateriales) ? undefined : extEquipo.obsMateriales,
-          obsSistemas: this.esTextoVacioOSinContenido(extEquipo.obsSistemas) ? undefined : extEquipo.obsSistemas,
+          obsEstadoInicial: this.esTextoVacioOSinContenido(extEquipo.obsEstadoInicial)
+            ? undefined
+            : extEquipo.obsEstadoInicial,
+          obsEstadoFinal: this.esTextoVacioOSinContenido(extEquipo.obsEstadoFinal)
+            ? undefined
+            : extEquipo.obsEstadoFinal,
+          obsProblema: this.esTextoVacioOSinContenido(extEquipo.obsProblema)
+            ? undefined
+            : extEquipo.obsProblema,
+          obsFallas: this.esTextoVacioOSinContenido(extEquipo.obsFallas)
+            ? undefined
+            : extEquipo.obsFallas,
+          obsDiagnostico: this.esTextoVacioOSinContenido(extEquipo.obsDiagnostico)
+            ? undefined
+            : extEquipo.obsDiagnostico,
+          obsTrabajos: this.esTextoVacioOSinContenido(extEquipo.obsTrabajos)
+            ? undefined
+            : extEquipo.obsTrabajos,
+          obsPendientes: this.esTextoVacioOSinContenido(extEquipo.obsPendientes)
+            ? undefined
+            : extEquipo.obsPendientes,
+          obsRecomendaciones: this.esTextoVacioOSinContenido(extEquipo.obsRecomendaciones)
+            ? undefined
+            : extEquipo.obsRecomendaciones,
+          obsRepuestos: this.esTextoVacioOSinContenido(extEquipo.obsRepuestos)
+            ? undefined
+            : extEquipo.obsRepuestos,
+          obsMateriales: this.esTextoVacioOSinContenido(extEquipo.obsMateriales)
+            ? undefined
+            : extEquipo.obsMateriales,
+          obsSistemas: this.esTextoVacioOSinContenido(extEquipo.obsSistemas)
+            ? undefined
+            : extEquipo.obsSistemas,
         };
       });
     }
@@ -338,14 +422,14 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     // ═══════════════════════════════════════════════════════════════════════════
     // PASO 2: Filtrar mediciones con valor para renderizado condicional
     // ═══════════════════════════════════════════════════════════════════════════
-    const medicionesConValor = (datos.mediciones || []).filter(m =>
-      m.valor !== null && m.valor !== undefined && m.valor !== 0
-    ).map(m => ({
-      parametro: m.parametro,
-      valorDespues: String(m.valor),
-      unidad: m.unidad,
-      estado: m.nivelAlerta || 'OK',
-    }));
+    const medicionesConValor = (datos.mediciones || [])
+      .filter((m) => m.valor !== null && m.valor !== undefined && m.valor !== 0)
+      .map((m) => ({
+        parametro: m.parametro,
+        valorDespues: String(m.valor),
+        unidad: m.unidad,
+        estado: m.nivelAlerta || 'OK',
+      }));
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PASO 3: Extraer datos del módulo de control desde mediciones
@@ -376,19 +460,27 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       tecnico: datos.tecnico,
 
       // --- Campos dedicados por naturaleza de actividad ---
-      estadoInicial: this.esTextoVacioOSinContenido(ext.estadoInicial) ? undefined : ext.estadoInicial,
+      estadoInicial: this.esTextoVacioOSinContenido(ext.estadoInicial)
+        ? undefined
+        : ext.estadoInicial,
       estadoFinal: this.esTextoVacioOSinContenido(ext.estadoFinal) ? undefined : ext.estadoFinal,
       problemaReportado: this.esTextoVacioOSinContenido(ext.problema) ? undefined : ext.problema,
       fallasObservadas: this.esTextoVacioOSinContenido(ext.sintomas) ? undefined : ext.sintomas,
-      diagnosticoTecnico: this.esTextoVacioOSinContenido(ext.diagnostico) ? undefined : ext.diagnostico,
+      diagnosticoTecnico: this.esTextoVacioOSinContenido(ext.diagnostico)
+        ? undefined
+        : ext.diagnostico,
       trabajosRealizados: this.esTextoVacioOSinContenido(ext.trabajos) ? undefined : ext.trabajos,
-      trabajosPendientes: this.esTextoVacioOSinContenido(ext.pendientes) ? undefined : ext.pendientes,
-      recomendaciones: this.esTextoVacioOSinContenido(ext.recomendaciones) ? undefined : ext.recomendaciones,
+      trabajosPendientes: this.esTextoVacioOSinContenido(ext.pendientes)
+        ? undefined
+        : ext.pendientes,
+      recomendaciones: this.esTextoVacioOSinContenido(ext.recomendaciones)
+        ? undefined
+        : ext.recomendaciones,
       sistemasAfectados: ext.sistemasAfectados.length > 0 ? ext.sistemasAfectados : undefined,
       repuestosUtilizados: (() => {
         const combinados = [...ext.repuestos];
-        for (const itemWms of (datos.repuestosWms || [])) {
-          if (itemWms && !combinados.some(r => r.toLowerCase() === itemWms.toLowerCase())) {
+        for (const itemWms of datos.repuestosWms || []) {
+          if (itemWms && !combinados.some((r) => r.toLowerCase() === itemWms.toLowerCase())) {
             combinados.push(itemWms);
           }
         }
@@ -397,16 +489,28 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       materialesUtilizados: ext.materiales.length > 0 ? ext.materiales : undefined,
 
       // ✅ FIX 06-FEB-2026: Observaciones auxiliares del técnico por actividad
-      obsEstadoInicial: this.esTextoVacioOSinContenido(ext.obsEstadoInicial) ? undefined : ext.obsEstadoInicial,
-      obsEstadoFinal: this.esTextoVacioOSinContenido(ext.obsEstadoFinal) ? undefined : ext.obsEstadoFinal,
+      obsEstadoInicial: this.esTextoVacioOSinContenido(ext.obsEstadoInicial)
+        ? undefined
+        : ext.obsEstadoInicial,
+      obsEstadoFinal: this.esTextoVacioOSinContenido(ext.obsEstadoFinal)
+        ? undefined
+        : ext.obsEstadoFinal,
       obsProblema: this.esTextoVacioOSinContenido(ext.obsProblema) ? undefined : ext.obsProblema,
       obsFallas: this.esTextoVacioOSinContenido(ext.obsFallas) ? undefined : ext.obsFallas,
-      obsDiagnostico: this.esTextoVacioOSinContenido(ext.obsDiagnostico) ? undefined : ext.obsDiagnostico,
+      obsDiagnostico: this.esTextoVacioOSinContenido(ext.obsDiagnostico)
+        ? undefined
+        : ext.obsDiagnostico,
       obsTrabajos: this.esTextoVacioOSinContenido(ext.obsTrabajos) ? undefined : ext.obsTrabajos,
-      obsPendientes: this.esTextoVacioOSinContenido(ext.obsPendientes) ? undefined : ext.obsPendientes,
-      obsRecomendaciones: this.esTextoVacioOSinContenido(ext.obsRecomendaciones) ? undefined : ext.obsRecomendaciones,
+      obsPendientes: this.esTextoVacioOSinContenido(ext.obsPendientes)
+        ? undefined
+        : ext.obsPendientes,
+      obsRecomendaciones: this.esTextoVacioOSinContenido(ext.obsRecomendaciones)
+        ? undefined
+        : ext.obsRecomendaciones,
       obsRepuestos: this.esTextoVacioOSinContenido(ext.obsRepuestos) ? undefined : ext.obsRepuestos,
-      obsMateriales: this.esTextoVacioOSinContenido(ext.obsMateriales) ? undefined : ext.obsMateriales,
+      obsMateriales: this.esTextoVacioOSinContenido(ext.obsMateriales)
+        ? undefined
+        : ext.obsMateriales,
       obsSistemas: this.esTextoVacioOSinContenido(ext.obsSistemas) ? undefined : ext.obsSistemas,
 
       // --- Mediciones y módulo ---
@@ -414,7 +518,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       datosModulo,
 
       // --- Observaciones generales (solo textarea del técnico, sin duplicar campos) ---
-      observacionesGenerales: this.esTextoVacioOSinContenido(datos.observaciones) ? undefined : datos.observaciones,
+      observacionesGenerales: this.esTextoVacioOSinContenido(datos.observaciones)
+        ? undefined
+        : datos.observaciones,
 
       // --- Multi-equipos ---
       esMultiEquipo: datos.esMultiEquipo,
@@ -427,9 +533,11 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
       // --- Evidencias con tipo para agrupación ---
       // ✅ FIX 06-FEB-2026: Reconocer GENERAL y MEDICION además de ANTES/DURANTE/DESPUES
-      evidencias: (datos.evidencias || []).map(e => {
+      evidencias: (datos.evidencias || []).map((e) => {
         const caption = typeof e === 'string' ? undefined : e.caption;
-        const tipoMatch = caption?.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):/i);
+        const tipoMatch = caption?.match(
+          /^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):/i,
+        );
         type TipoEvidencia = 'ANTES' | 'DURANTE' | 'DESPUES' | 'GENERAL' | 'MEDICION';
         let tipo: TipoEvidencia = 'DURANTE';
         if (tipoMatch) {
@@ -468,7 +576,12 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * Los widgets móviles guardan datos con prefijos como ESTADO_INICIAL:, PROBLEMA:, etc.
    */
   private extraerDatosEstructuradosCorrectivo(
-    actividades: Array<{ observaciones?: string; descripcion?: string; rolSemantico?: string | null; respuestaJson?: any }>,
+    actividades: Array<{
+      observaciones?: string;
+      descripcion?: string;
+      rolSemantico?: string | null;
+      respuestaJson?: any;
+    }>,
     ordenObservaciones?: string,
   ): {
     estadoInicial: string;
@@ -526,14 +639,14 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       'DESCRIPCIÓN DEL PROBLEMA REPORTADO': 'problema',
       'PROBLEMA REPORTADO': 'problema',
       'FALLAS OBSERVADAS': 'sintomas',
-      'DIAGNÓSTICO': 'diagnostico',
-      'DIAGNOSTICO': 'diagnostico',
+      DIAGNÓSTICO: 'diagnostico',
+      DIAGNOSTICO: 'diagnostico',
       'TRABAJOS REALIZADOS': 'trabajos',
       'TRABAJOS PENDIENTES': 'pendientes',
-      'RECOMENDACIONES': 'recomendaciones',
+      RECOMENDACIONES: 'recomendaciones',
       'REPUESTOS UTILIZADOS': 'repuestos',
       'MATERIALES E INSUMOS': 'materiales',
-      'MATERIALES': 'materiales',
+      MATERIALES: 'materiales',
     };
 
     const mapaRolSemanticoCampo: Record<string, keyof typeof resultado> = {
@@ -562,20 +675,38 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       const rol = actividad.rolSemantico?.toUpperCase().trim();
       const campoPorRol = rol ? mapaRolSemanticoCampo[rol] : undefined;
       if (campoPorRol) {
-        const respObj = actividad.respuestaJson && typeof actividad.respuestaJson === 'object' ? actividad.respuestaJson : null;
+        const respObj =
+          actividad.respuestaJson && typeof actividad.respuestaJson === 'object'
+            ? actividad.respuestaJson
+            : null;
         const valRaw =
           (Array.isArray(respObj?.seleccionados) ? respObj.seleccionados.join(', ') : null) ??
           respObj?.etiqueta ??
           respObj?.valor ??
-          obs.replace(/^(?:ESTADO_INICIAL|ESTADO_FINAL|SISTEMAS|PROBLEMA|SINTOMAS|FALLAS|DIAGNOSTICO|TRABAJOS|PENDIENTES|RECOMENDACIONES|REPUESTOS|MATERIALES):\s*/i, '').trim();
+          obs
+            .replace(
+              /^(?:ESTADO_INICIAL|ESTADO_FINAL|SISTEMAS|PROBLEMA|SINTOMAS|FALLAS|DIAGNOSTICO|TRABAJOS|PENDIENTES|RECOMENDACIONES|REPUESTOS|MATERIALES):\s*/i,
+              '',
+            )
+            .trim();
         const val = String(valRaw || '').trim();
         if (val && !this.esTextoVacioOSinContenido(val)) {
           if (campoPorRol === 'sistemasAfectados') {
-            resultado.sistemasAfectados = val.split(',').map(s => s.trim()).filter(s => s && !this.esTextoVacioOSinContenido(s)).map(s => this.mapearSistema(s));
+            resultado.sistemasAfectados = val
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s) => s && !this.esTextoVacioOSinContenido(s))
+              .map((s) => this.mapearSistema(s));
           } else if (campoPorRol === 'repuestos') {
-            resultado.repuestos = val.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+            resultado.repuestos = val
+              .split('; ')
+              .map((s) => s.trim())
+              .filter((s) => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
           } else if (campoPorRol === 'materiales') {
-            resultado.materiales = val.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+            resultado.materiales = val
+              .split('; ')
+              .map((s) => s.trim())
+              .filter((s) => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
           } else if (campoPorRol === 'estadoInicial') {
             resultado.estadoInicial = this.mapearEstadoInicial(val);
           } else if (campoPorRol === 'estadoFinal') {
@@ -584,7 +715,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
             (resultado as any)[campoPorRol] = val;
           }
           if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) {
-            const auxKey = `obs${campoPorRol.charAt(0).toUpperCase()}${campoPorRol.slice(1)}` as keyof typeof resultado;
+            const auxKey =
+              `obs${campoPorRol.charAt(0).toUpperCase()}${campoPorRol.slice(1)}` as keyof typeof resultado;
             if (auxKey in resultado && typeof resultado[auxKey] === 'string') {
               (resultado as any)[auxKey] = obsAux;
             }
@@ -597,18 +729,23 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         // Ya resuelto deterministicamente por rol_semantico
       } else if (/^ESTADO_INICIAL:\s*/i.test(obs)) {
         const val = obs.replace(/^ESTADO_INICIAL:\s*/i, '').trim();
-        if (!this.esTextoVacioOSinContenido(val)) resultado.estadoInicial = this.mapearEstadoInicial(val);
+        if (!this.esTextoVacioOSinContenido(val))
+          resultado.estadoInicial = this.mapearEstadoInicial(val);
         if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsEstadoInicial = obsAux;
         matched = true;
       } else if (/^ESTADO_FINAL:\s*/i.test(obs)) {
         const val = obs.replace(/^ESTADO_FINAL:\s*/i, '').trim();
-        if (!this.esTextoVacioOSinContenido(val)) resultado.estadoFinal = this.mapearEstadoFinal(val);
+        if (!this.esTextoVacioOSinContenido(val))
+          resultado.estadoFinal = this.mapearEstadoFinal(val);
         if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsEstadoFinal = obsAux;
         matched = true;
       } else if (/^SISTEMAS:\s*/i.test(obs)) {
         const val = obs.replace(/^SISTEMAS:\s*/i, '').trim();
-        const sistemas = val.split(',').map(s => s.trim()).filter(s => s && !this.esTextoVacioOSinContenido(s));
-        resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
+        const sistemas = val
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s && !this.esTextoVacioOSinContenido(s));
+        resultado.sistemasAfectados = sistemas.map((s) => this.mapearSistema(s));
         if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsSistemas = obsAux;
         matched = true;
       } else if (/^PROBLEMA:\s*/i.test(obs)) {
@@ -639,17 +776,24 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       } else if (/^RECOMENDACIONES:\s*/i.test(obs)) {
         const val = obs.replace(/^RECOMENDACIONES:\s*/i, '').trim();
         if (!this.esTextoVacioOSinContenido(val)) resultado.recomendaciones = val;
-        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsRecomendaciones = obsAux;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux))
+          resultado.obsRecomendaciones = obsAux;
         matched = true;
       } else if (/^REPUESTOS:\s*/i.test(obs)) {
         const val = obs.replace(/^REPUESTOS:\s*/i, '').trim();
-        const items = val.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+        const items = val
+          .split('; ')
+          .map((s) => s.trim())
+          .filter((s) => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
         resultado.repuestos = items;
         if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsRepuestos = obsAux;
         matched = true;
       } else if (/^MATERIALES:\s*/i.test(obs)) {
         const val = obs.replace(/^MATERIALES:\s*/i, '').trim();
-        const items = val.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+        const items = val
+          .split('; ')
+          .map((s) => s.trim())
+          .filter((s) => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
         resultado.materiales = items;
         if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsMateriales = obsAux;
         matched = true;
@@ -662,13 +806,22 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           const campo = mapaDescripcionCampo[descUpper];
           if (campo) {
             if (campo === 'sistemasAfectados') {
-              const sistemas = obs.split(',').map(s => s.trim()).filter(s => s && !this.esTextoVacioOSinContenido(s));
-              resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
+              const sistemas = obs
+                .split(',')
+                .map((s) => s.trim())
+                .filter((s) => s && !this.esTextoVacioOSinContenido(s));
+              resultado.sistemasAfectados = sistemas.map((s) => this.mapearSistema(s));
             } else if (campo === 'repuestos') {
-              const items = obs.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+              const items = obs
+                .split('; ')
+                .map((s) => s.trim())
+                .filter((s) => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
               resultado.repuestos = items;
             } else if (campo === 'materiales') {
-              const items = obs.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+              const items = obs
+                .split('; ')
+                .map((s) => s.trim())
+                .filter((s) => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
               resultado.materiales = items;
             } else if (campo === 'estadoInicial') {
               resultado.estadoInicial = this.mapearEstadoInicial(obs);
@@ -704,10 +857,10 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   /** Mapea códigos de estado inicial a texto legible */
   private mapearEstadoInicial(codigo: string): string {
     const mapa: Record<string, string> = {
-      'OPERATIVO': '✅ Equipo Operativo',
-      'PARADO': '🛑 Equipo Parado',
-      'FALLA_INTERMITENTE': '⚠️ Falla Intermitente',
-      'INACCESIBLE': '🚫 Inaccesible para Inspección',
+      OPERATIVO: '✅ Equipo Operativo',
+      PARADO: '🛑 Equipo Parado',
+      FALLA_INTERMITENTE: '⚠️ Falla Intermitente',
+      INACCESIBLE: '🚫 Inaccesible para Inspección',
     };
     return mapa[codigo] || codigo;
   }
@@ -715,10 +868,10 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   /** Mapea códigos de estado final a texto legible */
   private mapearEstadoFinal(codigo: string): string {
     const mapa: Record<string, string> = {
-      'OPERATIVO': '✅ Equipo Operativo',
-      'REPARACION_PARCIAL': '⚠️ Reparación Parcial',
-      'REQUIERE_REPUESTOS': '🔧 Requiere Repuestos',
-      'FUERA_SERVICIO': '🛑 Fuera de Servicio',
+      OPERATIVO: '✅ Equipo Operativo',
+      REPARACION_PARCIAL: '⚠️ Reparación Parcial',
+      REQUIERE_REPUESTOS: '🔧 Requiere Repuestos',
+      FUERA_SERVICIO: '🛑 Fuera de Servicio',
     };
     return mapa[codigo] || codigo;
   }
@@ -727,30 +880,30 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   private mapearSistema(codigo: string): string {
     const mapa: Record<string, string> = {
       // Sistemas de Generador
-      'MOTOR': 'Motor Diesel/Gas',
-      'GENERADOR': 'Generador Eléctrico',
-      'ELECTRONICO': 'Sistema Electrónico',
-      'ELECTRICO': 'Sistema Eléctrico',
-      'CONTROL': 'Módulo de Control',
-      'ENFRIAMIENTO': 'Sistema de Enfriamiento',
-      'REFRIGERACION': 'Sistema de Refrigeración',
-      'COMBUSTIBLE': 'Sistema de Combustible',
-      'LUBRICACION': 'Sistema de Lubricación',
-      'ESCAPE': 'Sistema de Escape',
-      'ASPIRACION': 'Sistema de Aspiración',
-      'ARRANQUE': 'Sistema de Arranque',
-      'ALTERNADOR': 'Alternador/Generador',
-      'TRANSFERENCIA': 'Transferencia Automática',
+      MOTOR: 'Motor Diesel/Gas',
+      GENERADOR: 'Generador Eléctrico',
+      ELECTRONICO: 'Sistema Electrónico',
+      ELECTRICO: 'Sistema Eléctrico',
+      CONTROL: 'Módulo de Control',
+      ENFRIAMIENTO: 'Sistema de Enfriamiento',
+      REFRIGERACION: 'Sistema de Refrigeración',
+      COMBUSTIBLE: 'Sistema de Combustible',
+      LUBRICACION: 'Sistema de Lubricación',
+      ESCAPE: 'Sistema de Escape',
+      ASPIRACION: 'Sistema de Aspiración',
+      ARRANQUE: 'Sistema de Arranque',
+      ALTERNADOR: 'Alternador/Generador',
+      TRANSFERENCIA: 'Transferencia Automática',
       // ✅ 09-FEB-2026: Sistemas de Bomba (BOM_CORR)
-      'HIDRAULICO': 'Sistema Hidráulico',
-      'MECANICO': 'Sistema Mecánico',
-      'PRESOSTATO': 'Presostato / Control de Presión',
-      'SELLO': 'Sellos Mecánicos / Empaquetadura',
-      'TANQUE': 'Tanques Hidroneumáticos',
-      'TABLERO': 'Tablero de Control',
-      'VALVULAS': 'Válvulas de Operación',
-      'TUBERIA': 'Tubería y Accesorios',
-      'OTRO': 'Otro',
+      HIDRAULICO: 'Sistema Hidráulico',
+      MECANICO: 'Sistema Mecánico',
+      PRESOSTATO: 'Presostato / Control de Presión',
+      SELLO: 'Sellos Mecánicos / Empaquetadura',
+      TANQUE: 'Tanques Hidroneumáticos',
+      TABLERO: 'Tablero de Control',
+      VALVULAS: 'Válvulas de Operación',
+      TUBERIA: 'Tubería y Accesorios',
+      OTRO: 'Otro',
     };
     return mapa[codigo] || codigo;
   }
@@ -759,7 +912,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * ✅ FIX 02-FEB-2026: Extrae datos del módulo de control desde las mediciones
    * Mapea nombres de parámetros a campos del módulo
    */
-  private extraerDatosModuloDesdelMediciones(mediciones: Array<{ parametro: string; valor?: number | null }>): {
+  private extraerDatosModuloDesdelMediciones(
+    mediciones: Array<{ parametro: string; valor?: number | null }>,
+  ): {
     rpm?: number;
     presionAceite?: number;
     temperaturaRefrigerante?: number;
@@ -804,57 +959,19 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   private generarFilename(tipo: TipoInforme, numeroOrden: string): string {
     const fecha = new Date().toISOString().split('T')[0];
     const tipoNombreMap: Record<TipoInforme, string> = {
-      'GENERADOR_A': 'Preventivo_A_Generador',
-      'GENERADOR_B': 'Preventivo_B_Generador',
-      'BOMBA_A': 'Preventivo_A_Bomba',
-      'UNIVERSAL_EAM': 'Informe_Servicio_EAM',
-      'CORRECTIVO': 'Correctivo',
-      'COTIZACION': 'Cotizacion',
-      'PROPUESTA_CORRECTIVO': 'Propuesta_Correctivo',
-      'REMISION': 'Remision',
-      'ORDEN_COMPRA': 'Orden_Compra',
+      GENERADOR_A: 'Preventivo_A_Generador',
+      GENERADOR_B: 'Preventivo_B_Generador',
+      BOMBA_A: 'Preventivo_A_Bomba',
+      UNIVERSAL_EAM: 'Informe_Servicio_EAM',
+      CORRECTIVO: 'Correctivo',
+      COTIZACION: 'Cotizacion',
+      PROPUESTA_CORRECTIVO: 'Propuesta_Correctivo',
+      REMISION: 'Remision',
+      ORDEN_COMPRA: 'Orden_Compra',
     };
     const tipoNombre = tipoNombreMap[tipo] || 'Informe';
 
     return `MEKANOS_${tipoNombre}_${numeroOrden}_${fecha}.pdf`;
-  }
-
-  /**
-   * ✅ OPTIMIZACIÓN 07-ENE-2026: Asegura browser conectado con soporte para pre-init
-   */
-  // @ts-ignore TS6133 - Reserved for future use
-  private async _ensureBrowserConnected(): Promise<void> {
-    try {
-      // Esperar pre-inicialización si está en curso
-      if (this.browserInitPromise) {
-        await this.browserInitPromise;
-        this.browserInitPromise = null;
-      }
-
-      // Verificar si browser existe y está conectado
-      if (this.browser && this.browser.connected) {
-        return; // Browser activo y listo ✅
-      }
-
-      // Si existe pero no está conectado, cerrarlo
-      if (this.browser) {
-        this.logger.warn('⚠️ Browser desconectado, reiniciando...');
-        try {
-          await this.browser.close();
-        } catch (e) {
-          // Ignorar errores al cerrar browser muerto
-        }
-        this.browser = null;
-      }
-
-      // Inicializar nuevo browser
-      await this.initBrowser();
-    } catch (error) {
-      this.logger.error('❌ Error verificando conexión de browser', error);
-      // Forzar reinicio
-      this.browser = null;
-      await this.initBrowser();
-    }
   }
 
   /**
@@ -865,7 +982,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     const isWindows = process.platform === 'win32';
     // Fallback inteligente: en Windows no existe /tmp
     const defaultCacheDir = isWindows
-      ? require('path').join(process.env.USERPROFILE || process.env.HOME || '.', '.cache', 'puppeteer')
+      ? path.join(process.env.USERPROFILE || process.env.HOME || '.', '.cache', 'puppeteer')
       : '/tmp/.cache/puppeteer';
     const cacheDir = process.env.PUPPETEER_CACHE_DIR || defaultCacheDir;
 
@@ -885,7 +1002,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       // PASO 2: Si Chrome no existe, instalarlo en runtime
       // ═══════════════════════════════════════════════════════════════════
       if (!executablePath) {
-        this.logger.warn('⚠️ Chrome no encontrado en ninguna ubicación conocida, instalando en runtime...');
+        this.logger.warn(
+          '⚠️ Chrome no encontrado en ninguna ubicación conocida, instalando en runtime...',
+        );
         try {
           // ✅ FIX 09-JUN-2026: Comando cross-platform (sin prefijo de env vars estilo Unix)
           // Las env vars se pasan únicamente via el objeto `env` de execSync
@@ -932,30 +1051,32 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       ];
 
       // Args adicionales solo para Linux/producción (causan ECONNRESET en Windows)
-      const linuxOnlyArgs = isWindows ? [] : [
-        '--single-process',
-        '--no-zygote',
-        '--disable-accelerated-2d-canvas',
-        '--disable-accelerated-jpeg-decoding',
-        '--disable-accelerated-mjpeg-decode',
-        '--disable-accelerated-video-decode',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-breakpad',
-        '--disable-component-extensions-with-background-pages',
-        '--disable-component-update',
-        '--disable-features=TranslateUI',
-        '--disable-hang-monitor',
-        '--disable-ipc-flooding-protection',
-        '--disable-prompt-on-repost',
-        '--disable-renderer-backgrounding',
-        '--enable-features=NetworkService,NetworkServiceInProcess',
-        '--force-color-profile=srgb',
-        '--metrics-recording-only',
-        '--safebrowsing-disable-auto-update',
-        '--js-flags=--max-old-space-size=256',
-        '--memory-pressure-off',
-      ];
+      const linuxOnlyArgs = isWindows
+        ? []
+        : [
+            '--single-process',
+            '--no-zygote',
+            '--disable-accelerated-2d-canvas',
+            '--disable-accelerated-jpeg-decoding',
+            '--disable-accelerated-mjpeg-decode',
+            '--disable-accelerated-video-decode',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-breakpad',
+            '--disable-component-extensions-with-background-pages',
+            '--disable-component-update',
+            '--disable-features=TranslateUI',
+            '--disable-hang-monitor',
+            '--disable-ipc-flooding-protection',
+            '--disable-prompt-on-repost',
+            '--disable-renderer-backgrounding',
+            '--enable-features=NetworkService,NetworkServiceInProcess',
+            '--force-color-profile=srgb',
+            '--metrics-recording-only',
+            '--safebrowsing-disable-auto-update',
+            '--js-flags=--max-old-space-size=256',
+            '--memory-pressure-off',
+          ];
 
       this.browser = await puppeteer.launch({
         headless: true,
@@ -971,7 +1092,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`📍 CWD: ${process.cwd()}`);
       throw new InternalServerErrorException(
         `Error inicializando generador de PDF: ${error.message}. ` +
-        `Asegúrese de que Chrome está instalado (npx puppeteer browsers install chrome)`
+          `Asegúrese de que Chrome está instalado (npx puppeteer browsers install chrome)`,
       );
     }
   }
@@ -984,8 +1105,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * 3. Rutas comunes del sistema según plataforma
    */
   private resolverChromePath(cacheDir: string): string | null {
-    const path = require('path');
-
     // 1. Intentar con puppeteer.executablePath() (usa .puppeteerrc.cjs)
     try {
       const defaultPath = puppeteer.executablePath();
@@ -1002,7 +1121,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       const chromeDirBase = path.join(cacheDir, 'chrome');
       if (fs.existsSync(chromeDirBase)) {
         try {
-          const versions = fs.readdirSync(chromeDirBase)
+          const versions = fs
+            .readdirSync(chromeDirBase)
             .filter((d: string) => fs.statSync(path.join(chromeDirBase, d)).isDirectory())
             .sort()
             .reverse(); // Más reciente primero
@@ -1026,7 +1146,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
             }
           }
         } catch (e) {
-          this.logger.warn(`⚠️ Error escaneando cacheDir ${chromeDirBase}: ${(e as Error).message}`);
+          this.logger.warn(
+            `⚠️ Error escaneando cacheDir ${chromeDirBase}: ${(e as Error).message}`,
+          );
         }
       }
     }
@@ -1035,9 +1157,27 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     const isWindows = process.platform === 'win32';
     const systemPaths = isWindows
       ? [
-          path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-          path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-          path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+          path.join(
+            process.env.PROGRAMFILES || 'C:\\Program Files',
+            'Google',
+            'Chrome',
+            'Application',
+            'chrome.exe',
+          ),
+          path.join(
+            process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
+            'Google',
+            'Chrome',
+            'Application',
+            'chrome.exe',
+          ),
+          path.join(
+            process.env.LOCALAPPDATA || '',
+            'Google',
+            'Chrome',
+            'Application',
+            'chrome.exe',
+          ),
         ]
       : [
           '/usr/bin/google-chrome',
@@ -1074,7 +1214,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    */
   determinarTipoInforme(
     tipoEquipo: 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string,
-    tipoServicio: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' | string
+    tipoServicio: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' | string,
   ): TipoInforme {
     // Servicios narrativos (CORRECTIVO, EMERGENCIA, DIAGNÓSTICO) → template narrativo universal
     const tsUpper = (tipoServicio || '').toUpperCase();
@@ -1124,19 +1264,84 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         corriente: 45,
       },
       actividades: [
-        { sistema: 'ENFRIAMIENTO', descripcion: 'Revisar tapa de radiador', resultado: 'B', observaciones: '' },
-        { sistema: 'ENFRIAMIENTO', descripcion: 'Revisar nivel de refrigerante', resultado: 'B', observaciones: '' },
-        { sistema: 'ENFRIAMIENTO', descripcion: 'Revisar estado de mangueras', resultado: 'B', observaciones: '' },
-        { sistema: 'ENFRIAMIENTO', descripcion: 'Revisar ventilador y correas', resultado: 'R', observaciones: 'Tensionar' },
-        { sistema: 'COMBUSTIBLE', descripcion: 'Revisar nivel de combustible', resultado: 'B', observaciones: '' },
-        { sistema: 'COMBUSTIBLE', descripcion: 'Revisar filtro de combustible', resultado: 'C', observaciones: 'Cambiar próximo servicio' },
-        { sistema: 'COMBUSTIBLE', descripcion: 'Purgar sistema de combustible', resultado: 'B', observaciones: '' },
-        { sistema: 'LUBRICACION', descripcion: 'Revisar nivel de aceite', resultado: 'B', observaciones: '' },
-        { sistema: 'LUBRICACION', descripcion: 'Revisar estado del aceite', resultado: 'B', observaciones: 'Color normal' },
-        { sistema: 'ELECTRICO', descripcion: 'Revisar bornes de batería', resultado: 'B', observaciones: '' },
-        { sistema: 'ELECTRICO', descripcion: 'Revisar cableado general', resultado: 'B', observaciones: '' },
-        { sistema: 'GENERAL', descripcion: '¿El equipo arranca sin dificultad?', resultado: 'B', observaciones: '' },
-        { sistema: 'GENERAL', descripcion: '¿Existe vibración excesiva?', resultado: 'M', observaciones: '' },
+        {
+          sistema: 'ENFRIAMIENTO',
+          descripcion: 'Revisar tapa de radiador',
+          resultado: 'B',
+          observaciones: '',
+        },
+        {
+          sistema: 'ENFRIAMIENTO',
+          descripcion: 'Revisar nivel de refrigerante',
+          resultado: 'B',
+          observaciones: '',
+        },
+        {
+          sistema: 'ENFRIAMIENTO',
+          descripcion: 'Revisar estado de mangueras',
+          resultado: 'B',
+          observaciones: '',
+        },
+        {
+          sistema: 'ENFRIAMIENTO',
+          descripcion: 'Revisar ventilador y correas',
+          resultado: 'R',
+          observaciones: 'Tensionar',
+        },
+        {
+          sistema: 'COMBUSTIBLE',
+          descripcion: 'Revisar nivel de combustible',
+          resultado: 'B',
+          observaciones: '',
+        },
+        {
+          sistema: 'COMBUSTIBLE',
+          descripcion: 'Revisar filtro de combustible',
+          resultado: 'C',
+          observaciones: 'Cambiar próximo servicio',
+        },
+        {
+          sistema: 'COMBUSTIBLE',
+          descripcion: 'Purgar sistema de combustible',
+          resultado: 'B',
+          observaciones: '',
+        },
+        {
+          sistema: 'LUBRICACION',
+          descripcion: 'Revisar nivel de aceite',
+          resultado: 'B',
+          observaciones: '',
+        },
+        {
+          sistema: 'LUBRICACION',
+          descripcion: 'Revisar estado del aceite',
+          resultado: 'B',
+          observaciones: 'Color normal',
+        },
+        {
+          sistema: 'ELECTRICO',
+          descripcion: 'Revisar bornes de batería',
+          resultado: 'B',
+          observaciones: '',
+        },
+        {
+          sistema: 'ELECTRICO',
+          descripcion: 'Revisar cableado general',
+          resultado: 'B',
+          observaciones: '',
+        },
+        {
+          sistema: 'GENERAL',
+          descripcion: '¿El equipo arranca sin dificultad?',
+          resultado: 'B',
+          observaciones: '',
+        },
+        {
+          sistema: 'GENERAL',
+          descripcion: '¿Existe vibración excesiva?',
+          resultado: 'M',
+          observaciones: '',
+        },
       ],
       mediciones: [
         { parametro: 'Temperatura Refrigerante', valor: 82, unidad: '°C', nivelAlerta: 'OK' },
@@ -1155,7 +1360,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         // Sistema eléctrico
         'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?q=80&w=400&auto=format&fit=crop',
       ],
-      observaciones: 'Equipo en buen estado general. Se recomienda programar cambio de filtros de combustible en el próximo servicio Tipo B. Se detectó leve vibración que debe monitorearse. Batería con carga óptima.',
+      observaciones:
+        'Equipo en buen estado general. Se recomienda programar cambio de filtros de combustible en el próximo servicio Tipo B. Se detectó leve vibración que debe monitorearse. Batería con carga óptima.',
     };
 
     return this.generarPDF({
@@ -1224,7 +1430,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       try {
         await page.setContent(html, {
           waitUntil: 'networkidle0',
-          timeout: 60000
+          timeout: 60000,
         });
 
         const pdfBuffer = await page.pdf({
@@ -1295,16 +1501,76 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       descripcionGeneral: 'Servicio de mantenimiento preventivo completo',
 
       itemsServicios: [
-        { orden: 1, descripcion: 'Mantenimiento Preventivo Tipo A - Generador 250 KVA', cantidad: 1, unidad: 'UND', precioUnitario: 1500000, descuentoPorcentaje: 0, subtotal: 1500000 },
-        { orden: 2, descripcion: 'Mantenimiento Preventivo Tipo B - Generador 250 KVA', cantidad: 1, unidad: 'UND', precioUnitario: 2800000, descuentoPorcentaje: 10, subtotal: 2520000 },
-        { orden: 3, descripcion: 'Servicio de Diagnóstico y Pruebas de Carga', cantidad: 2, unidad: 'UND', precioUnitario: 450000, descuentoPorcentaje: 0, subtotal: 900000 },
+        {
+          orden: 1,
+          descripcion: 'Mantenimiento Preventivo Tipo A - Generador 250 KVA',
+          cantidad: 1,
+          unidad: 'UND',
+          precioUnitario: 1500000,
+          descuentoPorcentaje: 0,
+          subtotal: 1500000,
+        },
+        {
+          orden: 2,
+          descripcion: 'Mantenimiento Preventivo Tipo B - Generador 250 KVA',
+          cantidad: 1,
+          unidad: 'UND',
+          precioUnitario: 2800000,
+          descuentoPorcentaje: 10,
+          subtotal: 2520000,
+        },
+        {
+          orden: 3,
+          descripcion: 'Servicio de Diagnóstico y Pruebas de Carga',
+          cantidad: 2,
+          unidad: 'UND',
+          precioUnitario: 450000,
+          descuentoPorcentaje: 0,
+          subtotal: 900000,
+        },
       ],
 
       itemsComponentes: [
-        { orden: 1, descripcion: 'Filtro de Aceite CATERPILLAR Original', referencia: 'FLT-001', cantidad: 3, unidad: 'UND', precioUnitario: 185000, descuentoPorcentaje: 0, subtotal: 555000 },
-        { orden: 2, descripcion: 'Filtro de Combustible Primario', referencia: 'FLT-002', cantidad: 3, unidad: 'UND', precioUnitario: 145000, descuentoPorcentaje: 10, subtotal: 420500 },
-        { orden: 3, descripcion: 'Filtro de Aire Principal', referencia: 'FLT-003', cantidad: 2, unidad: 'UND', precioUnitario: 350000, descuentoPorcentaje: 0, subtotal: 700000 },
-        { orden: 4, descripcion: 'Aceite Lubricante 15W40 (Galón)', referencia: 'ACE-001', cantidad: 8, unidad: 'GAL', precioUnitario: 125000, descuentoPorcentaje: 5, subtotal: 950000 },
+        {
+          orden: 1,
+          descripcion: 'Filtro de Aceite CATERPILLAR Original',
+          referencia: 'FLT-001',
+          cantidad: 3,
+          unidad: 'UND',
+          precioUnitario: 185000,
+          descuentoPorcentaje: 0,
+          subtotal: 555000,
+        },
+        {
+          orden: 2,
+          descripcion: 'Filtro de Combustible Primario',
+          referencia: 'FLT-002',
+          cantidad: 3,
+          unidad: 'UND',
+          precioUnitario: 145000,
+          descuentoPorcentaje: 10,
+          subtotal: 420500,
+        },
+        {
+          orden: 3,
+          descripcion: 'Filtro de Aire Principal',
+          referencia: 'FLT-003',
+          cantidad: 2,
+          unidad: 'UND',
+          precioUnitario: 350000,
+          descuentoPorcentaje: 0,
+          subtotal: 700000,
+        },
+        {
+          orden: 4,
+          descripcion: 'Aceite Lubricante 15W40 (Galón)',
+          referencia: 'ACE-001',
+          cantidad: 8,
+          unidad: 'GAL',
+          precioUnitario: 125000,
+          descuentoPorcentaje: 5,
+          subtotal: 950000,
+        },
       ],
 
       totales: {
@@ -1323,7 +1589,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       tiempoEstimadoDias: 7,
       mesesGarantia: 6,
       observacionesGarantia: '6 meses sobre repuestos instalados y mano de obra',
-      terminosCondiciones: 'Esta cotización incluye transporte e instalación. Los precios pueden variar según condiciones de mercado.',
+      terminosCondiciones:
+        'Esta cotización incluye transporte e instalación. Los precios pueden variar según condiciones de mercado.',
 
       elaboradoPor: 'Carlos Martínez',
       cargoElaborador: 'Asesor Comercial',
@@ -1338,7 +1605,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   async generarPDFTrazabilidadCliente(datos: DatosTrazabilidadClientePDF): Promise<PDFResult> {
     const startTime = Date.now();
     try {
-      this.logger.log(`📄 Generando Informe Ejecutivo de Trazabilidad para: ${datos.cliente.nombre}`);
+      this.logger.log(
+        `📄 Generando Informe Ejecutivo de Trazabilidad para: ${datos.cliente.nombre}`,
+      );
 
       await this.initBrowser();
       const html = generarTrazabilidadClienteHTML(datos);
@@ -1372,7 +1641,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
         const elapsed = Date.now() - startTime;
         const finalSizeKB = (pdfBuffer.length / 1024).toFixed(2);
-        this.logger.log(`✅ PDF Trazabilidad listo en ${elapsed}ms: ${filename} (${finalSizeKB} KB)`);
+        this.logger.log(
+          `✅ PDF Trazabilidad listo en ${elapsed}ms: ${filename} (${finalSizeKB} KB)`,
+        );
 
         return {
           buffer: Buffer.from(pdfBuffer),
@@ -1390,14 +1661,18 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     } catch (error: unknown) {
       const err = error as Error;
       this.logger.error(`❌ Error generando PDF de trazabilidad: ${err.message}`, err.stack);
-      throw new InternalServerErrorException(`Error al generar PDF de trazabilidad: ${err.message}`);
+      throw new InternalServerErrorException(
+        `Error al generar PDF de trazabilidad: ${err.message}`,
+      );
     }
   }
 
   private generarFilenameTrazabilidad(clienteNombre: string): string {
-    const sanitize = (clienteNombre || 'CLIENTE').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase().substring(0, 30);
+    const sanitize = (clienteNombre || 'CLIENTE')
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .toUpperCase()
+      .substring(0, 30);
     const fecha = new Date().toISOString().split('T')[0];
     return `INFORME_EJECUTIVO_TRAZABILIDAD_${sanitize}_${fecha}.pdf`;
   }
 }
-

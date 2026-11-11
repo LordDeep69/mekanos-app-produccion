@@ -21,7 +21,16 @@ import '../../../core/errors/user_friendly_error.dart';
 /// ============================================================================
 
 /// Tipos de evidencia permitidos
-enum TipoEvidencia { ANTES, DURANTE, DESPUES, MEDICION, GENERAL }
+enum TipoEvidencia {
+  antes('ANTES'),
+  durante('DURANTE'),
+  despues('DESPUES'),
+  medicion('MEDICION'),
+  general('GENERAL');
+
+  final String codigo;
+  const TipoEvidencia(this.codigo);
+}
 
 /// Resultado de captura de evidencia
 class CapturaEvidenciaResult {
@@ -90,7 +99,7 @@ class EvidenciaService {
   /// Formato: ORD_{idOrden}_{TIPO}_{timestamp}.jpg
   String _generarNombreArchivo(int idOrden, TipoEvidencia tipo) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    return 'ORD_${idOrden}_${tipo.name}_$timestamp.jpg';
+    return 'ORD_${idOrden}_${tipo.codigo}_$timestamp.jpg';
   }
 
   // ============================================================================
@@ -154,7 +163,7 @@ class EvidenciaService {
           idActividadEjecutada: Value(idActividadEjecutada), // ✅ MODELO HÍBRIDO
           idOrdenEquipo: Value(idOrdenEquipo), // ✅ MULTI-EQUIPOS (16-DIC-2025)
           rutaLocal: rutaDestino,
-          tipoEvidencia: tipo.name,
+          tipoEvidencia: tipo.codigo,
           descripcion: Value(descripcion),
           fechaCaptura: Value(DateTime.now()),
           isDirty: const Value(true),
@@ -220,7 +229,7 @@ class EvidenciaService {
           idOrden: idOrden,
           idActividadEjecutada: Value(idActividadEjecutada),
           rutaLocal: rutaDestino,
-          tipoEvidencia: tipo.name,
+          tipoEvidencia: tipo.codigo,
           descripcion: Value(descripcion),
           fechaCaptura: Value(DateTime.now()),
           isDirty: const Value(true),
@@ -284,7 +293,7 @@ class EvidenciaService {
               idOrden: idOrden,
               idActividadEjecutada: Value(idActividadEjecutada),
               rutaLocal: rutaDestino,
-              tipoEvidencia: tipo.name,
+              tipoEvidencia: tipo.codigo,
               descripcion: Value(descripcion),
               fechaCaptura: Value(DateTime.now()),
               isDirty: const Value(true),
@@ -345,7 +354,7 @@ class EvidenciaService {
     return await (_db.select(_db.evidencias)
           ..where(
             (e) =>
-                e.idOrden.equals(idOrden) & e.tipoEvidencia.equals(tipo.name),
+                e.idOrden.equals(idOrden) & e.tipoEvidencia.equals(tipo.codigo),
           )
           ..orderBy([(e) => OrderingTerm.desc(e.fechaCaptura)]))
         .get();
@@ -357,7 +366,7 @@ class EvidenciaService {
     final conteo = <TipoEvidencia, int>{};
 
     for (final tipo in TipoEvidencia.values) {
-      conteo[tipo] = todas.where((e) => e.tipoEvidencia == tipo.name).length;
+      conteo[tipo] = todas.where((e) => e.tipoEvidencia == tipo.codigo).length;
     }
 
     return conteo;
@@ -413,7 +422,7 @@ class EvidenciaService {
 
     for (final tipo in TipoEvidencia.values) {
       conteo[tipo] = generales
-          .where((e) => e.tipoEvidencia == tipo.name)
+          .where((e) => e.tipoEvidencia == tipo.codigo)
           .length;
     }
 
@@ -429,7 +438,7 @@ class EvidenciaService {
           ..where(
             (e) =>
                 e.idActividadEjecutada.equals(idActividadEjecutada) &
-                e.tipoEvidencia.equals(tipo.name),
+                e.tipoEvidencia.equals(tipo.codigo),
           )
           ..orderBy([(e) => OrderingTerm.desc(e.fechaCaptura)]))
         .get();
@@ -444,7 +453,7 @@ class EvidenciaService {
   }
 
   /// ✅ FIX RENDIMIENTO: Cuenta evidencias de MÚLTIPLES actividades en UNA query
-  /// Retorna Map<idActividad, conteo>
+  /// Retorna `Map<idActividad, conteo>`
   Future<Map<int, int>> contarEvidenciasBatch(Set<int> idsActividades) async {
     if (idsActividades.isEmpty) return {};
 

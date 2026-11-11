@@ -3,7 +3,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Gestión Maestra de Marcas y Fabricantes (/compras/marcas)
- * 
+ *
  * Directorio centralizado, auditoría, trazabilidad de artículos,
  * filtros OEM, toggles reactivos y herramienta de consolidación/fusión de marcas.
  */
@@ -84,7 +84,9 @@ export default function MarcasPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'OEM' | 'AFTERMARKET' | 'ACTIVOS' | 'INACTIVOS'>('TODOS');
+  const [filtroTipo, setFiltroTipo] = useState<
+    'TODOS' | 'OEM' | 'AFTERMARKET' | 'ACTIVOS' | 'INACTIVOS'
+  >('TODOS');
 
   // Modal de Crear / Editar
   const [modalOpen, setModalOpen] = useState(false);
@@ -122,7 +124,7 @@ export default function MarcasPage() {
       setMarcas(data);
 
       if (showToast) toast.success('Directorio de marcas actualizado');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Error al cargar marcas:', e);
       toast.error('No se pudo cargar el listado de marcas');
     } finally {
@@ -255,9 +257,10 @@ export default function MarcasPage() {
 
       setModalOpen(false);
       cargarMarcas();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error al guardar marca:', error);
-      const msg = error.response?.data?.message || 'Error al procesar la solicitud';
+      const apiErr = error as { response?: { data?: { message?: string } } };
+      const msg = apiErr.response?.data?.message || 'Error al procesar la solicitud';
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -276,7 +279,6 @@ export default function MarcasPage() {
       return;
     }
 
-    const marcaOrigenObj = marcas.find((m) => m.id_marca === mergeOrigenId);
     const marcaDestinoObj = marcas.find((m) => m.id_marca === mergeDestinoId);
 
     try {
@@ -287,12 +289,15 @@ export default function MarcasPage() {
         eliminar_origen: eliminarOrigen,
       });
 
-      toast.success(res.mensaje || `Fusión completada exitosamente hacia ${marcaDestinoObj?.nombre}`);
+      toast.success(
+        res.mensaje || `Fusión completada exitosamente hacia ${marcaDestinoObj?.nombre}`,
+      );
       setMergeModalOpen(false);
       cargarMarcas();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error al fusionar marcas:', error);
-      const msg = error.response?.data?.message || 'Error al ejecutar la fusión de marcas';
+      const apiErr = error as { response?: { data?: { message?: string } } };
+      const msg = apiErr.response?.data?.message || 'Error al ejecutar la fusión de marcas';
       toast.error(msg);
     } finally {
       setSubmittingMerge(false);
@@ -305,11 +310,11 @@ export default function MarcasPage() {
       const nuevoEstado = !marca.activo;
       // Optimistic update
       setMarcas((prev) =>
-        prev.map((m) => (m.id_marca === marca.id_marca ? { ...m, activo: nuevoEstado } : m))
+        prev.map((m) => (m.id_marca === marca.id_marca ? { ...m, activo: nuevoEstado } : m)),
       );
       await comprasService.updateMarca(marca.id_marca, { activo: nuevoEstado });
       toast.success(`Marca ${marca.nombre} ${nuevoEstado ? 'activada' : 'desactivada'}`);
-    } catch (e: any) {
+    } catch {
       toast.error('No se pudo actualizar el estado de la marca');
       cargarMarcas();
     }
@@ -329,7 +334,8 @@ export default function MarcasPage() {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-gray-600">
-            Gobierno y administración centralizada de fabricantes OEM, marcas homologadas y procedencia.
+            Gobierno y administración centralizada de fabricantes OEM, marcas homologadas y
+            procedencia.
           </p>
         </div>
 
@@ -359,8 +365,7 @@ export default function MarcasPage() {
             onClick={abrirCrearModal}
             className="h-10 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm"
           >
-            <Plus className="mr-1.5 h-4 w-4" />
-            + Nueva Marca / Fabricante
+            <Plus className="mr-1.5 h-4 w-4" />+ Nueva Marca / Fabricante
           </Button>
         </div>
       </div>
@@ -431,17 +436,19 @@ export default function MarcasPage() {
 
             {/* Pestañas de Filtro con Micro-contadores */}
             <div className="flex flex-wrap items-center gap-1.5">
-              {[
-                { id: 'TODOS', label: 'Todas', count: metricas.total },
-                { id: 'OEM', label: 'Solo OEM', count: metricas.oemCount },
-                { id: 'AFTERMARKET', label: 'Alternativas', count: metricas.alternativasCount },
-                { id: 'ACTIVOS', label: 'Activas', count: metricas.activosCount },
-                { id: 'INACTIVOS', label: 'Inactivas', count: metricas.inactivosCount },
-              ].map((f) => (
+              {(
+                [
+                  { id: 'TODOS', label: 'Todas', count: metricas.total },
+                  { id: 'OEM', label: 'Solo OEM', count: metricas.oemCount },
+                  { id: 'AFTERMARKET', label: 'Alternativas', count: metricas.alternativasCount },
+                  { id: 'ACTIVOS', label: 'Activas', count: metricas.activosCount },
+                  { id: 'INACTIVOS', label: 'Inactivas', count: metricas.inactivosCount },
+                ] as const
+              ).map((f) => (
                 <button
                   key={f.id}
                   type="button"
-                  onClick={() => setFiltroTipo(f.id as any)}
+                  onClick={() => setFiltroTipo(f.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
                     filtroTipo === f.id
                       ? 'bg-gray-900 text-white shadow-sm'
@@ -494,7 +501,9 @@ export default function MarcasPage() {
                     <Tag className="mx-auto h-8 w-8 text-gray-300 mb-2" />
                     <p className="text-sm font-semibold text-gray-700">No se encontraron marcas</p>
                     <p className="text-xs text-gray-400 mt-1">
-                      {search ? 'Intenta con otro término de búsqueda' : 'Registra la primera marca para el catálogo'}
+                      {search
+                        ? 'Intenta con otro término de búsqueda'
+                        : 'Registra la primera marca para el catálogo'}
                     </p>
                   </td>
                 </tr>
@@ -504,11 +513,16 @@ export default function MarcasPage() {
                   const gradientClass = getBrandGradient(marca.nombre);
 
                   return (
-                    <tr key={marca.id_marca} className="hover:bg-slate-50/80 transition-colors group">
+                    <tr
+                      key={marca.id_marca}
+                      className="hover:bg-slate-50/80 transition-colors group"
+                    >
                       {/* 1. Nombre, Slug y Avatar Prémium */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           {marca.logo_url ? (
+                            // URL externa arbitraria con fallback onError; next/image requiere whitelist por dominio
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={marca.logo_url}
                               alt={marca.nombre}
@@ -527,7 +541,9 @@ export default function MarcasPage() {
                           )}
 
                           <div>
-                            <p className="font-bold text-gray-900 text-sm leading-snug">{marca.nombre}</p>
+                            <p className="font-bold text-gray-900 text-sm leading-snug">
+                              {marca.nombre}
+                            </p>
                             <span className="font-mono text-[11px] text-gray-400">
                               {marca.slug || marca.nombre.toLowerCase().replace(/\s+/g, '-')}
                             </span>
@@ -543,7 +559,10 @@ export default function MarcasPage() {
                             Fabricante Original (OEM)
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-gray-600 border-gray-200 text-[11px]">
+                          <Badge
+                            variant="outline"
+                            className="text-gray-600 border-gray-200 text-[11px]"
+                          >
                             Homologado / Aftermarket
                           </Badge>
                         )}
@@ -651,7 +670,9 @@ export default function MarcasPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-gray-900">
-              {isEditing ? `Editar Marca: ${selectedMarca?.nombre}` : 'Registrar Nueva Marca / Fabricante'}
+              {isEditing
+                ? `Editar Marca: ${selectedMarca?.nombre}`
+                : 'Registrar Nueva Marca / Fabricante'}
             </DialogTitle>
             <DialogDescription className="text-xs text-gray-500">
               {isEditing
@@ -713,7 +734,9 @@ export default function MarcasPage() {
               <Switch
                 id="m_oem"
                 checked={formData.es_fabricante_oem}
-                onCheckedChange={(checked) => setFormData({ ...formData, es_fabricante_oem: checked })}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, es_fabricante_oem: checked })
+                }
               />
             </div>
 
@@ -782,7 +805,10 @@ export default function MarcasPage() {
             {isEditing && (
               <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3">
                 <div className="space-y-0.5">
-                  <Label htmlFor="m_activo" className="text-xs font-bold text-gray-800 cursor-pointer">
+                  <Label
+                    htmlFor="m_activo"
+                    className="text-xs font-bold text-gray-800 cursor-pointer"
+                  >
                     Estado Activo en Catálogo
                   </Label>
                   <p className="text-[11px] text-gray-500">
@@ -813,7 +839,11 @@ export default function MarcasPage() {
                 disabled={submitting}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {submitting ? 'Guardando...' : isEditing ? 'Actualizar Marca' : 'Guardar en Directorio'}
+                {submitting
+                  ? 'Guardando...'
+                  : isEditing
+                    ? 'Actualizar Marca'
+                    : 'Guardar en Directorio'}
               </Button>
             </DialogFooter>
           </form>
@@ -833,7 +863,9 @@ export default function MarcasPage() {
                   Herramienta de Fusión y Unificación de Marcas
                 </DialogTitle>
                 <DialogDescription className="text-xs text-gray-500 mt-1 leading-relaxed">
-                  Esta herramienta permite unificar dos marcas duplicadas (ej. &apos;CAT&apos; y &apos;CATERPILLAR&apos;), transfiriendo todos los repuestos asociados a la marca definitiva y archivando el alias secundario.
+                  Esta herramienta permite unificar dos marcas duplicadas (ej. &apos;CAT&apos; y
+                  &apos;CATERPILLAR&apos;), transfiriendo todos los repuestos asociados a la marca
+                  definitiva y archivando el alias secundario.
                 </DialogDescription>
               </div>
             </div>
@@ -901,11 +933,15 @@ export default function MarcasPage() {
             {/* Switch de eliminación o desactivación */}
             <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3">
               <div className="space-y-0.5">
-                <Label htmlFor="m_eliminar" className="text-xs font-bold text-gray-800 cursor-pointer">
+                <Label
+                  htmlFor="m_eliminar"
+                  className="text-xs font-bold text-gray-800 cursor-pointer"
+                >
                   Eliminar marca origen tras la transferencia
                 </Label>
                 <p className="text-[11px] text-gray-500">
-                  Si se desactiva, la marca origen quedará archivada como inactiva con nota de auditoría.
+                  Si se desactiva, la marca origen quedará archivada como inactiva con nota de
+                  auditoría.
                 </p>
               </div>
               <Switch

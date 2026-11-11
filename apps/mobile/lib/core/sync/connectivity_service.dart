@@ -105,7 +105,7 @@ final isOnlineProvider = Provider<bool>((ref) {
   return status.when(
     data: (s) => s == ConnectivityStatus.online,
     loading: () => true, // Asumir online mientras carga
-    error: (_, __) => false,
+    error: (_, _) => false,
   );
 });
 

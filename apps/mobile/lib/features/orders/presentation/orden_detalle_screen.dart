@@ -1222,7 +1222,7 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: estadoColor.withOpacity(0.1),
+                          color: estadoColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(

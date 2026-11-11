@@ -1,212 +1,243 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Tipos para el módulo de Órdenes de Servicio
- * 
+ *
  * Backend: ordenes.controller.ts
  */
 
 // Estado de orden
 export interface EstadoOrden {
-    id_estado: number;
-    codigo_estado: string;
-    nombre_estado: string;
-    descripcion?: string;
-    es_estado_final: boolean;
+  id_estado: number;
+  codigo_estado: string;
+  nombre_estado: string;
+  descripcion?: string;
+  es_estado_final: boolean;
 }
 
 // Tipo de servicio
 export interface TipoServicio {
-    id_tipo_servicio: number;
-    codigo_tipo: string;
-    nombre_tipo: string;
-    descripcion?: string;
-    plantilla_observacion?: string;
+  id_tipo_servicio: number;
+  codigo_tipo: string;
+  nombre_tipo: string;
+  descripcion?: string;
+  plantilla_observacion?: string;
 }
 
 // Sede de cliente
 export interface SedeCliente {
-    id_sede: number;
-    id_cliente: number;
-    nombre_sede: string;
-    direccion_sede: string;
-    barrio_zona?: string;
-    ciudad_sede?: string;
-    departamento_sede?: string;
-    contacto_sede?: string;
-    telefono_sede?: string;
-    email_sede?: string;
+  id_sede: number;
+  id_cliente: number;
+  nombre_sede: string;
+  direccion_sede: string;
+  barrio_zona?: string;
+  ciudad_sede?: string;
+  departamento_sede?: string;
+  contacto_sede?: string;
+  telefono_sede?: string;
+  email_sede?: string;
 }
 
 // Cliente básico
 export interface ClienteOrden {
-    id_cliente: number;
-    // ✅ FIX 09-FEB-2026: Soporte para clientes-sede
-    nombre_sede?: string;
-    id_cliente_principal?: number;
-    // ✅ FIX 03-MAR-2026: Emails adicionales de notificación
+  id_cliente: number;
+  // ✅ FIX 09-FEB-2026: Soporte para clientes-sede
+  nombre_sede?: string;
+  id_cliente_principal?: number;
+  // ✅ FIX 03-MAR-2026: Emails adicionales de notificación
+  emails_notificacion?: string | null;
+  cliente_principal?: {
+    id_cliente?: number;
     emails_notificacion?: string | null;
-    persona?: {
-        nombre_comercial?: string;
-        razon_social?: string;
-        numero_identificacion?: string;
-        direccion_principal?: string;
-        ciudad?: string;
-        departamento?: string;
-        email_principal?: string;
-    };
+  } | null;
+  persona?: {
+    nombre_comercial?: string;
+    razon_social?: string;
+    numero_identificacion?: string;
+    direccion_principal?: string;
+    ciudad?: string;
+    departamento?: string;
+    email_principal?: string;
+  };
 }
 
 // Equipo básico
 export interface EquipoOrden {
-    id_equipo: number;
-    codigo_equipo: string;
-    nombre_equipo?: string;
+  id_equipo: number;
+  codigo_equipo: string;
+  nombre_equipo?: string;
+  nombre?: string;
+  id_tipo_equipo?: number;
+  tipos_equipo?: {
+    id_tipo_equipo: number;
+    nombre_tipo?: string;
+    codigo_tipo?: string;
+    es_generador?: boolean;
+  } | null;
 }
 
 // Técnico asignado
 export interface TecnicoOrden {
-    id_empleado: number;
-    cargo?: string;
-    persona?: {
-        primer_nombre?: string;
-        primer_apellido?: string;
-    };
+  id_empleado: number;
+  cargo?: string;
+  persona?: {
+    primer_nombre?: string;
+    primer_apellido?: string;
+  };
 }
 
 export interface HiloCasoVisita {
-    id_orden_servicio: number;
-    numero_orden: string;
-    id_orden_padre?: number | null;
-    tipo_visita?: string | null;
-    numero_visita_caso?: number | null;
-    fecha_programada?: string;
-    fecha_fin_real?: string;
-    total_general?: number;
-    estados_orden?: EstadoOrden;
-    tipos_servicio?: TipoServicio;
-    empleados_ordenes_servicio_id_tecnico_asignadoToempleados?: TecnicoOrden;
-    ordenes_pendientes?: Array<{ id_orden_pendiente: number; estado: string; alcance?: string }>;
-    pendientes_asignados_resolver?: Array<{ id_orden_pendiente: number; estado: string; alcance?: string }>;
+  id_orden_servicio: number;
+  numero_orden: string;
+  id_orden_padre?: number | null;
+  tipo_visita?: string | null;
+  numero_visita_caso?: number | null;
+  fecha_programada?: string;
+  fecha_fin_real?: string;
+  total_general?: number;
+  estados_orden?: EstadoOrden;
+  tipos_servicio?: TipoServicio;
+  empleados_ordenes_servicio_id_tecnico_asignadoToempleados?: TecnicoOrden;
+  ordenes_pendientes?: Array<{ id_orden_pendiente: number; estado: string; alcance?: string }>;
+  pendientes_asignados_resolver?: Array<{
+    id_orden_pendiente: number;
+    estado: string;
+    alcance?: string;
+  }>;
 }
 
 export interface HiloCaso {
-    id_orden_raiz: number;
-    codigo_caso?: string;
-    numero_orden_raiz: string;
-    nombre_caso?: string | null;
-    estado_caso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string;
-    es_multivisita: boolean;
-    total_visitas: number;
-    inversion_acumulada: number;
-    pendientes_totales: number;
-    pendientes_resueltos: number;
-    pendientes_en_gestion: number;
-    pendientes_abiertos: number;
-    pendientes_caso?: OrdenPendiente[];
-    visitas: HiloCasoVisita[];
+  id_orden_raiz: number;
+  codigo_caso?: string;
+  numero_orden_raiz: string;
+  nombre_caso?: string | null;
+  estado_caso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string;
+  es_multivisita: boolean;
+  total_visitas: number;
+  inversion_acumulada: number;
+  pendientes_totales: number;
+  pendientes_resueltos: number;
+  pendientes_en_gestion: number;
+  pendientes_abiertos: number;
+  pendientes_caso?: OrdenPendiente[];
+  visitas: HiloCasoVisita[];
 }
 
 // Orden de servicio
 export interface Orden {
+  id_orden_servicio: number;
+  numero_orden: string;
+  descripcion?: string;
+  prioridad: 'BAJA' | 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
+  fecha_programada?: string;
+  fecha_inicio_real?: string;
+  fecha_fin_real?: string;
+  observaciones?: string;
+  observaciones_cierre?: string;
+  observaciones_tecnico?: string;
+  trabajo_realizado?: string;
+  fecha_creacion?: string;
+  fecha_modificacion?: string;
+
+  // Totales financieros (cache del backend)
+  total_servicios?: number;
+  total_gastos?: number;
+  total_componentes?: number;
+  total_general?: number;
+
+  // ✅ FIX 03-MAR-2026: Total de emails enviados para mostrar badge en lista
+  total_emails_enviados?: number;
+
+  // ✅ FIX 06-MAY-2026: Total de documentos PDF generados para mostrar badge en lista
+  total_documentos_pdf?: number;
+
+  // ✅ FIX 23-SEP-2026: Total de pendientes técnicos para badge en lista
+  total_pendientes?: number;
+  pendientes_activos?: number;
+  ordenes_pendientes?: OrdenPendiente[];
+  pendientes_asignados_resolver?: OrdenPendiente[];
+
+  // ✅ Encadenamiento Fractal (Visita 1 -> Visita N)
+  id_cliente?: number;
+  id_equipo?: number;
+  id_tipo_servicio?: number | null;
+  id_estado?: number;
+  id_estado_actual?: number;
+  id_estado_orden?: number;
+  id_orden_padre?: number | null;
+  tipo_visita?:
+    | 'INICIAL'
+    | 'CONTINUACION'
+    | 'CORRECTIVO_DERIVADO'
+    | 'GARANTIA'
+    | 'AISLADA'
+    | string
+    | null;
+  numero_visita_caso?: number | null;
+  nombre_caso?: string | null;
+  estado_caso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string | null;
+  orden_padre?: {
     id_orden_servicio: number;
     numero_orden: string;
-    descripcion?: string;
-    prioridad: 'BAJA' | 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
     fecha_programada?: string;
-    fecha_inicio_real?: string;
-    fecha_fin_real?: string;
-    observaciones?: string;
-    observaciones_cierre?: string;
-    observaciones_tecnico?: string;
-    trabajo_realizado?: string;
-    fecha_creacion?: string;
-    fecha_modificacion?: string;
-
-    // Totales financieros (cache del backend)
-    total_servicios?: number;
-    total_gastos?: number;
-    total_componentes?: number;
-    total_general?: number;
-
-    // ✅ FIX 03-MAR-2026: Total de emails enviados para mostrar badge en lista
-    total_emails_enviados?: number;
-
-    // ✅ FIX 06-MAY-2026: Total de documentos PDF generados para mostrar badge en lista
-    total_documentos_pdf?: number;
-
-    // ✅ FIX 23-SEP-2026: Total de pendientes técnicos para badge en lista
-    total_pendientes?: number;
-    pendientes_activos?: number;
-    ordenes_pendientes?: OrdenPendiente[];
-    pendientes_asignados_resolver?: OrdenPendiente[];
-
-    // ✅ Encadenamiento Fractal (Visita 1 -> Visita N)
-    id_cliente?: number;
-    id_equipo?: number;
-    id_orden_padre?: number | null;
-    tipo_visita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | 'AISLADA' | string | null;
-    numero_visita_caso?: number | null;
+    tipo_visita?: string;
+    numero_visita_caso?: number;
     nombre_caso?: string | null;
-    estado_caso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string | null;
-    orden_padre?: {
-        id_orden_servicio: number;
-        numero_orden: string;
-        fecha_programada?: string;
-        tipo_visita?: string;
-        numero_visita_caso?: number;
-        nombre_caso?: string | null;
-        estado_caso?: string | null;
-        estados_orden?: EstadoOrden;
-    } | null;
-    hilo_caso?: HiloCaso;
-
-    // Relaciones
+    estado_caso?: string | null;
     estados_orden?: EstadoOrden;
-    tipos_servicio?: TipoServicio;
-    clientes?: ClienteOrden;
-    equipos?: EquipoOrden; // Equipo principal (legacy)
-    // ✅ FIX 18-FEB-2026: Sede del cliente para dirección correcta
-    sedes_cliente?: SedeCliente;
-    id_sede?: number;
+  } | null;
+  hilo_caso?: HiloCaso;
 
-    // MULTI-EQUIPOS
-    ordenes_equipos?: Array<{
-        id_orden_equipo: number;
-        equipo: EquipoOrden;
-        orden_secuencia: number;
-        nombre_sistema?: string;
-    }>;
+  // Relaciones
+  estados_orden?: EstadoOrden;
+  tipos_servicio?: TipoServicio;
+  clientes?: ClienteOrden;
+  equipos?: EquipoOrden; // Equipo principal (legacy)
+  // ✅ FIX 18-FEB-2026: Sede del cliente para dirección correcta
+  sedes_cliente?: SedeCliente;
+  id_sede?: number;
 
-    id_tecnico_asignado?: number;
-    origen_solicitud?: string;
-    empleados_ordenes_servicio_id_tecnico_asignadoToempleados?: TecnicoOrden;
-    informes?: Array<{
-        id_informe: number;
-        url_pdf: string;
-        fecha_generacion: string;
-    }>;
+  // MULTI-EQUIPOS
+  ordenes_equipos?: Array<{
+    id_orden_equipo: number;
+    id_equipo?: number;
+    equipo: EquipoOrden;
+    equipos?: EquipoOrden;
+    orden_secuencia: number;
+    nombre_sistema?: string;
+  }>;
 
-    // ✅ Relación con servicios específicos vinculados del catálogo
-    detalle_servicios_orden?: Array<{
-        id_detalle_servicio?: number;
-        id_servicio: number;
-        catalogo_servicios?: {
-            id_servicio: number;
-            codigo_servicio: string;
-            nombre_servicio: string;
-        };
-    }>;
+  id_tecnico_asignado?: number;
+  origen_solicitud?: string;
+  empleados_ordenes_servicio_id_tecnico_asignadoToempleados?: TecnicoOrden;
+  informes?: Array<{
+    id_informe: number;
+    url_pdf: string;
+    fecha_generacion: string;
+  }>;
 
-    // ✅ FIX 25-SEP-2026: Telemetría y avance en tiempo real (Estilo Sytex)
-    progreso_registro?: ProgresoRegistroResumen;
+  // ✅ Relación con servicios específicos vinculados del catálogo
+  detalle_servicios_orden?: Array<{
+    id_detalle_servicio?: number;
+    id_servicio: number;
+    catalogo_servicios?: {
+      id_servicio: number;
+      codigo_servicio: string;
+      nombre_servicio: string;
+    };
+  }>;
 
-    // ✅ 19-OCT-2026: Autorización administrativa para edición técnica
-    // de una orden COMPLETADA desde la app móvil.
-    edicion_tecnico_habilitada?: boolean;
-    edicion_tecnico_autorizada_por?: number | null;
-    edicion_tecnico_autorizada_por_nombre?: string | null;
-    edicion_tecnico_fecha_autorizacion?: string | null;
-    edicion_tecnico_motivo?: string | null;
+  // ✅ FIX 25-SEP-2026: Telemetría y avance en tiempo real (Estilo Sytex)
+  progreso_registro?: ProgresoRegistroResumen;
+
+  // ✅ 19-OCT-2026: Autorización administrativa para edición técnica
+  // de una orden COMPLETADA desde la app móvil.
+  edicion_tecnico_habilitada?: boolean;
+  edicion_tecnico_autorizada_por?: number | null;
+  edicion_tecnico_autorizada_por_nombre?: string | null;
+  edicion_tecnico_fecha_autorizacion?: string | null;
+  edicion_tecnico_motivo?: string | null;
+  nombre_quien_recibe?: string | null;
+  cargo_quien_recibe?: string | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -214,207 +245,327 @@ export interface Orden {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export type EstadoConexionTecnico =
-    | 'EN_VIVO'
-    | 'RECIENTE'
-    | 'INACTIVO'
-    | 'COMPLETADO'
-    | 'SIN_INICIAR';
+  | 'EN_VIVO'
+  | 'RECIENTE'
+  | 'INACTIVO'
+  | 'COMPLETADO'
+  | 'SIN_INICIAR';
 
 export interface ProgresoRegistroResumen {
-    porcentaje_global: number;
-    estado_conexion: EstadoConexionTecnico;
-    minutos_inactividad: number | null;
-    ultima_actividad: string | null;
-    actividades: {
-        completadas: number;
-        total: number;
-        porcentaje: number;
-    };
-    mediciones: {
-        registradas: number;
-        con_alerta?: number;
-    };
-    evidencias_fotos: number;
-    firmas: {
-        tecnico: boolean;
-        cliente: boolean;
-        total: number;
-    };
-    tiempo?: {
-        inicio_real: string | null;
-        fin_real: string | null;
-        duracion_minutos: number | null;
-    };
+  porcentaje_global: number;
+  estado_conexion: EstadoConexionTecnico;
+  minutos_inactividad: number | null;
+  ultima_actividad: string | null;
+  actividades: {
+    completadas: number;
+    total: number;
+    obligatorias_total?: number;
+    obligatorias_completadas?: number;
+    porcentaje: number;
+  };
+  mediciones: {
+    registradas: number;
+    con_alerta?: number;
+  };
+  evidencias_fotos: number;
+  firmas: {
+    tecnico: boolean;
+    cliente: boolean;
+    total: number;
+  };
+  tiempo?: {
+    inicio_real: string | null;
+    fin_real: string | null;
+    duracion_minutos: number | null;
+  };
 }
 
 export interface ProgresoRegistroDetallado extends ProgresoRegistroResumen {
-    id_orden_servicio: number;
-    numero_orden: string;
-    estado_actual: {
-        id_estado: number;
-        codigo_estado: string;
-        nombre_estado: string;
+  id_orden_servicio: number;
+  numero_orden: string;
+  estado_actual: {
+    id_estado: number;
+    codigo_estado: string;
+    nombre_estado: string;
+  };
+  tecnico: {
+    id_empleado: number | null;
+    nombre_completo: string;
+  } | null;
+  cliente: {
+    id_cliente: number;
+    nombre: string;
+    nombre_sede?: string | null;
+  };
+  equipo: {
+    id_equipo: number;
+    codigo_equipo: string;
+    nombre_equipo?: string | null;
+  };
+  checklist_items: Array<{
+    id_actividad_ejecutada: number;
+    id_actividad_catalogo: number | null;
+    descripcion: string;
+    estado: string | null;
+    ejecutada: boolean;
+    fecha_ejecucion: string | null;
+    fecha_registro: string | null;
+    tiempo_ejecucion_minutos?: number | null;
+    requiere_evidencia: boolean;
+    evidencia_capturada: boolean;
+    observaciones?: string | null;
+  }>;
+  mediciones_items: Array<{
+    id_medicion: number;
+    parametro_codigo?: string;
+    parametro_nombre: string;
+    unidad_medida?: string | null;
+    valor_numerico?: number | null;
+    valor_texto?: string | null;
+    fuera_de_rango: boolean;
+    nivel_alerta?: string | null;
+    fecha_medicion: string | null;
+    observaciones?: string | null;
+  }>;
+  ultimos_eventos: Array<{
+    tipo: 'ACTIVIDAD' | 'MEDICION' | 'FOTO' | 'FIRMA' | 'ESTADO' | 'HEARTBEAT';
+    descripcion: string;
+    timestamp: string;
+  }>;
+  telemetria_en_vivo?: Record<string, unknown>;
+}
+
+export interface ActividadEjecutadaOrden {
+  id_actividad_ejecutada: number;
+  id_orden_servicio?: number;
+  id_orden_equipo?: number | null;
+  descripcion_manual?: string;
+  sistema?: string;
+  estado?: string;
+  observaciones?: string;
+  ejecutada?: boolean;
+  fecha_ejecucion?: string;
+  respuesta_json?: Record<string, unknown> | null;
+  catalogo_actividades?: {
+    descripcion_actividad?: string;
+    codigo_actividad?: string;
+    tipo_control_input?: string;
+    config_input_json?: unknown;
+    rol_semantico?: string | null;
+    naturaleza_personalizada?: string | null;
+    catalogo_sistemas?: {
+      nombre_sistema?: string;
     };
-    tecnico: {
-        id_empleado: number | null;
-        nombre_completo: string;
-    } | null;
-    cliente: {
-        id_cliente: number;
-        nombre: string;
-        nombre_sede?: string | null;
-    };
-    equipo: {
-        id_equipo: number;
-        codigo_equipo: string;
-        nombre_equipo?: string | null;
-    };
-    checklist_items: Array<{
-        id_actividad_ejecutada: number;
-        id_actividad_catalogo: number | null;
-        descripcion: string;
-        estado: string | null;
-        ejecutada: boolean;
-        fecha_ejecucion: string | null;
-        fecha_registro: string | null;
-        tiempo_ejecucion_minutos?: number | null;
-        requiere_evidencia: boolean;
-        evidencia_capturada: boolean;
-        observaciones?: string | null;
-    }>;
-    mediciones_items: Array<{
-        id_medicion: number;
-        parametro_codigo?: string;
-        parametro_nombre: string;
-        unidad_medida?: string | null;
-        valor_numerico?: number | null;
-        valor_texto?: string | null;
-        fuera_de_rango: boolean;
-        nivel_alerta?: string | null;
-        fecha_medicion: string | null;
-        observaciones?: string | null;
-    }>;
-    ultimos_eventos: Array<{
-        tipo: 'ACTIVIDAD' | 'MEDICION' | 'FOTO' | 'FIRMA' | 'ESTADO' | 'HEARTBEAT';
-        descripcion: string;
-        timestamp: string;
-    }>;
-    telemetria_en_vivo?: any;
+  };
+}
+
+export interface MedicionOrden {
+  id_medicion: number;
+  id_orden_servicio: number;
+  id_actividad_ejecutada?: number | null;
+  id_orden_equipo?: number | null;
+  id_parametro_medicion?: number;
+  valor_numerico?: number | null;
+  valor_texto?: string | null;
+  unidad_medida?: string;
+  fuera_de_rango?: boolean;
+  nivel_alerta?: string;
+  mensaje_alerta?: string;
+  observaciones?: string;
+  excluido_pdf?: boolean;
+  parametros_medicion?: {
+    nombre_parametro?: string;
+    codigo_parametro?: string;
+    unidad_medida?: string;
+    valorMinimoNormal?: number | null;
+    valorMaximoNormal?: number | null;
+    valor_minimo_normal?: number | null;
+    valor_maximo_normal?: number | null;
+    valorMinimoCritico?: number | null;
+    valorMaximoCritico?: number | null;
+    valor_minimo_critico?: number | null;
+    valor_maximo_critico?: number | null;
+  };
+}
+
+export interface ParametroSinMedirOrden {
+  id_parametro_medicion: number;
+  nombre_parametro: string;
+  unidad_medida?: string | null;
+  es_obligatorio?: boolean;
+  valor_minimo_normal?: number | string | null;
+  valor_maximo_normal?: number | string | null;
+}
+
+export interface ServicioOrdenDetalle {
+  id_detalle_servicio: number;
+  id_servicio?: number;
+  cantidad: number;
+  precio_unitario: number;
+  descuento_porcentaje?: number;
+  subtotal: number;
+  catalogo_servicios?: {
+    id_servicio?: number;
+    codigo_servicio?: string;
+    nombre_servicio?: string;
+  };
+}
+
+export interface EvidenciaOrden {
+  id_evidencia: number;
+  id_orden_servicio: number;
+  tipo_evidencia: 'ANTES' | 'DURANTE' | 'DESPUES' | 'GENERAL' | 'INSUMOS' | 'MEDICION' | string;
+  url_foto?: string;
+  ruta_archivo?: string;
+  foto_base64?: string;
+  descripcion?: string;
+  fecha_captura?: string;
+  id_actividad_ejecutada?: number;
+  id_orden_equipo?: number | null;
+  idOrdenEquipo?: number | null;
+  actividad_asociada?: {
+    descripcion_actividad?: string;
+  };
+}
+
+export interface FirmaOrden {
+  id_firma: number;
+  id_firma_digital?: number;
+  id_orden_servicio: number;
+  tipo_firma: 'TECNICO' | 'CLIENTE' | 'ASESOR' | 'GERENTE' | 'OTRO';
+  url_firma?: string;
+  firma_base64?: string;
+  nombre_firmante?: string;
+  cargo_firmante?: string;
+  fecha_firma?: string;
+  fecha_captura?: string;
+  ip_captura?: string;
 }
 
 // Respuesta paginada
 export interface OrdenesResponse {
-    success: boolean;
-    message: string;
-    data: Orden[];
-    pagination: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-        totalCasosAbiertos?: number;
-        totalConPendientes?: number;
-    };
+  success: boolean;
+  message: string;
+  data: Orden[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    totalCasosAbiertos?: number;
+    totalConPendientes?: number;
+  };
 }
 
 // Parámetros de consulta - ENTERPRISE
 export interface OrdenesQueryParams {
-    page?: number;
-    limit?: number;
-    idCliente?: number;
-    idEquipo?: number;
-    idTecnico?: number;
-    estado?: string;
-    prioridad?: string;
-    // ENTERPRISE: Nuevos parámetros de ordenamiento y filtrado
-    sortBy?: 'fecha_creacion' | 'fecha_programada' | 'fecha_modificacion' | 'numero_orden' | 'prioridad';
-    sortOrder?: 'asc' | 'desc';
-    tipoServicioId?: number;
-    fechaDesde?: string;  // ISO date string
-    fechaHasta?: string;  // ISO date string
-    busqueda?: string;    // ✅ Búsqueda por texto libre (numero_orden, cliente, técnico, equipo)
-    idServicio?: number;  // ✅ Filtro por servicio específico del catálogo (catalogo_servicios)
-    servicioTexto?: string; // ✅ Búsqueda inteligente por palabra clave de servicio (ej: 'RADIADOR')
-    filtroCaso?: 'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES' | string;
-    conPendientes?: boolean;
-    filtroCorreo?: 'CON' | 'SIN' | string;
-    filtroPdf?: 'CON' | 'SIN' | string;
-    filtroPendientes?: 'CON' | 'SIN' | string;
+  page?: number;
+  limit?: number;
+  idCliente?: number;
+  idEquipo?: number;
+  idTecnico?: number;
+  estado?: string;
+  prioridad?: string;
+  // ENTERPRISE: Nuevos parámetros de ordenamiento y filtrado
+  sortBy?:
+    | 'fecha_creacion'
+    | 'fecha_programada'
+    | 'fecha_modificacion'
+    | 'numero_orden'
+    | 'prioridad';
+  sortOrder?: 'asc' | 'desc';
+  tipoServicioId?: number;
+  fechaDesde?: string; // ISO date string
+  fechaHasta?: string; // ISO date string
+  busqueda?: string; // ✅ Búsqueda por texto libre (numero_orden, cliente, técnico, equipo)
+  idServicio?: number; // ✅ Filtro por servicio específico del catálogo (catalogo_servicios)
+  servicioTexto?: string; // ✅ Búsqueda inteligente por palabra clave de servicio (ej: 'RADIADOR')
+  filtroCaso?: 'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES' | string;
+  conPendientes?: boolean;
+  filtroCorreo?: 'CON' | 'SIN' | string;
+  filtroPdf?: 'CON' | 'SIN' | string;
+  filtroPendientes?: 'CON' | 'SIN' | string;
 }
 
 // DTO para crear orden - MULTI-EQUIPOS
 export interface CreateOrdenDto {
-    clienteId: number;
-    tipoServicioId: number;
-    // MULTI-EQUIPOS: equipoId para compatibilidad, equiposIds para múltiples
-    equipoId: number;           // Equipo principal (legacy/compatibilidad)
-    equiposIds?: number[];      // Array de IDs de equipos (MULTI-EQUIPOS)
-    serviciosIds?: number[];    // Array de IDs de catalogo_servicios (Correctivos específicos)
-    razonFalla?: string;        // Motivo o falla reportada
-    sedeClienteId?: number;
-    descripcion?: string;
-    prioridad?: 'BAJA' | 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
-    fechaProgramada?: string;
-    tecnicoId?: number;         // Opcional: asignar técnico al crear
-    idOrdenPadre?: number;      // Orden Raíz/Padre si es visita de seguimiento
-    tipoVisita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | 'AISLADA' | string;
-    nombreCaso?: string;        // Nombre característico del Caso Base (Expediente Raíz)
-    estadoCaso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string;
-    idsPendientesAResolver?: number[]; // Pendientes que se resolverán en esta orden
+  clienteId: number;
+  tipoServicioId: number;
+  // MULTI-EQUIPOS: equipoId para compatibilidad, equiposIds para múltiples
+  equipoId: number; // Equipo principal (legacy/compatibilidad)
+  equiposIds?: number[]; // Array de IDs de equipos (MULTI-EQUIPOS)
+  serviciosIds?: number[]; // Array de IDs de catalogo_servicios (Correctivos específicos)
+  razonFalla?: string; // Motivo o falla reportada
+  sedeClienteId?: number;
+  descripcion?: string;
+  prioridad?: 'BAJA' | 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
+  fechaProgramada?: string;
+  tecnicoId?: number; // Opcional: asignar técnico al crear
+  idOrdenPadre?: number; // Orden Raíz/Padre si es visita de seguimiento
+  tipoVisita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | 'AISLADA' | string;
+  nombreCaso?: string; // Nombre característico del Caso Base (Expediente Raíz)
+  estadoCaso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string;
+  idsPendientesAResolver?: number[]; // Pendientes que se resolverán en esta orden
 }
 
 // DTO para cambiar estado
 export interface CambiarEstadoDto {
-    nuevoEstado: string;
-    motivo?: string;
-    observaciones?: string;
-    tecnicoId?: number;
-    aprobadorId?: number;
+  nuevoEstado: string;
+  motivo?: string;
+  observaciones?: string;
+  tecnicoId?: number;
+  aprobadorId?: number;
 }
 
 // Helpers
 export function getClienteNombre(orden: Orden): string {
-    // ✅ FIX 09-FEB-2026: Priorizar nombre_sede para clientes tipo sede
-    if (orden.clientes?.nombre_sede) return orden.clientes.nombre_sede;
-    if (!orden.clientes?.persona) return 'Sin cliente';
-    return orden.clientes.persona.nombre_comercial ||
-        orden.clientes.persona.razon_social ||
-        'Sin nombre';
+  // ✅ FIX 09-FEB-2026: Priorizar nombre_sede para clientes tipo sede
+  if (orden.clientes?.nombre_sede) return orden.clientes.nombre_sede;
+  if (!orden.clientes?.persona) return 'Sin cliente';
+  return (
+    orden.clientes.persona.nombre_comercial || orden.clientes.persona.razon_social || 'Sin nombre'
+  );
 }
 
 export function getTecnicoNombre(orden: Orden): string {
-    const tecnico = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
-    if (!tecnico?.persona) return 'Sin asignar';
-    return `${tecnico.persona.primer_nombre || ''} ${tecnico.persona.primer_apellido || ''}`.trim() || 'Sin nombre';
+  const tecnico = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
+  if (!tecnico?.persona) return 'Sin asignar';
+  return (
+    `${tecnico.persona.primer_nombre || ''} ${tecnico.persona.primer_apellido || ''}`.trim() ||
+    'Sin nombre'
+  );
 }
 
 export function getTecnicoLabel(tecnico: TecnicoOrden): string {
-    if (!tecnico?.persona) return 'Sin nombre';
-    return `${tecnico.persona.primer_nombre || ''} ${tecnico.persona.primer_apellido || ''}`.trim() || 'Sin nombre';
+  if (!tecnico?.persona) return 'Sin nombre';
+  return (
+    `${tecnico.persona.primer_nombre || ''} ${tecnico.persona.primer_apellido || ''}`.trim() ||
+    'Sin nombre'
+  );
 }
 
 export function getEstadoColor(estado?: string): string {
-    const colores: Record<string, string> = {
-        PROGRAMADA: 'bg-blue-100 text-blue-800',
-        ASIGNADA: 'bg-violet-100 text-violet-800 border border-violet-200',
-        EN_PROCESO: 'bg-yellow-100 text-yellow-800',
-        EN_ESPERA_REPUESTO: 'bg-orange-100 text-orange-800',
-        COMPLETADA: 'bg-green-100 text-green-800',
-        APROBADA: 'bg-emerald-100 text-emerald-800',
-        CANCELADA: 'bg-red-100 text-red-800',
-    };
-    return colores[estado || ''] || 'bg-gray-100 text-gray-800';
+  const colores: Record<string, string> = {
+    PROGRAMADA: 'bg-blue-100 text-blue-800',
+    ASIGNADA: 'bg-violet-100 text-violet-800 border border-violet-200',
+    EN_PROCESO: 'bg-yellow-100 text-yellow-800',
+    EN_ESPERA_REPUESTO: 'bg-orange-100 text-orange-800',
+    COMPLETADA: 'bg-green-100 text-green-800',
+    APROBADA: 'bg-emerald-100 text-emerald-800',
+    CANCELADA: 'bg-red-100 text-red-800',
+  };
+  return colores[estado || ''] || 'bg-gray-100 text-gray-800';
 }
 
 export function getPrioridadColor(prioridad?: string): string {
-    const colores: Record<string, string> = {
-        BAJA: 'bg-slate-100 text-slate-800',
-        NORMAL: 'bg-blue-100 text-blue-800',
-        ALTA: 'bg-orange-100 text-orange-800',
-        URGENTE: 'bg-red-100 text-red-800',
-        EMERGENCIA: 'bg-purple-100 text-purple-800',
-    };
-    return colores[prioridad || ''] || 'bg-gray-100 text-gray-800';
+  const colores: Record<string, string> = {
+    BAJA: 'bg-slate-100 text-slate-800',
+    NORMAL: 'bg-blue-100 text-blue-800',
+    ALTA: 'bg-orange-100 text-orange-800',
+    URGENTE: 'bg-red-100 text-red-800',
+    EMERGENCIA: 'bg-purple-100 text-purple-800',
+  };
+  return colores[prioridad || ''] || 'bg-gray-100 text-gray-800';
 }
 
 // ============================================================================
@@ -422,105 +573,104 @@ export function getPrioridadColor(prioridad?: string): string {
 // ============================================================================
 
 export interface OrdenPendiente {
-    id_orden_pendiente: number;
-    id_orden_servicio?: number | null;
-    id_cliente: number;
-    id_equipo?: number | null;
-    id_orden_equipo?: number | null;
-    alcance?: 'CLIENTE' | 'EQUIPO' | 'SERVICIO';
-    id_orden_resolucion?: number | null;
-    id_pendiente_catalogo?: number | null;
-    descripcion: string;
-    origen: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO';
-    prioridad: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
-    estado: 'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO';
-    observaciones?: string | null;
-    creado_por?: number | null;
-    fecha_creacion: string;
-    fecha_resolucion?: string | null;
-    resuelto_por?: number | null;
-    observaciones_resolucion?: string | null;
-    ordenes_servicio?: {
-        id_orden_servicio: number;
-        numero_orden: string;
-        fecha_programada?: string;
-        tipo_visita?: string;
-        numero_visita_caso?: number;
-        estados_orden?: {
-            nombre_estado: string;
-            color_hex?: string;
-        };
-    } | null;
-    orden_resolucion?: {
-        id_orden_servicio: number;
-        numero_orden: string;
-        fecha_programada?: string;
-        tipo_visita?: string;
-        numero_visita_caso?: number;
-        estados_orden?: {
-            nombre_estado: string;
-            color_hex?: string;
-        };
-    } | null;
-    ordenes_equipos?: {
-        id_orden_equipo: number;
-        orden_secuencia?: number;
-        nombre_sistema?: string | null;
-        equipos?: {
-            id_equipo: number;
-            codigo_equipo?: string;
-            nombre_equipo?: string;
-        };
-    } | null;
+  id_orden_pendiente: number;
+  id_orden_servicio?: number | null;
+  id_cliente: number;
+  id_equipo?: number | null;
+  id_orden_equipo?: number | null;
+  alcance?: 'CLIENTE' | 'EQUIPO' | 'SERVICIO';
+  id_orden_resolucion?: number | null;
+  id_pendiente_catalogo?: number | null;
+  descripcion: string;
+  origen: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO';
+  prioridad: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
+  estado: 'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO';
+  observaciones?: string | null;
+  creado_por?: number | null;
+  fecha_creacion: string;
+  fecha_resolucion?: string | null;
+  resuelto_por?: number | null;
+  observaciones_resolucion?: string | null;
+  ordenes_servicio?: {
+    id_orden_servicio: number;
+    numero_orden: string;
+    fecha_programada?: string;
+    tipo_visita?: string;
+    numero_visita_caso?: number;
+    estados_orden?: {
+      nombre_estado: string;
+      color_hex?: string;
+    };
+  } | null;
+  orden_resolucion?: {
+    id_orden_servicio: number;
+    numero_orden: string;
+    fecha_programada?: string;
+    tipo_visita?: string;
+    numero_visita_caso?: number;
+    estados_orden?: {
+      nombre_estado: string;
+      color_hex?: string;
+    };
+  } | null;
+  ordenes_equipos?: {
+    id_orden_equipo: number;
+    orden_secuencia?: number;
+    nombre_sistema?: string | null;
     equipos?: {
-        id_equipo: number;
-        codigo_equipo?: string;
-        nombre_equipo?: string;
-        ubicacion_texto?: string;
-    } | null;
-    catalogo_pendientes?: {
-        id_pendiente_catalogo: number;
-        codigo?: string;
-        descripcion: string;
-        categoria?: string;
+      id_equipo: number;
+      codigo_equipo?: string;
+      nombre_equipo?: string;
     };
-    empleados_ordenes_pendientes_creado_porToempleados?: {
-        persona?: {
-            nombre_completo?: string;
-            primer_nombre?: string;
-            primer_apellido?: string;
-        };
+  } | null;
+  equipos?: {
+    id_equipo: number;
+    codigo_equipo?: string;
+    nombre_equipo?: string;
+    ubicacion_texto?: string;
+  } | null;
+  catalogo_pendientes?: {
+    id_pendiente_catalogo: number;
+    codigo?: string;
+    descripcion: string;
+    categoria?: string;
+  };
+  empleados_ordenes_pendientes_creado_porToempleados?: {
+    persona?: {
+      nombre_completo?: string;
+      primer_nombre?: string;
+      primer_apellido?: string;
     };
+  };
 }
 
 export function getPendienteEstadoColor(estado: string): string {
-    const colores: Record<string, string> = {
-        PENDIENTE: 'bg-amber-100 text-amber-800 border-amber-300',
-        EN_GESTION: 'bg-blue-100 text-blue-800 border-blue-300',
-        RESUELTO: 'bg-green-100 text-green-800 border-green-300',
-        CANCELADO: 'bg-gray-100 text-gray-600 border-gray-300',
-    };
-    return colores[estado] || 'bg-gray-100 text-gray-800';
+  const colores: Record<string, string> = {
+    PENDIENTE: 'bg-amber-100 text-amber-800 border-amber-300',
+    EN_GESTION: 'bg-blue-100 text-blue-800 border-blue-300',
+    RESUELTO: 'bg-green-100 text-green-800 border-green-300',
+    CANCELADO: 'bg-gray-100 text-gray-600 border-gray-300',
+  };
+  return colores[estado] || 'bg-gray-100 text-gray-800';
 }
 
-
 export function getPendienteEstadoLabel(estado?: string): string {
-    const labels: Record<string, string> = {
-        PENDIENTE: 'Pendiente',
-        EN_GESTION: 'En Gestión',
-        RESUELTO: 'Resuelto',
-        CANCELADO: 'Cancelado',
-    };
-    return labels[estado || ''] || estado || 'Pendiente';
+  const labels: Record<string, string> = {
+    PENDIENTE: 'Pendiente',
+    EN_GESTION: 'En Gestión',
+    RESUELTO: 'Resuelto',
+    CANCELADO: 'Cancelado',
+  };
+  return labels[estado || ''] || estado || 'Pendiente';
 }
 
 export function getTipoVisitaLabel(tipo?: string | null): string {
-    const labels: Record<string, string> = {
-        INICIAL: 'Visita Inicial',
-        CONTINUACION: 'Continuación Operativa',
-        CORRECTIVO_DERIVADO: 'Correctivo Derivado',
-        GARANTIA: 'Visita por Garantía',
-        AISLADA: 'Visita Independiente (Aislada)',
-    };
-    return labels[tipo || 'INICIAL'] || tipo || 'Visita Inicial';
+  const labels: Record<string, string> = {
+    INICIAL: 'Visita Inicial',
+    CONTINUACION: 'Continuación Operativa',
+    CORRECTIVO_DERIVADO: 'Correctivo Derivado',
+    GARANTIA: 'Visita por Garantía',
+    AISLADA: 'Visita Independiente (Aislada)',
+  };
+  return labels[tipo || 'INICIAL'] || tipo || 'Visita Inicial';
 }

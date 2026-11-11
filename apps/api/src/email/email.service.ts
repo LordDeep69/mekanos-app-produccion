@@ -9,24 +9,24 @@ import { PrismaService } from '../database/prisma.service';
  * EMAIL SERVICE - MEKANOS S.A.S
  * ============================================================================
  * Servicio profesional de envío de emails.
- * 
+ *
  * PRIORIDAD DE PROVEEDORES:
  * 1. Gmail API (OAuth2 via HTTPS) - Para Render/Vercel (puertos bloqueados)
  * 2. SMTP (Nodemailer) - Para servidores con puertos abiertos (Plan Pro)
  * 3. Mock Mode - Si ninguno está configurado
- * 
+ *
  * CONFIGURACIÓN GMAIL API (Principal):
  * - GMAIL_CLIENT_ID: OAuth2 Client ID de Google Cloud
  * - GMAIL_CLIENT_SECRET: OAuth2 Client Secret
  * - GMAIL_REFRESH_TOKEN: Refresh Token obtenido via OAuth2
  * - EMAIL_FROM: Email remitente (debe coincidir con cuenta OAuth)
- * 
+ *
  * CONFIGURACIÓN SMTP (Alternativa):
  * - EMAIL_SMTP_HOST: smtp.gmail.com
  * - EMAIL_SMTP_PORT: 587
  * - EMAIL_SMTP_USER: usuario@gmail.com
  * - EMAIL_SMTP_PASS: App Password de Gmail
- * 
+ *
  * COLORES CORPORATIVOS MEKANOS:
  * - #F2F2F2 (Blanco)
  * - #244673 (Azul Oscuro)
@@ -42,7 +42,7 @@ const MEKANOS_COLORS = {
   blueDark: '#244673',
   blueLight: '#3290A6',
   green: '#56A672',
-  greenLight: '#9EC23D'
+  greenLight: '#9EC23D',
 };
 
 export interface EmailAttachment {
@@ -84,6 +84,10 @@ export class EmailService implements OnModuleInit {
     this.fromEmail = process.env.EMAIL_FROM || 'mekanossas4@gmail.com';
   }
 
+  isEmailConfigured(): boolean {
+    return this.isConfigured;
+  }
+
   async onModuleInit() {
     this.logger.log('🔧 [EmailService] Iniciando configuración...');
     await this.initializeEmailProvider();
@@ -102,9 +106,15 @@ export class EmailService implements OnModuleInit {
     const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
 
     this.logger.log(`📋 [EmailService] Verificando proveedores de email...`);
-    this.logger.log(`   GMAIL_CLIENT_ID: ${clientId ? `✅ Configurado (${clientId.substring(0, 20)}...)` : '❌ NO CONFIGURADO'}`);
-    this.logger.log(`   GMAIL_CLIENT_SECRET: ${clientSecret ? '✅ Configurado' : '❌ NO CONFIGURADO'}`);
-    this.logger.log(`   GMAIL_REFRESH_TOKEN: ${refreshToken ? `✅ Configurado (${refreshToken.substring(0, 20)}...)` : '❌ NO CONFIGURADO'}`);
+    this.logger.log(
+      `   GMAIL_CLIENT_ID: ${clientId ? `✅ Configurado (${clientId.substring(0, 20)}...)` : '❌ NO CONFIGURADO'}`,
+    );
+    this.logger.log(
+      `   GMAIL_CLIENT_SECRET: ${clientSecret ? '✅ Configurado' : '❌ NO CONFIGURADO'}`,
+    );
+    this.logger.log(
+      `   GMAIL_REFRESH_TOKEN: ${refreshToken ? `✅ Configurado (${refreshToken.substring(0, 20)}...)` : '❌ NO CONFIGURADO'}`,
+    );
     this.logger.log(`   FROM: ${this.fromEmail}`);
 
     if (clientId && clientSecret && refreshToken) {
@@ -114,7 +124,7 @@ export class EmailService implements OnModuleInit {
         this.gmailOAuth2Client = new OAuth2(
           clientId,
           clientSecret,
-          'https://developers.google.com/oauthplayground' // Redirect URI
+          'https://developers.google.com/oauthplayground', // Redirect URI
         );
         this.gmailOAuth2Client.setCredentials({ refresh_token: refreshToken });
 
@@ -153,13 +163,19 @@ export class EmailService implements OnModuleInit {
     this.logger.log(`📋 [EmailService] Verificando credenciales SMTP (alternativa)...`);
     this.logger.log(`   HOST: ${host}`);
     this.logger.log(`   PORT: ${port}`);
-    this.logger.log(`   USER: ${user ? `${user.substring(0, 5)}...${user.includes('@') ? '@' + user.split('@')[1] : ''}` : '❌ NO CONFIGURADO'}`);
-    this.logger.log(`   PASS: ${pass ? `✅ Configurado (${pass.length} caracteres)` : '❌ NO CONFIGURADO'}`);
+    this.logger.log(
+      `   USER: ${user ? `${user.substring(0, 5)}...${user.includes('@') ? '@' + user.split('@')[1] : ''}` : '❌ NO CONFIGURADO'}`,
+    );
+    this.logger.log(
+      `   PASS: ${pass ? `✅ Configurado (${pass.length} caracteres)` : '❌ NO CONFIGURADO'}`,
+    );
 
     if (!user || !pass) {
       this.logger.warn('⚠️ Credenciales SMTP no configuradas');
       this.logger.warn('⚠️ Modo MOCK activado - Los emails NO se enviarán');
-      this.logger.warn('   💡 Recomendación: Configure GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET y GMAIL_REFRESH_TOKEN');
+      this.logger.warn(
+        '   💡 Recomendación: Configure GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET y GMAIL_REFRESH_TOKEN',
+      );
       return;
     }
 
@@ -183,7 +199,6 @@ export class EmailService implements OnModuleInit {
       this.logger.log('✅ Servicio de Email SMTP inicializado correctamente');
       this.logger.log(`   📧 Remitente: ${this.fromEmail}`);
       this.logger.log(`   📡 SMTP: ${host}:${port}`);
-
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ Error inicializando SMTP: ${errorMsg}`);
@@ -213,7 +228,13 @@ export class EmailService implements OnModuleInit {
           where: { id_cuenta_email: idCuentaEmail },
         });
 
-        if (cuenta && cuenta.activa && cuenta.gmail_client_id && cuenta.gmail_client_secret && cuenta.gmail_refresh_token) {
+        if (
+          cuenta &&
+          cuenta.activa &&
+          cuenta.gmail_client_id &&
+          cuenta.gmail_client_secret &&
+          cuenta.gmail_refresh_token
+        ) {
           this.logger.log(`📧 [MULTI-EMAIL] Usando cuenta: ${cuenta.email} (ID: ${idCuentaEmail})`);
           return this.sendEmailWithCredentials(options, {
             email: cuenta.email,
@@ -222,15 +243,23 @@ export class EmailService implements OnModuleInit {
             refreshToken: cuenta.gmail_refresh_token,
           });
         } else if (cuenta && !cuenta.activa) {
-          this.logger.warn(`⚠️ [MULTI-EMAIL] Cuenta ${cuenta.email} (ID: ${idCuentaEmail}) está INACTIVA, usando cuenta por defecto`);
+          this.logger.warn(
+            `⚠️ [MULTI-EMAIL] Cuenta ${cuenta.email} (ID: ${idCuentaEmail}) está INACTIVA, usando cuenta por defecto`,
+          );
         } else if (cuenta) {
-          this.logger.warn(`⚠️ [MULTI-EMAIL] Cuenta ${cuenta.email} (ID: ${idCuentaEmail}) sin credenciales Gmail API completas, usando cuenta por defecto`);
+          this.logger.warn(
+            `⚠️ [MULTI-EMAIL] Cuenta ${cuenta.email} (ID: ${idCuentaEmail}) sin credenciales Gmail API completas, usando cuenta por defecto`,
+          );
         } else {
-          this.logger.warn(`⚠️ [MULTI-EMAIL] Cuenta ID: ${idCuentaEmail} NO encontrada en BD, usando cuenta por defecto`);
+          this.logger.warn(
+            `⚠️ [MULTI-EMAIL] Cuenta ID: ${idCuentaEmail} NO encontrada en BD, usando cuenta por defecto`,
+          );
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        this.logger.error(`❌ [MULTI-EMAIL] Error consultando cuenta ${idCuentaEmail}: ${errorMsg}`);
+        this.logger.error(
+          `❌ [MULTI-EMAIL] Error consultando cuenta ${idCuentaEmail}: ${errorMsg}`,
+        );
         this.logger.warn(`   Fallback a cuenta por defecto`);
       }
     }
@@ -260,30 +289,46 @@ export class EmailService implements OnModuleInit {
       const toAddresses = Array.isArray(options.to) ? options.to.join(', ') : options.to;
       const boundary = `boundary_${Date.now()}`;
 
-      let emailContent = [
+      const emailContent = [
         `From: MEKANOS S.A.S <${credentials.email}>`,
         `To: ${toAddresses}`,
         options.cc ? `Cc: ${Array.isArray(options.cc) ? options.cc.join(', ') : options.cc}` : '',
-        options.bcc ? `Bcc: ${Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc}` : '',
+        options.bcc
+          ? `Bcc: ${Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc}`
+          : '',
         `Subject: =?UTF-8?B?${Buffer.from(options.subject).toString('base64')}?=`,
         'MIME-Version: 1.0',
       ].filter(Boolean);
 
       if (options.attachments && options.attachments.length > 0) {
-        emailContent.push(`Content-Type: multipart/mixed; boundary="${boundary}"`, '', `--${boundary}`);
-        emailContent.push('Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '');
+        emailContent.push(
+          `Content-Type: multipart/mixed; boundary="${boundary}"`,
+          '',
+          `--${boundary}`,
+        );
+        emailContent.push(
+          'Content-Type: text/html; charset=UTF-8',
+          'Content-Transfer-Encoding: base64',
+          '',
+        );
         emailContent.push(Buffer.from(options.html).toString('base64'));
 
         for (const att of options.attachments) {
           emailContent.push(`--${boundary}`);
-          emailContent.push(`Content-Type: ${att.contentType || 'application/pdf'}; name="${att.filename}"`);
+          emailContent.push(
+            `Content-Type: ${att.contentType || 'application/pdf'}; name="${att.filename}"`,
+          );
           emailContent.push('Content-Transfer-Encoding: base64');
           emailContent.push(`Content-Disposition: attachment; filename="${att.filename}"`, '');
           emailContent.push(att.content.toString('base64'));
         }
         emailContent.push(`--${boundary}--`);
       } else {
-        emailContent.push('Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '');
+        emailContent.push(
+          'Content-Type: text/html; charset=UTF-8',
+          'Content-Transfer-Encoding: base64',
+          '',
+        );
         emailContent.push(Buffer.from(options.html).toString('base64'));
       }
 
@@ -298,7 +343,9 @@ export class EmailService implements OnModuleInit {
         requestBody: { raw: rawEmail },
       });
 
-      this.logger.log(`✅ [Gmail API - ${credentials.email}] Email enviado - ID: ${response.data.id}`);
+      this.logger.log(
+        `✅ [Gmail API - ${credentials.email}] Email enviado - ID: ${response.data.id}`,
+      );
       return { success: true, messageId: response.data.id || undefined };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
@@ -312,7 +359,9 @@ export class EmailService implements OnModuleInit {
    * ENVÍO DE EMAILS GENÉRICO
    * =========================================================================
    */
-  async sendEmail(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  async sendEmail(
+    options: SendEmailOptions,
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     // =========================================================================
     // PROVEEDOR 1: Gmail API (OAuth2 via HTTPS)
     // =========================================================================
@@ -326,24 +375,36 @@ export class EmailService implements OnModuleInit {
         const toAddresses = Array.isArray(options.to) ? options.to.join(', ') : options.to;
         const boundary = `boundary_${Date.now()}`;
 
-        let emailContent = [
+        const emailContent = [
           `From: MEKANOS S.A.S <${this.fromEmail}>`,
           `To: ${toAddresses}`,
           options.cc ? `Cc: ${Array.isArray(options.cc) ? options.cc.join(', ') : options.cc}` : '',
-          options.bcc ? `Bcc: ${Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc}` : '',
+          options.bcc
+            ? `Bcc: ${Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc}`
+            : '',
           `Subject: =?UTF-8?B?${Buffer.from(options.subject).toString('base64')}?=`,
           'MIME-Version: 1.0',
         ].filter(Boolean);
 
         if (options.attachments && options.attachments.length > 0) {
           // Email con adjuntos (multipart/mixed)
-          emailContent.push(`Content-Type: multipart/mixed; boundary="${boundary}"`, '', `--${boundary}`);
-          emailContent.push('Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '');
+          emailContent.push(
+            `Content-Type: multipart/mixed; boundary="${boundary}"`,
+            '',
+            `--${boundary}`,
+          );
+          emailContent.push(
+            'Content-Type: text/html; charset=UTF-8',
+            'Content-Transfer-Encoding: base64',
+            '',
+          );
           emailContent.push(Buffer.from(options.html).toString('base64'));
 
           for (const att of options.attachments) {
             emailContent.push(`--${boundary}`);
-            emailContent.push(`Content-Type: ${att.contentType || 'application/pdf'}; name="${att.filename}"`);
+            emailContent.push(
+              `Content-Type: ${att.contentType || 'application/pdf'}; name="${att.filename}"`,
+            );
             emailContent.push('Content-Transfer-Encoding: base64');
             emailContent.push(`Content-Disposition: attachment; filename="${att.filename}"`, '');
             emailContent.push(att.content.toString('base64'));
@@ -351,7 +412,11 @@ export class EmailService implements OnModuleInit {
           emailContent.push(`--${boundary}--`);
         } else {
           // Email sin adjuntos
-          emailContent.push('Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '');
+          emailContent.push(
+            'Content-Type: text/html; charset=UTF-8',
+            'Content-Transfer-Encoding: base64',
+            '',
+          );
           emailContent.push(Buffer.from(options.html).toString('base64'));
         }
 
@@ -393,11 +458,11 @@ export class EmailService implements OnModuleInit {
           bcc: options.bcc,
           subject: options.subject,
           html: options.html,
-          attachments: options.attachments?.map(att => ({
+          attachments: options.attachments?.map((att) => ({
             filename: att.filename,
             content: att.content,
-            contentType: att.contentType || 'application/pdf'
-          }))
+            contentType: att.contentType || 'application/pdf',
+          })),
         };
 
         const result = await this.transporter.sendMail(mailOptions);
@@ -421,7 +486,7 @@ export class EmailService implements OnModuleInit {
     this.logger.warn(`   Asunto: ${options.subject}`);
     this.logger.warn(`   ⚠️ Configure RESEND_API_KEY para enviar emails reales`);
     if (options.attachments?.length) {
-      this.logger.warn(`   Adjuntos: ${options.attachments.map(a => a.filename).join(', ')}`);
+      this.logger.warn(`   Adjuntos: ${options.attachments.map((a) => a.filename).join(', ')}`);
     }
     return { success: true, messageId: 'mock-' + Date.now() };
   }
@@ -435,9 +500,8 @@ export class EmailService implements OnModuleInit {
     ordenNumero: string,
     clienteEmail: string,
     pdfUrl: string,
-    pdfBuffer?: Buffer
+    pdfBuffer?: Buffer,
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-
     const htmlContent = this.buildOrdenCompletadaTemplate(ordenNumero, pdfUrl);
 
     const attachments: EmailAttachment[] = [];
@@ -445,7 +509,7 @@ export class EmailService implements OnModuleInit {
       attachments.push({
         filename: `Orden_${ordenNumero.replace(/\s+/g, '_')}.pdf`,
         content: pdfBuffer,
-        contentType: 'application/pdf'
+        contentType: 'application/pdf',
       });
     }
 
@@ -453,7 +517,7 @@ export class EmailService implements OnModuleInit {
       to: clienteEmail,
       subject: `✅ Orden de Servicio ${ordenNumero} - Completada | MEKANOS S.A.S`,
       html: htmlContent,
-      attachments
+      attachments,
     });
   }
 
@@ -469,22 +533,23 @@ export class EmailService implements OnModuleInit {
     idCuentaEmail?: number, // ✅ MULTI-EMAIL: Cuenta específica del cliente
     attachmentFilename?: string, // ✅ FIX 29-ABR-2026: Nombre canónico del adjunto
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-
     const htmlContent = this.buildInformeTecnicoTemplate(data);
 
     // ✅ FIX 29-ABR-2026: Usar filename canónico si fue provisto, fallback al legacy
-    const filenameAdjunto = attachmentFilename
-      || `Informe_Tecnico_${data.ordenNumero.replace(/\s+/g, '_')}.pdf`;
+    const filenameAdjunto =
+      attachmentFilename || `Informe_Tecnico_${data.ordenNumero.replace(/\s+/g, '_')}.pdf`;
 
     const emailOptions: SendEmailOptions = {
       to: clienteEmail,
       subject: `📋 Informe Técnico ${data.ordenNumero} - ${data.tipoMantenimiento} | MEKANOS S.A.S`,
       html: htmlContent,
-      attachments: [{
-        filename: filenameAdjunto,
-        content: pdfBuffer,
-        contentType: 'application/pdf'
-      }]
+      attachments: [
+        {
+          filename: filenameAdjunto,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ],
     };
 
     // ✅ MULTI-EMAIL: Si hay cuenta específica, usarla
@@ -501,13 +566,15 @@ export class EmailService implements OnModuleInit {
    * ENVÍO DE EMAIL DE PRUEBA
    * =========================================================================
    */
-  async sendTestEmail(to: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  async sendTestEmail(
+    to: string,
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const htmlContent = this.buildTestEmailTemplate();
 
     return this.sendEmail({
       to,
       subject: '🧪 Email de Prueba - MEKANOS S.A.S',
-      html: htmlContent
+      html: htmlContent,
     });
   }
 
@@ -716,7 +783,9 @@ export class EmailService implements OnModuleInit {
                 </table>
               </div>
 
-              ${data.observaciones ? `
+              ${
+                data.observaciones
+                  ? `
               <!-- Observaciones -->
               <div style="background: linear-gradient(135deg, #fff8e6 0%, #fef3c7 100%); border-left: 4px solid #f59e0b; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0;">
                 <p style="color: #92400e; margin: 0; font-size: 14px;">
@@ -724,7 +793,9 @@ export class EmailService implements OnModuleInit {
                   ${data.observaciones}
                 </p>
               </div>
-              ` : ''}
+              `
+                  : ''
+              }
 
               <p style="color: #64748b; font-size: 13px; line-height: 1.6; margin: 25px 0 0 0; text-align: center;">
                 📎 <em>El informe técnico completo se encuentra adjunto en formato PDF.</em>
@@ -808,10 +879,10 @@ export class EmailService implements OnModuleInit {
               <div style="background: ${MEKANOS_COLORS.white}; border: 2px dashed ${MEKANOS_COLORS.blueLight}; padding: 20px; margin: 25px 0; border-radius: 8px;">
                 <p style="color: ${MEKANOS_COLORS.blueDark}; margin: 0; font-size: 14px;">
                   <strong>📅 Fecha:</strong> ${new Date().toLocaleString('es-CO', {
-      dateStyle: 'full',
-      timeStyle: 'short',
-      timeZone: 'America/Bogota'
-    })}
+                    dateStyle: 'full',
+                    timeStyle: 'short',
+                    timeZone: 'America/Bogota',
+                  })}
                 </p>
               </div>
 
@@ -861,11 +932,12 @@ export class EmailService implements OnModuleInit {
     const pass = process.env.EMAIL_SMTP_PASS || process.env.SMTP_PASS;
     const gmailClientId = process.env.GMAIL_CLIENT_ID;
 
-    const providerName = this.provider === 'gmail-api'
-      ? 'Gmail API (OAuth2 HTTPS)'
-      : this.provider === 'smtp'
-        ? 'Nodemailer (SMTP)'
-        : 'Mock Mode (NO envía emails)';
+    const providerName =
+      this.provider === 'gmail-api'
+        ? 'Gmail API (OAuth2 HTTPS)'
+        : this.provider === 'smtp'
+          ? 'Nodemailer (SMTP)'
+          : 'Mock Mode (NO envía emails)';
 
     return {
       configured: this.isConfigured,
@@ -879,9 +951,8 @@ export class EmailService implements OnModuleInit {
         host: process.env.EMAIL_SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.EMAIL_SMTP_PORT || process.env.SMTP_PORT || '587', 10),
         user: user ? `${user.substring(0, 5)}...` : null,
-        passConfigured: !!pass
-      }
+        passConfigured: !!pass,
+      },
     };
   }
-
 }

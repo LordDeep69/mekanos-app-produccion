@@ -5,7 +5,7 @@ import { Cotizacion } from '../domain/cotizacion.entity';
 
 /**
  * PRISMA REPOSITORY - Infrastructure Layer
- * 
+ *
  * Implementación concreta del repositorio usando Prisma ORM.
  */
 @Injectable()
@@ -33,7 +33,9 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       subtotal_general: c.subtotal_general ? Number(c.subtotal_general) : 0,
       descuento_porcentaje: c.descuento_porcentaje ? Number(c.descuento_porcentaje) : undefined,
       descuento_valor: c.descuento_valor ? Number(c.descuento_valor) : undefined,
-      subtotal_con_descuento: c.subtotal_con_descuento ? Number(c.subtotal_con_descuento) : undefined,
+      subtotal_con_descuento: c.subtotal_con_descuento
+        ? Number(c.subtotal_con_descuento)
+        : undefined,
       iva_porcentaje: Number(c.iva_porcentaje),
       iva_valor: c.iva_valor ? Number(c.iva_valor) : undefined,
       total_cotizacion: c.total_cotizacion ? Number(c.total_cotizacion) : undefined,
@@ -49,6 +51,14 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       aprobada_internamente_por: c.aprobada_internamente_por ?? undefined,
       fecha_aprobacion_interna: c.fecha_aprobacion_interna ?? undefined,
       modificado_por: c.modificado_por ?? undefined,
+      cliente: c.clientes ?? c.cliente ?? undefined,
+      sede: c.sedes_cliente ?? c.sede ?? undefined,
+      equipo: c.equipos ?? c.equipo ?? undefined,
+      estado: c.estados_cotizacion ?? c.estado ?? undefined,
+      items_servicios: c.items_cotizacion_servicios ?? c.items_servicios ?? undefined,
+      items_componentes: c.items_cotizacion_componentes ?? c.items_componentes ?? undefined,
+      aprobaciones: c.aprobaciones_cotizacion ?? c.aprobaciones ?? undefined,
+      historial_envios: c.historial_envios ?? undefined,
     });
   }
 
@@ -107,14 +117,14 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
     const cotizacion = await this.prisma.cotizaciones.findUnique({
       where: { id_cotizacion: idCotizacion },
       include: {
-        cliente: includeRelations?.cliente || false,
-        sede: includeRelations?.sede || false,
-        equipo: includeRelations?.equipo || false,
-        estado: includeRelations?.estado || false,
-        items_servicios: includeRelations?.items_servicios || false,
-        items_componentes: includeRelations?.items_componentes || false,
-        aprobaciones: includeRelations?.aprobaciones || false,
-        envios: includeRelations?.historial_envios || false,
+        clientes: includeRelations?.cliente || false,
+        sedes_cliente: includeRelations?.sede || false,
+        equipos: includeRelations?.equipo || false,
+        estados_cotizacion: includeRelations?.estado || false,
+        items_cotizacion_servicios: includeRelations?.items_servicios || false,
+        items_cotizacion_componentes: includeRelations?.items_componentes || false,
+        aprobaciones_cotizacion: includeRelations?.aprobaciones || false,
+        historial_envios: includeRelations?.historial_envios || false,
       },
     });
 
@@ -150,8 +160,8 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       this.prisma.cotizaciones.findMany({
         where,
         include: {
-          cliente: true,
-          estado: true,
+          clientes: true,
+          estados_cotizacion: true,
         },
         orderBy: { fecha_cotizacion: 'desc' },
         skip: filters.skip || 0,
@@ -167,7 +177,7 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
   }
 
   async findByNumero(numeroCotizacion: string): Promise<Cotizacion | null> {
-    const cotizacion = await this.prisma.cotizaciones.findUnique({
+    const cotizacion = await this.prisma.cotizaciones.findFirst({
       where: { numero_cotizacion: numeroCotizacion },
     });
 
@@ -252,7 +262,7 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
 
     return this.mapToEntity(cotizacion);
   }
-  
+
   async findProximasVencer(diasAnticipacion: number): Promise<Cotizacion[]> {
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() + diasAnticipacion);
@@ -266,7 +276,7 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
         },
       },
       include: {
-        cliente: true,
+        clientes: true,
       },
     });
 

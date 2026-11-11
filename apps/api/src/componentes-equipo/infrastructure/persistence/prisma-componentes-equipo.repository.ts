@@ -61,7 +61,7 @@ export class PrismaComponentesEquipoRepository {
     // Validar constraint: Si tiene id_componente, NO puede tener referencia_manual/marca_manual
     if (data.id_componente && (data.referencia_manual || data.marca_manual)) {
       throw new BadRequestException(
-        'No se pueden especificar datos manuales cuando se asocia un componente del catálogo'
+        'No se pueden especificar datos manuales cuando se asocia un componente del catálogo',
       );
     }
 
@@ -152,8 +152,8 @@ export class PrismaComponentesEquipoRepository {
       include: {
         equipos: {
           include: {
-            cliente: true,
-            sede: true,
+            clientes: true,
+            sedes_cliente: true,
           },
         },
         tipos_componente: true,
@@ -181,10 +181,7 @@ export class PrismaComponentesEquipoRepository {
     });
   }
 
-  async actualizar(
-    id: number,
-    data: ActualizarComponenteEquipoData
-  ): Promise<componentes_equipo> {
+  async actualizar(id: number, data: ActualizarComponenteEquipoData): Promise<componentes_equipo> {
     const componenteEquipo = await this.obtenerPorId(id);
     if (!componenteEquipo) {
       throw new NotFoundException(`Componente-Equipo ${id} no encontrado`);
@@ -193,7 +190,7 @@ export class PrismaComponentesEquipoRepository {
     // Validar constraint si se actualiza id_componente
     if (data.id_componente && (data.referencia_manual || data.marca_manual)) {
       throw new BadRequestException(
-        'No se pueden especificar datos manuales cuando se asocia un componente del catálogo'
+        'No se pueden especificar datos manuales cuando se asocia un componente del catálogo',
       );
     }
 
@@ -258,9 +255,7 @@ export class PrismaComponentesEquipoRepository {
         activo: false,
         fecha_desactivacion: new Date(),
         fecha_modificacion: new Date(),
-        usuarios_componentes_equipo_modificado_porTousuarios: {
-          connect: { id_usuario: usuario },
-        },
+        modificado_por: usuario,
       },
     });
   }

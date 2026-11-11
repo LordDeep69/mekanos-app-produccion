@@ -3,7 +3,7 @@
  * CLOUDINARY SERVICE - MEKANOS S.A.S
  * ============================================================================
  * Servicio para gestión de imágenes y evidencias fotográficas con Cloudinary.
- * 
+ *
  * Cuentas configuradas:
  * - PLANTAS: Para generadores y plantas eléctricas
  * - BOMBAS: Para bombas y sistemas de bombeo
@@ -18,7 +18,6 @@ import * as path from 'path';
 const CLOUDINARY_UPLOAD_TIMEOUT_MS = 300_000; // 5 minutos por upload (conexión lenta)
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 5_000; // 5s inicial, luego 10s, 20s
-const PENDING_DIR = path.join(process.cwd(), 'uploads', 'pending');
 
 export type CloudinaryAccount = 'PLANTAS' | 'BOMBAS';
 
@@ -103,7 +102,7 @@ export class CloudinaryService implements OnModuleInit {
       publicId?: string;
       account?: CloudinaryAccount;
       tags?: string[];
-    } = {}
+    } = {},
   ): Promise<UploadResult> {
     const account = options.account || 'PLANTAS';
 
@@ -123,9 +122,7 @@ export class CloudinaryService implements OnModuleInit {
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.warn(
-          `⚠️ Cloudinary intento ${attempt}/${MAX_RETRIES} falló: ${message}`,
-        );
+        this.logger.warn(`⚠️ Cloudinary intento ${attempt}/${MAX_RETRIES} falló: ${message}`);
         if (attempt < MAX_RETRIES) {
           const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
           await new Promise((r) => setTimeout(r, delay));
@@ -220,7 +217,7 @@ export class CloudinaryService implements OnModuleInit {
       publicId?: string;
       account?: CloudinaryAccount;
       tags?: string[];
-    } = {}
+    } = {},
   ): Promise<UploadResult> {
     const account = options.account || 'PLANTAS';
 
@@ -277,7 +274,7 @@ export class CloudinaryService implements OnModuleInit {
    */
   async uploadMultipleEvidencias(
     evidencias: EvidenciaUpload[],
-    tipoEquipo?: string
+    tipoEquipo?: string,
   ): Promise<UploadResult[]> {
     const results: UploadResult[] = [];
 
@@ -292,12 +289,15 @@ export class CloudinaryService implements OnModuleInit {
   /**
    * Genera URL optimizada para diferentes tamaños
    */
-  getOptimizedUrl(publicId: string, options: {
-    width?: number;
-    height?: number;
-    quality?: number;
-    format?: string;
-  } = {}): string {
+  getOptimizedUrl(
+    publicId: string,
+    options: {
+      width?: number;
+      height?: number;
+      quality?: number;
+      format?: string;
+    } = {},
+  ): string {
     return cloudinary.url(publicId, {
       transformation: [
         {

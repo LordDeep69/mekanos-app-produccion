@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject } from '@nestjs/common';
+import { ConflictException, Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { ICatalogoSistemasRepository } from '../../domain/catalogo-sistemas.repository.interface';
 import { CatalogoSistemasMapper } from '../../infrastructure/catalogo-sistemas.mapper';
@@ -25,18 +25,22 @@ export class CrearCatalogoSistemasHandler implements ICommandHandler<CrearCatalo
 
     // 3. Determinar orden de visualización inteligente y resolver intercalado
     const todos = await this.repository.findActivos();
-    const sistemasDelAmbito = (command.aplicaA && command.aplicaA.length > 0)
-      ? todos.filter(s => (s.aplica_a || []).some(t => command.aplicaA!.includes(t)))
-      : todos.filter(s => !s.aplica_a || s.aplica_a.length === 0);
+    const sistemasDelAmbito =
+      command.aplicaA && command.aplicaA.length > 0
+        ? todos.filter((s) => (s.aplica_a || []).some((t) => command.aplicaA!.includes(t)))
+        : todos.filter((s) => !s.aplica_a || s.aplica_a.length === 0);
 
     let ordenFinal = command.ordenVisualizacion ? Number(command.ordenVisualizacion) : 0;
     if (ordenFinal <= 0) {
-      const maxOrden = sistemasDelAmbito.reduce((max, s) => Math.max(max, s.orden_visualizacion || 0), 0);
+      const maxOrden = sistemasDelAmbito.reduce(
+        (max, s) => Math.max(max, s.orden_visualizacion || 0),
+        0,
+      );
       ordenFinal = maxOrden + 1;
     } else if (command.intercalar) {
       // Intercalar: desplazar sistemas del mismo ámbito con orden >= ordenFinal (+1)
       const aDesplazar = sistemasDelAmbito
-        .filter(s => (s.orden_visualizacion || 0) >= ordenFinal)
+        .filter((s) => (s.orden_visualizacion || 0) >= ordenFinal)
         .sort((a, b) => (b.orden_visualizacion || 0) - (a.orden_visualizacion || 0));
 
       for (const s of aDesplazar) {

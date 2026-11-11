@@ -4,7 +4,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connectivity_service.dart';
-import 'offline_sync_service.dart';
 import 'sync_state.dart';
 
 /// Manager del ciclo de vida de sincronización
@@ -159,27 +158,6 @@ class SyncLifecycleManager with WidgetsBindingObserver {
             .read(syncStateProvider.notifier)
             .syncNow(_tecnicoId, silent: true);
       }
-    }
-  }
-
-  /// ✅ FIX: Procesar cola de órdenes pendientes (completadas offline)
-  Future<void> _procesarColaPendiente() async {
-    try {
-      final offlineSync = _ref.read(offlineSyncServiceProvider);
-      final result = await offlineSync.procesarCola();
-
-      if (result.ordenesSync > 0) {
-        debugPrint(
-          '📤 [SYNC LIFECYCLE] ${result.ordenesSync} orden(es) subida(s) desde cola offline',
-        );
-      }
-      if (result.ordenesFallidas > 0) {
-        debugPrint(
-          '⚠️ [SYNC LIFECYCLE] ${result.ordenesFallidas} orden(es) fallida(s): ${result.errores.join(", ")}',
-        );
-      }
-    } catch (e) {
-      debugPrint('❌ [SYNC LIFECYCLE] Error procesando cola: $e');
     }
   }
 

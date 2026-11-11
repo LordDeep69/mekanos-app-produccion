@@ -3,7 +3,6 @@
 import {
   AlertTriangle,
   ArrowRightLeft,
-  BookOpen,
   Calculator,
   Check,
   CheckCircle2,
@@ -12,9 +11,7 @@ import {
   Eye,
   Gauge,
   Package,
-  Globe,
   Info,
-  Layers,
   Loader2,
   Lock,
   Plus,
@@ -80,16 +77,16 @@ function normalizarSlug(texto: string, maxLen = 30): string {
 }
 
 const SIMBOLOS_CANONICOS: Record<string, string> = {
-  'Ω': 'OHM',
-  'mΩ': 'MOHM',
-  'kΩ': 'KOHM',
-  'MΩ': 'MEOHM',
-  'µ': 'U',
-  'µm': 'UM',
-  'µF': 'UF',
-  'uF': 'UF',
-  'µs': 'US',
-  'µg': 'UG',
+  Ω: 'OHM',
+  mΩ: 'MOHM',
+  kΩ: 'KOHM',
+  MΩ: 'MEOHM',
+  µ: 'U',
+  µm: 'UM',
+  µF: 'UF',
+  uF: 'UF',
+  µs: 'US',
+  µg: 'UG',
   'm/s': 'MS',
   'm/s²': 'MS2',
   'ft/s': 'FPS',
@@ -97,22 +94,22 @@ const SIMBOLOS_CANONICOS: Record<string, string> = {
   'km/h': 'KMH',
   'N·m': 'NM',
   'N.m': 'NM',
-  'Nm': 'NM',
+  Nm: 'NM',
   'kg/m³': 'KGM3',
   'g/cm³': 'GCM3',
   'mm²/s': 'MM2S',
   'mm/s': 'MMS',
   '°C': 'CEL',
   '°F': 'FAH',
-  'K': 'KEL',
+  K: 'KEL',
   '°': 'DEG',
   '%': 'PCT',
   'l/min': 'LPM',
   'L/min': 'LPM',
   'gal/min': 'GPM',
-  'pulg': 'IN',
-  'pie': 'FT',
-  'pies': 'FT',
+  pulg: 'IN',
+  pie: 'FT',
+  pies: 'FT',
 };
 
 /**
@@ -197,7 +194,9 @@ function generarCodigoUnidadInteligente(
   if (codigoMagnitudPadre) {
     const magParts = codigoMagnitudPadre.split('_').filter(Boolean);
     const ultimaParte = magParts[magParts.length - 1] || '';
-    const sufijoContexto = (ultimaParte.length > 4 ? ultimaParte.slice(0, 3) : ultimaParte).toUpperCase();
+    const sufijoContexto = (
+      ultimaParte.length > 4 ? ultimaParte.slice(0, 3) : ultimaParte
+    ).toUpperCase();
 
     if (sufijoContexto) {
       const candidatoContextual = `${raiz.slice(0, maxLen - sufijoContexto.length - 1)}_${sufijoContexto}`;
@@ -222,15 +221,6 @@ function generarCodigoUnidadInteligente(
   return `${raiz.slice(0, maxLen - 5)}_${Date.now().toString().slice(-4)}`;
 }
 
-// Fallbacks de compatibilidad
-function generarSlugCodigo(nombre: string, maxLen = 20): string {
-  return normalizarSlug(nombre, maxLen);
-}
-
-function generarCodigoDesdeSimbolo(simbolo: string, nombre: string): string {
-  return generarCodigoUnidadInteligente(simbolo, nombre, new Set(), undefined, 10);
-}
-
 export function TabMagnitudesUom() {
   const { data: magnitudes = [], isLoading } = useMagnitudesEam();
   const [selectedMagCode, setSelectedMagCode] = useState<string>('');
@@ -250,7 +240,10 @@ export function TabMagnitudesUom() {
   const [filtroDisciplina, setFiltroDisciplina] = useState<CategoriaMagnitud | 'TODAS'>('TODAS');
   const [pestanaBanco, setPestanaBanco] = useState<'CATALOGO' | 'OCULTAS'>('CATALOGO');
   const [activandoPreset, setActivandoPreset] = useState<string | null>(null);
-  const [bancoFeedback, setBancoFeedback] = useState<{ tipo: 'success' | 'error'; msg: string } | null>(null);
+  const [bancoFeedback, setBancoFeedback] = useState<{
+    tipo: 'success' | 'error';
+    msg: string;
+  } | null>(null);
   const activarBancoMut = useActivarMagnitudBancoEam();
   const setActivoMut = useSetActivoMagnitudEam();
   const reactivarTodasMut = useReactivarTodasMagnitudesEam();
@@ -314,19 +307,18 @@ export function TabMagnitudesUom() {
         await deleteMagMut.mutateAsync(deleteTarget.codigo);
         // Si se eliminó la magnitud actualmente seleccionada, seleccionar otra
         if (selectedMagCode === deleteTarget.codigo) {
-          const restantes = magnitudes.filter(
-            (m) => m.codigo_magnitud !== deleteTarget.codigo,
-          );
+          const restantes = magnitudes.filter((m) => m.codigo_magnitud !== deleteTarget.codigo);
           setSelectedMagCode(restantes[0]?.codigo_magnitud || '');
         }
       } else {
         await deleteUnitMut.mutateAsync(deleteTarget.codigo);
       }
       setDeleteTarget(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
       const msg =
-        err?.response?.data?.message ||
-        err?.message ||
+        apiErr?.response?.data?.message ||
+        apiErr?.message ||
         'Ocurrió un error al procesar la eliminación';
       setDeleteError(msg);
     }
@@ -474,8 +466,10 @@ export function TabMagnitudesUom() {
         msg: '¡Todas las magnitudes del catálogo han sido reactivadas exitosamente!',
       });
       setTimeout(() => setBancoFeedback(null), 4500);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Error al reactivar magnitudes';
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
+      const msg =
+        apiErr?.response?.data?.message || apiErr?.message || 'Error al reactivar magnitudes';
       setBancoFeedback({ tipo: 'error', msg });
     }
   };
@@ -491,9 +485,12 @@ export function TabMagnitudesUom() {
         msg: `¡Magnitud "${preset.nombre_magnitud}" activada exitosamente con sus ${preset.unidades.length} unidades canónicas!`,
       });
       setTimeout(() => setBancoFeedback(null), 4500);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
       const msg =
-        err?.response?.data?.message || err?.message || 'Error al activar la magnitud preconfigurada';
+        apiErr?.response?.data?.message ||
+        apiErr?.message ||
+        'Error al activar la magnitud preconfigurada';
       setBancoFeedback({ tipo: 'error', msg });
     } finally {
       setActivandoPreset(null);
@@ -621,7 +618,7 @@ export function TabMagnitudesUom() {
       base_simbolo: '',
       base_codigo: '',
       customSlugBaseUnit: false,
-      activo: (mag as any).activo !== false,
+      activo: mag.activo !== false,
     });
     setShowMagModal(true);
   };
@@ -689,7 +686,7 @@ export function TabMagnitudesUom() {
         },
       });
     } else {
-      const payload: any = {
+      const payload: Parameters<typeof createMagMut.mutateAsync>[0] = {
         codigo_magnitud: magForm.codigo_magnitud.trim().toUpperCase(),
         nombre_magnitud: magForm.nombre_magnitud.trim(),
         descripcion: magForm.descripcion?.trim() || undefined,
@@ -709,7 +706,9 @@ export function TabMagnitudesUom() {
             codigosUnidadesExistentes,
             payload.codigo_magnitud,
           )
-        ).trim().toUpperCase();
+        )
+          .trim()
+          .toUpperCase();
 
         payload.unidad_base = {
           codigo: uCod,
@@ -852,9 +851,7 @@ export function TabMagnitudesUom() {
             <Calculator className="h-4 w-4" />
           </div>
           <div>
-            <div className="text-xs font-extrabold text-white">
-              Conversor Rápido de Unidades
-            </div>
+            <div className="text-xs font-extrabold text-white">Conversor Rápido de Unidades</div>
             <div className="text-[11px] text-slate-400">
               Prueba equivalencias exactas (PSI ↔ BAR, kW ↔ HP, °F ↔ °C, GPM ↔ L/s)
             </div>
@@ -1051,7 +1048,9 @@ export function TabMagnitudesUom() {
             {searchQuery.trim() && (
               <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
                 <span>
-                  Mostrando <strong className="text-blue-600 font-bold">{magnitudesFiltradas.length}</strong> de {magnitudes.length} magnitudes
+                  Mostrando{' '}
+                  <strong className="text-blue-600 font-bold">{magnitudesFiltradas.length}</strong>{' '}
+                  de {magnitudes.length} magnitudes
                 </span>
                 <button
                   type="button"
@@ -1073,7 +1072,8 @@ export function TabMagnitudesUom() {
                 <div>
                   <p className="text-xs font-bold text-slate-800">No se encontraron magnitudes</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    No hay coincidencias para &ldquo;<span className="text-slate-600 font-medium">{searchQuery}</span>&rdquo;
+                    No hay coincidencias para &ldquo;
+                    <span className="text-slate-600 font-medium">{searchQuery}</span>&rdquo;
                   </p>
                 </div>
                 <button
@@ -1144,10 +1144,11 @@ export function TabMagnitudesUom() {
                               title: 'Magnitud Ocultada',
                               description: `"${mag.nombre_magnitud}" se ha archivado. Puedes reactivarla desde el Banco de Magnitudes.`,
                             });
-                          } catch (err: any) {
+                          } catch (err: unknown) {
+                            const apiErr = err as { message?: string };
                             toast({
                               title: 'Error al ocultar',
-                              description: err?.message || 'No se pudo ocultar la magnitud',
+                              description: apiErr?.message || 'No se pudo ocultar la magnitud',
                               variant: 'destructive',
                             });
                           }
@@ -1302,7 +1303,8 @@ export function TabMagnitudesUom() {
                     </span>
                   </h4>
                   <p className="text-xs text-indigo-200/70">
-                    Estándares ontológicos internacionales (NASA / W3C / ISO 80000). Activa y gestiona magnitudes completas en 1 clic.
+                    Estándares ontológicos internacionales (NASA / W3C / ISO 80000). Activa y
+                    gestiona magnitudes completas en 1 clic.
                   </p>
                 </div>
               </div>
@@ -1345,11 +1347,13 @@ export function TabMagnitudesUom() {
                 >
                   <EyeOff className="h-4 w-4" />
                   <span>Magnitudes Ocultas</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                    numOcultas > 0
-                      ? 'bg-amber-500 text-white animate-pulse'
-                      : 'bg-slate-200 text-slate-600'
-                  }`}>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                      numOcultas > 0
+                        ? 'bg-amber-500 text-white animate-pulse'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
                     {numOcultas}
                   </span>
                 </button>
@@ -1390,9 +1394,10 @@ export function TabMagnitudesUom() {
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-1.5 pt-1">
                     {CATEGORIAS_QUDT.map((cat) => {
-                      const count = cat.id === 'TODAS'
-                        ? BANCO_UNIVERSAL_QUDT.length
-                        : BANCO_UNIVERSAL_QUDT.filter((p) => p.categoria === cat.id).length;
+                      const count =
+                        cat.id === 'TODAS'
+                          ? BANCO_UNIVERSAL_QUDT.length
+                          : BANCO_UNIVERSAL_QUDT.filter((p) => p.categoria === cat.id).length;
                       return (
                         <button
                           key={cat.id}
@@ -1414,11 +1419,17 @@ export function TabMagnitudesUom() {
                   {bancoCat !== 'TODAS' && (
                     <div className="flex items-center justify-between pt-1.5 px-1 border-t border-slate-200/70 text-xs">
                       <span className="text-slate-600 font-medium">
-                        Disciplina: <strong className="text-slate-900">{CATEGORIAS_QUDT.find((c) => c.id === bancoCat)?.label}</strong> (
-                        {BANCO_UNIVERSAL_QUDT.filter((p) => p.categoria === bancoCat).length} magnitudes)
+                        Disciplina:{' '}
+                        <strong className="text-slate-900">
+                          {CATEGORIAS_QUDT.find((c) => c.id === bancoCat)?.label}
+                        </strong>{' '}
+                        ({BANCO_UNIVERSAL_QUDT.filter((p) => p.categoria === bancoCat).length}{' '}
+                        magnitudes)
                       </span>
                       {(() => {
-                        const magsCat = BANCO_UNIVERSAL_QUDT.filter((p) => p.categoria === bancoCat);
+                        const magsCat = BANCO_UNIVERSAL_QUDT.filter(
+                          (p) => p.categoria === bancoCat,
+                        );
                         const todasActivas = magsCat.every((p) =>
                           magnitudes.some((m) => m.codigo_magnitud === p.codigo_magnitud),
                         );
@@ -1441,10 +1452,17 @@ export function TabMagnitudesUom() {
                                   } completamente (${magsCat.length} magnitudes).`,
                                 });
                                 setTimeout(() => setBancoFeedback(null), 4000);
-                              } catch (err: any) {
+                              } catch (err: unknown) {
+                                const apiErr = err as {
+                                  response?: { data?: { message?: string } };
+                                  message?: string;
+                                };
                                 setBancoFeedback({
                                   tipo: 'error',
-                                  msg: err?.response?.data?.message || err?.message || 'Error al actualizar disciplina',
+                                  msg:
+                                    apiErr?.response?.data?.message ||
+                                    apiErr?.message ||
+                                    'Error al actualizar disciplina',
                                 });
                               }
                             }}
@@ -1454,7 +1472,11 @@ export function TabMagnitudesUom() {
                                 : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300'
                             }`}
                           >
-                            {todasActivas ? <EyeOff className="h-3.5 w-3.5 text-amber-600" /> : <Eye className="h-3.5 w-3.5 text-emerald-600" />}
+                            {todasActivas ? (
+                              <EyeOff className="h-3.5 w-3.5 text-amber-600" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                            )}
                             <span>
                               {todasActivas
                                 ? `Ocultar toda esta disciplina (${magsCat.length})`
@@ -1507,12 +1529,14 @@ export function TabMagnitudesUom() {
                       ✓ Las {BANCO_UNIVERSAL_QUDT.length} magnitudes del banco mundial están activas
                     </p>
                     <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                      Si ocultas alguna magnitud de tu lista principal, aparecerá aquí para cuando quieras reactivarla.
+                      Si ocultas alguna magnitud de tu lista principal, aparecerá aquí para cuando
+                      quieras reactivarla.
                     </p>
                   </div>
                 ) : (
                   <div className="p-12 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
-                    No se encontraron magnitudes estándar para la búsqueda &ldquo;{bancoSearch}&rdquo;.
+                    No se encontraron magnitudes estándar para la búsqueda &ldquo;{bancoSearch}
+                    &rdquo;.
                   </div>
                 )
               ) : (
@@ -1570,7 +1594,10 @@ export function TabMagnitudesUom() {
                           <div className="pt-2 border-t border-slate-100 space-y-1.5">
                             <div className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
                               <span>
-                                Unidad Base: <strong className="font-mono text-indigo-700">{preset.unidad_base_codigo}</strong>
+                                Unidad Base:{' '}
+                                <strong className="font-mono text-indigo-700">
+                                  {preset.unidad_base_codigo}
+                                </strong>
                               </span>
                               <span className="text-[10px] text-slate-400">
                                 {preset.unidades.length} unidades canónicas
@@ -1621,7 +1648,7 @@ export function TabMagnitudesUom() {
                                         });
                                         setTimeout(() => setBancoFeedback(null), 4000);
                                       },
-                                    }
+                                    },
                                   );
                                 }}
                                 className="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
@@ -1659,7 +1686,8 @@ export function TabMagnitudesUom() {
               <div className="flex items-center gap-2">
                 <Info className="h-4 w-4 text-slate-400" />
                 <span>
-                  Las magnitudes activadas se integran automáticamente en los selectores de fichas técnicas y telemetría.
+                  Las magnitudes activadas se integran automáticamente en los selectores de fichas
+                  técnicas y telemetría.
                 </span>
               </div>
               <button
@@ -1716,16 +1744,18 @@ export function TabMagnitudesUom() {
               {/* 2° CÓDIGO IDENTIFICADOR AUTO-SUGERIDO */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    Código Identificador *
-                  </label>
+                  <label className="text-xs font-bold text-slate-700">Código Identificador *</label>
                   {!editingMag && (
                     <button
                       type="button"
                       onClick={() => setCustomSlugMag(!customSlugMag)}
                       className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
                     >
-                      {customSlugMag ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                      {customSlugMag ? (
+                        <Lock className="h-3 w-3" />
+                      ) : (
+                        <Unlock className="h-3 w-3" />
+                      )}
                       <span>{customSlugMag ? 'Auto-generar slug' : 'Personalizar código'}</span>
                     </button>
                   )}
@@ -1747,7 +1777,8 @@ export function TabMagnitudesUom() {
                 />
                 {isCodigoMagDuplicado ? (
                   <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
-                    ✕ El código "{magForm.codigo_magnitud.toUpperCase()}" ya existe en el catálogo. Modifícalo para que sea único.
+                    ✕ El código &ldquo;{magForm.codigo_magnitud.toUpperCase()}&rdquo; ya existe en
+                    el catálogo. Modifícalo para que sea único.
                   </p>
                 ) : magForm.codigo_magnitud && !editingMag ? (
                   <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
@@ -1762,9 +1793,7 @@ export function TabMagnitudesUom() {
 
               {/* 3° DESCRIPCIÓN */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Descripción
-                </label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Descripción</label>
                 <textarea
                   rows={2}
                   placeholder="Ej: Capacidad máxima admisible en cabina y masa de contrapeso..."
@@ -1790,14 +1819,16 @@ export function TabMagnitudesUom() {
                   </div>
 
                   <p className="text-[11px] text-blue-900/70 leading-relaxed">
-                    Toda magnitud física requiere una unidad canónica inicial contra la cual se calculan los factores de conversión de las demás unidades.
+                    Toda magnitud física requiere una unidad canónica inicial contra la cual se
+                    calculan los factores de conversión de las demás unidades.
                   </p>
 
                   {magForm.modoUnidadBase === 'SELECTOR' ? (
                     <div className="space-y-2.5 pt-1">
                       <div className="flex items-center justify-between">
                         <label className="text-[11px] font-bold text-slate-700">
-                          Seleccionar Unidad del Banco ({todasLasUnidadesDisponibles.length} estándar) *
+                          Seleccionar Unidad del Banco ({todasLasUnidadesDisponibles.length}{' '}
+                          estándar) *
                         </label>
                         <button
                           type="button"
@@ -1822,7 +1853,9 @@ export function TabMagnitudesUom() {
                         <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center justify-between text-xs text-emerald-950 animate-in fade-in duration-150">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                            <span className="font-bold text-emerald-900 shrink-0">✓ Unidad Base Seleccionada:</span>
+                            <span className="font-bold text-emerald-900 shrink-0">
+                              ✓ Unidad Base Seleccionada:
+                            </span>
                             <span className="font-mono font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[11px] border border-emerald-300 shrink-0">
                               [{magForm.base_simbolo || magForm.base_codigo}]
                             </span>
@@ -1887,8 +1920,12 @@ export function TabMagnitudesUom() {
                                     <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[11px] group-hover:bg-blue-100 group-hover:text-blue-900 shrink-0">
                                       {u.simbolo}
                                     </span>
-                                    <span className="font-medium text-slate-800 truncate">{u.nombre}</span>
-                                    <span className="text-[10px] text-slate-400 font-mono shrink-0">({u.codigo})</span>
+                                    <span className="font-medium text-slate-800 truncate">
+                                      {u.nombre}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                      ({u.codigo})
+                                    </span>
                                   </div>
                                   <span className="text-[10px] font-semibold text-slate-400 group-hover:text-blue-600 shrink-0 ml-2">
                                     {u.categoria || 'Canónica'}
@@ -2052,7 +2089,8 @@ export function TabMagnitudesUom() {
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Si desactivas esta magnitud, se ocultará de los selectores diarios y quedará archivada en el Banco de Magnitudes para cuando decidas reactivarla.
+                        Si desactivas esta magnitud, se ocultará de los selectores diarios y quedará
+                        archivada en el Banco de Magnitudes para cuando decidas reactivarla.
                       </p>
                     </div>
                     <button
@@ -2060,7 +2098,7 @@ export function TabMagnitudesUom() {
                       role="switch"
                       aria-checked={magForm.activo !== false}
                       onClick={() =>
-                        setMagForm((prev: any) => ({
+                        setMagForm((prev) => ({
                           ...prev,
                           activo: prev.activo === false ? true : false,
                         }))
@@ -2161,15 +2199,14 @@ export function TabMagnitudesUom() {
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-sm font-bold"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Respeta mayúsculas/minúsculas (ej: <span className="font-mono">kg</span>, <span className="font-mono">m/s</span>, <span className="font-mono">Hz</span>).
+                    Respeta mayúsculas/minúsculas (ej: <span className="font-mono">kg</span>,{' '}
+                    <span className="font-mono">m/s</span>, <span className="font-mono">Hz</span>).
                   </p>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-700">
-                      Código *
-                    </label>
+                    <label className="text-xs font-bold text-slate-700">Código *</label>
                     {!editingUnit && (
                       <button
                         type="button"
@@ -2197,7 +2234,8 @@ export function TabMagnitudesUom() {
                   />
                   {isCodigoUnitDuplicado ? (
                     <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
-                      ✕ El código "{unitForm.codigo.toUpperCase()}" ya está en uso. Las unidades tienen clave primaria global.
+                      ✕ El código &ldquo;{unitForm.codigo.toUpperCase()}&rdquo; ya está en uso. Las
+                      unidades tienen clave primaria global.
                     </p>
                   ) : unitForm.codigo && !editingUnit ? (
                     <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
@@ -2217,9 +2255,12 @@ export function TabMagnitudesUom() {
                     className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                   />
                   <div>
-                    <span className="block font-bold text-slate-900">¿Es la Unidad Principal de la Magnitud?</span>
+                    <span className="block font-bold text-slate-900">
+                      ¿Es la Unidad Principal de la Magnitud?
+                    </span>
                     <span className="block text-[11px] font-normal text-slate-500">
-                      Se registrará como la referencia base (Factor = 1.0) para todas las conversiones.
+                      Se registrará como la referencia base (Factor = 1.0) para todas las
+                      conversiones.
                     </span>
                   </div>
                 </label>
@@ -2230,7 +2271,10 @@ export function TabMagnitudesUom() {
                 <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-2.5 text-emerald-900">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
                   <div className="text-xs leading-relaxed">
-                    <strong className="font-bold">Unidad Base Canónica:</strong> El Factor de Conversión se fijará automáticamente en <span className="font-mono font-bold">1.0</span> y el Desplazamiento Térmico en <span className="font-mono font-bold">0.0</span>.
+                    <strong className="font-bold">Unidad Base Canónica:</strong> El Factor de
+                    Conversión se fijará automáticamente en{' '}
+                    <span className="font-mono font-bold">1.0</span> y el Desplazamiento Térmico en{' '}
+                    <span className="font-mono font-bold">0.0</span>.
                   </div>
                 </div>
               ) : (
@@ -2249,7 +2293,8 @@ export function TabMagnitudesUom() {
                       className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-sm bg-white"
                     />
                     <p className="text-[10px] text-slate-400 mt-1">
-                      1 {unitForm.simbolo || 'unidad'} = A × {selectedMagnitud.unidad_base_codigo || 'base'}
+                      1 {unitForm.simbolo || 'unidad'} = A ×{' '}
+                      {selectedMagnitud.unidad_base_codigo || 'base'}
                     </p>
                   </div>
                   <div>
@@ -2342,9 +2387,7 @@ export function TabMagnitudesUom() {
                   </span>
                 </div>
                 {deleteTarget.extraInfo && (
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    {deleteTarget.extraInfo}
-                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium">{deleteTarget.extraInfo}</p>
                 )}
               </div>
 
@@ -2352,7 +2395,10 @@ export function TabMagnitudesUom() {
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-amber-900">
                 <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                 <div className="text-[11px] leading-relaxed">
-                  <strong className="font-bold">Advertencia de trazabilidad:</strong> Se eliminará el elemento de los catálogos activos. Si posee vínculos con órdenes o equipos existentes, se preservará la integridad histórica mediante desactivación controlada.
+                  <strong className="font-bold">Advertencia de trazabilidad:</strong> Se eliminará
+                  el elemento de los catálogos activos. Si posee vínculos con órdenes o equipos
+                  existentes, se preservará la integridad histórica mediante desactivación
+                  controlada.
                 </div>
               </div>
 

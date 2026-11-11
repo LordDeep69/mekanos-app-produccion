@@ -13,23 +13,43 @@
  * 5. Unidades de Medida (11 Magnitudes • Conversor)
  */
 
-import {
-  ArrowLeft,
-  Boxes,
-  Cpu,
-  Database,
-  Factory,
-  Scale,
-  Wrench,
-} from 'lucide-react';
+import { ArrowLeft, Boxes, Cpu, Database, Factory, Scale, Wrench } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useState } from 'react';
 import { TabArquetiposEquipo } from '@/features/catalogos-eam/components/TabArquetiposEquipo';
-import { TabDiccionarioAtributos } from '@/features/catalogos-eam/components/TabDiccionarioAtributos';
-import { TabMagnitudesUom } from '@/features/catalogos-eam/components/TabMagnitudesUom';
-import { TabModelosOemBom } from '@/features/catalogos-eam/components/TabModelosOemBom';
-import { TabModulosTecnicos } from '@/features/catalogos-eam/components/TabModulosTecnicos';
 import { useResumenEjecutivoEam } from '@/features/catalogos-eam';
+
+const TabLoadingFallback = () => (
+  <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+    Cargando módulo...
+  </div>
+);
+
+const TabModelosOemBom = dynamic(
+  () =>
+    import('@/features/catalogos-eam/components/TabModelosOemBom').then((m) => m.TabModelosOemBom),
+  { ssr: false, loading: TabLoadingFallback },
+);
+const TabModulosTecnicos = dynamic(
+  () =>
+    import('@/features/catalogos-eam/components/TabModulosTecnicos').then(
+      (m) => m.TabModulosTecnicos,
+    ),
+  { ssr: false, loading: TabLoadingFallback },
+);
+const TabDiccionarioAtributos = dynamic(
+  () =>
+    import('@/features/catalogos-eam/components/TabDiccionarioAtributos').then(
+      (m) => m.TabDiccionarioAtributos,
+    ),
+  { ssr: false, loading: TabLoadingFallback },
+);
+const TabMagnitudesUom = dynamic(
+  () =>
+    import('@/features/catalogos-eam/components/TabMagnitudesUom').then((m) => m.TabMagnitudesUom),
+  { ssr: false, loading: TabLoadingFallback },
+);
 
 type EamTabKey = 'arquetipos' | 'modelos' | 'modulos' | 'diccionario' | 'magnitudes';
 
@@ -113,7 +133,8 @@ export default function CatalogosEamHubPage() {
               <span>Configuración de Equipos Maestros y Fichas Técnicas</span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Define qué tipos de equipos atiende Mekanos, qué partes los componen, qué datos técnicos se piden en sus fichas y qué repuestos usan sus modelos.
+              Define qué tipos de equipos atiende Mekanos, qué partes los componen, qué datos
+              técnicos se piden en sus fichas y qué repuestos usan sus modelos.
             </p>
           </div>
         </div>
@@ -147,9 +168,7 @@ export default function CatalogosEamHubPage() {
             >
               <div
                 className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                  isActive
-                    ? tab.iconBgClass
-                    : 'bg-white border border-slate-200 text-slate-600'
+                  isActive ? tab.iconBgClass : 'bg-white border border-slate-200 text-slate-600'
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />

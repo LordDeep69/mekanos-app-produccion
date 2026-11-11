@@ -1,22 +1,17 @@
-import {
-    ConflictException,
-    Injectable,
-    NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { tipos_componente } from '@prisma/client';
+import { getNextTableId } from '../../common/utils/next-id.helper';
 import { PrismaService } from '../../database/prisma.service';
 import {
-    ActualizarTipoComponenteData,
-    CrearTipoComponenteData,
-    ITiposComponenteRepository,
-    TipoComponenteEntity,
-    TiposComponenteFilters,
+  ActualizarTipoComponenteData,
+  CrearTipoComponenteData,
+  ITiposComponenteRepository,
+  TipoComponenteEntity,
+  TiposComponenteFilters,
 } from '../domain/tipos-componente.repository.interface';
 
 @Injectable()
-export class PrismaTiposComponenteRepository
-  implements ITiposComponenteRepository
-{
+export class PrismaTiposComponenteRepository implements ITiposComponenteRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -41,18 +36,19 @@ export class PrismaTiposComponenteRepository
 
   async crear(data: CrearTipoComponenteData): Promise<TipoComponenteEntity> {
     // Validar código único
-    const existe = await this.prisma.tipos_componente.findUnique({
+    const existe = await this.prisma.tipos_componente.findFirst({
       where: { codigo_tipo: data.codigo_tipo },
     });
 
     if (existe) {
-      throw new ConflictException(
-        `Ya existe un tipo de componente con código ${data.codigo_tipo}`,
-      );
+      throw new ConflictException(`Ya existe un tipo de componente con código ${data.codigo_tipo}`);
     }
+
+    const nextId = await getNextTableId(this.prisma, 'tipos_componente', 'id_tipo_componente');
 
     const tipoComponente = await this.prisma.tipos_componente.create({
       data: {
+        id_tipo_componente: nextId,
         codigo_tipo: data.codigo_tipo,
         nombre_componente: data.nombre_componente,
         categoria: data.categoria as any,
@@ -70,24 +66,19 @@ export class PrismaTiposComponenteRepository
     return this.toEntity(tipoComponente);
   }
 
-  async actualizar(
-    id: number,
-    data: ActualizarTipoComponenteData,
-  ): Promise<TipoComponenteEntity> {
+  async actualizar(id: number, data: ActualizarTipoComponenteData): Promise<TipoComponenteEntity> {
     // Verificar que existe
     const existe = await this.prisma.tipos_componente.findUnique({
       where: { id_tipo_componente: id },
     });
 
     if (!existe) {
-      throw new NotFoundException(
-        `Tipo de componente con ID ${id} no encontrado`,
-      );
+      throw new NotFoundException(`Tipo de componente con ID ${id} no encontrado`);
     }
 
     // Si se actualiza el código, verificar que no exista otro con el mismo código
     if (data.codigo_tipo && data.codigo_tipo !== existe.codigo_tipo) {
-      const codigoExiste = await this.prisma.tipos_componente.findUnique({
+      const codigoExiste = await this.prisma.tipos_componente.findFirst({
         where: { codigo_tipo: data.codigo_tipo },
       });
 
@@ -122,9 +113,7 @@ export class PrismaTiposComponenteRepository
     });
 
     if (!existe) {
-      throw new NotFoundException(
-        `Tipo de componente con ID ${id} no encontrado`,
-      );
+      throw new NotFoundException(`Tipo de componente con ID ${id} no encontrado`);
     }
 
     const desactivado = await this.prisma.tipos_componente.update({
@@ -146,7 +135,7 @@ export class PrismaTiposComponenteRepository
   }
 
   async findByCodigo(codigo: string): Promise<TipoComponenteEntity | null> {
-    const tipoComponente = await this.prisma.tipos_componente.findUnique({
+    const tipoComponente = await this.prisma.tipos_componente.findFirst({
       where: { codigo_tipo: codigo },
     });
 

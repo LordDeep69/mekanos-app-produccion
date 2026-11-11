@@ -1,18 +1,17 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ActualizarEquipoGeneradorCommand } from './application/commands/actualizar-equipo-generador.command';
@@ -33,10 +32,7 @@ export class EquiposGeneradorController {
   ) {}
 
   @Post()
-  async create(
-    @Body() dto: CreateEquipoGeneradorDto,
-    @CurrentUser('id') userId: number,
-  ) {
+  async create(@Body() dto: CreateEquipoGeneradorDto, @CurrentUser('id') userId: number) {
     const command = new CrearEquipoGeneradorCommand(
       dto.id_equipo,
       dto.marca_generador,
@@ -85,13 +81,15 @@ export class EquiposGeneradorController {
     const query = new GetAllEquiposGeneradorQuery({
       marca_generador,
       tiene_avr: tiene_avr !== undefined ? tiene_avr === 'true' : undefined,
-      tiene_modulo_control: tiene_modulo_control !== undefined ? tiene_modulo_control === 'true' : undefined,
-      tiene_arranque_automatico: tiene_arranque_automatico !== undefined ? tiene_arranque_automatico === 'true' : undefined,
+      tiene_modulo_control:
+        tiene_modulo_control !== undefined ? tiene_modulo_control === 'true' : undefined,
+      tiene_arranque_automatico:
+        tiene_arranque_automatico !== undefined ? tiene_arranque_automatico === 'true' : undefined,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 50,
     });
     const result = await this.queryBus.execute(query);
-    
+
     // Formato consistente con equipos.controller
     return {
       success: true,
@@ -100,8 +98,8 @@ export class EquiposGeneradorController {
         total: result.total,
         page: query.filters.page || 1,
         limit: query.filters.limit || 50,
-        totalPages: Math.ceil(result.total / (query.filters.limit || 50))
-      }
+        totalPages: Math.ceil(result.total / (query.filters.limit || 50)),
+      },
     };
   }
 
@@ -112,10 +110,7 @@ export class EquiposGeneradorController {
   }
 
   @Put(':id')
-  async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateEquipoGeneradorDto,
-  ) {
+  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEquipoGeneradorDto) {
     const command = new ActualizarEquipoGeneradorCommand(
       id,
       dto.marca_generador,

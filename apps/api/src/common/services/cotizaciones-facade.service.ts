@@ -19,11 +19,14 @@
 
 import { PrismaService } from '@mekanos/database';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { categoria_propuesta_enum, prioridad_enum } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { CotizacionCalculoService } from '../../cotizaciones/services/cotizacion-calculo.service';
 import { EmailService } from '../../email/email.service';
 import { PdfService } from '../../pdf/pdf.service';
-import { NumeracionService } from './numeracion.service';
+import { DatosCotizacionPDF } from '../../pdf/templates/cotizacion.template';
+import { getNextTableId } from '../utils/next-id.helper';
+import { DocumentType, NumeracionService } from './numeracion.service';
 
 // ==================== TIPOS DE ENTRADA SIMPLIFICADOS ====================
 
@@ -135,6 +138,10 @@ export interface EnvioCotizacionResult {
 export class CotizacionesFacadeService {
   private readonly logger = new Logger(CotizacionesFacadeService.name);
 
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly pdfService: PdfService,
@@ -175,7 +182,7 @@ export class CotizacionesFacadeService {
       }
 
       // Generar número de cotización
-      const numeracion = await this.numeracionService.generarNumero('COTIZACION');
+      const numeracion = await this.numeracionService.generateNextNumber(DocumentType.COTIZACION);
 
       // Calcular fecha de vencimiento
       const fechaCotizacion = new Date();
@@ -186,7 +193,7 @@ export class CotizacionesFacadeService {
       // Crear cotización
       const cotizacion = await this.prisma.cotizaciones.create({
         data: {
-          numero_cotizacion: numeracion.codigo,
+          numero_cotizacion: numeracion.code,
           id_cliente: input.idCliente,
           id_sede: input.idSede,
           id_equipo: input.idEquipo,
@@ -217,20 +224,21 @@ export class CotizacionesFacadeService {
         },
       });
 
-      this.logger.log(`✅ Cotización creada: ${numeracion.codigo}`);
+      this.logger.log(`✅ Cotización creada: ${numeracion.code}`);
 
       return {
         success: true,
         idCotizacion: cotizacion.id_cotizacion,
         numeroCotizacion: cotizacion.numero_cotizacion,
         estado: 'BORRADOR',
-        mensaje: `Cotización ${numeracion.codigo} creada exitosamente`,
+        mensaje: `Cotización ${numeracion.code} creada exitosamente`,
       };
     } catch (error) {
-      this.logger.error(`Error creando cotización: ${error.message}`);
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Error creando cotización: ${errorMessage}`);
       return {
         success: false,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }
@@ -248,6 +256,10 @@ export class CotizacionesFacadeService {
       // Verificar cotización existe y está en BORRADOR
       const cotizacion = await this.verificarCotizacionEditable(idCotizacion);
 
+      if (!item.idServicioCatalogo) {
+        throw new BadRequestException('idServicioCatalogo es requerido para agregar servicio');
+      }
+
       // Calcular subtotal del item
       const subtotal = this.calcularSubtotalItem(
         item.cantidad,
@@ -255,9 +267,16 @@ export class CotizacionesFacadeService {
         item.descuentoPorcentaje || 0,
       );
 
+      const idItemServicio = await getNextTableId(
+        this.prisma,
+        'items_cotizacion_servicios',
+        'id_item_servicio',
+      );
+
       // Crear item de servicio
       await this.prisma.items_cotizacion_servicios.create({
         data: {
+          id_item_servicio: idItemServicio,
           id_cotizacion: idCotizacion,
           id_servicio: item.idServicioCatalogo,
           descripcion_personalizada: item.descripcionPersonalizada,
@@ -282,8 +301,9 @@ export class CotizacionesFacadeService {
         mensaje: 'Item de servicio agregado exitosamente',
       };
     } catch (error) {
-      this.logger.error(`Error agregando item servicio: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Error agregando item servicio: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -303,11 +323,40 @@ export class CotizacionesFacadeService {
         item.descuentoPorcentaje || 0,
       );
 
+      let idTipoComponente = item.idComponenteCatalogo
+        ? (
+            await this.prisma.catalogo_componentes.findUnique({
+              where: { id_componente: item.idComponenteCatalogo },
+              select: { id_tipo_componente: true },
+            })
+          )?.id_tipo_componente
+        : undefined;
+
+      if (!idTipoComponente) {
+        idTipoComponente = (
+          await this.prisma.tipos_componente.findFirst({
+            select: { id_tipo_componente: true },
+          })
+        )?.id_tipo_componente;
+      }
+
+      if (!idTipoComponente) {
+        throw new BadRequestException('No existe un tipo de componente configurado');
+      }
+
+      const idItemComponente = await getNextTableId(
+        this.prisma,
+        'items_cotizacion_componentes',
+        'id_item_componente',
+      );
+
       await this.prisma.items_cotizacion_componentes.create({
         data: {
+          id_item_componente: idItemComponente,
           id_cotizacion: idCotizacion,
           id_componente: item.idComponenteCatalogo,
-          descripcion: item.descripcion,
+          id_tipo_componente: idTipoComponente,
+          descripcion: item.descripcion || 'Componente / Repuesto',
           referencia_manual: item.referenciaManual,
           cantidad: new Decimal(item.cantidad),
           precio_unitario: new Decimal(item.precioUnitario),
@@ -329,8 +378,9 @@ export class CotizacionesFacadeService {
         mensaje: 'Item de componente agregado exitosamente',
       };
     } catch (error) {
-      this.logger.error(`Error agregando item componente: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Error agregando item componente: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -357,7 +407,7 @@ export class CotizacionesFacadeService {
         mensaje: 'Totales recalculados exitosamente',
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: this.getErrorMessage(error) };
     }
   }
 
@@ -415,7 +465,7 @@ export class CotizacionesFacadeService {
         mensaje: 'Aprobación solicitada exitosamente',
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: this.getErrorMessage(error) };
     }
   }
 
@@ -434,8 +484,8 @@ export class CotizacionesFacadeService {
           estados_cotizacion: true, // ✅ FIX: relación real es `estados_cotizacion`
           clientes: { include: { persona: true } },
           empleados: { include: { persona: true } },
-          items_servicios: { include: { servicio: true } },
-          items_componentes: { include: { catalogo_componentes: true } },
+          items_cotizacion_servicios: { include: { catalogo_servicios: true } },
+          items_cotizacion_componentes: { include: { catalogo_componentes: true } },
         },
       });
 
@@ -443,9 +493,9 @@ export class CotizacionesFacadeService {
         throw new NotFoundException(`Cotización ${input.idCotizacion} no encontrada`);
       }
 
-      if (cotizacion.estado.nombre_estado !== 'APROBADA_INTERNA') {
+      if (cotizacion.estados_cotizacion.nombre_estado !== 'APROBADA_INTERNA') {
         throw new BadRequestException(
-          `Solo cotizaciones APROBADA_INTERNA pueden enviarse. Estado actual: ${cotizacion.estado.nombre_estado}`,
+          `Solo cotizaciones APROBADA_INTERNA pueden enviarse. Estado actual: ${cotizacion.estados_cotizacion.nombre_estado}`,
         );
       }
 
@@ -464,7 +514,7 @@ export class CotizacionesFacadeService {
         pdfGenerado = true;
         this.logger.log(`PDF generado: ${pdfFilename} (${pdfBuffer.length} bytes)`);
       } catch (pdfError) {
-        this.logger.warn(`No se pudo generar PDF: ${pdfError.message}`);
+        this.logger.warn(`No se pudo generar PDF: ${this.getErrorMessage(pdfError)}`);
       }
 
       // Enviar email
@@ -490,7 +540,7 @@ export class CotizacionesFacadeService {
         });
         emailEnviado = emailResult.success;
       } catch (emailError) {
-        this.logger.warn(`No se pudo enviar email: ${emailError.message}`);
+        this.logger.warn(`No se pudo enviar email: ${this.getErrorMessage(emailError)}`);
       }
 
       // Cambiar estado a ENVIADA
@@ -507,8 +557,10 @@ export class CotizacionesFacadeService {
       });
 
       // Registrar historial de envío
+      const idEnvio = await getNextTableId(this.prisma, 'historial_envios', 'id_envio');
       await this.prisma.historial_envios.create({
         data: {
+          id_envio: idEnvio,
           tipo_documento: 'COTIZACION',
           id_cotizacion: input.idCotizacion,
           fecha_envio: new Date(),
@@ -533,14 +585,15 @@ export class CotizacionesFacadeService {
         destinatario: input.destinatarioEmail,
       };
     } catch (error) {
-      this.logger.error(`Error enviando cotización: ${error.message}`);
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Error enviando cotización: ${errorMessage}`);
       return {
         success: false,
         pdfGenerado: false,
         emailEnviado: false,
         numeroCotizacion: '',
         destinatario: input.destinatarioEmail,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }
@@ -552,7 +605,7 @@ export class CotizacionesFacadeService {
   async aprobarPorCliente(
     idCotizacion: number,
     aprobadoPor: number,
-    observaciones?: string,
+    _observaciones?: string,
   ): Promise<CotizacionResult> {
     try {
       const cotizacion = await this.prisma.cotizaciones.findUnique({
@@ -564,9 +617,9 @@ export class CotizacionesFacadeService {
         throw new NotFoundException(`Cotización ${idCotizacion} no encontrada`);
       }
 
-      if (cotizacion.estado.nombre_estado !== 'ENVIADA') {
+      if (cotizacion.estados_cotizacion.nombre_estado !== 'ENVIADA') {
         throw new BadRequestException(
-          `Solo cotizaciones ENVIADA pueden aprobarse. Estado: ${cotizacion.estado.nombre_estado}`,
+          `Solo cotizaciones ENVIADA pueden aprobarse. Estado: ${cotizacion.estados_cotizacion.nombre_estado}`,
         );
       }
 
@@ -578,8 +631,8 @@ export class CotizacionesFacadeService {
         where: { id_cotizacion: idCotizacion },
         data: {
           id_estado: estadoAprobada?.id_estado,
-          fecha_aprobacion: new Date(),
-          aprobada_por: aprobadoPor,
+          fecha_cambio_estado: new Date(),
+          modificado_por: aprobadoPor,
           fecha_modificacion: new Date(),
         },
       });
@@ -594,7 +647,7 @@ export class CotizacionesFacadeService {
         mensaje: 'Cotización aprobada por cliente exitosamente',
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: this.getErrorMessage(error) };
     }
   }
 
@@ -617,9 +670,9 @@ export class CotizacionesFacadeService {
         throw new NotFoundException(`Cotización ${idCotizacion} no encontrada`);
       }
 
-      if (cotizacion.estado.nombre_estado !== 'ENVIADA') {
+      if (cotizacion.estados_cotizacion.nombre_estado !== 'ENVIADA') {
         throw new BadRequestException(
-          `Solo cotizaciones ENVIADA pueden rechazarse. Estado: ${cotizacion.estado.nombre_estado}`,
+          `Solo cotizaciones ENVIADA pueden rechazarse. Estado: ${cotizacion.estados_cotizacion.nombre_estado}`,
         );
       }
 
@@ -631,9 +684,9 @@ export class CotizacionesFacadeService {
         where: { id_cotizacion: idCotizacion },
         data: {
           id_estado: estadoRechazada?.id_estado,
-          motivo_rechazo: motivoRechazo,
-          rechazada_por: rechazadoPor,
-          fecha_rechazo: new Date(),
+          observaciones_rechazo: motivoRechazo,
+          fecha_cambio_estado: new Date(),
+          modificado_por: rechazadoPor,
           fecha_modificacion: new Date(),
         },
       });
@@ -648,7 +701,7 @@ export class CotizacionesFacadeService {
         mensaje: 'Cotización rechazada por cliente',
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: this.getErrorMessage(error) };
     }
   }
 
@@ -677,9 +730,9 @@ export class CotizacionesFacadeService {
         throw new NotFoundException(`Orden de servicio ${input.idOrdenServicio} no encontrada`);
       }
 
-      if (orden.estado.nombre_estado !== 'EN_PROCESO') {
+      if (orden.estados_orden.nombre_estado !== 'EN_PROCESO') {
         throw new BadRequestException(
-          `Solo órdenes EN_PROCESO pueden generar propuestas. Estado actual: ${orden.estado.nombre_estado}`,
+          `Solo órdenes EN_PROCESO pueden generar propuestas. Estado actual: ${orden.estados_orden.nombre_estado}`,
         );
       }
 
@@ -706,18 +759,33 @@ export class CotizacionesFacadeService {
         where: { nombre_estado: 'BORRADOR' },
       });
 
+      if (!estadoBorrador) {
+        throw new BadRequestException('Estado BORRADOR no configurado');
+      }
+
+      const idPropuesta = await getNextTableId(
+        this.prisma,
+        'propuestas_correctivo',
+        'id_propuesta',
+      );
+
+      const categoria: categoria_propuesta_enum =
+        input.tipoPropuesta === 'REEMPLAZO' ? 'MEJORA' : input.tipoPropuesta;
+      const prioridad: prioridad_enum = input.prioridad === 'BAJA' ? 'NORMAL' : input.prioridad;
+
       // Crear propuesta
       const propuesta = await this.prisma.propuestas_correctivo.create({
         data: {
+          id_propuesta: idPropuesta,
           numero_propuesta: numeroPropuesta,
           id_orden_servicio: input.idOrdenServicio,
           id_cliente: orden.id_cliente,
           id_equipo: orden.id_equipo,
           descripcion_problema: input.descripcionHallazgo,
           solucion_propuesta: input.descripcionSolucion,
-          categoria: input.tipoPropuesta,
-          prioridad: input.prioridad,
-          id_estado: estadoBorrador?.id_estado,
+          categoria,
+          prioridad,
+          id_estado: estadoBorrador.id_estado,
           fecha_propuesta: new Date(),
           fecha_vencimiento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           subtotal_servicios: 0,
@@ -737,8 +805,9 @@ export class CotizacionesFacadeService {
         mensaje: `Propuesta ${numeroPropuesta} creada exitosamente`,
       };
     } catch (error) {
-      this.logger.error(`Error creando propuesta: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Error creando propuesta: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -753,7 +822,7 @@ export class CotizacionesFacadeService {
       const propuesta = await this.prisma.propuestas_correctivo.findUnique({
         where: { id_propuesta: idPropuesta },
         include: {
-          orden_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio: {
+          ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio: {
             include: { clientes: { include: { persona: true } }, sedes_cliente: true },
           },
           estados_cotizacion: true, // ✅ FIX: relación real es `estados_cotizacion`
@@ -764,9 +833,9 @@ export class CotizacionesFacadeService {
         throw new NotFoundException(`Propuesta ${idPropuesta} no encontrada`);
       }
 
-      if (propuesta.estado?.nombre_estado !== 'APROBADA') {
+      if (propuesta.estados_cotizacion?.nombre_estado !== 'APROBADA') {
         throw new BadRequestException(
-          `Solo propuestas APROBADAS pueden convertirse. Estado: ${propuesta.estado?.nombre_estado}`,
+          `Solo propuestas APROBADAS pueden convertirse. Estado: ${propuesta.estados_cotizacion?.nombre_estado}`,
         );
       }
 
@@ -776,8 +845,17 @@ export class CotizacionesFacadeService {
         );
       }
 
+      const ordenOrigen =
+        propuesta.ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio;
+      const idEquipo = propuesta.id_equipo ?? ordenOrigen?.id_equipo;
+      if (!idEquipo) {
+        throw new BadRequestException('La propuesta no tiene equipo asociado para crear orden');
+      }
+
       // Generar número de orden
-      const numeracion = await this.numeracionService.generarNumero('ORDEN_SERVICIO');
+      const numeracion = await this.numeracionService.generateNextNumber(
+        DocumentType.ORDEN_SERVICIO,
+      );
 
       // Obtener estado PROGRAMADA
       const estadoProgramada = await this.prisma.estados_orden.findFirst({
@@ -788,14 +866,14 @@ export class CotizacionesFacadeService {
       const result = await this.prisma.$transaction(async (prisma) => {
         const orden = await prisma.ordenes_servicio.create({
           data: {
-            numero_orden: numeracion.codigo,
+            numero_orden: numeracion.code,
             id_cliente: propuesta.id_cliente,
-            id_sede: propuesta.orden_servicio?.id_sede,
-            id_equipo: propuesta.id_equipo,
-            id_estado_actual: estadoProgramada?.id_estado,
+            id_sede: ordenOrigen?.id_sede,
+            id_equipo: idEquipo,
+            id_estado_actual: estadoProgramada?.id_estado || 1,
             descripcion_inicial: propuesta.solucion_propuesta,
             prioridad: propuesta.prioridad || 'NORMAL',
-            origen_solicitud: 'CORRECTIVO',
+            origen_solicitud: 'INTERNO',
             creado_por: convertidaPor,
           },
         });
@@ -812,18 +890,18 @@ export class CotizacionesFacadeService {
       });
 
       this.logger.log(
-        `✅ Propuesta ${propuesta.numero_propuesta} convertida a orden ${numeracion.codigo}`,
+        `✅ Propuesta ${propuesta.numero_propuesta} convertida a orden ${numeracion.code}`,
       );
 
       return {
         success: true,
         idCotizacion: result.id_orden_servicio,
-        numeroCotizacion: numeracion.codigo,
+        numeroCotizacion: numeracion.code,
         estado: 'PROGRAMADA',
-        mensaje: `Propuesta convertida exitosamente a orden ${numeracion.codigo}`,
+        mensaje: `Propuesta convertida exitosamente a orden ${numeracion.code}`,
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: this.getErrorMessage(error) };
     }
   }
 
@@ -840,9 +918,9 @@ export class CotizacionesFacadeService {
         sedes_cliente: true,
         equipos: true,
         estados_cotizacion: true, // ✅ FIX: relación real es `estados_cotizacion`
-        items_servicios: { include: { catalogo_servicios: true } },
-        items_componentes: { include: { catalogo_componentes: true } },
-        aprobaciones: true,
+        items_cotizacion_servicios: { include: { catalogo_servicios: true } },
+        items_cotizacion_componentes: { include: { catalogo_componentes: true } },
+        aprobaciones_cotizacion: true,
       },
     });
 
@@ -860,10 +938,10 @@ export class CotizacionesFacadeService {
     return this.prisma.aprobaciones_cotizacion.findMany({
       where: { estado_aprobacion: 'PENDIENTE' },
       include: {
-        cotizacion: {
+        cotizaciones: {
           include: {
-            cliente: { include: { persona: true } },
-            estado: true,
+            clientes: { include: { persona: true } },
+            estados_cotizacion: true,
           },
         },
       },
@@ -883,9 +961,9 @@ export class CotizacionesFacadeService {
       throw new NotFoundException(`Cotización ${idCotizacion} no encontrada`);
     }
 
-    if (cotizacion.estado.nombre_estado !== 'BORRADOR') {
+    if (cotizacion.estados_cotizacion.nombre_estado !== 'BORRADOR') {
       throw new BadRequestException(
-        `Solo cotizaciones en BORRADOR pueden editarse. Estado actual: ${cotizacion.estado.nombre_estado}`,
+        `Solo cotizaciones en BORRADOR pueden editarse. Estado actual: ${cotizacion.estados_cotizacion.nombre_estado}`,
       );
     }
 
@@ -912,71 +990,82 @@ export class CotizacionesFacadeService {
     };
   }
 
-  private prepararDatosPDF(cotizacion: any, input: EnviarCotizacionInput): any {
-    const clientePersona = cotizacion.cliente?.persona;
+  private prepararDatosPDF(cotizacion: any, input: EnviarCotizacionInput): DatosCotizacionPDF {
+    const clientePersona = cotizacion.clientes?.persona;
     const empleadoPersona = cotizacion.empleados?.persona;
+    const diasValidez = cotizacion.dias_validez || 30;
+    const fechaBase = cotizacion.fecha_cotizacion
+      ? new Date(cotizacion.fecha_cotizacion)
+      : new Date();
+    const fechaVencimientoBase = cotizacion.fecha_vencimiento
+      ? new Date(cotizacion.fecha_vencimiento)
+      : new Date(fechaBase.getTime() + diasValidez * 86400000);
 
     return {
       numeroCotizacion: cotizacion.numero_cotizacion,
-      fecha: new Date(cotizacion.fecha_cotizacion).toLocaleDateString('es-CO'),
-      validezDias: cotizacion.dias_validez || 30,
+      fechaCotizacion: fechaBase.toLocaleDateString('es-CO'),
+      fechaVencimiento: fechaVencimientoBase.toLocaleDateString('es-CO'),
+      diasValidez,
+      version: cotizacion.version || 1,
       cliente: {
-        nombre:
-          clientePersona?.razon_social || clientePersona?.nombre_completo || 'N/A',
+        nombre: clientePersona?.razon_social || clientePersona?.nombre_completo || 'N/A',
         nit: clientePersona?.numero_identificacion || 'N/A',
         direccion: clientePersona?.direccion_principal || 'N/A',
         telefono: clientePersona?.telefono_principal || 'N/A',
         email: clientePersona?.email_principal || 'N/A',
         contacto: input.destinatarioNombre,
       },
-      vendedor: {
-        nombre: empleadoPersona
-          ? `${empleadoPersona.primer_nombre || ''} ${empleadoPersona.primer_apellido || ''}`.trim()
-          : 'Equipo MEKANOS',
-        cargo: 'Asesor Comercial',
-        telefono: empleadoPersona?.celular || 'N/A',
-        email: empleadoPersona?.email_principal || 'N/A',
-      },
-      servicios:
-        cotizacion.items_servicios?.map((item: any) => ({
-          descripcion: item.descripcion_personalizada || item.servicio?.nombre_servicio,
+      asunto: cotizacion.asunto || `Cotización ${cotizacion.numero_cotizacion}`,
+      descripcionGeneral: cotizacion.descripcion_general || undefined,
+      alcanceTrabajo: cotizacion.alcance_trabajo || undefined,
+      exclusiones: cotizacion.exclusiones || undefined,
+      itemsServicios:
+        cotizacion.items_cotizacion_servicios?.map((item: any, idx: number) => ({
+          orden: item.orden_item ?? idx + 1,
+          descripcion:
+            item.descripcion_personalizada ||
+            item.catalogo_servicios?.nombre_servicio ||
+            'Servicio',
           cantidad: Number(item.cantidad),
+          unidad: item.unidad || 'UND',
           precioUnitario: Number(item.precio_unitario),
-          descuento: Number(item.descuento_porcentaje || 0),
-          subtotal: Number(item.subtotal),
+          descuentoPorcentaje: Number(item.descuento_porcentaje || 0),
+          subtotal: Number(item.subtotal || 0),
         })) || [],
-      componentes:
-        cotizacion.items_componentes?.map((item: any) => ({
-          codigo: item.catalogo_componentes?.codigo_interno || item.referencia_manual || '',
-          descripcion: item.descripcion || item.catalogo_componentes?.descripcion_corta,
+      itemsComponentes:
+        cotizacion.items_cotizacion_componentes?.map((item: any, idx: number) => ({
+          orden: item.orden_item ?? idx + 1,
+          descripcion:
+            item.descripcion || item.catalogo_componentes?.descripcion_corta || 'Componente',
+          referencia:
+            item.catalogo_componentes?.codigo_interno || item.referencia_manual || undefined,
           cantidad: Number(item.cantidad),
+          unidad: item.unidad || 'UND',
           precioUnitario: Number(item.precio_unitario),
-          descuento: Number(item.descuento_porcentaje || 0),
-          subtotal: Number(item.subtotal),
+          descuentoPorcentaje: Number(item.descuento_porcentaje || 0),
+          subtotal: Number(item.subtotal || 0),
         })) || [],
-      subtotalServicios: Number(cotizacion.subtotal_servicios || 0),
-      subtotalComponentes: Number(cotizacion.subtotal_componentes || 0),
-      subtotalGeneral: Number(cotizacion.subtotal_general || 0),
-      descuentoGlobal: {
-        tipo: 'valor',
-        valor: Number(cotizacion.descuento_valor || 0),
-        monto: Number(cotizacion.descuento_valor || 0),
+      totales: {
+        subtotalServicios: Number(cotizacion.subtotal_servicios || 0),
+        subtotalComponentes: Number(cotizacion.subtotal_componentes || 0),
+        subtotalGeneral: Number(cotizacion.subtotal_general || 0),
+        descuentoPorcentaje: Number(cotizacion.descuento_porcentaje || 0),
+        descuentoValor: Number(cotizacion.descuento_valor || 0),
+        subtotalConDescuento: Number(cotizacion.subtotal_con_descuento || 0),
+        ivaPorcentaje: Number(cotizacion.iva_porcentaje || 19),
+        ivaValor: Number(cotizacion.iva_valor || 0),
+        totalCotizacion: Number(cotizacion.total_cotizacion || 0),
       },
-      baseImponible: Number(cotizacion.subtotal_con_descuento || 0),
-      iva: {
-        porcentaje: Number(cotizacion.iva_porcentaje || 19),
-        monto: Number(cotizacion.iva_valor || 0),
-      },
-      total: Number(cotizacion.total_cotizacion || 0),
       formaPago: cotizacion.forma_pago || 'Contado',
-      tiempoEntrega: cotizacion.tiempo_estimado_dias
-        ? `${cotizacion.tiempo_estimado_dias} días`
-        : 'Por confirmar',
-      garantia: cotizacion.meses_garantia
-        ? `${cotizacion.meses_garantia} meses`
-        : 'Garantía estándar',
-      notas: cotizacion.terminos_condiciones || '',
-      estado: cotizacion.estado?.nombre_estado || 'ENVIADA',
+      tiempoEstimadoDias: cotizacion.tiempo_estimado_dias ?? undefined,
+      mesesGarantia: cotizacion.meses_garantia ?? 6,
+      observacionesGarantia: cotizacion.observaciones_garantia || undefined,
+      terminosCondiciones: cotizacion.terminos_condiciones || undefined,
+      elaboradoPor: empleadoPersona
+        ? `${empleadoPersona.primer_nombre || ''} ${empleadoPersona.primer_apellido || ''}`.trim() ||
+          'Equipo MEKANOS'
+        : 'Equipo MEKANOS',
+      cargoElaborador: 'Asesor Comercial',
     };
   }
 
@@ -1034,4 +1123,3 @@ export class CotizacionesFacadeService {
 </html>`.trim();
   }
 }
-

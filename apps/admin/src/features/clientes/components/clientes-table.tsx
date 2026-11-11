@@ -50,11 +50,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  TIPO_CLIENTE_LABELS,
-  TipoClienteEnum,
-  type ClienteConPersona,
-} from '@/types/clientes';
+import { TIPO_CLIENTE_LABELS, TipoClienteEnum, type ClienteConPersona } from '@/types/clientes';
 import {
   ArrowDown,
   ArrowUp,
@@ -98,12 +94,19 @@ export function ClientesTable() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<TipoClienteEnum | 'TODOS'>('TODOS');
-  const [tipoEquipoFilter, setTipoEquipoFilter] = useState<'TODOS' | 'PLANTAS' | 'BOMBAS' | 'AMBOS' | 'SIN_EQUIPOS'>('TODOS');
-  const [estructuraFilter, setEstructuraFilter] = useState<'TODOS' | 'PRINCIPALES' | 'SEDES' | 'INDEPENDIENTES'>('TODOS');
+  const [tipoEquipoFilter, setTipoEquipoFilter] = useState<
+    'TODOS' | 'PLANTAS' | 'BOMBAS' | 'AMBOS' | 'SIN_EQUIPOS'
+  >('TODOS');
+  const [estructuraFilter, setEstructuraFilter] = useState<
+    'TODOS' | 'PRINCIPALES' | 'SEDES' | 'INDEPENDIENTES'
+  >('TODOS');
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // Modal para inspección rápida de equipos
-  const [selectedClienteEquipos, setSelectedClienteEquipos] = useState<{ id: number; nombre: string } | null>(null);
+  const [selectedClienteEquipos, setSelectedClienteEquipos] = useState<{
+    id: number;
+    nombre: string;
+  } | null>(null);
 
   // Ordenamiento local de columnas
   const [sortField, setSortField] = useState<SortField>('nombre');
@@ -151,12 +154,12 @@ export function ClientesTable() {
   };
 
   const handleTipoEquipoChange = (value: string) => {
-    setTipoEquipoFilter(value as any);
+    setTipoEquipoFilter(value as 'TODOS' | 'PLANTAS' | 'BOMBAS' | 'AMBOS' | 'SIN_EQUIPOS');
     setPage(0);
   };
 
   const handleEstructuraChange = (value: string) => {
-    setEstructuraFilter(value as any);
+    setEstructuraFilter(value as 'TODOS' | 'PRINCIPALES' | 'SEDES' | 'INDEPENDIENTES');
     setPage(0);
   };
 
@@ -193,15 +196,17 @@ export function ClientesTable() {
     const persona = cliente.persona;
     const baseName = (() => {
       if (!persona) return `Cliente #${cliente.id_cliente}`;
-      if (persona.nombre_comercial && persona.nombre_comercial.trim()) return persona.nombre_comercial;
+      if (persona.nombre_comercial && persona.nombre_comercial.trim())
+        return persona.nombre_comercial;
       if (persona.nombre_completo && persona.nombre_completo.trim()) return persona.nombre_completo;
-      const nombrePersona = `${persona.primer_nombre || ''} ${persona.primer_apellido || ''}`.trim();
+      const nombrePersona =
+        `${persona.primer_nombre || ''} ${persona.primer_apellido || ''}`.trim();
       if (nombrePersona) return nombrePersona;
       return persona.razon_social || 'Sin nombre';
     })();
 
-    if ((cliente as any).nombre_sede) {
-      return `${(cliente as any).nombre_sede} (${baseName})`;
+    if (cliente.nombre_sede) {
+      return `${cliente.nombre_sede} (${baseName})`;
     }
 
     return baseName;
@@ -256,10 +261,13 @@ export function ClientesTable() {
         const estructura = c.es_cliente_principal
           ? 'Matriz / Principal'
           : c.id_cliente_principal
-          ? 'Sede / Sucursal'
-          : 'Independiente';
-        const sedeDe = c.cliente_principal?.persona?.razon_social || c.cliente_principal?.persona?.nombre_comercial || '';
-        const totalSedes = (c as any).total_sedes || 0;
+            ? 'Sede / Sucursal'
+            : 'Independiente';
+        const sedeDe =
+          c.cliente_principal?.persona?.razon_social ||
+          c.cliente_principal?.persona?.nombre_comercial ||
+          '';
+        const totalSedes = c.total_sedes || 0;
         const nit = getNit(c);
         const tipo = TIPO_CLIENTE_LABELS[c.tipo_cliente] || c.tipo_cliente;
         const asesor = c.asesor_asignado?.persona?.nombre_completo || 'Sin asignar';
@@ -267,7 +275,7 @@ export function ClientesTable() {
         const email = c.persona?.email_principal || '';
         const ciudad = c.persona?.ciudad || '';
         const dir = c.persona?.direccion_principal || '';
-        const mapsUrl = (c.persona as any)?.url_ubicacion || '';
+        const mapsUrl = c.persona?.url_ubicacion || '';
         const tienePlantas = c.tiene_plantas ? 'SÍ' : 'NO';
         const totalPlantas = c.total_equipos_plantas || 0;
         const tieneBombas = c.tiene_bombas ? 'SÍ' : 'NO';
@@ -441,9 +449,7 @@ export function ClientesTable() {
                 <span className="text-lg sm:text-2xl font-bold tracking-tight text-amber-950">
                   {summary?.con_plantas ?? 0}
                 </span>
-                <span className="text-[10px] sm:text-xs text-amber-700/80">
-                  clientes
-                </span>
+                <span className="text-[10px] sm:text-xs text-amber-700/80">clientes</span>
               </div>
               <p className="text-[10px] sm:text-xs text-amber-600/90 truncate hidden sm:block">
                 {tipoEquipoFilter === 'PLANTAS' ? '✓ Filtro activo' : 'Clic para filtrar'}
@@ -476,9 +482,7 @@ export function ClientesTable() {
                 <span className="text-lg sm:text-2xl font-bold tracking-tight text-blue-950">
                   {summary?.con_bombas ?? 0}
                 </span>
-                <span className="text-[10px] sm:text-xs text-blue-700/80">
-                  clientes
-                </span>
+                <span className="text-[10px] sm:text-xs text-blue-700/80">clientes</span>
               </div>
               <p className="text-[10px] sm:text-xs text-blue-600/90 truncate hidden sm:block">
                 {tipoEquipoFilter === 'BOMBAS' ? '✓ Filtro activo' : 'Clic para filtrar'}
@@ -511,16 +515,16 @@ export function ClientesTable() {
                 <span className="text-lg sm:text-2xl font-bold tracking-tight text-purple-950">
                   {summary?.con_ambos ?? 0}
                 </span>
-                <span className="text-[10px] sm:text-xs text-purple-700/80">
-                  mixtos
-                </span>
+                <span className="text-[10px] sm:text-xs text-purple-700/80">mixtos</span>
               </div>
               <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground truncate hidden sm:flex">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setEstructuraFilter((prev) => (prev === 'PRINCIPALES' ? 'TODOS' : 'PRINCIPALES'));
+                    setEstructuraFilter((prev) =>
+                      prev === 'PRINCIPALES' ? 'TODOS' : 'PRINCIPALES',
+                    );
                     setPage(0);
                   }}
                   className={`hover:underline font-semibold transition-colors ${
@@ -600,7 +604,11 @@ export function ClientesTable() {
               <Download className={`h-3.5 w-3.5 mr-1.5 ${isExporting ? 'animate-bounce' : ''}`} />
               {isExporting ? 'Exportando...' : 'Exportar CSV'}
             </Button>
-            <Button size="sm" onClick={handleNew} className="h-9 flex-1 sm:flex-none text-xs sm:text-sm">
+            <Button
+              size="sm"
+              onClick={handleNew}
+              className="h-9 flex-1 sm:flex-none text-xs sm:text-sm"
+            >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
               Nuevo Cliente
             </Button>
@@ -685,7 +693,12 @@ export function ClientesTable() {
               <SelectItem value="INDEPENDIENTES">
                 <span className="flex items-center gap-1.5">
                   <span className="text-xs">👤</span>
-                  <span>Independientes ({summary?.independientes ?? (summary ? summary.total - summary.corporativos - summary.sedes : 0)})</span>
+                  <span>
+                    Independientes (
+                    {summary?.independientes ??
+                      (summary ? summary.total - summary.corporativos - summary.sedes : 0)}
+                    )
+                  </span>
                 </span>
               </SelectItem>
             </SelectContent>
@@ -717,7 +730,11 @@ export function ClientesTable() {
                 <div className="flex items-center gap-1">
                   <span>Código</span>
                   {sortField === 'codigo' ? (
-                    sortOrder === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    sortOrder === 'asc' ? (
+                      <ArrowUp className="h-3 w-3" />
+                    ) : (
+                      <ArrowDown className="h-3 w-3" />
+                    )
                   ) : (
                     <ArrowUpDown className="h-3 w-3 text-muted-foreground/60" />
                   )}
@@ -730,7 +747,11 @@ export function ClientesTable() {
                 <div className="flex items-center gap-1">
                   <span>Nombre / Razón Social</span>
                   {sortField === 'nombre' ? (
-                    sortOrder === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    sortOrder === 'asc' ? (
+                      <ArrowUp className="h-3 w-3" />
+                    ) : (
+                      <ArrowDown className="h-3 w-3" />
+                    )
                   ) : (
                     <ArrowUpDown className="h-3 w-3 text-muted-foreground/60" />
                   )}
@@ -743,7 +764,11 @@ export function ClientesTable() {
                 <div className="flex items-center gap-1">
                   <span>NIT/CC</span>
                   {sortField === 'nit' ? (
-                    sortOrder === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    sortOrder === 'asc' ? (
+                      <ArrowUp className="h-3 w-3" />
+                    ) : (
+                      <ArrowDown className="h-3 w-3" />
+                    )
                   ) : (
                     <ArrowUpDown className="h-3 w-3 text-muted-foreground/60" />
                   )}
@@ -756,7 +781,11 @@ export function ClientesTable() {
                 <div className="flex items-center gap-1">
                   <span>Tipo</span>
                   {sortField === 'tipo' ? (
-                    sortOrder === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    sortOrder === 'asc' ? (
+                      <ArrowUp className="h-3 w-3" />
+                    ) : (
+                      <ArrowDown className="h-3 w-3" />
+                    )
                   ) : (
                     <ArrowUpDown className="h-3 w-3 text-muted-foreground/60" />
                   )}
@@ -771,7 +800,11 @@ export function ClientesTable() {
                 <div className="flex items-center gap-1">
                   <span>Estado</span>
                   {sortField === 'estado' ? (
-                    sortOrder === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    sortOrder === 'asc' ? (
+                      <ArrowUp className="h-3 w-3" />
+                    ) : (
+                      <ArrowDown className="h-3 w-3" />
+                    )
                   ) : (
                     <ArrowUpDown className="h-3 w-3 text-muted-foreground/60" />
                   )}
@@ -786,7 +819,10 @@ export function ClientesTable() {
             {sortedClientes.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                  No se encontraron clientes {tipoEquipoFilter !== 'TODOS' ? `con filtro: ${tipoEquipoFilter === 'PLANTAS' ? 'Plantas' : tipoEquipoFilter === 'BOMBAS' ? 'Bombas' : tipoEquipoFilter.toLowerCase()}` : ''}
+                  No se encontraron clientes{' '}
+                  {tipoEquipoFilter !== 'TODOS'
+                    ? `con filtro: ${tipoEquipoFilter === 'PLANTAS' ? 'Plantas' : tipoEquipoFilter === 'BOMBAS' ? 'Bombas' : tipoEquipoFilter.toLowerCase()}`
+                    : ''}
                 </TableCell>
               </TableRow>
             ) : (
@@ -803,7 +839,9 @@ export function ClientesTable() {
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <span className="font-medium text-foreground text-xs sm:text-sm">{getClienteName(cliente)}</span>
+                        <span className="font-medium text-foreground text-xs sm:text-sm">
+                          {getClienteName(cliente)}
+                        </span>
                         {/* Badges de Jerarquía Estructural */}
                         {cliente.es_cliente_principal && (
                           <span
@@ -811,9 +849,9 @@ export function ClientesTable() {
                             title="Cliente Corporativo Matriz"
                           >
                             <span>🏢 Matriz</span>
-                            {Boolean((cliente as any).total_sedes && (cliente as any).total_sedes > 0) && (
+                            {Boolean(cliente.total_sedes && cliente.total_sedes > 0) && (
                               <span className="ml-0.5 px-1 py-0.2 bg-indigo-200/80 text-indigo-900 rounded text-[9px] font-bold">
-                                {(cliente as any).total_sedes} {(cliente as any).total_sedes === 1 ? 'sede' : 'sedes'}
+                                {cliente.total_sedes} {cliente.total_sedes === 1 ? 'sede' : 'sedes'}
                               </span>
                             )}
                           </span>
@@ -834,9 +872,9 @@ export function ClientesTable() {
                           <span className="text-slate-400">↳ Matriz:</span>
                           <span className="font-medium text-slate-700 truncate">
                             {cliente.cliente_principal.persona?.razon_social ||
-                             cliente.cliente_principal.persona?.nombre_comercial ||
-                             cliente.cliente_principal.nombre_sede ||
-                             `Cliente #${cliente.id_cliente_principal}`}
+                              cliente.cliente_principal.persona?.nombre_comercial ||
+                              cliente.cliente_principal.nombre_sede ||
+                              `Cliente #${cliente.id_cliente_principal}`}
                           </span>
                         </p>
                       )}
@@ -857,7 +895,12 @@ export function ClientesTable() {
                               title={`Ver ${cliente.total_equipos_plantas || 1} planta(s) eléctrica(s) instalada(s)`}
                             >
                               <Zap className="h-3 w-3 text-amber-500 fill-amber-500" />
-                              <span>Planta{cliente.total_equipos_plantas ? ` (${cliente.total_equipos_plantas})` : ''}</span>
+                              <span>
+                                Planta
+                                {cliente.total_equipos_plantas
+                                  ? ` (${cliente.total_equipos_plantas})`
+                                  : ''}
+                              </span>
                             </button>
                           )}
                           {cliente.tiene_bombas && (
@@ -874,16 +917,19 @@ export function ClientesTable() {
                               title={`Ver ${cliente.total_equipos_bombas || 1} bomba(s) hidráulica(s) instalada(s)`}
                             >
                               <Droplets className="h-3 w-3 text-blue-500 fill-blue-500" />
-                              <span>Bomba{cliente.total_equipos_bombas ? ` (${cliente.total_equipos_bombas})` : ''}</span>
+                              <span>
+                                Bomba
+                                {cliente.total_equipos_bombas
+                                  ? ` (${cliente.total_equipos_bombas})`
+                                  : ''}
+                              </span>
                             </button>
                           )}
                         </div>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-xs sm:text-sm">
-                    {getNit(cliente)}
-                  </TableCell>
+                  <TableCell className="font-mono text-xs sm:text-sm">{getNit(cliente)}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="text-xs font-normal">
                       {TIPO_CLIENTE_LABELS[cliente.tipo_cliente] || cliente.tipo_cliente}
@@ -893,7 +939,9 @@ export function ClientesTable() {
                     {cliente.asesor_asignado?.persona?.nombre_completo ? (
                       <div className="flex items-center gap-1 text-xs sm:text-sm">
                         <UserCheck className="h-3 w-3 text-green-600 flex-shrink-0" />
-                        <span className="truncate">{cliente.asesor_asignado.persona.nombre_completo}</span>
+                        <span className="truncate">
+                          {cliente.asesor_asignado.persona.nombre_completo}
+                        </span>
                       </div>
                     ) : (
                       <span className="text-muted-foreground text-xs">Sin asignar</span>
@@ -908,7 +956,10 @@ export function ClientesTable() {
                         </span>
                       )}
                       {cliente.persona?.email_principal && (
-                        <span className="flex items-center gap-1 truncate max-w-[150px]" title={cliente.persona.email_principal}>
+                        <span
+                          className="flex items-center gap-1 truncate max-w-[150px]"
+                          title={cliente.persona.email_principal}
+                        >
                           <Mail className="h-3 w-3 flex-shrink-0" />
                           <span className="truncate">{cliente.persona.email_principal}</span>
                         </span>
@@ -925,11 +976,16 @@ export function ClientesTable() {
                         >
                           <MapPin className="h-3 w-3 text-red-500 fill-red-500/20 flex-shrink-0" />
                           <span className="truncate max-w-[140px]">
-                            {cliente.persona.ciudad ? `${cliente.persona.ciudad} (Mapa)` : 'Ver en Maps'}
+                            {cliente.persona.ciudad
+                              ? `${cliente.persona.ciudad} (Mapa)`
+                              : 'Ver en Maps'}
                           </span>
                         </a>
                       ) : cliente.persona?.direccion_principal ? (
-                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground truncate max-w-[150px]" title={cliente.persona.direccion_principal}>
+                        <span
+                          className="flex items-center gap-1 text-[11px] text-muted-foreground truncate max-w-[150px]"
+                          title={cliente.persona.direccion_principal}
+                        >
                           <MapPin className="h-3 w-3 text-slate-400 flex-shrink-0" />
                           <span className="truncate">{cliente.persona.direccion_principal}</span>
                         </span>
@@ -937,18 +993,26 @@ export function ClientesTable() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={cliente.cliente_activo ? 'default' : 'destructive'} className="text-xs">
+                    <Badge
+                      variant={cliente.cliente_activo ? 'default' : 'destructive'}
+                      className="text-xs"
+                    >
                       {cliente.cliente_activo ? 'Activo' : 'Inactivo'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right sticky right-0 bg-card group-hover:bg-muted/70 transition-colors z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">
-                    <div className="flex justify-end items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className="flex justify-end items-center gap-0.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {/* Botón rápido Crear Orden */}
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                        onClick={() => router.push(`/ordenes/nueva?clienteId=${cliente.id_cliente}`)}
+                        onClick={() =>
+                          router.push(`/ordenes/nueva?clienteId=${cliente.id_cliente}`)
+                        }
                         title="Crear Nueva Orden de Servicio"
                       >
                         <FilePlus2 className="h-4 w-4" />
@@ -982,13 +1046,17 @@ export function ClientesTable() {
                           className="w-56 bg-white text-slate-800 border border-slate-200/90 shadow-2xl z-50 rounded-xl p-1.5 ring-1 ring-black/5"
                         >
                           <DropdownMenuItem
-                            onClick={() => router.push(`/ordenes/nueva?clienteId=${cliente.id_cliente}`)}
+                            onClick={() =>
+                              router.push(`/ordenes/nueva?clienteId=${cliente.id_cliente}`)
+                            }
                             className="cursor-pointer flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs sm:text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 focus:bg-slate-100 focus:text-slate-900 transition-colors"
                           >
                             <div className="flex items-center justify-center h-6 w-6 rounded-md bg-blue-50 text-blue-600 shrink-0">
                               <FileText className="h-3.5 w-3.5" />
                             </div>
-                            <span className="text-slate-800 font-medium">Nueva Orden de Servicio</span>
+                            <span className="text-slate-800 font-medium">
+                              Nueva Orden de Servicio
+                            </span>
                           </DropdownMenuItem>
 
                           <DropdownMenuItem
@@ -1003,7 +1071,9 @@ export function ClientesTable() {
                             <div className="flex items-center justify-center h-6 w-6 rounded-md bg-amber-50 text-amber-600 shrink-0">
                               <Wrench className="h-3.5 w-3.5" />
                             </div>
-                            <span className="text-slate-800 font-medium">Ver Equipos Instalados</span>
+                            <span className="text-slate-800 font-medium">
+                              Ver Equipos Instalados
+                            </span>
                           </DropdownMenuItem>
 
                           <DropdownMenuItem
@@ -1053,7 +1123,8 @@ export function ClientesTable() {
       {totalPages > 1 && (
         <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
           <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
-            Mostrando {page * PAGE_SIZE + 1} - {Math.min((page + 1) * PAGE_SIZE, total)} de {total} clientes
+            Mostrando {page * PAGE_SIZE + 1} - {Math.min((page + 1) * PAGE_SIZE, total)} de {total}{' '}
+            clientes
           </p>
           <div className="flex gap-2">
             <Button
@@ -1154,7 +1225,8 @@ export function ClientesTable() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar cliente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción no se puede deshacer. El cliente será marcado como inactivo o eliminado permanentemente.
+              Esta acción no se puede deshacer. El cliente será marcado como inactivo o eliminado
+              permanentemente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

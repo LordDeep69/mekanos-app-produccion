@@ -29,20 +29,13 @@ export class CrearDevolucionHandler implements ICommandHandler<CrearDevolucionCo
   ) {}
 
   async execute(command: CrearDevolucionCommand): Promise<any> {
-    try {
-      const devolucion = await this.repository.crear({
-        id_orden_compra: command.id_orden_compra,
-        id_lote: command.id_lote,
-        motivo: command.motivo,
-        cantidad_devuelta: command.cantidad_devuelta,
-        solicitada_por: command.solicitada_por,
-        observaciones_solicitud: command.observaciones_solicitud,
-      });
-
-      return devolucion;
-    } catch (error) {
-      // En producción, usar logger adecuado y transformar excepciones
-      throw error;
-    }
+    return this.repository.crear({
+      id_orden_compra: command.id_orden_compra,
+      id_lote: command.id_lote,
+      motivo: command.motivo,
+      cantidad_devuelta: command.cantidad_devuelta,
+      solicitada_por: command.solicitada_por,
+      observaciones_solicitud: command.observaciones_solicitud,
+    });
   }
 }

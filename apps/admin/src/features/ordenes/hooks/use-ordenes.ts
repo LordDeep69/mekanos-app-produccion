@@ -1,61 +1,57 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Hooks TanStack Query para Órdenes de Servicio
- * 
+ *
  * ENTERPRISE CACHE: Órdenes usan estrategia DYNAMIC (2min staleTime)
  * para garantizar actualizaciones en tiempo real sin sacrificar rendimiento.
- * 
+ *
  * IMPORTANTE: Las mutaciones invalidan cache relacionado para
  * garantizar que cambios de estado se reflejen inmediatamente.
  */
 
 import { CacheStrategy } from '@/lib/cache';
-import type {
-    CambiarEstadoDto,
-    CreateOrdenDto,
-    OrdenesQueryParams,
-} from '@/types/ordenes';
+import type { CambiarEstadoDto, CreateOrdenDto, OrdenesQueryParams } from '@/types/ordenes';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-    addServicioOrden,
-    asignarTecnico,
-    cambiarEstadoOrden,
-    cancelarOrden,
-    createMedicionOrden,
-    createOrden,
-    deleteOrden,
-    getActividadesOrden,
-    getEvidenciasOrden,
-    getFirmasOrden,
-    getHistorialEmails,
-    getMedicionesCompletasOrden,
-    getMedicionesOrden,
-    getOrden,
-    getOrdenes,
-    getServiciosOrden,
-    removeServicioOrden,
-    getComponentesOrden,
-    addComponenteOrden,
-    removeComponenteOrden,
-    type DespacharComponenteOrdenDto,
-    updateActividad,
-    updateEdicionTecnico,
-    updateFirmaOrden,
-    updateHorariosServicio,
-    updateMedicion,
-    updateObservacionesCierre,
-    updateOrden,
-    type AddServicioDetalleDto,
-    type UpdateActividadDto,
-    type UpdateEdicionTecnicoDto,
-    getFirmasHistorialTecnico,
-    getProgresoRegistro,
-    sendHeartbeat,
-    type UpdateHorariosServicioDto,
-    type UpdateMedicionDto,
-    type UpdateOrdenDto,
-    type UpdateFirmaOrdenDto
+  addServicioOrden,
+  asignarTecnico,
+  cambiarEstadoOrden,
+  cancelarOrden,
+  createMedicionOrden,
+  createOrden,
+  deleteOrden,
+  getActividadesOrden,
+  getEvidenciasOrden,
+  getFirmasOrden,
+  getHistorialEmails,
+  getMedicionesCompletasOrden,
+  getMedicionesOrden,
+  getOrden,
+  getOrdenes,
+  getServiciosOrden,
+  removeServicioOrden,
+  getComponentesOrden,
+  addComponenteOrden,
+  removeComponenteOrden,
+  type DespacharComponenteOrdenDto,
+  updateActividad,
+  updateEdicionTecnico,
+  updateFirmaOrden,
+  updateHorariosServicio,
+  updateMedicion,
+  updateObservacionesCierre,
+  updateOrden,
+  type AddServicioDetalleDto,
+  type UpdateActividadDto,
+  type UpdateEdicionTecnicoDto,
+  getFirmasHistorialTecnico,
+  getProgresoRegistro,
+  sendHeartbeat,
+  type UpdateHorariosServicioDto,
+  type UpdateMedicionDto,
+  type UpdateOrdenDto,
+  type UpdateFirmaOrdenDto,
 } from '../api/ordenes.service';
 
 // Query keys
@@ -76,24 +72,24 @@ const PROGRESO_REGISTRO_KEY = ['ordenes', 'progreso-registro'];
  * Hook para obtener evidencias de una orden
  */
 export function useEvidenciasOrden(idOrden: number) {
-    return useQuery({
-        queryKey: [...EVIDENCIAS_ORDEN_KEY, idOrden],
-        queryFn: () => getEvidenciasOrden(idOrden),
-        enabled: !!idOrden,
-        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
-    });
+  return useQuery({
+    queryKey: [...EVIDENCIAS_ORDEN_KEY, idOrden],
+    queryFn: () => getEvidenciasOrden(idOrden),
+    enabled: !!idOrden,
+    ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
+  });
 }
 
 /**
  * Hook para obtener firmas de una orden
  */
 export function useFirmasOrden(idOrden: number) {
-    return useQuery({
-        queryKey: [...FIRMAS_ORDEN_KEY, idOrden],
-        queryFn: () => getFirmasOrden(idOrden),
-        enabled: !!idOrden,
-        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
-    });
+  return useQuery({
+    queryKey: [...FIRMAS_ORDEN_KEY, idOrden],
+    queryFn: () => getFirmasOrden(idOrden),
+    enabled: !!idOrden,
+    ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
+  });
 }
 
 /**
@@ -101,220 +97,245 @@ export function useFirmasOrden(idOrden: number) {
  * (solo se consulta cuando enabled=true, p.ej. al editar la firma del técnico)
  */
 export function useFirmasHistorialTecnico(idOrden: number, enabled = true) {
-    return useQuery({
-        queryKey: [...FIRMAS_HISTORIAL_TECNICO_KEY, idOrden],
-        queryFn: () => getFirmasHistorialTecnico(idOrden),
-        enabled: !!idOrden && enabled,
-        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
-    });
+  return useQuery({
+    queryKey: [...FIRMAS_HISTORIAL_TECNICO_KEY, idOrden],
+    queryFn: () => getFirmasHistorialTecnico(idOrden),
+    enabled: !!idOrden && enabled,
+    ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
+  });
 }
 
 /**
  * ✅ 25-FEB-2026: Hook para actualizar/crear firma de una orden
  */
 export function useUpdateFirmaOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ idOrden, tipo, data }: { idOrden: number; tipo: 'TECNICO' | 'CLIENTE'; data: UpdateFirmaOrdenDto }) =>
-            updateFirmaOrden(idOrden, tipo, data),
-        onSuccess: (res, { idOrden, tipo, data }) => {
-            queryClient.invalidateQueries({ queryKey: [...FIRMAS_ORDEN_KEY, idOrden] });
-            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
-            queryClient.invalidateQueries({ queryKey: ['orden', idOrden] });
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            const msg = res?.message || (tipo === 'CLIENTE' && !data?.firma_base64
-                ? 'Datos del firmante actualizados exitosamente'
-                : 'Firma actualizada exitosamente');
-            toast.success(msg);
-        },
-        onError: (error: any) => {
-            toast.error(error?.response?.data?.message || 'Error al actualizar la firma');
-        },
-    });
+  return useMutation({
+    mutationFn: ({
+      idOrden,
+      tipo,
+      data,
+    }: {
+      idOrden: number;
+      tipo: 'TECNICO' | 'CLIENTE';
+      data: UpdateFirmaOrdenDto;
+    }) => updateFirmaOrden(idOrden, tipo, data),
+    onSuccess: (res, { idOrden, tipo, data }) => {
+      queryClient.invalidateQueries({ queryKey: [...FIRMAS_ORDEN_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: ['orden', idOrden] });
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+      const msg =
+        res?.message ||
+        (tipo === 'CLIENTE' && !data?.firma_base64
+          ? 'Datos del firmante actualizados exitosamente'
+          : 'Firma actualizada exitosamente');
+      toast.success(msg);
+    },
+    onError: (error: unknown) => {
+      const msg = (error as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message;
+      toast.error(msg || 'Error al actualizar la firma');
+    },
+  });
 }
 
 /**
  * Hook para obtener actividades de una orden
  */
 export function useActividadesOrden(idOrden: number) {
-    return useQuery({
-        queryKey: [...ACTIVIDADES_ORDEN_KEY, idOrden],
-        queryFn: () => getActividadesOrden(idOrden),
-        enabled: !!idOrden,
-        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
-    });
+  return useQuery({
+    queryKey: [...ACTIVIDADES_ORDEN_KEY, idOrden],
+    queryFn: () => getActividadesOrden(idOrden),
+    enabled: !!idOrden,
+    ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
+  });
 }
 
 /**
  * Hook para obtener mediciones de una orden
  */
 export function useMedicionesOrden(idOrden: number) {
-    return useQuery({
-        queryKey: [...MEDICIONES_ORDEN_KEY, idOrden],
-        queryFn: () => getMedicionesOrden(idOrden),
-        enabled: !!idOrden,
-        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
-    });
+  return useQuery({
+    queryKey: [...MEDICIONES_ORDEN_KEY, idOrden],
+    queryFn: () => getMedicionesOrden(idOrden),
+    enabled: !!idOrden,
+    ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
+  });
 }
 
 /**
  * ✅ 24-FEB-2026: Hook para obtener mediciones completas (registradas + sin medir)
  */
 export function useMedicionesCompletasOrden(idOrden: number) {
-    return useQuery({
-        queryKey: [...MEDICIONES_ORDEN_KEY, idOrden, 'completas'],
-        queryFn: () => getMedicionesCompletasOrden(idOrden),
-        enabled: !!idOrden,
-        ...CacheStrategy.DYNAMIC,
-    });
+  return useQuery({
+    queryKey: [...MEDICIONES_ORDEN_KEY, idOrden, 'completas'],
+    queryFn: () => getMedicionesCompletasOrden(idOrden),
+    enabled: !!idOrden,
+    ...CacheStrategy.DYNAMIC,
+  });
 }
 
 /**
  * ✅ 24-FEB-2026: Hook para crear una nueva medición desde el portal admin
  */
 export function useCreateMedicion() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ idOrden, data }: { idOrden: number; data: { id_parametro_medicion: number; valor_numerico?: number; valor_texto?: string; observaciones?: string } }) =>
-            createMedicionOrden(idOrden, data),
-        onSuccess: (_, { idOrden }) => {
-            queryClient.invalidateQueries({ queryKey: [...MEDICIONES_ORDEN_KEY, idOrden] });
-            toast.success('Medición registrada exitosamente');
-        },
-    });
+  return useMutation({
+    mutationFn: ({
+      idOrden,
+      data,
+    }: {
+      idOrden: number;
+      data: {
+        id_parametro_medicion: number;
+        valor_numerico?: number;
+        valor_texto?: string;
+        observaciones?: string;
+      };
+    }) => createMedicionOrden(idOrden, data),
+    onSuccess: (_, { idOrden }) => {
+      queryClient.invalidateQueries({ queryKey: [...MEDICIONES_ORDEN_KEY, idOrden] });
+      toast.success('Medición registrada exitosamente');
+    },
+  });
 }
 
 /**
  * Hook para obtener servicios de una orden
  */
 export function useServiciosOrden(idOrden: number) {
-    return useQuery({
-        queryKey: [...SERVICIOS_ORDEN_KEY, idOrden],
-        queryFn: () => getServiciosOrden(idOrden),
-        enabled: !!idOrden,
-        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
-    });
+  return useQuery({
+    queryKey: [...SERVICIOS_ORDEN_KEY, idOrden],
+    queryFn: () => getServiciosOrden(idOrden),
+    enabled: !!idOrden,
+    ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
+  });
 }
 
 /**
  * Hook para agregar servicio a una orden
  */
 export function useAddServicioOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ idOrden, data }: { idOrden: number; data: AddServicioDetalleDto }) =>
-            addServicioOrden(idOrden, data),
-        onSuccess: (_, { idOrden }) => {
-            queryClient.invalidateQueries({ queryKey: [...SERVICIOS_ORDEN_KEY, idOrden] });
-            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] }); // Refrescar totales
-            toast.success('Servicio agregado exitosamente');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ idOrden, data }: { idOrden: number; data: AddServicioDetalleDto }) =>
+      addServicioOrden(idOrden, data),
+    onSuccess: (_, { idOrden }) => {
+      queryClient.invalidateQueries({ queryKey: [...SERVICIOS_ORDEN_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] }); // Refrescar totales
+      toast.success('Servicio agregado exitosamente');
+    },
+  });
 }
 
 /**
  * Hook para eliminar servicio de una orden
  */
 export function useRemoveServicioOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ idOrden, idDetalle }: { idOrden: number; idDetalle: number }) =>
-            removeServicioOrden(idOrden, idDetalle),
-        onSuccess: (_, { idOrden }) => {
-            queryClient.invalidateQueries({ queryKey: [...SERVICIOS_ORDEN_KEY, idOrden] });
-            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] }); // Refrescar totales
-            toast.success('Servicio eliminado de la orden');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ idOrden, idDetalle }: { idOrden: number; idDetalle: number }) =>
+      removeServicioOrden(idOrden, idDetalle),
+    onSuccess: (_, { idOrden }) => {
+      queryClient.invalidateQueries({ queryKey: [...SERVICIOS_ORDEN_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] }); // Refrescar totales
+      toast.success('Servicio eliminado de la orden');
+    },
+  });
 }
 
 /**
  * ✅ INTEGRACIÓN WMS ⇄ OS: Hook para obtener repuestos e insumos de una orden
  */
 export function useComponentesOrden(idOrden: number) {
-    const validId = Number(idOrden);
-    const isValid = Boolean(validId && !isNaN(validId) && validId > 0);
-    return useQuery({
-        queryKey: [...COMPONENTES_ORDEN_KEY, validId],
-        queryFn: () => getComponentesOrden(validId),
-        enabled: isValid,
-        ...CacheStrategy.DYNAMIC,
-    });
+  const validId = Number(idOrden);
+  const isValid = Boolean(validId && !isNaN(validId) && validId > 0);
+  return useQuery({
+    queryKey: [...COMPONENTES_ORDEN_KEY, validId],
+    queryFn: () => getComponentesOrden(validId),
+    enabled: isValid,
+    ...CacheStrategy.DYNAMIC,
+  });
 }
 
 /**
  * ✅ INTEGRACIÓN WMS ⇄ OS: Hook para despachar repuesto de almacén o compra directa a una orden
  */
 export function useAddComponenteOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ idOrden, data }: { idOrden: number; data: DespacharComponenteOrdenDto }) =>
-            addComponenteOrden(idOrden, data),
-        onSuccess: (res, { idOrden }) => {
-            queryClient.invalidateQueries({ queryKey: [...COMPONENTES_ORDEN_KEY, idOrden] });
-            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
-            queryClient.invalidateQueries({ queryKey: ['inventario'] });
-            queryClient.invalidateQueries({ queryKey: ['equipos'] });
-            toast.success(res?.mensaje || 'Repuesto despachado e imputado a la orden');
-        },
-        onError: (error: any) => {
-            toast.error(error?.response?.data?.message || 'Error al despachar repuesto a la orden');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ idOrden, data }: { idOrden: number; data: DespacharComponenteOrdenDto }) =>
+      addComponenteOrden(idOrden, data),
+    onSuccess: (res, { idOrden }) => {
+      queryClient.invalidateQueries({ queryKey: [...COMPONENTES_ORDEN_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: ['inventario'] });
+      queryClient.invalidateQueries({ queryKey: ['equipos'] });
+      toast.success(res?.mensaje || 'Repuesto despachado e imputado a la orden');
+    },
+    onError: (error: unknown) => {
+      const msg = (error as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message;
+      toast.error(msg || 'Error al despachar repuesto a la orden');
+    },
+  });
 }
 
 /**
  * ✅ INTEGRACIÓN WMS ⇄ OS: Hook para reintegrar repuesto al almacén WMS y descontar de la orden
  */
 export function useRemoveComponenteOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ idOrden, idUso, motivo }: { idOrden: number; idUso: number; motivo?: string }) =>
-            removeComponenteOrden(idOrden, idUso, motivo),
-        onSuccess: (res, { idOrden }) => {
-            queryClient.invalidateQueries({ queryKey: [...COMPONENTES_ORDEN_KEY, idOrden] });
-            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
-            queryClient.invalidateQueries({ queryKey: ['inventario'] });
-            queryClient.invalidateQueries({ queryKey: ['equipos'] });
-            toast.success(res?.mensaje || 'Repuesto reintegrado al almacén exitosamente');
-        },
-        onError: (error: any) => {
-            toast.error(error?.response?.data?.message || 'Error al reintegrar repuesto');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ idOrden, idUso, motivo }: { idOrden: number; idUso: number; motivo?: string }) =>
+      removeComponenteOrden(idOrden, idUso, motivo),
+    onSuccess: (res, { idOrden }) => {
+      queryClient.invalidateQueries({ queryKey: [...COMPONENTES_ORDEN_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: ['inventario'] });
+      queryClient.invalidateQueries({ queryKey: ['equipos'] });
+      toast.success(res?.mensaje || 'Repuesto reintegrado al almacén exitosamente');
+    },
+    onError: (error: unknown) => {
+      const msg = (error as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message;
+      toast.error(msg || 'Error al reintegrar repuesto');
+    },
+  });
 }
 
 /**
  * Hook para obtener lista de órdenes
  */
 export function useOrdenes(params?: OrdenesQueryParams) {
-    return useQuery({
-        queryKey: [...ORDENES_KEY, params],
-        queryFn: () => getOrdenes(params),
-        // ⚡ 04-NOV-2026: mantener los resultados anteriores mientras llega la
-        // nueva búsqueda/página. Evita que la tabla parpadee o desaparezca
-        // entre tecleos (la percepción de velocidad mejora mucho).
-        placeholderData: keepPreviousData,
-        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
-    });
+  return useQuery({
+    queryKey: [...ORDENES_KEY, params],
+    queryFn: () => getOrdenes(params),
+    // ⚡ 04-NOV-2026: mantener los resultados anteriores mientras llega la
+    // nueva búsqueda/página. Evita que la tabla parpadee o desaparezca
+    // entre tecleos (la percepción de velocidad mejora mucho).
+    placeholderData: keepPreviousData,
+    ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
+  });
 }
 
 /**
  * Hook para obtener una orden por ID
  */
 export function useOrden(id: number | string) {
-    return useQuery({
-        queryKey: [...ORDENES_KEY, id],
-        queryFn: () => getOrden(id),
-        enabled: Boolean(id) && String(id) !== "NaN",
-        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
-    });
+  return useQuery({
+    queryKey: [...ORDENES_KEY, id],
+    queryFn: () => getOrden(id),
+    enabled: Boolean(id) && String(id) !== 'NaN',
+    ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
+  });
 }
 
 /**
@@ -324,95 +345,94 @@ export function useOrden(id: number | string) {
 const DASHBOARD_KEY = ['dashboard'];
 
 export function useCrearOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: (data: CreateOrdenDto) => createOrden(data),
-        onSuccess: () => {
-            // Invalidar órdenes Y dashboard para reflejar cambios en métricas
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
-            toast.success('Orden creada exitosamente');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al crear orden');
-        },
-    });
+  return useMutation({
+    mutationFn: (data: CreateOrdenDto) => createOrden(data),
+    onSuccess: () => {
+      // Invalidar órdenes Y dashboard para reflejar cambios en métricas
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+      queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      toast.success('Orden creada exitosamente');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al crear orden');
+    },
+  });
 }
 
 /**
  * Hook para cambiar estado de orden
  */
 export function useCambiarEstadoOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ id, data }: { id: number; data: CambiarEstadoDto }) =>
-            cambiarEstadoOrden(id, data),
-        onSuccess: (result) => {
-            // ✅ ENTERPRISE: Invalidar órdenes Y dashboard para actualización en tiempo real
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
-            toast.success(result.message || 'Estado actualizado');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al cambiar estado');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: CambiarEstadoDto }) =>
+      cambiarEstadoOrden(id, data),
+    onSuccess: (result) => {
+      // ✅ ENTERPRISE: Invalidar órdenes Y dashboard para actualización en tiempo real
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+      queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      toast.success(result.message || 'Estado actualizado');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al cambiar estado');
+    },
+  });
 }
 
 /**
  * Hook para asignar técnico
  */
 export function useAsignarTecnico() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ id, tecnicoId }: { id: number; tecnicoId: number }) =>
-            asignarTecnico(id, tecnicoId),
-        onSuccess: (result) => {
-            // Invalidar órdenes Y dashboard
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
-            toast.success(result.message || 'Técnico asignado');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al asignar técnico');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ id, tecnicoId }: { id: number; tecnicoId: number }) =>
+      asignarTecnico(id, tecnicoId),
+    onSuccess: (result) => {
+      // Invalidar órdenes Y dashboard
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+      queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      toast.success(result.message || 'Técnico asignado');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al asignar técnico');
+    },
+  });
 }
 
 /**
  * Hook para cancelar orden
  */
 export function useCancelarOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ id, motivo }: { id: number; motivo?: string }) =>
-            cancelarOrden(id, motivo),
-        onSuccess: (result) => {
-            // Invalidar órdenes Y dashboard
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
-            toast.success(result.message || 'Orden cancelada');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al cancelar orden');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ id, motivo }: { id: number; motivo?: string }) => cancelarOrden(id, motivo),
+    onSuccess: (result) => {
+      // Invalidar órdenes Y dashboard
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+      queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      toast.success(result.message || 'Orden cancelada');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al cancelar orden');
+    },
+  });
 }
 
 /**
@@ -420,36 +440,35 @@ export function useCancelarOrden() {
  * Solo permite edición si el estado NO es final (APROBADA, CANCELADA)
  */
 export function useUpdateOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ id, data }: { id: number; data: UpdateOrdenDto }) =>
-            updateOrden(id, data),
-        onSuccess: (result, { id }) => {
-            // Invalidar órdenes específica Y lista Y dashboard
-            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, id] });
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
-            toast.success(result.message || 'Orden actualizada exitosamente');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al actualizar orden');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateOrdenDto }) => updateOrden(id, data),
+    onSuccess: (result, { id }) => {
+      // Invalidar órdenes específica Y lista Y dashboard
+      queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, id] });
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+      queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      toast.success(result.message || 'Orden actualizada exitosamente');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al actualizar orden');
+    },
+  });
 }
 
 /**
  * Hook para refrescar lista de órdenes
  */
 export function useRefreshOrdenes() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return {
-        refresh: () => queryClient.invalidateQueries({ queryKey: ORDENES_KEY }),
-    };
+  return {
+    refresh: () => queryClient.invalidateQueries({ queryKey: ORDENES_KEY }),
+  };
 }
 
 /**
@@ -457,22 +476,22 @@ export function useRefreshOrdenes() {
  * Invalida cache de actividades de la orden para reflejar cambios inmediatamente
  */
 export function useUpdateActividad() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ idActividad, data }: { idActividad: number; data: UpdateActividadDto }) =>
-            updateActividad(idActividad, data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ACTIVIDADES_ORDEN_KEY });
-            toast.success('Actividad actualizada');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al actualizar actividad');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ idActividad, data }: { idActividad: number; data: UpdateActividadDto }) =>
+      updateActividad(idActividad, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ACTIVIDADES_ORDEN_KEY });
+      toast.success('Actividad actualizada');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al actualizar actividad');
+    },
+  });
 }
 
 /**
@@ -480,22 +499,22 @@ export function useUpdateActividad() {
  * El backend recalcula automáticamente fueraDeRango y nivelAlerta
  */
 export function useUpdateMedicion() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ idMedicion, data }: { idMedicion: number; data: UpdateMedicionDto }) =>
-            updateMedicion(idMedicion, data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: MEDICIONES_ORDEN_KEY });
-            toast.success('Medición actualizada');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al actualizar medición');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ idMedicion, data }: { idMedicion: number; data: UpdateMedicionDto }) =>
+      updateMedicion(idMedicion, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MEDICIONES_ORDEN_KEY });
+      toast.success('Medición actualizada');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al actualizar medición');
+    },
+  });
 }
 
 /**
@@ -504,29 +523,29 @@ export function useUpdateMedicion() {
  * Permite edición incluso en órdenes COMPLETADAS
  */
 export function useUpdateObservacionesCierre() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ id, observaciones_cierre }: { id: number; observaciones_cierre: string }) =>
-            updateObservacionesCierre(id, observaciones_cierre),
-        onSuccess: (response, variables) => {
-            // Si el texto visible no cambió, el API no escribe ni historial ni
-            // fecha de modificación: no hace falta refrescar la orden.
-            if (!response.data?.sin_cambios) {
-                queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
-                queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-                queryClient.invalidateQueries({ queryKey: ['orden', variables.id] });
-                queryClient.invalidateQueries({ queryKey: ['orden-historial', variables.id] });
-            }
-            toast.success(response.message || 'Observaciones de cierre actualizadas');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al actualizar observaciones de cierre');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ id, observaciones_cierre }: { id: number; observaciones_cierre: string }) =>
+      updateObservacionesCierre(id, observaciones_cierre),
+    onSuccess: (response, variables) => {
+      // Si el texto visible no cambió, el API no escribe ni historial ni
+      // fecha de modificación: no hace falta refrescar la orden.
+      if (!response.data?.sin_cambios) {
+        queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
+        queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+        queryClient.invalidateQueries({ queryKey: ['orden', variables.id] });
+        queryClient.invalidateQueries({ queryKey: ['orden-historial', variables.id] });
+      }
+      toast.success(response.message || 'Observaciones de cierre actualizadas');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al actualizar observaciones de cierre');
+    },
+  });
 }
 
 /**
@@ -535,24 +554,24 @@ export function useUpdateObservacionesCierre() {
  * historial para reflejar la auditoría de inmediato.
  */
 export function useUpdateEdicionTecnico() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ id, data }: { id: number; data: UpdateEdicionTecnicoDto }) =>
-            updateEdicionTecnico(id, data),
-        onSuccess: (response, variables) => {
-            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            queryClient.invalidateQueries({ queryKey: ['orden-historial', variables.id] });
-            toast.success(response.message || 'Autorización de edición actualizada');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al actualizar la autorización de edición');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateEdicionTecnicoDto }) =>
+      updateEdicionTecnico(id, data),
+    onSuccess: (response, variables) => {
+      queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+      queryClient.invalidateQueries({ queryKey: ['orden-historial', variables.id] });
+      toast.success(response.message || 'Autorización de edición actualizada');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al actualizar la autorización de edición');
+    },
+  });
 }
 
 /**
@@ -562,23 +581,23 @@ export function useUpdateEdicionTecnico() {
  * Recalcula duracion_minutos automáticamente en backend
  */
 export function useUpdateHorariosServicio() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ id, data }: { id: number; data: UpdateHorariosServicioDto }) =>
-            updateHorariosServicio(id, data),
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            toast.success('Horarios de servicio actualizados exitosamente');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al actualizar horarios de servicio');
-        },
-    });
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateHorariosServicioDto }) =>
+      updateHorariosServicio(id, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+      toast.success('Horarios de servicio actualizados exitosamente');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al actualizar horarios de servicio');
+    },
+  });
 }
 
 /**
@@ -586,12 +605,12 @@ export function useUpdateHorariosServicio() {
  * FIX 18-FEB-2026
  */
 export function useHistorialEmails(idOrden: number) {
-    return useQuery({
-        queryKey: [...HISTORIAL_EMAILS_KEY, idOrden],
-        queryFn: () => getHistorialEmails(idOrden),
-        enabled: !!idOrden,
-        ...CacheStrategy.DYNAMIC,
-    });
+  return useQuery({
+    queryKey: [...HISTORIAL_EMAILS_KEY, idOrden],
+    queryFn: () => getHistorialEmails(idOrden),
+    enabled: !!idOrden,
+    ...CacheStrategy.DYNAMIC,
+  });
 }
 
 /**
@@ -600,33 +619,33 @@ export function useHistorialEmails(idOrden: number) {
  * Invalida cache de órdenes y dashboard tras eliminación
  */
 export function useDeleteOrden() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: (id: number) => deleteOrden(id),
-        onSuccess: (result, deletedId) => {
-            // ✅ FIX 26-FEB-2026: REMOVER todas las queries relacionadas con la orden eliminada
-            // para evitar que React Query intente refetchar datos que ya no existen (404)
-            queryClient.removeQueries({ queryKey: [...ORDENES_KEY, deletedId] });
-            queryClient.removeQueries({ queryKey: [...SERVICIOS_ORDEN_KEY, deletedId] });
-            queryClient.removeQueries({ queryKey: [...ACTIVIDADES_ORDEN_KEY, deletedId] });
-            queryClient.removeQueries({ queryKey: [...MEDICIONES_ORDEN_KEY, deletedId] });
-            queryClient.removeQueries({ queryKey: [...EVIDENCIAS_ORDEN_KEY, deletedId] });
-            queryClient.removeQueries({ queryKey: [...FIRMAS_ORDEN_KEY, deletedId] });
-            queryClient.removeQueries({ queryKey: [...HISTORIAL_EMAILS_KEY, deletedId] });
+  return useMutation({
+    mutationFn: (id: number) => deleteOrden(id),
+    onSuccess: (result, deletedId) => {
+      // ✅ FIX 26-FEB-2026: REMOVER todas las queries relacionadas con la orden eliminada
+      // para evitar que React Query intente refetchar datos que ya no existen (404)
+      queryClient.removeQueries({ queryKey: [...ORDENES_KEY, deletedId] });
+      queryClient.removeQueries({ queryKey: [...SERVICIOS_ORDEN_KEY, deletedId] });
+      queryClient.removeQueries({ queryKey: [...ACTIVIDADES_ORDEN_KEY, deletedId] });
+      queryClient.removeQueries({ queryKey: [...MEDICIONES_ORDEN_KEY, deletedId] });
+      queryClient.removeQueries({ queryKey: [...EVIDENCIAS_ORDEN_KEY, deletedId] });
+      queryClient.removeQueries({ queryKey: [...FIRMAS_ORDEN_KEY, deletedId] });
+      queryClient.removeQueries({ queryKey: [...HISTORIAL_EMAILS_KEY, deletedId] });
 
-            // Luego invalidar la lista de órdenes y dashboard
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
-            toast.success(result.message || 'Orden eliminada permanentemente');
-        },
-        onError: (error: unknown) => {
-            const err = error as { response?: { data?: { message?: string | string[] } } };
-            const message = err.response?.data?.message;
-            const errorText = Array.isArray(message) ? message.join(', ') : message;
-            toast.error(errorText || 'Error al eliminar la orden');
-        },
-    });
+      // Luego invalidar la lista de órdenes y dashboard
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+      queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      toast.success(result.message || 'Orden eliminada permanentemente');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al eliminar la orden');
+    },
+  });
 }
 
 /**
@@ -635,33 +654,38 @@ export function useDeleteOrden() {
  * Soporta refetchInterval (ej. 15s o 30s) para auto-refresh sin recargar
  */
 export function useProgresoRegistro(
-    idOrden: number,
-    options?: {
-        refetchInterval?: number | false;
-        enabled?: boolean;
-    }
+  idOrden: number,
+  options?: {
+    refetchInterval?: number | false;
+    enabled?: boolean;
+  },
 ) {
-    return useQuery({
-        queryKey: [...PROGRESO_REGISTRO_KEY, idOrden],
-        queryFn: () => getProgresoRegistro(idOrden),
-        enabled: (options?.enabled ?? true) && Boolean(idOrden),
-        refetchInterval: options?.refetchInterval ?? false,
-        staleTime: 5000, // 5 segundos
-    });
+  return useQuery({
+    queryKey: [...PROGRESO_REGISTRO_KEY, idOrden],
+    queryFn: () => getProgresoRegistro(idOrden),
+    enabled: (options?.enabled ?? true) && Boolean(idOrden),
+    refetchInterval: options?.refetchInterval ?? false,
+    staleTime: 5000, // 5 segundos
+  });
 }
 
 /**
  * Hook para registrar heartbeat/latido desde UI o testing
  */
 export function useSendHeartbeat() {
-    const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-    return useMutation({
-        mutationFn: ({ idOrden, data }: { idOrden: number; data: any }) =>
-            sendHeartbeat(idOrden, data),
-        onSuccess: (_result, { idOrden }) => {
-            queryClient.invalidateQueries({ queryKey: [...PROGRESO_REGISTRO_KEY, idOrden] });
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-        },
-    });
+  return useMutation({
+    mutationFn: ({
+      idOrden,
+      data,
+    }: {
+      idOrden: number;
+      data: Parameters<typeof sendHeartbeat>[1];
+    }) => sendHeartbeat(idOrden, data),
+    onSuccess: (_result, { idOrden }) => {
+      queryClient.invalidateQueries({ queryKey: [...PROGRESO_REGISTRO_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+    },
+  });
 }

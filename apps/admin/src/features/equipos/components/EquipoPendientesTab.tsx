@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   AlertCircle,
@@ -21,7 +21,12 @@ import {
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
-import { getPendienteEstadoColor, getPendienteEstadoLabel, getPrioridadColor } from '@/types/ordenes';
+import {
+  getPendienteEstadoColor,
+  getPendienteEstadoLabel,
+  getPrioridadColor,
+  type OrdenPendiente,
+} from '@/types/ordenes';
 import { EamSelect } from '@/components/ui/eam-select';
 
 interface EquipoPendientesTabProps {
@@ -29,16 +34,13 @@ interface EquipoPendientesTabProps {
   codigoEquipo?: string;
 }
 
-export function EquipoPendientesTab({
-  idEquipo,
-  codigoEquipo,
-}: EquipoPendientesTabProps) {
+export function EquipoPendientesTab({ idEquipo, codigoEquipo }: EquipoPendientesTabProps) {
   const [data, setData] = useState<{
     total: number;
     activosCount: number;
     resueltosCount: number;
     canceladosCount: number;
-    items: any[];
+    items: OrdenPendiente[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,11 +50,13 @@ export function EquipoPendientesTab({
   // Modal Nuevo Pendiente Directo (sin OT previa)
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [descripcion, setDescripcion] = useState('');
-  const [prioridad, setPrioridad] = useState<'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA'>('NORMAL');
+  const [prioridad, setPrioridad] = useState<'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA'>(
+    'NORMAL',
+  );
   const [observaciones, setObservaciones] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const cargarPendientes = async () => {
+  const cargarPendientes = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -62,17 +66,19 @@ export function EquipoPendientesTab({
       } else {
         throw new Error(res.data?.message || 'Error cargando pendientes');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error cargando pendientes del equipo:', err);
-      setError(err.message || 'No se pudo cargar el historial de pendientes');
+      const msg =
+        err instanceof Error ? err.message : 'No se pudo cargar el historial de pendientes';
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  };
+  }, [idEquipo]);
 
   useEffect(() => {
     cargarPendientes();
-  }, [idEquipo]);
+  }, [cargarPendientes]);
 
   const handleCrearPendienteDirecto = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,8 +99,9 @@ export function EquipoPendientesTab({
         setPrioridad('NORMAL');
         await cargarPendientes();
       }
-    } catch (err: any) {
-      alert(err.message || 'Error registrando pendiente directo');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error registrando pendiente directo';
+      alert(msg);
     } finally {
       setSubmitting(false);
     }
@@ -143,9 +150,10 @@ export function EquipoPendientesTab({
       const matchDesc = p.descripcion?.toLowerCase().includes(q);
       const matchOrden = p.ordenes_servicio?.numero_orden?.toLowerCase().includes(q);
       const matchObs = p.observaciones?.toLowerCase().includes(q);
-      const matchTec = p.empleados_ordenes_pendientes_creado_porToempleados?.persona?.nombre_completo
-        ?.toLowerCase()
-        .includes(q);
+      const matchTec =
+        p.empleados_ordenes_pendientes_creado_porToempleados?.persona?.nombre_completo
+          ?.toLowerCase()
+          .includes(q);
       return matchDesc || matchOrden || matchObs || matchTec;
     }
     return true;
@@ -169,7 +177,8 @@ export function EquipoPendientesTab({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Registro histórico y activo de pendientes técnicos capturados en órdenes de servicio o reportados directamente
+              Registro histórico y activo de pendientes técnicos capturados en órdenes de servicio o
+              reportados directamente
             </p>
           </div>
         </div>
@@ -213,7 +222,7 @@ export function EquipoPendientesTab({
             <span
               className={cn(
                 'text-2xl font-black',
-                (data?.activosCount || 0) > 0 ? 'text-amber-600' : 'text-slate-800'
+                (data?.activosCount || 0) > 0 ? 'text-amber-600' : 'text-slate-800',
               )}
             >
               {data?.activosCount || 0}
@@ -245,14 +254,10 @@ export function EquipoPendientesTab({
             Desestimados / Cancelados
           </span>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-400">
-              {data?.canceladosCount || 0}
-            </span>
+            <span className="text-2xl font-black text-slate-400">{data?.canceladosCount || 0}</span>
             <span className="text-xs text-slate-500">ítems cancelados</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Hallazgos no aplicables o sustituidos
-          </p>
+          <p className="text-[11px] text-slate-400 mt-1">Hallazgos no aplicables o sustituidos</p>
         </div>
       </div>
 
@@ -268,14 +273,14 @@ export function EquipoPendientesTab({
                 'px-3 py-1 rounded-lg font-bold transition-all cursor-pointer',
                 filtro === f
                   ? 'bg-amber-600 text-white shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
               )}
             >
               {f === 'TODOS'
                 ? `Todos (${data?.total || 0})`
                 : f === 'ACTIVOS'
-                ? `Activos (${data?.activosCount || 0})`
-                : `Resueltos (${data?.resueltosCount || 0})`}
+                  ? `Activos (${data?.activosCount || 0})`
+                  : `Resueltos (${data?.resueltosCount || 0})`}
             </button>
           ))}
         </div>
@@ -296,9 +301,7 @@ export function EquipoPendientesTab({
       {filtrados.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-10 text-center shadow-2xs">
           <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-2 opacity-80" />
-          <h4 className="text-sm font-bold text-slate-800">
-            Sin Pendientes en Este Criterio
-          </h4>
+          <h4 className="text-sm font-bold text-slate-800">Sin Pendientes en Este Criterio</h4>
           <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
             {busqueda.trim()
               ? 'No hay hallazgos que coincidan con la búsqueda ingresada.'
@@ -324,8 +327,8 @@ export function EquipoPendientesTab({
                   isResuelto
                     ? 'bg-emerald-50/20 border-emerald-200'
                     : isCancelado
-                    ? 'bg-slate-50 border-slate-200 opacity-60'
-                    : 'bg-white border-amber-200 hover:border-amber-300'
+                      ? 'bg-slate-50 border-slate-200 opacity-60'
+                      : 'bg-white border-amber-200 hover:border-amber-300',
                 )}
               >
                 <div>
@@ -335,7 +338,7 @@ export function EquipoPendientesTab({
                       <span
                         className={cn(
                           'px-2 py-0.5 rounded-md text-[11px] font-bold border',
-                          estadoClase
+                          estadoClase,
                         )}
                       >
                         {getPendienteEstadoLabel(p.estado)}
@@ -343,7 +346,7 @@ export function EquipoPendientesTab({
                       <span
                         className={cn(
                           'px-2 py-0.5 rounded-md text-[11px] font-semibold',
-                          prioridadClase
+                          prioridadClase,
                         )}
                       >
                         {p.prioridad}
@@ -373,7 +376,9 @@ export function EquipoPendientesTab({
                         className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 hover:underline"
                         title="Ver Orden de Servicio donde se reportó este hallazgo"
                       >
-                        <span>Origen: {numOrden || `OT #${p.ordenes_servicio.id_orden_servicio}`}</span>
+                        <span>
+                          Origen: {numOrden || `OT #${p.ordenes_servicio.id_orden_servicio}`}
+                        </span>
                         <ExternalLink className="h-2.5 w-2.5" />
                       </Link>
                     ) : (
@@ -503,7 +508,9 @@ export function EquipoPendientesTab({
                   </label>
                   <EamSelect
                     value={prioridad}
-                    onChange={(val) => setPrioridad(val as any)}
+                    onChange={(val) =>
+                      setPrioridad(val as 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA')
+                    }
                     options={[
                       { value: 'NORMAL', label: 'Normal', badge: 'Estándar' },
                       { value: 'ALTA', label: 'Alta', badge: 'Atención' },

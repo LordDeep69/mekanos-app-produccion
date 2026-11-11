@@ -1,6 +1,6 @@
 /**
  * PDF Controller - MEKANOS S.A.S
- * 
+ *
  * Endpoints para generación de PDFs:
  * - GET /ordenes/:id/pdf - Genera PDF de una orden específica
  * - GET /pdf/prueba - Genera PDF de prueba
@@ -17,7 +17,7 @@ import {
   Param,
   Post,
   Query,
-  Res
+  Res,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -27,7 +27,7 @@ import {
   ApiProperty,
   ApiQuery,
   ApiResponse,
-  ApiTags
+  ApiTags,
 } from '@nestjs/swagger';
 import { IsArray, IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
 import { createHash } from 'crypto';
@@ -44,7 +44,10 @@ import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
  * DTO para regenerar PDF y enviarlo por email
  */
 class RegenerarPdfDto {
-  @ApiProperty({ description: 'Email del destinatario (opcional, usa email del cliente si no se especifica)', required: false })
+  @ApiProperty({
+    description: 'Email del destinatario (opcional, usa email del cliente si no se especifica)',
+    required: false,
+  })
   @IsOptional()
   @IsEmail()
   emailDestino?: string;
@@ -121,9 +124,9 @@ class EnviarPdfExistenteDto {
       properties: {
         filename: { type: 'string' },
         contentBase64: { type: 'string', description: 'Contenido del archivo en base64' },
-        contentType: { type: 'string', description: 'MIME type del archivo' }
-      }
-    }
+        contentType: { type: 'string', description: 'MIME type del archivo' },
+      },
+    },
   })
   @IsOptional()
   archivosAdicionales?: ArchivoAdjuntoDto[];
@@ -141,7 +144,7 @@ export class PdfController {
     private readonly emailService: EmailService,
     private readonly emailTemplates: EmailTemplatesService,
     private readonly r2Service: R2StorageService,
-  ) { }
+  ) {}
 
   /**
    * Genera PDF de una orden de servicio
@@ -182,7 +185,9 @@ export class PdfController {
   ): Promise<void> {
     // ✅ FIX 15-DIC-2025: tipo ahora es opcional para permitir auto-detección
     let tipo = tipoParam;
-    this.logger.log(`📄 Generando PDF para orden ${id}, tipo solicitado: ${tipo || 'AUTO-DETECTAR'}`);
+    this.logger.log(
+      `📄 Generando PDF para orden ${id}, tipo solicitado: ${tipo || 'AUTO-DETECTAR'}`,
+    );
 
     // Convertir ID a número
     const idNumerico = parseInt(id, 10);
@@ -192,7 +197,7 @@ export class PdfController {
 
     // Buscar la orden con todas las relaciones necesarias
     // Cast as any para evitar errores de tipado con includes complejos de Prisma
-    const orden = await this.prisma.ordenes_servicio.findUnique({
+    const orden = (await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: idNumerico },
       include: {
         equipos: {
@@ -286,7 +291,7 @@ export class PdfController {
           orderBy: { id_componente_usado: 'asc' },
         },
       },
-    }) as any; // Cast as any para Prisma includes complejos
+    })) as any; // Cast as any para Prisma includes complejos
 
     if (!orden) {
       throw new NotFoundException(`Orden con ID ${id} no encontrada`);
@@ -305,7 +310,9 @@ export class PdfController {
 
     // ✅ MULTI-EQUIPOS: Detectar si es orden multi-equipo
     const esMultiEquipo = (orden.ordenes_equipos?.length || 0) > 1;
-    this.logger.log(`📦 Orden ${id}: esMultiEquipo=${esMultiEquipo}, equipos=${orden.ordenes_equipos?.length || 0}`);
+    this.logger.log(
+      `📦 Orden ${id}: esMultiEquipo=${esMultiEquipo}, equipos=${orden.ordenes_equipos?.length || 0}`,
+    );
 
     // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos tienen el mismo valor (bug histórico)
     // Antes, orden_secuencia no se seteaba al crear → todos recibían default=1 → "EQ1" para todos
@@ -313,7 +320,9 @@ export class PdfController {
       const secuencias = orden.ordenes_equipos.map((oe: any) => oe.orden_secuencia);
       const todasIguales = secuencias.every((s: number) => s === secuencias[0]);
       if (todasIguales) {
-        this.logger.warn(`⚠️ Todas las orden_secuencia son ${secuencias[0]} - normalizando a 1,2,3...`);
+        this.logger.warn(
+          `⚠️ Todas las orden_secuencia son ${secuencias[0]} - normalizando a 1,2,3...`,
+        );
         orden.ordenes_equipos.forEach((oe: any, idx: number) => {
           oe.orden_secuencia = idx + 1;
         });
@@ -323,12 +332,17 @@ export class PdfController {
     // Construir datos para el PDF
     const clientePersona = orden.clientes?.persona;
     // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
-    const clienteNombreBase = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
+    const clienteNombreBase =
+      clientePersona?.razon_social ||
+      clientePersona?.nombre_comercial ||
+      clientePersona?.nombre_completo ||
+      'N/A';
     const clienteNombre = orden.clientes?.nombre_sede
       ? `${clienteNombreBase} - ${orden.clientes.nombre_sede}`
       : clienteNombreBase;
     // ✅ FIX MULTI-SEDE: Priorizar dirección de sede
-    const clienteDireccion = orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
+    const clienteDireccion =
+      orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
 
     // Obtener marca y serie unificadas con EquipoSpecsReader (Zero-Trust)
     let marcaEquipo = 'N/A';
@@ -339,14 +353,16 @@ export class PdfController {
     }
 
     // ✅ MULTI-EQUIPOS: Construir datos de equipos
-    const equiposOrden = esMultiEquipo ? orden.ordenes_equipos?.map((oe: any) => ({
-      idOrdenEquipo: oe.id_orden_equipo,
-      ordenSecuencia: oe.orden_secuencia || 1,
-      nombreSistema: oe.nombre_sistema || undefined,
-      codigoEquipo: oe.equipos?.codigo_equipo || undefined,
-      nombreEquipo: oe.equipos?.nombre_equipo || undefined,
-      estado: oe.estado_equipo || 'PENDIENTE',
-    })) : undefined;
+    const equiposOrden = esMultiEquipo
+      ? orden.ordenes_equipos?.map((oe: any) => ({
+          idOrdenEquipo: oe.id_orden_equipo,
+          ordenSecuencia: oe.orden_secuencia || 1,
+          nombreSistema: oe.nombre_sistema || undefined,
+          codigoEquipo: oe.equipos?.codigo_equipo || undefined,
+          nombreEquipo: oe.equipos?.nombre_equipo || undefined,
+          estado: oe.estado_equipo || 'PENDIENTE',
+        }))
+      : undefined;
 
     // ✅ FIX 20-AGO-2026: Cargar lotes de galería (fotos generales agrupadas por lote)
     const lotesGaleria = await this.prisma.lotes_galeria.findMany({
@@ -366,10 +382,18 @@ export class PdfController {
     let actividadesPorEquipo: any = undefined;
     if (esMultiEquipo && orden.ordenes_equipos) {
       // Primero, verificar si las actividades tienen id_orden_equipo asignado
-      const actividadesConEquipo = orden.actividades_ejecutadas?.filter((act: any) => act.id_orden_equipo != null && !act.excluido_pdf) || [];
-      const actividadesSinEquipo = orden.actividades_ejecutadas?.filter((act: any) => act.id_orden_equipo == null && !act.excluido_pdf) || [];
+      const actividadesConEquipo =
+        orden.actividades_ejecutadas?.filter(
+          (act: any) => act.id_orden_equipo != null && !act.excluido_pdf,
+        ) || [];
+      const actividadesSinEquipo =
+        orden.actividades_ejecutadas?.filter(
+          (act: any) => act.id_orden_equipo == null && !act.excluido_pdf,
+        ) || [];
 
-      this.logger.log(`📊 Actividades: ${actividadesConEquipo.length} con equipo, ${actividadesSinEquipo.length} sin equipo`);
+      this.logger.log(
+        `📊 Actividades: ${actividadesConEquipo.length} con equipo, ${actividadesSinEquipo.length} sin equipo`,
+      );
 
       if (actividadesConEquipo.length > 0) {
         // CASO IDEAL: Las actividades tienen id_orden_equipo asignado
@@ -386,7 +410,8 @@ export class PdfController {
             .filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo)
             .map((act: any) => ({
               sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
-              descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
+              descripcion:
+                act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
               resultado: (act.estado as any) || 'NA',
               observaciones: act.observaciones || '',
               tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
@@ -394,7 +419,8 @@ export class PdfController {
               tipoControlInput: act.catalogo_actividades?.tipo_control_input || undefined,
               configInputJson: act.catalogo_actividades?.config_input_json || undefined,
               rolSemantico: act.catalogo_actividades?.rol_semantico || undefined,
-              naturalezaPersonalizada: act.catalogo_actividades?.naturaleza_personalizada || undefined,
+              naturalezaPersonalizada:
+                act.catalogo_actividades?.naturaleza_personalizada || undefined,
               respuestaJson: act.respuesta_json || undefined,
             })),
         }));
@@ -403,7 +429,9 @@ export class PdfController {
         // Las actividades del tipo A son idénticas para todos los equipos
         // Asumimos que si hay N equipos y M actividades, cada equipo tiene M/N actividades
         // Y el patrón se repite (actividad 1 para todos, actividad 2 para todos, etc.)
-        this.logger.log(`⚠️ FALLBACK: Distribuyendo ${actividadesSinEquipo.length} actividades entre ${orden.ordenes_equipos.length} equipos`);
+        this.logger.log(
+          `⚠️ FALLBACK: Distribuyendo ${actividadesSinEquipo.length} actividades entre ${orden.ordenes_equipos.length} equipos`,
+        );
 
         const actividadesUnicas = new Map<string, any[]>(); // descripcion -> [resultados por equipo]
 
@@ -427,25 +455,32 @@ export class PdfController {
             estado: oe.estado_equipo || 'PENDIENTE',
           },
           actividades: Array.from(actividadesUnicas.entries()).map(([descripcion, acts]) => {
-            const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
+            const ordenados = [...acts].sort(
+              (a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0),
+            );
             const actEquipo = ordenados[equipoIndex] || ordenados[0];
             return {
-              sistema: actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+              sistema:
+                actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
               descripcion: descripcion,
               resultado: (actEquipo.estado as any) || 'NA',
               observaciones: actEquipo.observaciones || '',
               tipoActividad: actEquipo.catalogo_actividades?.tipo_actividad || undefined,
-              idParametroMedicion: actEquipo.catalogo_actividades?.id_parametro_medicion ?? undefined,
+              idParametroMedicion:
+                actEquipo.catalogo_actividades?.id_parametro_medicion ?? undefined,
               tipoControlInput: actEquipo.catalogo_actividades?.tipo_control_input || undefined,
               configInputJson: actEquipo.catalogo_actividades?.config_input_json || undefined,
               rolSemantico: actEquipo.catalogo_actividades?.rol_semantico || undefined,
-              naturalezaPersonalizada: actEquipo.catalogo_actividades?.naturaleza_personalizada || undefined,
+              naturalezaPersonalizada:
+                actEquipo.catalogo_actividades?.naturaleza_personalizada || undefined,
               respuestaJson: actEquipo.respuesta_json || undefined,
             };
           }),
         }));
 
-        this.logger.log(`✅ FALLBACK completado: ${actividadesUnicas.size} actividades únicas distribuidas`);
+        this.logger.log(
+          `✅ FALLBACK completado: ${actividadesUnicas.size} actividades únicas distribuidas`,
+        );
       }
     }
 
@@ -453,10 +488,18 @@ export class PdfController {
     let medicionesPorEquipo: any = undefined;
     if (esMultiEquipo && orden.ordenes_equipos) {
       // Verificar si las mediciones tienen id_orden_equipo asignado
-      const medicionesConEquipo = orden.mediciones_servicio?.filter((med: any) => med.id_orden_equipo != null && !med.excluido_pdf) || [];
-      const medicionesSinEquipo = orden.mediciones_servicio?.filter((med: any) => med.id_orden_equipo == null && !med.excluido_pdf) || [];
+      const medicionesConEquipo =
+        orden.mediciones_servicio?.filter(
+          (med: any) => med.id_orden_equipo != null && !med.excluido_pdf,
+        ) || [];
+      const medicionesSinEquipo =
+        orden.mediciones_servicio?.filter(
+          (med: any) => med.id_orden_equipo == null && !med.excluido_pdf,
+        ) || [];
 
-      this.logger.log(`📊 Mediciones: ${medicionesConEquipo.length} con equipo, ${medicionesSinEquipo.length} sin equipo`);
+      this.logger.log(
+        `📊 Mediciones: ${medicionesConEquipo.length} con equipo, ${medicionesSinEquipo.length} sin equipo`,
+      );
 
       if (medicionesConEquipo.length > 0) {
         // CASO IDEAL: Las mediciones tienen id_orden_equipo asignado
@@ -480,7 +523,9 @@ export class PdfController {
         }));
       } else if (medicionesSinEquipo.length > 0) {
         // ✅ FALLBACK INTELIGENTE: Distribuir mediciones entre equipos
-        this.logger.log(`⚠️ FALLBACK MEDICIONES: Distribuyendo ${medicionesSinEquipo.length} mediciones entre ${orden.ordenes_equipos.length} equipos`);
+        this.logger.log(
+          `⚠️ FALLBACK MEDICIONES: Distribuyendo ${medicionesSinEquipo.length} mediciones entre ${orden.ordenes_equipos.length} equipos`,
+        );
 
         const medicionesUnicas = new Map<string, any[]>(); // parametro -> [valores por equipo]
 
@@ -502,7 +547,9 @@ export class PdfController {
             estado: oe.estado_equipo || 'PENDIENTE',
           },
           mediciones: Array.from(medicionesUnicas.entries()).map(([parametro, meds]) => {
-            const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
+            const ordenados = [...meds].sort(
+              (a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0),
+            );
             const medEquipo = ordenados[equipoIndex] || ordenados[0];
             return {
               parametro: parametro,
@@ -513,7 +560,9 @@ export class PdfController {
           }),
         }));
 
-        this.logger.log(`✅ FALLBACK MEDICIONES completado: ${medicionesUnicas.size} parámetros únicos`);
+        this.logger.log(
+          `✅ FALLBACK MEDICIONES completado: ${medicionesUnicas.size} parámetros únicos`,
+        );
       }
     }
 
@@ -523,7 +572,7 @@ export class PdfController {
     if (esMultiEquipo && orden.ordenes_equipos) {
       // Paso 1: Construir mapa actividad→equipo para resolver huérfanas
       const actToEqMap = new Map<number, number>();
-      for (const act of (orden.actividades_ejecutadas || [])) {
+      for (const act of orden.actividades_ejecutadas || []) {
         if (act.id_actividad_ejecutada && act.id_orden_equipo) {
           actToEqMap.set(act.id_actividad_ejecutada, act.id_orden_equipo);
         }
@@ -534,13 +583,15 @@ export class PdfController {
       const evHuerfanasNoGeneral: any[] = [];
       const evGenerales: any[] = [];
 
-      for (const ev of (orden.evidencias_fotograficas || [])) {
+      for (const ev of orden.evidencias_fotograficas || []) {
         if (ev.id_orden_equipo) {
           evConEquipo.push(ev);
         } else if (ev.id_actividad_ejecutada && actToEqMap.has(ev.id_actividad_ejecutada)) {
           const idEqInferido = actToEqMap.get(ev.id_actividad_ejecutada)!;
           evConEquipo.push({ ...ev, id_orden_equipo: idEqInferido });
-          this.logger.log(`📷 Evidencia ${ev.id_evidencia}: equipo inferido desde actividad ${ev.id_actividad_ejecutada} → ${idEqInferido}`);
+          this.logger.log(
+            `📷 Evidencia ${ev.id_evidencia}: equipo inferido desde actividad ${ev.id_actividad_ejecutada} → ${idEqInferido}`,
+          );
         } else if (ev.tipo_evidencia === 'GENERAL' || !ev.tipo_evidencia) {
           evGenerales.push(ev);
         } else {
@@ -549,7 +600,9 @@ export class PdfController {
       }
 
       if (evHuerfanasNoGeneral.length > 0) {
-        this.logger.warn(`⚠️ ${evHuerfanasNoGeneral.length} evidencias sin equipo ni actividad vinculable`);
+        this.logger.warn(
+          `⚠️ ${evHuerfanasNoGeneral.length} evidencias sin equipo ni actividad vinculable`,
+        );
       }
 
       // Paso 3: Agrupar por equipo
@@ -573,10 +626,7 @@ export class PdfController {
       }));
 
       // Paso 4: Agregar fotos GENERALES + huérfanas irresolubles como pseudo-equipo
-      const fotosGenAll = [
-        ...evGenerales,
-        ...evHuerfanasNoGeneral,
-      ].map((ev: any) => ({
+      const fotosGenAll = [...evGenerales, ...evHuerfanasNoGeneral].map((ev: any) => ({
         url: ev.ruta_archivo,
         caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
         momento: ev.tipo_evidencia || 'GENERAL',
@@ -618,12 +668,11 @@ export class PdfController {
           ? this.formatearFecha(orden.fecha_programada)
           : this.formatearFecha(new Date()),
       // ✅ FIX 20-AGO-2026: Fecha de salida + flag de días distintos
-      fechaSalida: orden.fecha_fin_real
-        ? this.formatearFecha(orden.fecha_fin_real)
-        : undefined,
+      fechaSalida: orden.fecha_fin_real ? this.formatearFecha(orden.fecha_fin_real) : undefined,
       diasDiferentes: this.sonDiasDiferentes(orden.fecha_inicio_real, orden.fecha_fin_real),
       tecnico: orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona
-        ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim() || 'N/A'
+        ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim() ||
+          'N/A'
         : 'N/A',
       // ✅ FIX 07-FEB-2026: Usar formatearHora consistente y corregir precedencia de operadores
       horaEntrada: this.formatearHora(orden.fecha_inicio_real),
@@ -634,43 +683,64 @@ export class PdfController {
       tipoVisita: (orden as any).tipo_visita || 'INICIAL',
       numeroOrdenPadre: (orden as any).orden_padre?.numero_orden || undefined,
       datosModulo: this.extraerDatosModulo(orden.mediciones_servicio),
-      actividades: orden.actividades_ejecutadas?.filter((act: any) => !act.excluido_pdf).map((act: any) => ({
-        sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
-        descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
-        resultado: (act.estado as any) || 'NA',
-        observaciones: act.observaciones || '',
-        tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
-        idParametroMedicion: act.catalogo_actividades?.id_parametro_medicion ?? undefined,
-        tipoControlInput: act.catalogo_actividades?.tipo_control_input || undefined,
-        configInputJson: act.catalogo_actividades?.config_input_json || undefined,
-        rolSemantico: act.catalogo_actividades?.rol_semantico || undefined,
-        naturalezaPersonalizada: act.catalogo_actividades?.naturaleza_personalizada || undefined,
-        respuestaJson: act.respuesta_json || undefined,
-      })) || [],
-      mediciones: orden.mediciones_servicio?.filter((med: any) => !med.excluido_pdf).map((med: any) => ({
-        parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
-        valor: Number(med.valor_numerico) || 0,
-        unidad: med.parametros_medicion?.unidad_medida || '',
-        nivelAlerta: (med.nivel_alerta as any) || 'OK',
-        rangoMin: med.parametros_medicion?.valor_minimo_normal != null ? Number(med.parametros_medicion.valor_minimo_normal) : undefined,
-        rangoMax: med.parametros_medicion?.valor_maximo_normal != null ? Number(med.parametros_medicion.valor_maximo_normal) : undefined,
-        estado: med.nivel_alerta === 'CRITICAL' ? 'CRITICO' : med.nivel_alerta === 'WARNING' ? 'ALERTA' : 'NORMAL',
-      })) || [],
+      actividades:
+        orden.actividades_ejecutadas
+          ?.filter((act: any) => !act.excluido_pdf)
+          .map((act: any) => ({
+            sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+            descripcion:
+              act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
+            resultado: (act.estado as any) || 'NA',
+            observaciones: act.observaciones || '',
+            tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
+            idParametroMedicion: act.catalogo_actividades?.id_parametro_medicion ?? undefined,
+            tipoControlInput: act.catalogo_actividades?.tipo_control_input || undefined,
+            configInputJson: act.catalogo_actividades?.config_input_json || undefined,
+            rolSemantico: act.catalogo_actividades?.rol_semantico || undefined,
+            naturalezaPersonalizada:
+              act.catalogo_actividades?.naturaleza_personalizada || undefined,
+            respuestaJson: act.respuesta_json || undefined,
+          })) || [],
+      mediciones:
+        orden.mediciones_servicio
+          ?.filter((med: any) => !med.excluido_pdf)
+          .map((med: any) => ({
+            parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
+            valor: Number(med.valor_numerico) || 0,
+            unidad: med.parametros_medicion?.unidad_medida || '',
+            nivelAlerta: (med.nivel_alerta as any) || 'OK',
+            rangoMin:
+              med.parametros_medicion?.valor_minimo_normal != null
+                ? Number(med.parametros_medicion.valor_minimo_normal)
+                : undefined,
+            rangoMax:
+              med.parametros_medicion?.valor_maximo_normal != null
+                ? Number(med.parametros_medicion.valor_maximo_normal)
+                : undefined,
+            estado:
+              med.nivel_alerta === 'CRITICAL'
+                ? 'CRITICO'
+                : med.nivel_alerta === 'WARNING'
+                  ? 'ALERTA'
+                  : 'NORMAL',
+          })) || [],
       // ✅ FIX 06-FEB-2026: Mapear evidencias como objetos con caption/tipo (no solo URL)
       // Esto permite al template separar fotos GENERALES de fotos de actividad
-      evidencias: orden.evidencias_fotograficas?.map((ev: any) => ({
-        url: ev.ruta_archivo,
-        caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
-        idLote: ev.id_lote_galeria || undefined,
-      })) || [],
+      evidencias:
+        orden.evidencias_fotograficas?.map((ev: any) => ({
+          url: ev.ruta_archivo,
+          caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
+          idLote: ev.id_lote_galeria || undefined,
+        })) || [],
       // ✅ FIX 20-AGO-2026: Lotes de galería para el PDF
-      lotesGaleria: lotesGaleria.length > 0
-        ? lotesGaleria.map((l) => ({
-          idLoteGaleria: l.id_lote_galeria,
-          nombreLote: l.nombre_lote,
-          ordenLote: l.orden_lote || 0,
-        }))
-        : undefined,
+      lotesGaleria:
+        lotesGaleria.length > 0
+          ? lotesGaleria.map((l) => ({
+              idLoteGaleria: l.id_lote_galeria,
+              nombreLote: l.nombre_lote,
+              ordenLote: l.orden_lote || 0,
+            }))
+          : undefined,
       observaciones: orden.observaciones_cierre || orden.observaciones || '',
       observaciones_tecnico: orden.observaciones_tecnico || undefined,
       repuestosWms: (orden.componentes_usados || []).map((cu: any) => {
@@ -678,7 +748,9 @@ export class PdfController {
         const desc = cu.descripcion || cu.catalogo_componentes?.descripcion_corta || 'Repuesto';
         const cant = Number(cu.cantidad ?? 1);
         const und = cu.unidad || cu.catalogo_componentes?.unidad_medida || 'UND';
-        const lote = cu.lotes_componentes?.codigo_lote ? ` • Lote ${cu.lotes_componentes.codigo_lote}` : '';
+        const lote = cu.lotes_componentes?.codigo_lote
+          ? ` • Lote ${cu.lotes_componentes.codigo_lote}`
+          : '';
         const origenTag =
           cu.origen_componente === 'CLIENTE'
             ? ' • Suministrado por Cliente'
@@ -688,8 +760,13 @@ export class PdfController {
         return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote}${origenTag})`;
       }),
       repuestosDetallados: this.extraerRepuestosDetallados(orden),
-      equipoDetalle: this.extraerEquipoDetallado(orden, this.extraerDatosModulo(orden.mediciones_servicio)),
-      placaUniversal: orden.equipos ? EquipoSpecsReader.getPlacaUniversal(orden.equipos) : undefined,
+      equipoDetalle: this.extraerEquipoDetallado(
+        orden,
+        this.extraerDatosModulo(orden.mediciones_servicio),
+      ),
+      placaUniversal: orden.equipos
+        ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
+        : undefined,
       // ✅ MULTI-EQUIPOS: Datos adicionales
       esMultiEquipo,
       equiposOrden,
@@ -698,10 +775,14 @@ export class PdfController {
       evidenciasPorEquipo,
       // ✅ FIX 06-FEB-2026: Firmas digitales con imagen base64 y prefijo data URL
       firmaTecnico: firmaTecnico?.firma_base64
-        ? (firmaTecnico.firma_base64.startsWith('data:') ? firmaTecnico.firma_base64 : `data:image/png;base64,${firmaTecnico.firma_base64}`)
+        ? firmaTecnico.firma_base64.startsWith('data:')
+          ? firmaTecnico.firma_base64
+          : `data:image/png;base64,${firmaTecnico.firma_base64}`
         : undefined,
       firmaCliente: firmaCliente?.firma_base64
-        ? (firmaCliente.firma_base64.startsWith('data:') ? firmaCliente.firma_base64 : `data:image/png;base64,${firmaCliente.firma_base64}`)
+        ? firmaCliente.firma_base64.startsWith('data:')
+          ? firmaCliente.firma_base64
+          : `data:image/png;base64,${firmaCliente.firma_base64}`
         : undefined,
       // ✅ FIX 06-FEB-2026: Nombre y cargo del técnico
       nombreTecnico: orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona
@@ -709,42 +790,62 @@ export class PdfController {
         : undefined,
       cargoTecnico: 'Técnico de Servicio',
       // ✅ FIX 06-FEB-2026: Cadena robusta de fallback para nombre/cargo del cliente
-      nombreCliente: (orden.nombre_quien_recibe && orden.nombre_quien_recibe !== 'Cliente')
-        ? orden.nombre_quien_recibe
-        : firmaCliente?.persona
-          ? `${firmaCliente.persona.primer_nombre || ''} ${firmaCliente.persona.primer_apellido || ''}`.trim() || orden.nombre_quien_recibe || undefined
-          : clientePersona
-            ? (clientePersona.nombre_comercial || `${clientePersona.primer_nombre || ''} ${clientePersona.primer_apellido || ''}`.trim() || clientePersona.razon_social || undefined)
-            : orden.nombre_quien_recibe || undefined,
+      nombreCliente:
+        orden.nombre_quien_recibe && orden.nombre_quien_recibe !== 'Cliente'
+          ? orden.nombre_quien_recibe
+          : firmaCliente?.persona
+            ? `${firmaCliente.persona.primer_nombre || ''} ${firmaCliente.persona.primer_apellido || ''}`.trim() ||
+              orden.nombre_quien_recibe ||
+              undefined
+            : clientePersona
+              ? clientePersona.nombre_comercial ||
+                `${clientePersona.primer_nombre || ''} ${clientePersona.primer_apellido || ''}`.trim() ||
+                clientePersona.razon_social ||
+                undefined
+              : orden.nombre_quien_recibe || undefined,
       cargoCliente: orden.cargo_quien_recibe || 'Cliente / Autorizador',
     };
 
     // 🔍 DEBUG: Log de datos antes de enviar al template
     this.logger.log(`📊 DEBUG PDF - esMultiEquipo: ${esMultiEquipo}`);
     this.logger.log(`📊 DEBUG PDF - equiposOrden: ${JSON.stringify(equiposOrden?.length)} equipos`);
-    this.logger.log(`📊 DEBUG PDF - actividadesPorEquipo: ${JSON.stringify(actividadesPorEquipo?.length)} grupos`);
+    this.logger.log(
+      `📊 DEBUG PDF - actividadesPorEquipo: ${JSON.stringify(actividadesPorEquipo?.length)} grupos`,
+    );
     if (actividadesPorEquipo && actividadesPorEquipo.length > 0) {
-      this.logger.log(`📊 DEBUG PDF - Primer grupo actividades: ${JSON.stringify(actividadesPorEquipo[0]?.actividades?.length)} actividades`);
+      this.logger.log(
+        `📊 DEBUG PDF - Primer grupo actividades: ${JSON.stringify(actividadesPorEquipo[0]?.actividades?.length)} actividades`,
+      );
       // ✅ FIX 15-DIC-2025: Log detallado de primera actividad
       if (actividadesPorEquipo[0]?.actividades?.length > 0) {
         const primeraAct = actividadesPorEquipo[0].actividades[0];
-        this.logger.log(`📊 DEBUG PDF - Primera actividad: sistema="${primeraAct?.sistema}", desc="${primeraAct?.descripcion?.substring(0, 30)}", resultado="${primeraAct?.resultado}"`);
+        this.logger.log(
+          `📊 DEBUG PDF - Primera actividad: sistema="${primeraAct?.sistema}", desc="${primeraAct?.descripcion?.substring(0, 30)}", resultado="${primeraAct?.resultado}"`,
+        );
       }
     }
-    this.logger.log(`📊 DEBUG PDF - medicionesPorEquipo: ${JSON.stringify(medicionesPorEquipo?.length)} grupos`);
-    this.logger.log(`📊 DEBUG PDF - evidenciasPorEquipo: ${JSON.stringify(evidenciasPorEquipo?.length)} grupos`);
+    this.logger.log(
+      `📊 DEBUG PDF - medicionesPorEquipo: ${JSON.stringify(medicionesPorEquipo?.length)} grupos`,
+    );
+    this.logger.log(
+      `📊 DEBUG PDF - evidenciasPorEquipo: ${JSON.stringify(evidenciasPorEquipo?.length)} grupos`,
+    );
     this.logger.log(`📊 DEBUG PDF - actividades totales: ${datosOrden.actividades?.length}`);
 
     // ✅ DEBUG: Log de URLs de evidencias para diagnóstico de imágenes
     if (evidenciasPorEquipo && evidenciasPorEquipo.length > 0) {
       evidenciasPorEquipo.forEach((grupo: any, idx: number) => {
-        this.logger.log(`📷 DEBUG EVIDENCIAS - Grupo ${idx} (${grupo.equipo?.nombreSistema || 'N/A'}): ${grupo.evidencias?.length} fotos`);
+        this.logger.log(
+          `📷 DEBUG EVIDENCIAS - Grupo ${idx} (${grupo.equipo?.nombreSistema || 'N/A'}): ${grupo.evidencias?.length} fotos`,
+        );
         if (grupo.evidencias?.length > 0) {
           const primeraUrl = grupo.evidencias[0]?.url;
           this.logger.log(`📷 DEBUG EVIDENCIAS - URL ejemplo: ${primeraUrl?.substring(0, 80)}...`);
           // Verificar si es URL Cloudinary válida
           if (primeraUrl && !primeraUrl.includes('res.cloudinary.com')) {
-            this.logger.warn(`⚠️ DEBUG EVIDENCIAS - URL no parece ser de Cloudinary: ${primeraUrl}`);
+            this.logger.warn(
+              `⚠️ DEBUG EVIDENCIAS - URL no parece ser de Cloudinary: ${primeraUrl}`,
+            );
           }
         }
       });
@@ -762,7 +863,8 @@ export class PdfController {
       // ✅ PRIORIDAD 1 (FUENTE DE VERDAD): tipos_equipo.nombre_tipo desde ordenes_equipos
       if (orden.ordenes_equipos?.length > 0) {
         const primerEquipo = orden.ordenes_equipos[0]?.equipos;
-        tipoEquipoNombre = primerEquipo?.tipos_equipo?.nombre_tipo || primerEquipo?.tipos_equipo?.nombre;
+        tipoEquipoNombre =
+          primerEquipo?.tipos_equipo?.nombre_tipo || primerEquipo?.tipos_equipo?.nombre;
         if (tipoEquipoNombre) {
           this.logger.log(`📊 DEBUG PDF - Tipo equipo P1 (ordenes_equipos): ${tipoEquipoNombre}`);
         }
@@ -770,7 +872,8 @@ export class PdfController {
 
       // ✅ PRIORIDAD 1b: tipos_equipo.nombre_tipo desde equipo principal (id_equipo directo)
       if (!tipoEquipoNombre) {
-        tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre_tipo || orden.equipos?.tipos_equipo?.nombre;
+        tipoEquipoNombre =
+          orden.equipos?.tipos_equipo?.nombre_tipo || orden.equipos?.tipos_equipo?.nombre;
         if (tipoEquipoNombre) {
           this.logger.log(`📊 DEBUG PDF - Tipo equipo P1b (principal): ${tipoEquipoNombre}`);
         }
@@ -826,18 +929,20 @@ export class PdfController {
       // Esto garantiza que cualquier nuevo tipo de servicio creado en el Hub se despache correctamente.
       const codigoServicio = (orden.tipos_servicio?.codigo_tipo || '').toUpperCase();
       const categoriaServicio = (orden.tipos_servicio?.categoria || '').toUpperCase();
-      const esNarrativo = ['CORRECTIVO', 'EMERGENCIA', 'DIAGNOSTICO'].includes(categoriaServicio)
-        || codigoServicio.includes('CORR');
-      const tipoServicioReal: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' | string =
-        esNarrativo
-          ? 'CORRECTIVO'
-          : codigoServicio.includes('PREV_B') || codigoServicio.includes('_B')
-            ? 'PREVENTIVO_B'
-            : categoriaServicio === 'INSPECCION' || categoriaServicio === 'ESPECIALIZADO'
-              ? 'PREVENTIVO_A'  // Inspección y Especializado usan estructura de checklist
-              : 'PREVENTIVO_A';
+      const esNarrativo =
+        ['CORRECTIVO', 'EMERGENCIA', 'DIAGNOSTICO'].includes(categoriaServicio) ||
+        codigoServicio.includes('CORR');
+      const tipoServicioReal: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' | string = esNarrativo
+        ? 'CORRECTIVO'
+        : codigoServicio.includes('PREV_B') || codigoServicio.includes('_B')
+          ? 'PREVENTIVO_B'
+          : categoriaServicio === 'INSPECCION' || categoriaServicio === 'ESPECIALIZADO'
+            ? 'PREVENTIVO_A' // Inspección y Especializado usan estructura de checklist
+            : 'PREVENTIVO_A';
 
-      this.logger.log(`📊 DEBUG PDF - tipoServicioReal: ${tipoServicioReal} (codigo=${codigoServicio}, categoria=${categoriaServicio})`);
+      this.logger.log(
+        `📊 DEBUG PDF - tipoServicioReal: ${tipoServicioReal} (codigo=${codigoServicio}, categoria=${categoriaServicio})`,
+      );
 
       // ✅ FIX 24-FEB-2026: Sincronizar tipoEquipo en datosOrden para que el header
       // del template correctivo muestre BOMBA/MOTOR en vez de GENERADOR por defecto
@@ -922,10 +1027,7 @@ export class PdfController {
     },
   })
   @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
-  async generarPdfCotizacion(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ): Promise<void> {
+  async generarPdfCotizacion(@Param('id') id: string, @Res() res: Response): Promise<void> {
     this.logger.log(`📄 Generando PDF para cotización ${id}`);
 
     // Convertir ID a número
@@ -935,7 +1037,7 @@ export class PdfController {
     }
 
     // Buscar la cotización con todas las relaciones necesarias
-    const cotizacion = await this.prisma.cotizaciones.findUnique({
+    const cotizacion = (await this.prisma.cotizaciones.findUnique({
       where: { id_cotizacion: idNumerico },
       include: {
         clientes: {
@@ -960,27 +1062,31 @@ export class PdfController {
         },
         estados_cotizacion: true,
       },
-    }) as any; // Cast as any para Prisma includes complejos
+    })) as any; // Cast as any para Prisma includes complejos
 
     if (!cotizacion) {
       throw new NotFoundException(`Cotización con ID ${id} no encontrada`);
     }
 
     // Calcular totales si no están calculados
-    const subtotalServicios = cotizacion.items_cotizacion_servicios?.reduce(
-      (acc: number, item: any) => acc + (Number(item.subtotal) || 0), 0
-    ) || 0;
+    const subtotalServicios =
+      cotizacion.items_cotizacion_servicios?.reduce(
+        (acc: number, item: any) => acc + (Number(item.subtotal) || 0),
+        0,
+      ) || 0;
 
-    const subtotalComponentes = cotizacion.items_cotizacion_componentes?.reduce(
-      (acc: number, item: any) => acc + (Number(item.subtotal) || 0), 0
-    ) || 0;
+    const subtotalComponentes =
+      cotizacion.items_cotizacion_componentes?.reduce(
+        (acc: number, item: any) => acc + (Number(item.subtotal) || 0),
+        0,
+      ) || 0;
 
     const subtotalGeneral = subtotalServicios + subtotalComponentes;
     const descuentoMonto = Number(cotizacion.descuento_valor) || 0;
     const baseImponible = subtotalGeneral - descuentoMonto;
     const ivaPorcentaje = Number(cotizacion.iva_porcentaje) || 19;
-    const ivaMonto = Number(cotizacion.iva_valor) || (baseImponible * ivaPorcentaje / 100);
-    const total = Number(cotizacion.total_cotizacion) || (baseImponible + ivaMonto);
+    const ivaMonto = Number(cotizacion.iva_valor) || (baseImponible * ivaPorcentaje) / 100;
+    const total = Number(cotizacion.total_cotizacion) || baseImponible + ivaMonto;
 
     // Obtener datos de la persona cliente
     const clientePersona = cotizacion.clientes?.persona;
@@ -1000,7 +1106,10 @@ export class PdfController {
         // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede en cotizaciones
         nombre: (cotizacion as any).clientes?.nombre_sede
           ? `${clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A'} - ${(cotizacion as any).clientes.nombre_sede}`
-          : (clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A'),
+          : clientePersona?.razon_social ||
+            clientePersona?.nombre_comercial ||
+            clientePersona?.nombre_completo ||
+            'N/A',
         nit: clientePersona?.numero_identificacion || 'N/A',
         direccion: clientePersona?.direccion_principal || 'N/A',
         telefono: clientePersona?.telefono_principal || clientePersona?.celular || 'N/A',
@@ -1017,22 +1126,28 @@ export class PdfController {
         email: empleadoPersona?.email_principal || 'N/A',
       },
 
-      servicios: cotizacion.items_cotizacion_servicios?.map((item: any) => ({
-        descripcion: item.descripcion_personalizada || item.catalogo_servicios?.nombre_servicio || 'Servicio',
-        cantidad: Number(item.cantidad) || 1,
-        precioUnitario: Number(item.precio_unitario) || 0,
-        descuento: Number(item.descuento_porcentaje) || 0,
-        subtotal: Number(item.subtotal) || 0,
-      })) || [],
+      servicios:
+        cotizacion.items_cotizacion_servicios?.map((item: any) => ({
+          descripcion:
+            item.descripcion_personalizada ||
+            item.catalogo_servicios?.nombre_servicio ||
+            'Servicio',
+          cantidad: Number(item.cantidad) || 1,
+          precioUnitario: Number(item.precio_unitario) || 0,
+          descuento: Number(item.descuento_porcentaje) || 0,
+          subtotal: Number(item.subtotal) || 0,
+        })) || [],
 
-      componentes: cotizacion.items_cotizacion_componentes?.map((item: any) => ({
-        codigo: item.catalogo_componentes?.codigo_interno || item.referencia_manual || 'N/A',
-        descripcion: item.descripcion || item.catalogo_componentes?.descripcion_corta || 'Componente',
-        cantidad: Number(item.cantidad) || 1,
-        precioUnitario: Number(item.precio_unitario) || 0,
-        descuento: Number(item.descuento_porcentaje) || 0,
-        subtotal: Number(item.subtotal) || 0,
-      })) || [],
+      componentes:
+        cotizacion.items_cotizacion_componentes?.map((item: any) => ({
+          codigo: item.catalogo_componentes?.codigo_interno || item.referencia_manual || 'N/A',
+          descripcion:
+            item.descripcion || item.catalogo_componentes?.descripcion_corta || 'Componente',
+          cantidad: Number(item.cantidad) || 1,
+          precioUnitario: Number(item.precio_unitario) || 0,
+          descuento: Number(item.descuento_porcentaje) || 0,
+          subtotal: Number(item.subtotal) || 0,
+        })) || [],
 
       subtotalServicios,
       subtotalComponentes,
@@ -1050,8 +1165,12 @@ export class PdfController {
       total,
 
       formaPago: cotizacion.forma_pago || 'Contado',
-      tiempoEntrega: cotizacion.tiempo_estimado_dias ? `${cotizacion.tiempo_estimado_dias} días` : 'Por confirmar',
-      garantia: cotizacion.meses_garantia ? `${cotizacion.meses_garantia} meses - ${cotizacion.observaciones_garantia || 'Garantía estándar'}` : 'Garantía estándar',
+      tiempoEntrega: cotizacion.tiempo_estimado_dias
+        ? `${cotizacion.tiempo_estimado_dias} días`
+        : 'Por confirmar',
+      garantia: cotizacion.meses_garantia
+        ? `${cotizacion.meses_garantia} meses - ${cotizacion.observaciones_garantia || 'Garantía estándar'}`
+        : 'Garantía estándar',
       notas: cotizacion.terminos_condiciones || '',
       estado: cotizacion.estados_cotizacion?.nombre_estado || 'BORRADOR',
     };
@@ -1137,7 +1256,8 @@ export class PdfController {
   @Post('ordenes/:id/pdf/regenerar')
   @ApiOperation({
     summary: 'Regenerar PDF de orden y enviar por email',
-    description: 'Regenera el PDF con los datos actualizados de la orden y opcionalmente lo envía por email',
+    description:
+      'Regenera el PDF con los datos actualizados de la orden y opcionalmente lo envía por email',
   })
   @ApiParam({
     name: 'id',
@@ -1171,6 +1291,7 @@ export class PdfController {
     filename?: string;
     pdfBase64?: string;
     usoPdfExistente?: boolean;
+    idDocumento?: number;
   }> {
     this.logger.log(`🔄 Regenerando PDF para orden ${id}`);
 
@@ -1210,16 +1331,22 @@ export class PdfController {
 
               const resultado = await this.emailService.sendEmail({
                 to: dto.emailDestino,
-                subject: dto.asuntoEmail || `Informe de Mantenimiento - ${ordenContexto?.numeroOrden || id}`,
+                subject:
+                  dto.asuntoEmail ||
+                  `Informe de Mantenimiento - ${ordenContexto?.numeroOrden || id}`,
                 html: `<p>Adjunto encontrará el informe de servicio.</p>`,
-                attachments: [{
-                  filename: filenameCanonico,
-                  content: pdfBuffer,
-                  contentType: 'application/pdf',
-                }],
+                attachments: [
+                  {
+                    filename: filenameCanonico,
+                    content: pdfBuffer,
+                    contentType: 'application/pdf',
+                  },
+                ],
               });
 
-              this.logger.log(`📧 Email enviado usando PDF existente: ${resultado.success} (${filenameCanonico})`);
+              this.logger.log(
+                `📧 Email enviado usando PDF existente: ${resultado.success} (${filenameCanonico})`,
+              );
 
               return {
                 success: true,
@@ -1253,7 +1380,7 @@ export class PdfController {
     }
 
     // Buscar orden con relaciones
-    const orden = await this.prisma.ordenes_servicio.findUnique({
+    const orden = (await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: idNumerico },
       include: {
         equipos: {
@@ -1350,7 +1477,7 @@ export class PdfController {
           orderBy: { id_componente_usado: 'asc' },
         },
       },
-    }) as any;
+    })) as any;
 
     if (!orden) {
       throw new NotFoundException(`Orden con ID ${id} no encontrada`);
@@ -1374,12 +1501,17 @@ export class PdfController {
     // Construir datos para PDF (reutilizar lógica existente)
     const clientePersona = orden.clientes?.persona;
     // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
-    const clienteNombreBase2 = clientePersona?.nombre_comercial || clientePersona?.razon_social || clientePersona?.nombre_completo || 'N/A';
+    const clienteNombreBase2 =
+      clientePersona?.nombre_comercial ||
+      clientePersona?.razon_social ||
+      clientePersona?.nombre_completo ||
+      'N/A';
     const clienteNombre = orden.clientes?.nombre_sede
       ? `${clienteNombreBase2} - ${orden.clientes.nombre_sede}`
       : clienteNombreBase2;
     // ✅ FIX MULTI-SEDE: Priorizar dirección de sede
-    const clienteDireccion = orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
+    const clienteDireccion =
+      orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
     // ✅ 24-FEB-2026: MULTI-EMAIL - Recopilar TODOS los correos del cliente
     const emailPrincipal = dto.emailDestino || clientePersona?.email_principal;
     const clienteEmailsArray: string[] = [];
@@ -1415,14 +1547,18 @@ export class PdfController {
 
     // ✅ FIX 19-ENE-2026: Construir estructuras multi-equipo igual que mobile
     const esMultiEquipo = (orden.ordenes_equipos?.length || 0) > 1;
-    this.logger.log(`📊 Es multi-equipo: ${esMultiEquipo} (${orden.ordenes_equipos?.length || 0} equipos)`);
+    this.logger.log(
+      `📊 Es multi-equipo: ${esMultiEquipo} (${orden.ordenes_equipos?.length || 0} equipos)`,
+    );
 
     // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos tienen el mismo valor (bug histórico)
     if (esMultiEquipo && orden.ordenes_equipos) {
       const secuencias = orden.ordenes_equipos.map((oe: any) => oe.orden_secuencia);
       const todasIguales = secuencias.every((s: number) => s === secuencias[0]);
       if (todasIguales) {
-        this.logger.warn(`⚠️ [enviarPdf] Normalizando orden_secuencia: todas eran ${secuencias[0]}`);
+        this.logger.warn(
+          `⚠️ [enviarPdf] Normalizando orden_secuencia: todas eran ${secuencias[0]}`,
+        );
         orden.ordenes_equipos.forEach((oe: any, idx: number) => {
           oe.orden_secuencia = idx + 1;
         });
@@ -1450,10 +1586,12 @@ export class PdfController {
 
     if (esMultiEquipo && orden.ordenes_equipos?.length > 0) {
       // Agrupar actividades por equipo
-      const actividadesConEquipo = (orden.actividades_ejecutadas || [])
-        .filter((act: any) => act.id_orden_equipo != null && !act.excluido_pdf);
-      const actividadesSinEquipo = (orden.actividades_ejecutadas || [])
-        .filter((act: any) => act.id_orden_equipo == null && !act.excluido_pdf);
+      const actividadesConEquipo = (orden.actividades_ejecutadas || []).filter(
+        (act: any) => act.id_orden_equipo != null && !act.excluido_pdf,
+      );
+      const actividadesSinEquipo = (orden.actividades_ejecutadas || []).filter(
+        (act: any) => act.id_orden_equipo == null && !act.excluido_pdf,
+      );
 
       if (actividadesConEquipo.length > 0) {
         actividadesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
@@ -1461,7 +1599,8 @@ export class PdfController {
             .filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo)
             .map((act: any) => ({
               sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
-              descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
+              descripcion:
+                act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
               resultado: (act.estado as any) || 'NA',
               observaciones: act.observaciones || '',
             }));
@@ -1497,10 +1636,13 @@ export class PdfController {
             nombreEquipo: oe.equipos?.nombre_equipo,
           },
           actividades: Array.from(actividadesUnicas.entries()).map(([descripcion, acts]) => {
-            const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
+            const ordenados = [...acts].sort(
+              (a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0),
+            );
             const actEquipo = ordenados[equipoIndex] || ordenados[0];
             return {
-              sistema: actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+              sistema:
+                actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
               descripcion,
               resultado: (actEquipo.estado as any) || 'NA',
               observaciones: actEquipo.observaciones || '',
@@ -1510,17 +1652,20 @@ export class PdfController {
       }
 
       // Agrupar mediciones por equipo
-      const medicionesConEquipo = (orden.mediciones_servicio || [])
-        .filter((med: any) => med.id_orden_equipo != null && !med.excluido_pdf);
-      const medicionesSinEquipo = (orden.mediciones_servicio || [])
-        .filter((med: any) => med.id_orden_equipo == null && !med.excluido_pdf);
+      const medicionesConEquipo = (orden.mediciones_servicio || []).filter(
+        (med: any) => med.id_orden_equipo != null && !med.excluido_pdf,
+      );
+      const medicionesSinEquipo = (orden.mediciones_servicio || []).filter(
+        (med: any) => med.id_orden_equipo == null && !med.excluido_pdf,
+      );
 
       if (medicionesConEquipo.length > 0) {
         medicionesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
           const medicionesEquipo = medicionesConEquipo
             .filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo)
             .map((med: any) => ({
-              parametro: med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
+              parametro:
+                med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
               valor: Number(med.valor_numerico) || 0,
               unidad: med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
               nivelAlerta: (med.nivel_alerta as any) || 'OK',
@@ -1539,7 +1684,8 @@ export class PdfController {
         // ✅ FIX 14-FEB-2026: fallback para órdenes históricas sin id_orden_equipo en mediciones
         const medicionesUnicas = new Map<string, any[]>();
         for (const med of medicionesSinEquipo) {
-          const key = med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A';
+          const key =
+            med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A';
           if (!medicionesUnicas.has(key)) {
             medicionesUnicas.set(key, []);
           }
@@ -1553,12 +1699,17 @@ export class PdfController {
             nombreSistema: oe.nombre_sistema || oe.equipos?.nombre_equipo || 'Equipo',
           },
           mediciones: Array.from(medicionesUnicas.entries()).map(([parametro, meds]) => {
-            const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
+            const ordenados = [...meds].sort(
+              (a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0),
+            );
             const medEquipo = ordenados[equipoIndex] || ordenados[0];
             return {
               parametro,
               valor: Number(medEquipo.valor_numerico) || 0,
-              unidad: medEquipo.parametros_medicion?.unidad_medida || medEquipo.unidad_medida_snapshot || '',
+              unidad:
+                medEquipo.parametros_medicion?.unidad_medida ||
+                medEquipo.unidad_medida_snapshot ||
+                '',
               nivelAlerta: (medEquipo.nivel_alerta as any) || 'OK',
             };
           }),
@@ -1572,7 +1723,7 @@ export class PdfController {
 
       // Paso 1: Construir mapa actividad→equipo para resolver huérfanas
       const actividadToEquipoMap = new Map<number, number>();
-      for (const act of (orden.actividades_ejecutadas || [])) {
+      for (const act of orden.actividades_ejecutadas || []) {
         if (act.id_actividad_ejecutada && act.id_orden_equipo) {
           actividadToEquipoMap.set(act.id_actividad_ejecutada, act.id_orden_equipo);
         }
@@ -1583,15 +1734,20 @@ export class PdfController {
       const evidenciasHuerfanasNoGeneral: any[] = [];
       const evidenciasGenerales: any[] = [];
 
-      for (const ev of (orden.evidencias_fotograficas || [])) {
+      for (const ev of orden.evidencias_fotograficas || []) {
         if (ev.id_orden_equipo) {
           // Caso ideal: ya tiene equipo asignado
           evidenciasConEquipo.push(ev);
-        } else if (ev.id_actividad_ejecutada && actividadToEquipoMap.has(ev.id_actividad_ejecutada)) {
+        } else if (
+          ev.id_actividad_ejecutada &&
+          actividadToEquipoMap.has(ev.id_actividad_ejecutada)
+        ) {
           // ✅ FIX: Inferir equipo desde la actividad vinculada
           const idEquipoInferido = actividadToEquipoMap.get(ev.id_actividad_ejecutada)!;
           evidenciasConEquipo.push({ ...ev, id_orden_equipo: idEquipoInferido });
-          this.logger.log(`📷 Evidencia ${ev.id_evidencia} (${ev.tipo_evidencia}): equipo inferido desde actividad ${ev.id_actividad_ejecutada} → equipo ${idEquipoInferido}`);
+          this.logger.log(
+            `📷 Evidencia ${ev.id_evidencia} (${ev.tipo_evidencia}): equipo inferido desde actividad ${ev.id_actividad_ejecutada} → equipo ${idEquipoInferido}`,
+          );
         } else if (ev.tipo_evidencia === 'GENERAL' || !ev.tipo_evidencia) {
           evidenciasGenerales.push(ev);
         } else {
@@ -1601,7 +1757,9 @@ export class PdfController {
       }
 
       if (evidenciasHuerfanasNoGeneral.length > 0) {
-        this.logger.warn(`⚠️ ${evidenciasHuerfanasNoGeneral.length} evidencias sin equipo ni actividad vinculable - se agregarán como generales`);
+        this.logger.warn(
+          `⚠️ ${evidenciasHuerfanasNoGeneral.length} evidencias sin equipo ni actividad vinculable - se agregarán como generales`,
+        );
       }
 
       // Paso 3: Agrupar por equipo
@@ -1625,15 +1783,14 @@ export class PdfController {
       });
 
       // Paso 4: Agregar fotos GENERALES + huérfanas irresolubles como pseudo-equipo
-      const fotosGeneralesAll = [
-        ...evidenciasGenerales,
-        ...evidenciasHuerfanasNoGeneral,
-      ].map((ev: any) => ({
-        url: ev.ruta_archivo,
-        caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
-        momento: ev.tipo_evidencia || 'GENERAL',
-        idLote: ev.id_lote_galeria || undefined,
-      }));
+      const fotosGeneralesAll = [...evidenciasGenerales, ...evidenciasHuerfanasNoGeneral].map(
+        (ev: any) => ({
+          url: ev.ruta_archivo,
+          caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
+          momento: ev.tipo_evidencia || 'GENERAL',
+          idLote: ev.id_lote_galeria || undefined,
+        }),
+      );
 
       if (fotosGeneralesAll.length > 0 && evidenciasPorEquipo) {
         evidenciasPorEquipo.push({
@@ -1651,13 +1808,19 @@ export class PdfController {
       }
 
       if (actividadesPorEquipo) {
-        this.logger.log(`📋 Actividades agrupadas: ${actividadesPorEquipo.map(g => `${g.equipo.nombreSistema}:${g.actividades.length}`).join(', ')}`);
+        this.logger.log(
+          `📋 Actividades agrupadas: ${actividadesPorEquipo.map((g) => `${g.equipo.nombreSistema}:${g.actividades.length}`).join(', ')}`,
+        );
       }
       if (medicionesPorEquipo) {
-        this.logger.log(`📏 Mediciones agrupadas: ${medicionesPorEquipo.map(g => `${g.equipo.nombreSistema}:${g.mediciones.length}`).join(', ')}`);
+        this.logger.log(
+          `📏 Mediciones agrupadas: ${medicionesPorEquipo.map((g) => `${g.equipo.nombreSistema}:${g.mediciones.length}`).join(', ')}`,
+        );
       }
       if (evidenciasPorEquipo) {
-        this.logger.log(`📷 Evidencias agrupadas: ${evidenciasPorEquipo.map(g => `${g.equipo.nombreSistema}:${g.evidencias.length}`).join(', ')}`);
+        this.logger.log(
+          `📷 Evidencias agrupadas: ${evidenciasPorEquipo.map((g) => `${g.equipo.nombreSistema}:${g.evidencias.length}`).join(', ')}`,
+        );
       }
     }
 
@@ -1676,12 +1839,11 @@ export class PdfController {
           ? this.formatearFecha(orden.fecha_programada)
           : this.formatearFecha(new Date()),
       // ✅ FIX 20-AGO-2026: Fecha de salida + flag de días distintos
-      fechaSalida: orden.fecha_fin_real
-        ? this.formatearFecha(orden.fecha_fin_real)
-        : undefined,
+      fechaSalida: orden.fecha_fin_real ? this.formatearFecha(orden.fecha_fin_real) : undefined,
       diasDiferentes: this.sonDiasDiferentes(orden.fecha_inicio_real, orden.fecha_fin_real),
       tecnico: orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona
-        ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim() || 'N/A'
+        ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim() ||
+          'N/A'
         : 'N/A',
       // ✅ FIX 19-ENE-2026: Formato HH:mm igual que mobile
       horaEntrada: this.formatearHora(orden.fecha_inicio_real),
@@ -1694,34 +1856,44 @@ export class PdfController {
       // ✅ FIX 19-ENE-2026: Extraer datosModulo correctamente de las mediciones
       datosModulo: this.extraerDatosModuloReal(orden.mediciones_servicio),
       // Actividades flat (para backward compatibility y single-equipo)
-      actividades: orden.actividades_ejecutadas?.filter((act: any) => !act.excluido_pdf).map((act: any) => ({
-        sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
-        descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
-        resultado: (act.estado as any) || 'NA',
-        observaciones: act.observaciones || '',
-        tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
-      })) || [],
+      actividades:
+        orden.actividades_ejecutadas
+          ?.filter((act: any) => !act.excluido_pdf)
+          .map((act: any) => ({
+            sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+            descripcion:
+              act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
+            resultado: (act.estado as any) || 'NA',
+            observaciones: act.observaciones || '',
+            tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
+          })) || [],
       // Mediciones flat (para backward compatibility y single-equipo)
-      mediciones: orden.mediciones_servicio?.filter((med: any) => !med.excluido_pdf).map((med: any) => ({
-        parametro: med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
-        valor: Number(med.valor_numerico) || 0,
-        unidad: med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
-        nivelAlerta: (med.nivel_alerta as any) || 'OK',
-      })) || [],
+      mediciones:
+        orden.mediciones_servicio
+          ?.filter((med: any) => !med.excluido_pdf)
+          .map((med: any) => ({
+            parametro:
+              med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
+            valor: Number(med.valor_numerico) || 0,
+            unidad: med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
+            nivelAlerta: (med.nivel_alerta as any) || 'OK',
+          })) || [],
       // Evidencias flat (para backward compatibility y single-equipo)
-      evidencias: orden.evidencias_fotograficas?.map((ev: any) => ({
-        url: ev.ruta_archivo,
-        caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
-        idLote: ev.id_lote_galeria || undefined,
-      })) || [],
+      evidencias:
+        orden.evidencias_fotograficas?.map((ev: any) => ({
+          url: ev.ruta_archivo,
+          caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
+          idLote: ev.id_lote_galeria || undefined,
+        })) || [],
       // ✅ FIX 20-AGO-2026: Lotes de galería para el PDF
-      lotesGaleria: lotesGaleria.length > 0
-        ? lotesGaleria.map((l) => ({
-          idLoteGaleria: l.id_lote_galeria,
-          nombreLote: l.nombre_lote,
-          ordenLote: l.orden_lote || 0,
-        }))
-        : undefined,
+      lotesGaleria:
+        lotesGaleria.length > 0
+          ? lotesGaleria.map((l) => ({
+              idLoteGaleria: l.id_lote_galeria,
+              nombreLote: l.nombre_lote,
+              ordenLote: l.orden_lote || 0,
+            }))
+          : undefined,
       observaciones: orden.observaciones_cierre || orden.observaciones || '',
       observaciones_tecnico: orden.observaciones_tecnico || undefined,
       repuestosWms: (orden.componentes_usados || []).map((cu: any) => {
@@ -1729,7 +1901,9 @@ export class PdfController {
         const desc = cu.descripcion || cu.catalogo_componentes?.descripcion_corta || 'Repuesto';
         const cant = Number(cu.cantidad ?? 1);
         const und = cu.unidad || cu.catalogo_componentes?.unidad_medida || 'UND';
-        const lote = cu.lotes_componentes?.codigo_lote ? ` • Lote ${cu.lotes_componentes.codigo_lote}` : '';
+        const lote = cu.lotes_componentes?.codigo_lote
+          ? ` • Lote ${cu.lotes_componentes.codigo_lote}`
+          : '';
         const origenTag =
           cu.origen_componente === 'CLIENTE'
             ? ' • Suministrado por Cliente'
@@ -1739,8 +1913,13 @@ export class PdfController {
         return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote}${origenTag})`;
       }),
       repuestosDetallados: this.extraerRepuestosDetallados(orden),
-      equipoDetalle: this.extraerEquipoDetallado(orden, this.extraerDatosModulo(orden.mediciones_servicio)),
-      placaUniversal: orden.equipos ? EquipoSpecsReader.getPlacaUniversal(orden.equipos) : undefined,
+      equipoDetalle: this.extraerEquipoDetallado(
+        orden,
+        this.extraerDatosModulo(orden.mediciones_servicio),
+      ),
+      placaUniversal: orden.equipos
+        ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
+        : undefined,
       // ✅ FIX 19-ENE-2026: Estructuras multi-equipo (igual que mobile)
       esMultiEquipo,
       actividadesPorEquipo,
@@ -1749,10 +1928,14 @@ export class PdfController {
       // ✅ FIX 19-ENE-2026: Corregir campo de firma (firma_base64, no imagen_base64)
       // Y agregar prefijo data:image/png;base64, si no lo tiene
       firmaTecnico: firmaTecnico?.firma_base64
-        ? (firmaTecnico.firma_base64.startsWith('data:') ? firmaTecnico.firma_base64 : `data:image/png;base64,${firmaTecnico.firma_base64}`)
+        ? firmaTecnico.firma_base64.startsWith('data:')
+          ? firmaTecnico.firma_base64
+          : `data:image/png;base64,${firmaTecnico.firma_base64}`
         : undefined,
       firmaCliente: firmaCliente?.firma_base64
-        ? (firmaCliente.firma_base64.startsWith('data:') ? firmaCliente.firma_base64 : `data:image/png;base64,${firmaCliente.firma_base64}`)
+        ? firmaCliente.firma_base64.startsWith('data:')
+          ? firmaCliente.firma_base64
+          : `data:image/png;base64,${firmaCliente.firma_base64}`
         : undefined,
       nombreTecnico: orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona
         ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim()
@@ -1762,13 +1945,19 @@ export class PdfController {
       // 1. nombre_quien_recibe explícito (del mobile) si no es genérico
       // 2. Nombre de la persona vinculada a la firma del cliente
       // 3. Nombre de la persona del cliente de la orden
-      nombreCliente: (orden.nombre_quien_recibe && orden.nombre_quien_recibe !== 'Cliente')
-        ? orden.nombre_quien_recibe
-        : firmaCliente?.persona
-          ? `${firmaCliente.persona.primer_nombre || ''} ${firmaCliente.persona.primer_apellido || ''}`.trim() || orden.nombre_quien_recibe || undefined
-          : clientePersona
-            ? (clientePersona.nombre_comercial || `${clientePersona.primer_nombre || ''} ${clientePersona.primer_apellido || ''}`.trim() || clientePersona.razon_social || undefined)
-            : orden.nombre_quien_recibe || undefined,
+      nombreCliente:
+        orden.nombre_quien_recibe && orden.nombre_quien_recibe !== 'Cliente'
+          ? orden.nombre_quien_recibe
+          : firmaCliente?.persona
+            ? `${firmaCliente.persona.primer_nombre || ''} ${firmaCliente.persona.primer_apellido || ''}`.trim() ||
+              orden.nombre_quien_recibe ||
+              undefined
+            : clientePersona
+              ? clientePersona.nombre_comercial ||
+                `${clientePersona.primer_nombre || ''} ${clientePersona.primer_apellido || ''}`.trim() ||
+                clientePersona.razon_social ||
+                undefined
+              : orden.nombre_quien_recibe || undefined,
       cargoCliente: orden.cargo_quien_recibe || 'Cliente / Autorizador',
     };
 
@@ -1778,10 +1967,13 @@ export class PdfController {
       let tipoEquipoNombre: string | undefined = undefined;
       // P1: Fuente de verdad canónica desde tipos_equipo (nombre_tipo es el campo correcto en Prisma)
       if (orden.ordenes_equipos?.length > 0) {
-        tipoEquipoNombre = orden.ordenes_equipos[0]?.equipos?.tipos_equipo?.nombre_tipo || orden.ordenes_equipos[0]?.equipos?.tipos_equipo?.nombre;
+        tipoEquipoNombre =
+          orden.ordenes_equipos[0]?.equipos?.tipos_equipo?.nombre_tipo ||
+          orden.ordenes_equipos[0]?.equipos?.tipos_equipo?.nombre;
       }
       if (!tipoEquipoNombre) {
-        tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre_tipo || orden.equipos?.tipos_equipo?.nombre;
+        tipoEquipoNombre =
+          orden.equipos?.tipos_equipo?.nombre_tipo || orden.equipos?.tipos_equipo?.nombre;
       }
       // P2: Número de orden (heurística de fallback)
       if (!tipoEquipoNombre && orden.numero_orden) {
@@ -1796,7 +1988,8 @@ export class PdfController {
         const nomTipo2 = (orden.tipos_servicio?.nombre_tipo || '').toUpperCase();
         if (codTipo2.includes('BOM') || nomTipo2.includes('BOMBA')) tipoEquipoNombre = 'BOMBA';
         else if (codTipo2.includes('MOT') || nomTipo2.includes('MOTOR')) tipoEquipoNombre = 'MOTOR';
-        else if (codTipo2.includes('GEN') || nomTipo2.includes('GENERADOR')) tipoEquipoNombre = 'GENERADOR';
+        else if (codTipo2.includes('GEN') || nomTipo2.includes('GENERADOR'))
+          tipoEquipoNombre = 'GENERADOR';
       }
       // P4: marcaEquipo (último recurso)
       if (!tipoEquipoNombre && datosOrden.marcaEquipo) {
@@ -1821,8 +2014,9 @@ export class PdfController {
     const tEq = (datosOrden.tipoEquipo || '').toUpperCase();
 
     // ─── PASO 1: ¿Es correctivo/emergencia/diagnóstico? → Template narrativo CORRECTIVO ───
-    const esServicioNarrativo = ['CORRECTIVO', 'EMERGENCIA', 'DIAGNOSTICO'].includes(categoriaServicio)
-      || codigoTipo.includes('CORR');
+    const esServicioNarrativo =
+      ['CORRECTIVO', 'EMERGENCIA', 'DIAGNOSTICO'].includes(categoriaServicio) ||
+      codigoTipo.includes('CORR');
 
     if (esServicioNarrativo) {
       tipoInforme = 'CORRECTIVO';
@@ -1832,9 +2026,10 @@ export class PdfController {
       tipoInforme = 'BOMBA_A';
     } else if (tEq === 'GENERADOR' || tEq === 'GEN') {
       // Generador distingue A vs B por codigo_tipo
-      const esPreventivoBLegacy = codigoTipo.includes('GEN_PREV_B')
-        || (codigoTipo.includes('PREV_B') && tEq.includes('GEN'))
-        || codigoTipo.includes('_B');
+      const esPreventivoBLegacy =
+        codigoTipo.includes('GEN_PREV_B') ||
+        (codigoTipo.includes('PREV_B') && tEq.includes('GEN')) ||
+        codigoTipo.includes('_B');
       tipoInforme = esPreventivoBLegacy ? 'GENERADOR_B' : 'GENERADOR_A';
     }
     // ─── PASO 3: Cualquier otro equipo (nuevo o polimórfico) → UNIVERSAL_EAM ───
@@ -1854,7 +2049,9 @@ export class PdfController {
     // `datosModulo`, `mediciones` y `medicionesPorEquipo`.
     // ⛔ NO heredar, NO generalizar, NO aplicar a ninguna otra orden.
     if (orden.numero_orden === 'OS-202607-0134') {
-      this.logger.warn('⚠️ [FIX ATÓMICO] OS-202607-0134: suprimiendo secciones de mediciones del PDF');
+      this.logger.warn(
+        '⚠️ [FIX ATÓMICO] OS-202607-0134: suprimiendo secciones de mediciones del PDF',
+      );
       (datosOrden as any).datosModulo = undefined;
       (datosOrden as any).mediciones = [];
       (datosOrden as any).medicionesPorEquipo = undefined;
@@ -1885,7 +2082,7 @@ export class PdfController {
           codigoTipoEquipo: orden.equipos?.tipos_equipo?.codigo_tipo,
           nombreTipoEquipo: orden.equipos?.tipos_equipo?.nombre_tipo,
           nombreCliente: clienteNombre,
-      nombreEquipo: orden.equipos?.nombre_equipo,
+          nombreEquipo: orden.equipos?.nombre_equipo,
           numeroOrden: orden.numero_orden,
         });
         urlPdf = await this.r2Service.uploadPDF(resultado.buffer, r2Filename, { downloadFilename });
@@ -1914,7 +2111,9 @@ export class PdfController {
             },
           });
           idDocumentoFinal = documentoExistente.id_documento;
-          this.logger.log(`✅ Documento actualizado en BD (id: ${documentoExistente.id_documento})`);
+          this.logger.log(
+            `✅ Documento actualizado en BD (id: ${documentoExistente.id_documento})`,
+          );
         } else {
           // CREAR nuevo registro solo si no existe
           const docNuevo = await this.prisma.documentos_generados.create({
@@ -1942,13 +2141,17 @@ export class PdfController {
 
     // Enviar por email si se solicita
     let emailEnviado = false;
-    this.logger.log(`📧 Verificando envío de email: enviarEmail=${dto.enviarEmail}, clienteEmail=${clienteEmail}`);
+    this.logger.log(
+      `📧 Verificando envío de email: enviarEmail=${dto.enviarEmail}, clienteEmail=${clienteEmail}`,
+    );
 
     if (dto.enviarEmail && clienteEmail) {
       const asunto = dto.asuntoEmail || `Informe de Mantenimiento - ${orden.numero_orden}`;
       try {
         this.logger.log(`📧 Preparando envío de email a ${clienteEmail}...`);
-        const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
+        const mensaje =
+          dto.mensajeEmail ||
+          `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
 
         const tipoServicioDetallado = orden.tipos_servicio?.nombre_tipo || 'Mantenimiento';
         const codigoTipo = orden.tipos_servicio?.codigo_tipo || '';
@@ -1981,21 +2184,30 @@ export class PdfController {
 
         // ✅ MULTI-EMAIL: Usar cuenta específica del cliente si está configurada
         const idCuentaEmailRegen = orden.clientes?.id_cuenta_email_remitente || undefined;
-        this.logger.log(`📧 [MULTI-EMAIL REGEN] Cliente id_cuenta_email_remitente: ${idCuentaEmailRegen ?? 'NO CONFIGURADA (usará cuenta por defecto)'}`);
+        this.logger.log(
+          `📧 [MULTI-EMAIL REGEN] Cliente id_cuenta_email_remitente: ${idCuentaEmailRegen ?? 'NO CONFIGURADA (usará cuenta por defecto)'}`,
+        );
 
-        const regenEmailResult = await this.emailService.sendEmailFromAccount({
-          to: clienteEmailsArray,
-          subject: asunto,
-          html: htmlTemplate,
-          attachments: [{
-            filename: resultado.filename,
-            content: resultado.buffer,
-            contentType: 'application/pdf',
-          }],
-        }, idCuentaEmailRegen);
+        const regenEmailResult = await this.emailService.sendEmailFromAccount(
+          {
+            to: clienteEmailsArray,
+            subject: asunto,
+            html: htmlTemplate,
+            attachments: [
+              {
+                filename: resultado.filename,
+                content: resultado.buffer,
+                contentType: 'application/pdf',
+              },
+            ],
+          },
+          idCuentaEmailRegen,
+        );
 
         emailEnviado = regenEmailResult.success;
-        this.logger.log(`${emailEnviado ? '✅' : '❌'} Email ${emailEnviado ? 'enviado' : 'fallido'} a ${clienteEmail}`);
+        this.logger.log(
+          `${emailEnviado ? '✅' : '❌'} Email ${emailEnviado ? 'enviado' : 'fallido'} a ${clienteEmail}`,
+        );
 
         // ✅ FIX 18-FEB-2026: Registrar historial de envío
         try {
@@ -2006,7 +2218,7 @@ export class PdfController {
               asunto,
               estado_envio: emailEnviado ? 'EXITOSO' : 'FALLIDO',
               message_id: regenEmailResult.messageId || null,
-              mensaje_error: emailEnviado ? null : (regenEmailResult.error || 'Error desconocido'),
+              mensaje_error: emailEnviado ? null : regenEmailResult.error || 'Error desconocido',
               url_pdf_enviado: urlPdf || null,
               origen_envio: 'ADMIN_PORTAL_REGENERAR',
             },
@@ -2038,7 +2250,9 @@ export class PdfController {
     } else if (dto.enviarEmail && !clienteEmail) {
       this.logger.warn(`⚠️ No se puede enviar email: clienteEmail no disponible`);
       this.logger.warn(`   dto.emailDestino: ${dto.emailDestino || 'NO PROPORCIONADO'}`);
-      this.logger.warn(`   clientePersona?.email_principal: ${clientePersona?.email_principal || 'NO DISPONIBLE'}`);
+      this.logger.warn(
+        `   clientePersona?.email_principal: ${clientePersona?.email_principal || 'NO DISPONIBLE'}`,
+      );
     }
 
     return {
@@ -2064,7 +2278,8 @@ export class PdfController {
   @Post('ordenes/:id/pdf/enviar')
   @ApiOperation({
     summary: 'Enviar email con PDF existente (OPTIMIZADO)',
-    description: 'Envía el PDF ya guardado en R2 sin regenerar. Usa esto desde Admin Portal para reenviar informes.',
+    description:
+      'Envía el PDF ya guardado en R2 sin regenerar. Usa esto desde Admin Portal para reenviar informes.',
   })
   @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: String })
   @ApiBody({ type: EnviarPdfExistenteDto })
@@ -2103,15 +2318,16 @@ export class PdfController {
       where: { id_orden_servicio: idNumerico },
       select: {
         numero_orden: true,
+        fecha_inicio_real: true,
         fecha_programada: true,
         empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
           select: {
             persona: {
-              select: { primer_nombre: true, primer_apellido: true }
-            }
-          }
-        }
-      }
+              select: { primer_nombre: true, primer_apellido: true },
+            },
+          },
+        },
+      },
     });
 
     if (!orden) {
@@ -2187,7 +2403,9 @@ export class PdfController {
         : new Date().toLocaleDateString('es-CO');
 
     const asunto = dto.asuntoEmail || `Informe de Mantenimiento - ${orden.numero_orden}`;
-    const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
+    const mensaje =
+      dto.mensajeEmail ||
+      `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
 
     try {
       const clienteOrden = await this.prisma.ordenes_servicio.findUnique({
@@ -2212,20 +2430,28 @@ export class PdfController {
       });
 
       // ✅ MULTI-EMAIL HABILITADO: Leer cuenta email del cliente (con fallback al principal para sedes)
-      const idCuentaEmailCliente = clienteOrden?.clientes?.id_cuenta_email_remitente
-        || clienteOrden?.clientes?.cliente_principal?.id_cuenta_email_remitente
-        || null;
-      this.logger.log(`📧 [MULTI-EMAIL] Cliente id_cuenta_email_remitente: ${idCuentaEmailCliente ?? 'NO CONFIGURADA (usará cuenta por defecto)'}`);
-
+      const idCuentaEmailCliente =
+        clienteOrden?.clientes?.id_cuenta_email_remitente ||
+        clienteOrden?.clientes?.cliente_principal?.id_cuenta_email_remitente ||
+        null;
+      this.logger.log(
+        `📧 [MULTI-EMAIL] Cliente id_cuenta_email_remitente: ${idCuentaEmailCliente ?? 'NO CONFIGURADA (usará cuenta por defecto)'}`,
+      );
 
       const clientePersona = clienteOrden?.clientes?.persona;
       // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
-      const clienteNombreBase3 = clientePersona?.nombre_comercial || clientePersona?.razon_social || dto.emailDestino.split('@')[0];
+      const clienteNombreBase3 =
+        clientePersona?.nombre_comercial ||
+        clientePersona?.razon_social ||
+        dto.emailDestino.split('@')[0];
       const clienteNombreCompleto = clienteOrden?.clientes?.nombre_sede
         ? `${clienteNombreBase3} - ${clienteOrden.clientes.nombre_sede}`
         : clienteNombreBase3;
       // ✅ FIX MULTI-SEDE: Priorizar dirección de sede
-      const clienteDireccion = clienteOrden?.sedes_cliente?.direccion_sede ?? clientePersona?.direccion_principal ?? undefined;
+      const clienteDireccion =
+        clienteOrden?.sedes_cliente?.direccion_sede ??
+        clientePersona?.direccion_principal ??
+        undefined;
       const marcaEquipo = clienteOrden?.equipos?.nombre_equipo ?? undefined;
       const serieEquipo = clienteOrden?.equipos?.numero_serie_equipo ?? undefined;
       const tipoServicioNombre = clienteOrden?.tipos_servicio?.nombre_tipo || 'Mantenimiento';
@@ -2259,12 +2485,15 @@ export class PdfController {
       });
 
       // ✅ FIX 13-FEB-2026: Soporte CC para múltiples destinatarios
-      const ccEmails = dto.emailsCc?.filter(e => e && e.includes('@')) || [];
+      const ccEmails = dto.emailsCc?.filter((e) => e && e.includes('@')) || [];
 
       // ✅ FIX 28-FEB-2026: Auto-incluir emails_notificacion del cliente + principal como CC
       const autoAddCc = (emailsStr: string | null | undefined) => {
         if (!emailsStr) return;
-        const extras = emailsStr.split(';;').map(e => e.trim()).filter(e => e.length > 0 && e.includes('@'));
+        const extras = emailsStr
+          .split(';;')
+          .map((e) => e.trim())
+          .filter((e) => e.length > 0 && e.includes('@'));
         for (const extra of extras) {
           if (extra !== dto.emailDestino && !ccEmails.includes(extra)) {
             ccEmails.push(extra);
@@ -2275,19 +2504,25 @@ export class PdfController {
       autoAddCc(clienteOrden?.clientes?.cliente_principal?.emails_notificacion);
 
       if (ccEmails.length > 0) {
-        this.logger.log(`📧 [CC] Emails adicionales (dto + emails_notificacion + principal): ${ccEmails.join(', ')}`);
+        this.logger.log(
+          `📧 [CC] Emails adicionales (dto + emails_notificacion + principal): ${ccEmails.join(', ')}`,
+        );
       }
 
       // ✅ FIX 11-MAR-2026: Procesar archivos adicionales del DTO
-      const attachments: { filename: string; content: Buffer; contentType: string }[] = [{
-        filename,
-        content: pdfBuffer,
-        contentType: 'application/pdf',
-      }];
+      const attachments: { filename: string; content: Buffer; contentType: string }[] = [
+        {
+          filename,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ];
 
       // Agregar archivos adicionales si existen
       if (dto.archivosAdicionales && dto.archivosAdicionales.length > 0) {
-        this.logger.log(`📎 [ADJUNTOS] Procesando ${dto.archivosAdicionales.length} archivo(s) adicional(es)`);
+        this.logger.log(
+          `📎 [ADJUNTOS] Procesando ${dto.archivosAdicionales.length} archivo(s) adicional(es)`,
+        );
 
         for (const archivo of dto.archivosAdicionales) {
           try {
@@ -2297,7 +2532,9 @@ export class PdfController {
               content: contentBuffer,
               contentType: archivo.contentType || 'application/octet-stream',
             });
-            this.logger.log(`📎 [ADJUNTO] Agregado: ${archivo.filename} (${contentBuffer.length} bytes)`);
+            this.logger.log(
+              `📎 [ADJUNTO] Agregado: ${archivo.filename} (${contentBuffer.length} bytes)`,
+            );
           } catch (error) {
             this.logger.warn(`⚠️ [ADJUNTO] Error procesando archivo ${archivo.filename}: ${error}`);
           }
@@ -2305,13 +2542,16 @@ export class PdfController {
       }
 
       // ✅ MULTI-EMAIL: Usar cuenta específica del cliente si está configurada
-      const emailResult = await this.emailService.sendEmailFromAccount({
-        to: dto.emailDestino,
-        subject: asunto,
-        html: htmlTemplate,
-        attachments,
-        ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
-      }, idCuentaEmailCliente ?? undefined);
+      const emailResult = await this.emailService.sendEmailFromAccount(
+        {
+          to: dto.emailDestino,
+          subject: asunto,
+          html: htmlTemplate,
+          attachments,
+          ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
+        },
+        idCuentaEmailCliente ?? undefined,
+      );
 
       const allDestinatarios = [dto.emailDestino, ...ccEmails];
       if (emailResult.success) {
@@ -2403,7 +2643,9 @@ export class PdfController {
    * Mapea el nombre del tipo de equipo a la enum normalizada
    * ✅ FIX EAM FASE 5.3: Fallback seguro 'EQUIPO' en vez de 'GENERADOR' silencioso
    */
-  private mapTipoEquipo(nombre: string | undefined): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string {
+  private mapTipoEquipo(
+    nombre: string | undefined,
+  ): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string {
     if (!nombre) return 'EQUIPO';
 
     const nombreUpper = nombre.toUpperCase();
@@ -2512,7 +2754,10 @@ export class PdfController {
   /**
    * ✅ ENRIQUECIMIENTO FICHA TÉCNICA: Extrae datos técnicos de placa del activo
    */
-  private extraerEquipoDetallado(orden: any, datosModulo?: any): DatosEquipoDetalladoPDF | undefined {
+  private extraerEquipoDetallado(
+    orden: any,
+    datosModulo?: any,
+  ): DatosEquipoDetalladoPDF | undefined {
     const eq = orden.equipos;
     if (!eq) return undefined;
 
@@ -2523,14 +2768,19 @@ export class PdfController {
     const tipoEq = eq.tipos_equipo?.nombre_tipo || 'EQUIPO';
 
     const clientePersona = orden.clientes?.persona;
-    const clienteNombreBase = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
+    const clienteNombreBase =
+      clientePersona?.razon_social ||
+      clientePersona?.nombre_comercial ||
+      clientePersona?.nombre_completo ||
+      'N/A';
     const clienteNombre = orden.clientes?.nombre_sede
       ? `${clienteNombreBase} - ${orden.clientes.nombre_sede}`
       : clienteNombreBase;
     const clienteNit = clientePersona?.numero_documento
       ? `${clientePersona.tipo_documento || 'NIT'}: ${clientePersona.numero_documento}`
       : undefined;
-    const clienteDireccion = orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
+    const clienteDireccion =
+      orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
     const ciudad = orden.sedes_cliente?.ciudad || clientePersona?.ciudad || undefined;
     const sede = orden.sedes_cliente?.nombre_sede || orden.clientes?.nombre_sede || undefined;
 
@@ -2543,18 +2793,38 @@ export class PdfController {
     modelo = EquipoSpecsReader.getModelo(eq);
 
     const potenciaKva = gen?.potencia_kva ? Number(gen.potencia_kva) : undefined;
-    const potenciaKw = gen?.potencia_kw ? Number(gen.potencia_kw) : (mot?.potencia_kw ? Number(mot.potencia_kw) : undefined);
-    const potenciaHp = mot?.potencia_hp ? Number(mot.potencia_hp) : (bom?.potencia_hidraulica_kw ? Number(bom.potencia_hidraulica_kw) : undefined);
-    const voltaje = gen?.voltaje_salida || (datosModulo?.voltaje ? `${datosModulo.voltaje} V` : undefined);
-    const frecuencia = gen?.frecuencia_hz ? `${gen.frecuencia_hz} Hz` : (datosModulo?.frecuencia ? `${datosModulo.frecuencia} Hz` : undefined);
+    const potenciaKw = gen?.potencia_kw
+      ? Number(gen.potencia_kw)
+      : mot?.potencia_kw
+        ? Number(mot.potencia_kw)
+        : undefined;
+    const potenciaHp = mot?.potencia_hp
+      ? Number(mot.potencia_hp)
+      : bom?.potencia_hidraulica_kw
+        ? Number(bom.potencia_hidraulica_kw)
+        : undefined;
+    const voltaje =
+      gen?.voltaje_salida || (datosModulo?.voltaje ? `${datosModulo.voltaje} V` : undefined);
+    const frecuencia = gen?.frecuencia_hz
+      ? `${gen.frecuencia_hz} Hz`
+      : datosModulo?.frecuencia
+        ? `${datosModulo.frecuencia} Hz`
+        : undefined;
     const fases = gen?.numero_fases ? `${gen.numero_fases}F` : undefined;
-    const rpm = mot?.velocidad_nominal_rpm ? `${mot.velocidad_nominal_rpm} RPM` : (datosModulo?.rpm ? `${datosModulo.rpm} RPM` : undefined);
+    const rpm = mot?.velocidad_nominal_rpm
+      ? `${mot.velocidad_nominal_rpm} RPM`
+      : datosModulo?.rpm
+        ? `${datosModulo.rpm} RPM`
+        : undefined;
 
     const tipoBomba = bom?.tipo_bomba || undefined;
     const caudalGpm = bom?.caudal_maximo_m3h ? `${bom.caudal_maximo_m3h} m³/h` : undefined;
-    const presionPsi = bom?.altura_presion_trabajo_m ? `${bom.altura_presion_trabajo_m} m` : undefined;
+    const presionPsi = bom?.altura_presion_trabajo_m
+      ? `${bom.altura_presion_trabajo_m} m`
+      : undefined;
 
-    const horometroInterv = datosModulo?.horasTrabajo ?? orden.horometro_final ?? orden.horometro_inicial ?? undefined;
+    const horometroInterv =
+      datosModulo?.horasTrabajo ?? orden.horometro_final ?? orden.horometro_inicial ?? undefined;
     const horometroAcum = eq.horas_actuales ? Number(eq.horas_actuales) : undefined;
 
     return {
@@ -2595,19 +2865,38 @@ export class PdfController {
     const datosModulo: NonNullable<DatosOrdenPDF['datosModulo']> = {};
 
     for (const med of mediciones) {
-      const nombreParametro = (med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || '').toLowerCase();
+      const nombreParametro = (
+        med.parametros_medicion?.nombre_parametro ||
+        med.nombre_parametro_snapshot ||
+        ''
+      ).toLowerCase();
       const valor = Number(med.valor_numerico) || 0;
 
       // Mapear según el nombre del parámetro
       if (nombreParametro.includes('velocidad') || nombreParametro.includes('rpm')) {
         datosModulo.rpm = valor;
-      } else if (nombreParametro.includes('presión') || nombreParametro.includes('presion') || nombreParametro.includes('aceite')) {
+      } else if (
+        nombreParametro.includes('presión') ||
+        nombreParametro.includes('presion') ||
+        nombreParametro.includes('aceite')
+      ) {
         datosModulo.presionAceite = valor;
-      } else if (nombreParametro.includes('temperatura') || nombreParametro.includes('refrigerante')) {
+      } else if (
+        nombreParametro.includes('temperatura') ||
+        nombreParametro.includes('refrigerante')
+      ) {
         datosModulo.temperaturaRefrigerante = valor;
-      } else if (nombreParametro.includes('carga') || nombreParametro.includes('batería') || nombreParametro.includes('bateria')) {
+      } else if (
+        nombreParametro.includes('carga') ||
+        nombreParametro.includes('batería') ||
+        nombreParametro.includes('bateria')
+      ) {
         datosModulo.cargaBateria = valor;
-      } else if (nombreParametro.includes('horas') || nombreParametro.includes('horómetro') || nombreParametro.includes('horometro')) {
+      } else if (
+        nombreParametro.includes('horas') ||
+        nombreParametro.includes('horómetro') ||
+        nombreParametro.includes('horometro')
+      ) {
         datosModulo.horasTrabajo = valor;
       } else if (nombreParametro.includes('voltaje')) {
         datosModulo.voltaje = valor;
@@ -2619,7 +2908,7 @@ export class PdfController {
     }
 
     // Solo retornar si hay al menos un dato
-    const tieneDatos = Object.values(datosModulo).some(v => v !== undefined);
+    const tieneDatos = Object.values(datosModulo).some((v) => v !== undefined);
     return tieneDatos ? datosModulo : undefined;
   }
 
@@ -2649,7 +2938,12 @@ export class PdfController {
         fecha_inicio_real: true,
         fecha_programada: true,
         tipos_servicio: { select: { codigo_tipo: true, nombre_tipo: true } },
-        equipos: { select: { nombre_equipo: true, tipos_equipo: { select: { codigo_tipo: true, nombre_tipo: true } } } },
+        equipos: {
+          select: {
+            nombre_equipo: true,
+            tipos_equipo: { select: { codigo_tipo: true, nombre_tipo: true } },
+          },
+        },
         clientes: {
           select: {
             nombre_sede: true,
@@ -2670,11 +2964,12 @@ export class PdfController {
     if (!orden) return null;
 
     const persona = orden.clientes?.persona;
-    const nombreBase = persona?.nombre_comercial
-      || persona?.razon_social
-      || persona?.nombre_completo
-      || [persona?.primer_nombre, persona?.primer_apellido].filter(Boolean).join(' ')
-      || 'CLIENTE';
+    const nombreBase =
+      persona?.nombre_comercial ||
+      persona?.razon_social ||
+      persona?.nombre_completo ||
+      [persona?.primer_nombre, persona?.primer_apellido].filter(Boolean).join(' ') ||
+      'CLIENTE';
     const nombreCliente = orden.clientes?.nombre_sede
       ? `${nombreBase} - ${orden.clientes.nombre_sede}`
       : nombreBase;
@@ -2686,7 +2981,7 @@ export class PdfController {
       codigoTipoEquipo: orden.equipos?.tipos_equipo?.codigo_tipo,
       nombreTipoEquipo: orden.equipos?.tipos_equipo?.nombre_tipo,
       nombreCliente,
-      nombreEquipo: orden.equipos?.nombre,
+      nombreEquipo: orden.equipos?.nombre_equipo,
       numeroOrden: orden.numero_orden,
     };
   }

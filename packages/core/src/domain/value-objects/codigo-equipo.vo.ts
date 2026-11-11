@@ -11,12 +11,12 @@ export class CodigoEquipo {
   }
 
   static create(codigo: string): CodigoEquipo {
-    if (!codigo || codigo.trim().length === 0) {
+    if ((codigo ?? '').trim().length === 0) {
       throw new Error('Código de equipo no puede estar vacío');
     }
-    
+
     const codigoNormalizado = codigo.trim().toUpperCase();
-    
+
     if (codigoNormalizado.length > 50) {
       throw new Error('Código de equipo no puede exceder 50 caracteres');
     }
@@ -26,7 +26,7 @@ export class CodigoEquipo {
 
   private static isValid(codigo: string): boolean {
     // Validar que contiene solo alfanuméricos y guiones
-    const regex = /^[A-Z0-9\-]+$/;
+    const regex = /^[A-Z0-9-]+$/;
     return regex.test(codigo);
   }
 
@@ -34,8 +34,8 @@ export class CodigoEquipo {
     return this.value;
   }
 
-  equals(other: CodigoEquipo): boolean {
-    if (!other) return false;
+  equals(other?: CodigoEquipo | null): boolean {
+    if (other == null) return false;
     return this.value === other.value;
   }
 

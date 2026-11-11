@@ -2,13 +2,12 @@
 
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
+import { getNextTableId } from '../../../common/utils/next-id.helper';
 import { ItemsCotizacionComponentesRepository } from '../domain/items-cotizacion-componentes.repository.interface';
 import { ItemCotizacionComponente } from '../domain/item-cotizacion-componente.entity';
 
 @Injectable()
-export class PrismaItemsComponentesRepository
-  implements ItemsCotizacionComponentesRepository
-{
+export class PrismaItemsComponentesRepository implements ItemsCotizacionComponentesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   private mapToEntity(item: any): ItemCotizacionComponente {
@@ -23,9 +22,7 @@ export class PrismaItemsComponentesRepository
       cantidad: item.cantidad ? Number(item.cantidad) : 1,
       unidad: item.unidad ?? undefined,
       precio_unitario: Number(item.precio_unitario),
-      descuento_porcentaje: item.descuento_porcentaje
-        ? Number(item.descuento_porcentaje)
-        : 0,
+      descuento_porcentaje: item.descuento_porcentaje ? Number(item.descuento_porcentaje) : 0,
       subtotal: item.subtotal ? Number(item.subtotal) : undefined,
       garantia_meses: item.garantia_meses ?? undefined,
       observaciones_garantia: item.observaciones_garantia ?? undefined,
@@ -33,21 +30,25 @@ export class PrismaItemsComponentesRepository
       orden_item: item.orden_item ?? undefined,
       fecha_registro: item.fecha_registro ?? undefined,
       registrado_por: item.registrado_por ?? undefined,
-      cotizacion: item.cotizacion ?? undefined,
+      cotizacion: item.cotizaciones ?? item.cotizacion ?? undefined,
       componente: item.catalogo_componentes ?? undefined,
       tipo_componente: item.tipos_componente ?? undefined,
       usuario: item.usuarios ?? undefined,
     });
   }
 
-  async save(
-    data: Partial<ItemCotizacionComponente>,
-  ): Promise<ItemCotizacionComponente> {
+  async save(data: Partial<ItemCotizacionComponente>): Promise<ItemCotizacionComponente> {
     const itemTemp = new ItemCotizacionComponente(data);
     const subtotalCalculado = itemTemp.calcularSubtotal();
+    const idItemComponente = await getNextTableId(
+      this.prisma,
+      'items_cotizacion_componentes',
+      'id_item_componente',
+    );
 
     const itemCreado = await this.prisma.items_cotizacion_componentes.create({
       data: {
+        id_item_componente: idItemComponente,
         id_cotizacion: data.id_cotizacion!,
         id_componente: data.id_componente,
         id_tipo_componente: data.id_tipo_componente!,
@@ -82,14 +83,22 @@ export class PrismaItemsComponentesRepository
     const item = await this.prisma.items_cotizacion_componentes.findUnique({
       where: { id_item_componente: id },
       include: {
-        cotizacion: includeRelations?.includeCotizacion ?? false,
+        cotizaciones: includeRelations?.includeCotizacion ?? false,
         catalogo_componentes: includeRelations?.includeComponente ?? false,
         tipos_componente: includeRelations?.includeTipoComponente ?? false,
-        usuarios: includeRelations?.includeUsuario ?? false,
       },
     });
 
-    return item ? this.mapToEntity(item) : null;
+    if (!item) return null;
+
+    if (includeRelations?.includeUsuario && item.registrado_por) {
+      const usuario = await this.prisma.usuarios.findUnique({
+        where: { id_usuario: item.registrado_por },
+      });
+      return this.mapToEntity({ ...item, usuarios: usuario });
+    }
+
+    return this.mapToEntity(item);
   }
 
   async findByCotizacionId(
@@ -105,10 +114,25 @@ export class PrismaItemsComponentesRepository
       include: {
         catalogo_componentes: includeRelations?.includeComponente ?? false,
         tipos_componente: includeRelations?.includeTipoComponente ?? false,
-        usuarios: includeRelations?.includeUsuario ?? false,
       },
       orderBy: { orden_item: 'asc' },
     });
+
+    if (includeRelations?.includeUsuario) {
+      const userIds = Array.from(
+        new Set(items.map((i) => i.registrado_por).filter((u): u is number => u !== null)),
+      );
+      const usuarios = userIds.length
+        ? await this.prisma.usuarios.findMany({ where: { id_usuario: { in: userIds } } })
+        : [];
+      const userMap = new Map(usuarios.map((u) => [u.id_usuario, u]));
+      return items.map((item) =>
+        this.mapToEntity({
+          ...item,
+          usuarios: item.registrado_por ? userMap.get(item.registrado_por) : undefined,
+        }),
+      );
+    }
 
     return items.map((item) => this.mapToEntity(item));
   }
@@ -151,17 +175,18 @@ export class PrismaItemsComponentesRepository
     if (data.cantidad !== undefined) updateData.cantidad = data.cantidad;
     if (data.unidad !== undefined) updateData.unidad = data.unidad;
     if (data.precio_unitario !== undefined) updateData.precio_unitario = data.precio_unitario;
-    if (data.descuento_porcentaje !== undefined) updateData.descuento_porcentaje = data.descuento_porcentaje;
+    if (data.descuento_porcentaje !== undefined)
+      updateData.descuento_porcentaje = data.descuento_porcentaje;
     if (data.garantia_meses !== undefined) updateData.garantia_meses = data.garantia_meses;
-    if (data.observaciones_garantia !== undefined) updateData.observaciones_garantia = data.observaciones_garantia;
+    if (data.observaciones_garantia !== undefined)
+      updateData.observaciones_garantia = data.observaciones_garantia;
     if (data.observaciones !== undefined) updateData.observaciones = data.observaciones;
     if (data.orden_item !== undefined) updateData.orden_item = data.orden_item;
 
-    const itemActualizado =
-      await this.prisma.items_cotizacion_componentes.update({
-        where: { id_item_componente: id },
-        data: updateData,
-      });
+    const itemActualizado = await this.prisma.items_cotizacion_componentes.update({
+      where: { id_item_componente: id },
+      data: updateData,
+    });
 
     return this.mapToEntity(itemActualizado);
   }

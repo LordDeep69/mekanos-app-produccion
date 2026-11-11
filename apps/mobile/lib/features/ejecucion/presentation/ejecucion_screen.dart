@@ -233,7 +233,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         _esBomba = false;
       }
     } catch (e) {
-      print('❌ Error cargando datos: $e');
+      debugPrint('❌ Error cargando datos: $e');
     }
 
     if (mounted) {
@@ -309,7 +309,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         );
       }
     } catch (e) {
-      print('❌ Error marcando actividad: $e');
+      debugPrint('❌ Error marcando actividad: $e');
       if (mounted) {
         mostrarErrorSnackBar(context, e, contexto: 'marcar la actividad');
       }
@@ -559,7 +559,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 )
               : ListView.separated(
                   itemCount: actividadesDisponibles.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final act = actividadesDisponibles[index];
                     return ListTile(
@@ -2811,7 +2811,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: color.withOpacity(0.3),
+                        color: color.withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -2901,7 +2901,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: color.withOpacity(0.3),
+                        color: color.withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -3135,7 +3135,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: tieneContenido ? color.withOpacity(0.1) : Colors.grey.shade50,
+          color: tieneContenido ? color.withValues(alpha: 0.1) : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: tieneContenido ? color : Colors.grey.shade300,
@@ -3361,7 +3361,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: tieneItems ? color.withOpacity(0.1) : Colors.grey.shade50,
+          color: tieneItems ? color.withValues(alpha: 0.1) : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: tieneItems ? color : Colors.grey.shade300,
@@ -3423,7 +3423,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.15),
+                          color: color.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -3555,7 +3555,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                             child: ListTile(
                               dense: true,
                               leading: CircleAvatar(
-                                backgroundColor: color.withOpacity(0.2),
+                                backgroundColor: color.withValues(alpha: 0.2),
                                 radius: 14,
                                 child: Text(
                                   '${index + 1}',
@@ -3937,7 +3937,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -3973,7 +3973,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.3),
+                                    color: Colors.white.withValues(alpha: 0.3),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: const Text(
@@ -4246,11 +4246,12 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     );
 
     // DEBUG: Log de valores iniciales
-    print('🕐 Diálogo Finalización:');
-    print('   Hora entrada default: ${_formatTimeOfDay24h(horaEntrada)}');
-    print('   Hora salida default: ${_formatTimeOfDay24h(horaSalida)}');
-    print('   Modo: SOLO_DATOS (forzado)');
+    debugPrint('🕐 Diálogo Finalización:');
+    debugPrint('   Hora entrada default: ${_formatTimeOfDay24h(horaEntrada)}');
+    debugPrint('   Hora salida default: ${_formatTimeOfDay24h(horaSalida)}');
+    debugPrint('   Modo: SOLO_DATOS (forzado)');
 
+    if (!mounted) return;
     final resultado = await showDialog<Map<String, String>>(
       context: context,
       barrierDismissible: false,
@@ -4543,10 +4544,10 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 // ✅ SIEMPRE enviar HH:mm 24h al backend (sin AM/PM)
                 final entradaStr = _formatTimeOfDay24h(horaEntrada);
                 final salidaStr = _formatTimeOfDay24h(horaSalida);
-                print('🕐 DEBUG FINALIZACIÓN:');
-                print('   horaEntrada: $entradaStr');
-                print('   horaSalida: $salidaStr');
-                print('   modo: SOLO_DATOS (forzado)');
+                debugPrint('🕐 DEBUG FINALIZACIÓN:');
+                debugPrint('   horaEntrada: $entradaStr');
+                debugPrint('   horaSalida: $salidaStr');
+                debugPrint('   modo: SOLO_DATOS (forzado)');
                 Navigator.of(ctx).pop({
                   'horaEntrada': entradaStr,
                   'horaSalida': salidaStr,
@@ -4607,6 +4608,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
 
       if (orden == null || orden.idBackend == null) {
+        if (!mounted) return;
         Navigator.of(context).pop(); // Cerrar loading
         _mostrarError('No se pudo obtener la información de la orden');
         return;
@@ -4630,6 +4632,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         esResubida: widget.esResubida,
       );
 
+      if (!mounted) return;
       Navigator.of(context).pop(); // Cerrar loading
 
       if (resultado.success) {
@@ -4694,6 +4697,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       '🔍 [RESULTADO] evidencias=$evidenciasCount, firmas=$firmasCount',
     );
 
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -5350,12 +5354,12 @@ class _SyncProgressDialog extends ConsumerWidget {
                 icon: Icons.verified_user,
               ),
               _buildStepItem(
-                step: SyncStep.obteniendo_orden,
+                step: SyncStep.obteniendoOrden,
                 progress: progress,
                 icon: Icons.cloud_download,
               ),
               _buildStepItem(
-                step: SyncStep.limpieza_residuales,
+                step: SyncStep.limpiezaResiduales,
                 progress: progress,
                 icon: Icons.cleaning_services,
               ),
@@ -5370,7 +5374,7 @@ class _SyncProgressDialog extends ConsumerWidget {
                 icon: Icons.draw,
               ),
               _buildStepItem(
-                step: SyncStep.actualizando_estado,
+                step: SyncStep.actualizandoEstado,
                 progress: progress,
                 icon: Icons.cloud_done,
               ),

@@ -43,10 +43,7 @@ export class CategoriasComponenteService {
   async getArbol(): Promise<CategoriaNodo[]> {
     const categorias = await this.prisma.categorias_componente.findMany({
       where: { activo: true },
-      orderBy: [
-        { nivel: 'asc' },
-        { nombre: 'asc' },
-      ],
+      orderBy: [{ nivel: 'asc' }, { nombre: 'asc' }],
       select: {
         id_categoria: true,
         codigo_categoria: true,
@@ -153,9 +150,7 @@ export class CategoriasComponenteService {
 
     return this.prisma.categorias_componente.findMany({
       where,
-      orderBy: [
-        { ruta_jerarquica: 'asc' },
-      ],
+      orderBy: [{ ruta_jerarquica: 'asc' }],
       include: {
         _count: {
           select: {
@@ -206,7 +201,7 @@ export class CategoriasComponenteService {
 
     let nivel = 1;
     let rutaJerarquica = nombreSanitizado.toUpperCase();
-    let baseSlug = slugify(nombreSanitizado) || 'cat';
+    const baseSlug = slugify(nombreSanitizado) || 'cat';
     let slugPath = baseSlug;
 
     // 1. Si tiene padre asignado, validar existencia y componer jerarquía
@@ -269,7 +264,10 @@ export class CategoriasComponenteService {
     } else {
       // Generar código automático seguro (ej: CAT-FILTROS-AIRE)
       const prefijo = dto.id_padre ? 'SUB' : 'CAT';
-      const cleanSlug = baseSlug.toUpperCase().replace(/[^A-Z0-9]/g, '-').substring(0, 30);
+      const cleanSlug = baseSlug
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '-')
+        .substring(0, 30);
       let candCod = `${prefijo}-${cleanSlug}`;
       let c = 1;
       while (

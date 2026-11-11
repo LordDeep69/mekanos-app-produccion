@@ -1,15 +1,14 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseBoolPipe,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -34,10 +33,7 @@ export class TiposComponenteController {
   ) {}
 
   @Post()
-  create(
-    @Body() createDto: CreateTiposComponenteDto,
-    @CurrentUser('id') userId: number,
-  ) {
+  create(@Body() createDto: CreateTiposComponenteDto, @CurrentUser('id') userId: number) {
     const command = new CrearTipoComponenteCommand(
       createDto.codigo_tipo,
       createDto.nombre_componente,
@@ -73,10 +69,7 @@ export class TiposComponenteController {
   }
 
   @Put(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateDto: UpdateTiposComponenteDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateDto: UpdateTiposComponenteDto) {
     const command = new ActualizarTipoComponenteCommand(
       id,
       updateDto.codigo_tipo,

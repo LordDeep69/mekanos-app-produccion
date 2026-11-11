@@ -11,6 +11,7 @@
 
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
+import { getNextTableId } from '../common/utils/next-id.helper';
 
 /**
  * Tipos de notificación
@@ -93,8 +94,11 @@ export class NotificacionesService {
         throw new NotFoundException(`Usuario ${input.idUsuarioDestino} no encontrado`);
       }
 
+      const nextId = await getNextTableId(this.prisma, 'notificaciones', 'id_notificacion');
+
       const notificacion = await this.prisma.notificaciones.create({
         data: {
+          id_notificacion: nextId,
           id_usuario: input.idUsuarioDestino,
           tipo_notificacion: input.tipo,
           titulo: input.titulo,
@@ -109,7 +113,9 @@ export class NotificacionesService {
         },
       });
 
-      this.logger.log(`📬 Notificación creada para usuario ${input.idUsuarioDestino}: ${input.titulo}`);
+      this.logger.log(
+        `📬 Notificación creada para usuario ${input.idUsuarioDestino}: ${input.titulo}`,
+      );
 
       return {
         success: true,
@@ -117,8 +123,9 @@ export class NotificacionesService {
         mensaje: 'Notificación creada exitosamente',
       };
     } catch (error) {
-      this.logger.error(`Error creando notificación: ${error.message}`);
-      return { success: false, error: error.message };
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error creando notificación: ${msg}`);
+      return { success: false, error: msg };
     }
   }
 
@@ -130,7 +137,9 @@ export class NotificacionesService {
     input: Omit<CrearNotificacionInput, 'idUsuarioDestino'>,
   ): Promise<NotificacionResult> {
     try {
-      const notificaciones = idUsuarios.map((idUsuario) => ({
+      const baseId = await getNextTableId(this.prisma, 'notificaciones', 'id_notificacion');
+      const notificaciones = idUsuarios.map((idUsuario, idx) => ({
+        id_notificacion: baseId + idx,
         id_usuario: idUsuario,
         tipo_notificacion: input.tipo,
         titulo: input.titulo,
@@ -155,7 +164,7 @@ export class NotificacionesService {
         mensaje: `${idUsuarios.length} notificaciones creadas`,
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 
@@ -225,7 +234,7 @@ export class NotificacionesService {
 
       return { success: true, mensaje: 'Notificación marcada como leída' };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 
@@ -250,7 +259,7 @@ export class NotificacionesService {
         mensaje: `${result.count} notificaciones marcadas como leídas`,
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 
@@ -276,7 +285,7 @@ export class NotificacionesService {
 
       return { success: true, mensaje: 'Notificación eliminada' };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 
@@ -302,7 +311,7 @@ export class NotificacionesService {
         mensaje: `${result.count} notificaciones eliminadas`,
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 
@@ -436,4 +445,3 @@ export class NotificacionesService {
     });
   }
 }
-

@@ -1,15 +1,16 @@
 import { Injectable } from '@nestjs/common';
+import { getNextTableId } from '../../common/utils/next-id.helper';
 import { PrismaService } from '../../database/prisma.service';
 import {
-    CreateGastoOrdenData,
-    IGastosOrdenRepository,
-    UpdateGastoOrdenData,
+  CreateGastoOrdenData,
+  IGastosOrdenRepository,
+  UpdateGastoOrdenData,
 } from '../domain/gastos-orden.repository.interface';
 
 /**
  * Implementación Prisma del repositorio de gastos de orden
  * Tabla 13/14 - FASE 3
- * 
+ *
  * Relaciones incluidas:
  * - ordenes_servicio: CASCADE
  * - empleados: generado_por
@@ -46,8 +47,11 @@ export class PrismaGastosOrdenRepository implements IGastosOrdenRepository {
   };
 
   async create(data: CreateGastoOrdenData): Promise<any> {
+    const nextId = await getNextTableId(this.prisma, 'gastos_orden', 'id_gasto');
+
     return this.prisma.gastos_orden.create({
       data: {
+        id_gasto: nextId,
         id_orden_servicio: data.idOrdenServicio,
         tipo_gasto: data.tipoGasto as any,
         descripcion: data.descripcion,
@@ -99,16 +103,20 @@ export class PrismaGastosOrdenRepository implements IGastosOrdenRepository {
     if (data.justificacion !== undefined) updateData.justificacion = data.justificacion;
     if (data.valor !== undefined) updateData.valor = data.valor;
     if (data.tieneComprobante !== undefined) updateData.tiene_comprobante = data.tieneComprobante;
-    if (data.numeroComprobante !== undefined) updateData.numero_comprobante = data.numeroComprobante;
+    if (data.numeroComprobante !== undefined)
+      updateData.numero_comprobante = data.numeroComprobante;
     if (data.proveedor !== undefined) updateData.proveedor = data.proveedor;
     if (data.rutaComprobante !== undefined) updateData.ruta_comprobante = data.rutaComprobante;
-    if (data.requiereAprobacion !== undefined) updateData.requiere_aprobacion = data.requiereAprobacion;
+    if (data.requiereAprobacion !== undefined)
+      updateData.requiere_aprobacion = data.requiereAprobacion;
     if (data.estadoAprobacion !== undefined) updateData.estado_aprobacion = data.estadoAprobacion;
-    if (data.observacionesAprobacion !== undefined) updateData.observaciones_aprobacion = data.observacionesAprobacion;
+    if (data.observacionesAprobacion !== undefined)
+      updateData.observaciones_aprobacion = data.observacionesAprobacion;
     if (data.fechaGasto !== undefined) updateData.fecha_gasto = new Date(data.fechaGasto);
     if (data.generadoPor !== undefined) updateData.generado_por = data.generadoPor;
     if (data.aprobadoPor !== undefined) updateData.aprobado_por = data.aprobadoPor;
-    if (data.fechaAprobacion !== undefined) updateData.fecha_aprobacion = new Date(data.fechaAprobacion);
+    if (data.fechaAprobacion !== undefined)
+      updateData.fecha_aprobacion = new Date(data.fechaAprobacion);
     if (data.observaciones !== undefined) updateData.observaciones = data.observaciones;
     if (data.modificadoPor !== undefined) updateData.modificado_por = data.modificadoPor;
 

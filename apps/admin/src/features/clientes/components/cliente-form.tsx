@@ -1,20 +1,14 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Formulario de Cliente (Crear/Editar)
- * 
+ *
  * REFACTORIZADO: Ahora permite crear persona + cliente en un solo formulario
  */
 
 'use client';
 
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -35,13 +29,17 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { getCuentasEmail, type CuentaEmail } from '@/features/cuentas-email/api/cuentas-email.service';
+import {
+  getCuentasEmail,
+  type CuentaEmail,
+} from '@/features/cuentas-email/api/cuentas-email.service';
 import { useAsesoresSelector } from '@/features/empleados/hooks/use-empleados';
 import { useFirmasAdministrativas } from '@/features/firmas-administrativas';
 import { useToast } from '@/hooks/use-toast';
 import type { ClientePrincipalSelector } from '@/types/clientes';
 import {
   CreateClienteDto,
+  UpdateClienteDto,
   PERIODICIDAD_LABELS,
   PeriodicidadMantenimientoEnum,
   TIPO_CLIENTE_LABELS,
@@ -51,10 +49,24 @@ import {
 } from '@/types/clientes';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, ExternalLink, Link, Loader2, Mail, MapPin, Navigation, Plus, Save, Star, Trash2, User } from 'lucide-react';
+import {
+  ArrowLeft,
+  Building2,
+  ExternalLink,
+  Link,
+  Loader2,
+  Mail,
+  MapPin,
+  Navigation,
+  Plus,
+  Save,
+  Star,
+  Trash2,
+  User,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { getClientesPrincipales } from '../api/clientes.service';
 import { useCliente, useCreateCliente, useUpdateCliente } from '../hooks/use-clientes';
@@ -75,75 +87,80 @@ const TIPO_PERSONA_LABELS: Record<TipoPersonaEnum, string> = {
 };
 
 // Schema de validación Zod - NUEVO con datos de persona
-const clienteFormSchema = z.object({
-  // ===== DATOS DE PERSONA =====
-  tipo_identificacion: z.nativeEnum(TipoIdentificacionEnum),
-  numero_identificacion: z.string().min(5, 'El documento debe tener al menos 5 caracteres'),
-  tipo_persona: z.nativeEnum(TipoPersonaEnum),
-  // Persona Natural
-  primer_nombre: z.string().optional(),
-  segundo_nombre: z.string().optional(),
-  primer_apellido: z.string().optional(),
-  segundo_apellido: z.string().optional(),
-  // Persona Jurídica
-  razon_social: z.string().optional(),
-  nombre_comercial: z.string().optional(),
-  representante_legal: z.string().optional(),
-  cedula_representante: z.string().optional(),
-  // Contacto
-  email_principal: z.string().email('Email inválido').optional().or(z.literal('')),
-  telefono_principal: z.string().optional(),
-  celular: z.string().optional(),
-  direccion_principal: z.string().optional(),
-  url_ubicacion: z.string().optional(),
-  ciudad: z.string().optional(),
-  departamento: z.string().optional(),
+const clienteFormSchema = z
+  .object({
+    // ===== DATOS DE PERSONA =====
+    tipo_identificacion: z.nativeEnum(TipoIdentificacionEnum),
+    numero_identificacion: z.string().min(5, 'El documento debe tener al menos 5 caracteres'),
+    tipo_persona: z.nativeEnum(TipoPersonaEnum),
+    // Persona Natural
+    primer_nombre: z.string().optional(),
+    segundo_nombre: z.string().optional(),
+    primer_apellido: z.string().optional(),
+    segundo_apellido: z.string().optional(),
+    // Persona Jurídica
+    razon_social: z.string().optional(),
+    nombre_comercial: z.string().optional(),
+    representante_legal: z.string().optional(),
+    cedula_representante: z.string().optional(),
+    // Contacto
+    email_principal: z.string().email('Email inválido').optional().or(z.literal('')),
+    telefono_principal: z.string().optional(),
+    celular: z.string().optional(),
+    direccion_principal: z.string().optional(),
+    url_ubicacion: z.string().optional(),
+    ciudad: z.string().optional(),
+    departamento: z.string().optional(),
 
-  // ===== DATOS DE CLIENTE =====
-  tipo_cliente: z.nativeEnum(TipoClienteEnum),
-  periodicidad_mantenimiento: z.nativeEnum(PeriodicidadMantenimientoEnum).optional(),
+    // ===== DATOS DE CLIENTE =====
+    tipo_cliente: z.nativeEnum(TipoClienteEnum),
+    periodicidad_mantenimiento: z.nativeEnum(PeriodicidadMantenimientoEnum).optional(),
 
-  // Configuración comercial
-  descuento_autorizado: z.coerce.number().min(0).max(100).optional(),
-  tiene_credito: z.boolean().optional(),
-  limite_credito: z.coerce.number().min(0).optional(),
-  dias_credito: z.coerce.number().min(0).optional(),
+    // Configuración comercial
+    descuento_autorizado: z.coerce.number<number>().min(0).max(100).optional(),
+    tiene_credito: z.boolean().optional(),
+    limite_credito: z.coerce.number<number>().min(0).optional(),
+    dias_credito: z.coerce.number<number>().min(0).optional(),
 
-  // Estado
-  cliente_activo: z.boolean().optional(),
-  tiene_acceso_portal: z.boolean().optional(),
+    // Estado
+    cliente_activo: z.boolean().optional(),
+    tiene_acceso_portal: z.boolean().optional(),
 
-  // Observaciones
-  observaciones_servicio: z.string().optional(),
-  requisitos_especiales: z.string().optional(),
+    // Observaciones
+    observaciones_servicio: z.string().optional(),
+    requisitos_especiales: z.string().optional(),
 
-  // Firma Administrativa (opcional)
-  id_firma_administrativa: z.number().nullable().optional(),
+    // Firma Administrativa (opcional)
+    id_firma_administrativa: z.number().nullable().optional(),
 
-  // ✅ MULTI-ASESOR: Asesor asignado
-  id_asesor_asignado: z.number().nullable().optional(),
+    // ✅ MULTI-ASESOR: Asesor asignado
+    id_asesor_asignado: z.number().nullable().optional(),
 
-  // ✅ MULTI-EMAIL: Cuenta de email para envío de informes
-  id_cuenta_email_remitente: z.number().nullable().optional(),
+    // ✅ MULTI-EMAIL: Cuenta de email para envío de informes
+    id_cuenta_email_remitente: z.number().nullable().optional(),
 
-  // ✅ 24-FEB-2026: Multi-email - Correos adicionales separados por ';;'
-  emails_notificacion: z.string().optional(),
+    // ✅ 24-FEB-2026: Multi-email - Correos adicionales separados por ';;'
+    emails_notificacion: z.string().optional(),
 
-  // ✅ MULTI-SEDE (09-Feb-2026)
-  es_cliente_principal: z.boolean().optional(),
-  id_cliente_principal: z.number().nullable().optional(),
-  nombre_sede: z.string().optional(),
-}).refine((data) => {
-  // Validar que persona jurídica tenga razón social
-  if (data.tipo_persona === TipoPersonaEnum.JURIDICA) {
-    return data.razon_social && data.razon_social.length >= 3;
-  }
-  // Validar que persona natural tenga nombres
-  return data.primer_nombre && data.primer_apellido;
-}, {
-  message: 'Complete los datos obligatorios según el tipo de persona',
-  path: ['razon_social'],
-});
+    // ✅ MULTI-SEDE (09-Feb-2026)
+    es_cliente_principal: z.boolean().optional(),
+    id_cliente_principal: z.number().nullable().optional(),
+    nombre_sede: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      // Validar que persona jurídica tenga razón social
+      if (data.tipo_persona === TipoPersonaEnum.JURIDICA) {
+        return data.razon_social && data.razon_social.length >= 3;
+      }
+      // Validar que persona natural tenga nombres
+      return data.primer_nombre && data.primer_apellido;
+    },
+    {
+      message: 'Complete los datos obligatorios según el tipo de persona',
+      path: ['razon_social'],
+    },
+  );
 
 type ClienteFormValues = z.infer<typeof clienteFormSchema>;
 
@@ -157,17 +174,16 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
   const { toast } = useToast();
 
   // Queries/Mutations
-  const { data: cliente, isLoading: isLoadingCliente } = useCliente(
-    clienteId ?? 0,
-    { enabled: mode === 'editar' && !!clienteId }
-  );
+  const { data: cliente, isLoading: isLoadingCliente } = useCliente(clienteId ?? 0, {
+    enabled: mode === 'editar' && !!clienteId,
+  });
   const createMutation = useCreateCliente();
   const updateMutation = useUpdateCliente();
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   // Form
-  const form = useForm<ClienteFormValues>({
+  const form = useForm({
     resolver: zodResolver(clienteFormSchema),
     defaultValues: {
       // Persona
@@ -234,84 +250,105 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
     staleTime: 0,
   });
 
-  const tipoPersona = form.watch('tipo_persona');
-  const esSede = form.watch('id_cliente_principal');
+  const tipoPersona = useWatch({ control: form.control, name: 'tipo_persona' });
+  const esSede = useWatch({ control: form.control, name: 'id_cliente_principal' });
+  const esClientePrincipal = useWatch({ control: form.control, name: 'es_cliente_principal' });
   const [sedeAutoFilled, setSedeAutoFilled] = useState(false);
 
   // ✅ 24-FEB-2026: Estado local para correos adicionales (UI individual por correo)
-  const [emailsList, setEmailsList] = useState<string[]>([]);
+  const clienteKey = mode === 'editar' && cliente ? cliente.id_cliente : 0;
+  const [emailsState, setEmailsState] = useState<{ key: number; items: string[] } | null>(null);
+  const emailsList = useMemo<string[]>(() => {
+    if (emailsState && emailsState.key === clienteKey) return emailsState.items;
+    const rawEmails = mode === 'editar' && cliente ? (cliente.emails_notificacion ?? '') : '';
+    return rawEmails ? rawEmails.split(';;').filter((e: string) => e.trim() !== '') : [];
+  }, [emailsState, clienteKey, mode, cliente]);
 
   // Sincronizar emailsList → campo oculto del formulario (join con ';;')
-  const syncEmailsToForm = useCallback((emails: string[]) => {
-    const cleaned = emails.filter(e => e.trim() !== '');
-    form.setValue('emails_notificacion', cleaned.join(';;'));
-  }, [form]);
+  const syncEmailsToForm = useCallback(
+    (emails: string[]) => {
+      const cleaned = emails.filter((e) => e.trim() !== '');
+      form.setValue('emails_notificacion', cleaned.join(';;'));
+    },
+    [form],
+  );
 
   const handleAddEmail = () => {
-    setEmailsList(prev => [...prev, '']);
+    setEmailsState({ key: clienteKey, items: [...emailsList, ''] });
   };
 
   const handleRemoveEmail = (index: number) => {
-    setEmailsList(prev => {
-      const next = prev.filter((_, i) => i !== index);
-      syncEmailsToForm(next);
-      return next;
-    });
+    const next = emailsList.filter((_, i) => i !== index);
+    syncEmailsToForm(next);
+    setEmailsState({ key: clienteKey, items: next });
   };
 
   const handleEmailChange = (index: number, value: string) => {
-    setEmailsList(prev => {
-      const next = [...prev];
-      next[index] = value;
-      syncEmailsToForm(next);
-      return next;
-    });
+    const next = [...emailsList];
+    next[index] = value;
+    syncEmailsToForm(next);
+    setEmailsState({ key: clienteKey, items: next });
   };
 
   // ✅ MULTI-SEDE: Auto-fill cuando se selecciona un cliente principal
-  const handleSelectPrincipal = useCallback((idPrincipal: number | null) => {
-    form.setValue('id_cliente_principal', idPrincipal);
-    if (!idPrincipal) {
-      setSedeAutoFilled(false);
-      return;
-    }
-    const principal = (clientesPrincipales ?? []).find((c: ClientePrincipalSelector) => c.id_cliente === idPrincipal);
-    if (!principal?.persona) return;
-    const p = principal.persona;
-    // Auto-fill persona data (read-only para sedes)
-    form.setValue('tipo_identificacion', (p.tipo_identificacion as TipoIdentificacionEnum) || TipoIdentificacionEnum.NIT);
-    form.setValue('numero_identificacion', p.numero_identificacion || '');
-    form.setValue('tipo_persona', (p.tipo_persona as TipoPersonaEnum) || TipoPersonaEnum.JURIDICA);
-    form.setValue('razon_social', p.razon_social || '');
-    form.setValue('nombre_comercial', p.nombre_comercial || '');
-    form.setValue('representante_legal', p.representante_legal || '');
-    form.setValue('cedula_representante', p.cedula_representante || '');
-    form.setValue('email_principal', p.email_principal || '');
-    form.setValue('telefono_principal', p.telefono_principal || '');
-    form.setValue('celular', p.celular || '');
-    form.setValue('direccion_principal', p.direccion_principal || '');
-    form.setValue('url_ubicacion', (p as any).url_ubicacion || '');
-    form.setValue('ciudad', p.ciudad || '');
-    form.setValue('departamento', p.departamento || '');
-    // Auto-fill client data
-    form.setValue('tipo_cliente', principal.tipo_cliente);
-    form.setValue('periodicidad_mantenimiento', principal.periodicidad_mantenimiento ?? undefined);
-    form.setValue('descuento_autorizado', Number(principal.descuento_autorizado) || 0);
-    form.setValue('tiene_credito', principal.tiene_credito ?? false);
-    form.setValue('limite_credito', Number(principal.limite_credito) || 0);
-    form.setValue('dias_credito', Number(principal.dias_credito) || 0);
-    form.setValue('id_cuenta_email_remitente', principal.id_cuenta_email_remitente ?? null);
-    // ✅ FIX 03-MAR-2026: Heredar emails_notificacion del principal al crear sede
-    const principalEmails = principal.emails_notificacion ?? '';
-    form.setValue('emails_notificacion', principalEmails);
-    if (principalEmails) {
-      setEmailsList(principalEmails.split(';;').filter((e: string) => e.trim() !== ''));
-    } else {
-      setEmailsList([]);
-    }
-    form.setValue('es_cliente_principal', false);
-    setSedeAutoFilled(true);
-  }, [clientesPrincipales, form]);
+  const handleSelectPrincipal = useCallback(
+    (idPrincipal: number | null) => {
+      form.setValue('id_cliente_principal', idPrincipal);
+      if (!idPrincipal) {
+        setSedeAutoFilled(false);
+        return;
+      }
+      const principal = (clientesPrincipales ?? []).find(
+        (c: ClientePrincipalSelector) => c.id_cliente === idPrincipal,
+      );
+      if (!principal?.persona) return;
+      const p = principal.persona;
+      // Auto-fill persona data (read-only para sedes)
+      form.setValue(
+        'tipo_identificacion',
+        (p.tipo_identificacion as TipoIdentificacionEnum) || TipoIdentificacionEnum.NIT,
+      );
+      form.setValue('numero_identificacion', p.numero_identificacion || '');
+      form.setValue(
+        'tipo_persona',
+        (p.tipo_persona as TipoPersonaEnum) || TipoPersonaEnum.JURIDICA,
+      );
+      form.setValue('razon_social', p.razon_social || '');
+      form.setValue('nombre_comercial', p.nombre_comercial || '');
+      form.setValue('representante_legal', p.representante_legal || '');
+      form.setValue('cedula_representante', p.cedula_representante || '');
+      form.setValue('email_principal', p.email_principal || '');
+      form.setValue('telefono_principal', p.telefono_principal || '');
+      form.setValue('celular', p.celular || '');
+      form.setValue('direccion_principal', p.direccion_principal || '');
+      form.setValue('url_ubicacion', p.url_ubicacion || '');
+      form.setValue('ciudad', p.ciudad || '');
+      form.setValue('departamento', p.departamento || '');
+      // Auto-fill client data
+      form.setValue('tipo_cliente', principal.tipo_cliente);
+      form.setValue(
+        'periodicidad_mantenimiento',
+        principal.periodicidad_mantenimiento ?? undefined,
+      );
+      form.setValue('descuento_autorizado', Number(principal.descuento_autorizado) || 0);
+      form.setValue('tiene_credito', principal.tiene_credito ?? false);
+      form.setValue('limite_credito', Number(principal.limite_credito) || 0);
+      form.setValue('dias_credito', Number(principal.dias_credito) || 0);
+      form.setValue('id_cuenta_email_remitente', principal.id_cuenta_email_remitente ?? null);
+      // ✅ FIX 03-MAR-2026: Heredar emails_notificacion del principal al crear sede
+      const principalEmails = principal.emails_notificacion ?? '';
+      form.setValue('emails_notificacion', principalEmails);
+      setEmailsState({
+        key: clienteKey,
+        items: principalEmails
+          ? principalEmails.split(';;').filter((e: string) => e.trim() !== '')
+          : [],
+      });
+      form.setValue('es_cliente_principal', false);
+      setSedeAutoFilled(true);
+    },
+    [clientesPrincipales, clienteKey, form],
+  );
 
   // Cargar datos del cliente en modo editar
   useEffect(() => {
@@ -319,9 +356,10 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
       const persona = cliente.persona;
       form.reset({
         // Persona (solo lectura en editar)
-        tipo_identificacion: persona?.tipo_identificacion as TipoIdentificacionEnum || TipoIdentificacionEnum.NIT,
+        tipo_identificacion:
+          (persona?.tipo_identificacion as TipoIdentificacionEnum) || TipoIdentificacionEnum.NIT,
         numero_identificacion: persona?.numero_identificacion || '',
-        tipo_persona: persona?.tipo_persona as TipoPersonaEnum || TipoPersonaEnum.JURIDICA,
+        tipo_persona: (persona?.tipo_persona as TipoPersonaEnum) || TipoPersonaEnum.JURIDICA,
         primer_nombre: persona?.primer_nombre || '',
         segundo_nombre: persona?.segundo_nombre || '',
         primer_apellido: persona?.primer_apellido || '',
@@ -333,15 +371,21 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         email_principal: persona?.email_principal || '',
         telefono_principal: persona?.telefono_principal || '',
         celular: persona?.celular || '',
-        direccion_principal: persona?.direccion_principal && !persona.direccion_principal.startsWith('http')
-          ? persona.direccion_principal
-          : (persona?.direccion_principal && !(persona as any)?.url_ubicacion ? '' : persona?.direccion_principal || ''),
-        url_ubicacion: (persona as any)?.url_ubicacion || (persona?.direccion_principal?.startsWith('http') ? persona.direccion_principal : ''),
+        direccion_principal:
+          persona?.direccion_principal && !persona.direccion_principal.startsWith('http')
+            ? persona.direccion_principal
+            : persona?.direccion_principal && !persona?.url_ubicacion
+              ? ''
+              : persona?.direccion_principal || '',
+        url_ubicacion:
+          persona?.url_ubicacion ||
+          (persona?.direccion_principal?.startsWith('http') ? persona.direccion_principal : ''),
         ciudad: persona?.ciudad || 'Bogotá',
         departamento: persona?.departamento || '',
         // Cliente
         tipo_cliente: cliente.tipo_cliente,
-        periodicidad_mantenimiento: cliente.periodicidad_mantenimiento ?? PeriodicidadMantenimientoEnum.SIN_DEFINIR,
+        periodicidad_mantenimiento:
+          cliente.periodicidad_mantenimiento ?? PeriodicidadMantenimientoEnum.SIN_DEFINIR,
         descuento_autorizado: cliente.descuento_autorizado ?? 0,
         tiene_credito: cliente.tiene_credito ?? false,
         limite_credito: cliente.limite_credito ?? 0,
@@ -350,23 +394,15 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         tiene_acceso_portal: cliente.tiene_acceso_portal ?? false,
         observaciones_servicio: cliente.observaciones_servicio ?? '',
         requisitos_especiales: cliente.requisitos_especiales ?? '',
-        emails_notificacion: (cliente as any).emails_notificacion ?? '',
+        emails_notificacion: cliente.emails_notificacion ?? '',
         id_firma_administrativa: cliente.id_firma_administrativa ?? null,
         id_asesor_asignado: cliente.id_asesor_asignado ?? null,
-        id_cuenta_email_remitente: (cliente as any).id_cuenta_email_remitente ?? null,
+        id_cuenta_email_remitente: cliente.id_cuenta_email_remitente ?? null,
         // ✅ MULTI-SEDE: cargar campos de sede en edición
         es_cliente_principal: cliente.es_cliente_principal ?? false,
         id_cliente_principal: cliente.id_cliente_principal ?? null,
         nombre_sede: cliente.nombre_sede ?? '',
       });
-
-      // ✅ 24-FEB-2026: Sincronizar emailsList desde el campo ';;' separado
-      const rawEmails = (cliente as any).emails_notificacion ?? '';
-      if (rawEmails) {
-        setEmailsList(rawEmails.split(';;').filter((e: string) => e.trim() !== ''));
-      } else {
-        setEmailsList([]);
-      }
     }
   }, [cliente, mode, form]);
 
@@ -375,7 +411,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
     try {
       if (mode === 'crear') {
         // Construir payload con persona anidada
-        const payload = {
+        const payload: CreateClienteDto = {
           persona: {
             tipo_identificacion: values.tipo_identificacion,
             numero_identificacion: values.numero_identificacion,
@@ -388,11 +424,17 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
             nombre_comercial: values.nombre_comercial || undefined,
             representante_legal: values.representante_legal || undefined,
             cedula_representante: values.cedula_representante || undefined,
-            email_principal: values.email_principal && values.email_principal.trim() !== '' ? values.email_principal : undefined,
+            email_principal:
+              values.email_principal && values.email_principal.trim() !== ''
+                ? values.email_principal
+                : undefined,
             telefono_principal: values.telefono_principal || undefined,
             celular: values.celular || undefined,
             direccion_principal: values.direccion_principal || undefined,
-            url_ubicacion: values.url_ubicacion && values.url_ubicacion.trim() !== '' ? values.url_ubicacion.trim() : undefined,
+            url_ubicacion:
+              values.url_ubicacion && values.url_ubicacion.trim() !== ''
+                ? values.url_ubicacion.trim()
+                : undefined,
             ciudad: values.ciudad || 'Bogotá',
             departamento: values.departamento || undefined,
           },
@@ -408,22 +450,22 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           requisitos_especiales: values.requisitos_especiales || undefined,
           id_firma_administrativa: values.id_firma_administrativa || undefined,
           id_asesor_asignado: values.id_asesor_asignado || undefined,
-          id_cuenta_email_remitente: values.id_cuenta_email_remitente,
+          id_cuenta_email_remitente: values.id_cuenta_email_remitente ?? undefined,
           // ✅ FIX 03-MAR-2026: Incluir emails_notificacion en creación (heredados del principal para sedes)
           emails_notificacion: emailsList.length > 0 ? emailsList.join(';;') : undefined,
         };
 
         // ✅ MULTI-SEDE: incluir campos de sede
         if (values.es_cliente_principal) {
-          (payload as any).es_cliente_principal = true;
+          payload.es_cliente_principal = true;
         }
         if (values.id_cliente_principal) {
-          (payload as any).id_cliente_principal = values.id_cliente_principal;
-          (payload as any).nombre_sede = values.nombre_sede;
+          payload.id_cliente_principal = values.id_cliente_principal;
+          payload.nombre_sede = values.nombre_sede;
         }
 
         console.log('[DEBUG] Payload a enviar:', JSON.stringify(payload, null, 2));
-        await createMutation.mutateAsync(payload as CreateClienteDto);
+        await createMutation.mutateAsync(payload);
         // Invalidar cache de principales para que aparezcan en el selector
         queryClient.invalidateQueries({ queryKey: ['clientes-principales'] });
         toast({
@@ -432,7 +474,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         });
       } else if (clienteId) {
         // ✅ FIX 02-FEB-2026: Incluir datos de persona editables (contacto)
-        const updateData: Record<string, any> = {
+        const updateData: UpdateClienteDto = {
           tipo_cliente: values.tipo_cliente,
           periodicidad_mantenimiento: values.periodicidad_mantenimiento ?? undefined,
           descuento_autorizado: values.descuento_autorizado,
@@ -460,11 +502,17 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
             nombre_comercial: values.nombre_comercial || undefined,
             representante_legal: values.representante_legal || undefined,
             cedula_representante: values.cedula_representante || undefined,
-            email_principal: values.email_principal && values.email_principal.trim() !== '' ? values.email_principal : undefined,
+            email_principal:
+              values.email_principal && values.email_principal.trim() !== ''
+                ? values.email_principal
+                : undefined,
             telefono_principal: values.telefono_principal || undefined,
             celular: values.celular || undefined,
             direccion_principal: values.direccion_principal || undefined,
-            url_ubicacion: values.url_ubicacion && values.url_ubicacion.trim() !== '' ? values.url_ubicacion.trim() : undefined,
+            url_ubicacion:
+              values.url_ubicacion && values.url_ubicacion.trim() !== ''
+                ? values.url_ubicacion.trim()
+                : undefined,
             ciudad: values.ciudad || undefined,
             departamento: values.departamento || undefined,
           },
@@ -477,7 +525,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
 
         if (idPrincipalNuevo !== idPrincipalOriginal) {
           updateData.id_cliente_principal = idPrincipalNuevo;
-          updateData.es_cliente_principal = idPrincipalNuevo ? false : values.es_cliente_principal ?? false;
+          updateData.es_cliente_principal = idPrincipalNuevo
+            ? false
+            : (values.es_cliente_principal ?? false);
           updateData.nombre_sede = idPrincipalNuevo ? nombreSedeNuevo : null;
         } else if (idPrincipalNuevo) {
           // Principal no cambió pero nombre de sede pudo cambiar
@@ -487,7 +537,10 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         }
 
         // Si se marcó/desmarcó como cliente principal (sin ser sede)
-        if (!idPrincipalNuevo && values.es_cliente_principal !== (cliente?.es_cliente_principal ?? false)) {
+        if (
+          !idPrincipalNuevo &&
+          values.es_cliente_principal !== (cliente?.es_cliente_principal ?? false)
+        ) {
           updateData.es_cliente_principal = values.es_cliente_principal;
         }
         await updateMutation.mutateAsync({ id: clienteId, data: updateData });
@@ -506,7 +559,10 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
       let errorMessage = 'No se pudo guardar el cliente';
 
       if (error && typeof error === 'object') {
-        const axiosError = error as { response?: { data?: { message?: string } }; message?: string };
+        const axiosError = error as {
+          response?: { data?: { message?: string } };
+          message?: string;
+        };
         errorMessage = axiosError.response?.data?.message || axiosError.message || errorMessage;
       }
 
@@ -538,7 +594,6 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-
         {/* ===== SECCIÓN SEDE: Configuración de sede en modo editar ===== */}
         {mode === 'editar' && (
           <Card className="border-blue-200 bg-blue-50/30">
@@ -589,7 +644,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
               />
 
               {/* Selector: Es Sede de... */}
-              {!form.watch('es_cliente_principal') && (
+              {!esClientePrincipal && (
                 <div className="space-y-3">
                   <FormField
                     control={form.control}
@@ -621,17 +676,15 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                             {(clientesPrincipales ?? [])
                               .filter((cp: ClientePrincipalSelector) => cp.id_cliente !== clienteId)
                               .map((cp: ClientePrincipalSelector) => (
-                                <SelectItem
-                                  key={cp.id_cliente}
-                                  value={cp.id_cliente.toString()}
-                                >
+                                <SelectItem key={cp.id_cliente} value={cp.id_cliente.toString()}>
                                   {cp.nombre} — NIT: {cp.nit} ({cp.total_sedes} sedes)
                                 </SelectItem>
                               ))}
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          Selecciona un cliente principal para convertir este cliente en una de sus sedes.
+                          Selecciona un cliente principal para convertir este cliente en una de sus
+                          sedes.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -668,14 +721,18 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   {/* Info: desvinculando */}
                   {cliente?.id_cliente_principal && !esSede && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                      <strong>Atenci&oacute;n:</strong> Al guardar sin un cliente principal seleccionado, este cliente dejar&aacute; de ser sede y se convertir&aacute; en un cliente independiente.
+                      <strong>Atenci&oacute;n:</strong> Al guardar sin un cliente principal
+                      seleccionado, este cliente dejar&aacute; de ser sede y se convertir&aacute; en
+                      un cliente independiente.
                     </div>
                   )}
 
                   {/* Info: convirtiendo */}
                   {!cliente?.id_cliente_principal && esSede && (
                     <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-                      <strong>Conversi&oacute;n a sede:</strong> Al guardar, este cliente quedar&aacute; vinculado como sede del cliente principal seleccionado. Sus equipos, &oacute;rdenes e historial se mantienen intactos.
+                      <strong>Conversi&oacute;n a sede:</strong> Al guardar, este cliente
+                      quedar&aacute; vinculado como sede del cliente principal seleccionado. Sus
+                      equipos, &oacute;rdenes e historial se mantienen intactos.
                     </div>
                   )}
                 </div>
@@ -693,7 +750,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 Tipo de Cliente
               </CardTitle>
               <CardDescription>
-                Define si este cliente es principal (corporativo con sedes) o es una sede de un cliente existente
+                Define si este cliente es principal (corporativo con sedes) o es una sede de un
+                cliente existente
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -730,7 +788,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
               />
 
               {/* Es Sede de (selector de principal) */}
-              {!form.watch('es_cliente_principal') && (
+              {!esClientePrincipal && (
                 <div className="space-y-3">
                   <FormField
                     control={form.control}
@@ -757,17 +815,15 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <SelectContent>
                             <SelectItem value="none">No es sede (cliente independiente)</SelectItem>
                             {(clientesPrincipales ?? []).map((cp: ClientePrincipalSelector) => (
-                              <SelectItem
-                                key={cp.id_cliente}
-                                value={cp.id_cliente.toString()}
-                              >
+                              <SelectItem key={cp.id_cliente} value={cp.id_cliente.toString()}>
                                 {cp.nombre} — NIT: {cp.nit} ({cp.total_sedes} sedes)
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          Si seleccionas un principal, todos los datos se heredan automáticamente. Solo necesitas definir el nombre de la sede.
+                          Si seleccionas un principal, todos los datos se heredan automáticamente.
+                          Solo necesitas definir el nombre de la sede.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -805,8 +861,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
               {/* Info banner cuando es sede */}
               {sedeAutoFilled && esSede && (
                 <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-                  <strong>Datos heredados del cliente principal.</strong> Los campos de persona y configuración se han llenado automáticamente.
-                  Puedes ajustar la configuración comercial si esta sede tiene condiciones diferentes.
+                  <strong>Datos heredados del cliente principal.</strong> Los campos de persona y
+                  configuración se han llenado automáticamente. Puedes ajustar la configuración
+                  comercial si esta sede tiene condiciones diferentes.
                 </div>
               )}
             </CardContent>
@@ -822,7 +879,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
               ) : (
                 <User className="h-5 w-5" />
               )}
-              Información del {tipoPersona === TipoPersonaEnum.JURIDICA ? 'Representante / Empresa' : 'Cliente'}
+              Información del{' '}
+              {tipoPersona === TipoPersonaEnum.JURIDICA ? 'Representante / Empresa' : 'Cliente'}
             </CardTitle>
             <CardDescription className="flex items-center justify-between">
               <span>
@@ -836,7 +894,6 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-
             {/* Tipo de persona y Tipo de documento */}
             <div className="grid md:grid-cols-2 gap-4">
               <FormField
@@ -845,11 +902,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo de Persona *</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={!!esSede}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value} disabled={!!esSede}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar tipo" />
@@ -874,11 +927,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo de Documento *</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={!!esSede}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value} disabled={!!esSede}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar tipo" />
@@ -906,11 +955,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 <FormItem>
                   <FormLabel>Número de Documento *</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="Ej: 900123456-7"
-                      {...field}
-                      disabled={!!esSede}
-                    />
+                    <Input placeholder="Ej: 900123456-7" {...field} disabled={!!esSede} />
                   </FormControl>
                   <FormDescription>
                     {tipoPersona === TipoPersonaEnum.JURIDICA
@@ -974,11 +1019,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <FormItem>
                         <FormLabel>Representante Legal</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="Nombre completo"
-                            {...field}
-                            disabled={!!esSede}
-                          />
+                          <Input placeholder="Nombre completo" {...field} disabled={!!esSede} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -992,11 +1033,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <FormItem>
                         <FormLabel>Cédula del Representante</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="Número de documento"
-                            {...field}
-                            disabled={!!esSede}
-                          />
+                          <Input placeholder="Número de documento" {...field} disabled={!!esSede} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1015,11 +1052,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <FormItem>
                         <FormLabel>Primer Nombre *</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="Nombre"
-                            {...field}
-                            disabled={!!esSede}
-                          />
+                          <Input placeholder="Nombre" {...field} disabled={!!esSede} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1033,11 +1066,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <FormItem>
                         <FormLabel>Segundo Nombre</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="Segundo nombre"
-                            {...field}
-                            disabled={!!esSede}
-                          />
+                          <Input placeholder="Segundo nombre" {...field} disabled={!!esSede} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1053,11 +1082,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <FormItem>
                         <FormLabel>Primer Apellido *</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="Apellido"
-                            {...field}
-                            disabled={!!esSede}
-                          />
+                          <Input placeholder="Apellido" {...field} disabled={!!esSede} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1071,11 +1096,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <FormItem>
                         <FormLabel>Segundo Apellido</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="Segundo apellido"
-                            {...field}
-                            disabled={!!esSede}
-                          />
+                          <Input placeholder="Segundo apellido" {...field} disabled={!!esSede} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1096,11 +1117,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem>
                     <FormLabel>Email Principal</FormLabel>
                     <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="correo@empresa.com"
-                        {...field}
-                      />
+                      <Input type="email" placeholder="correo@empresa.com" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1114,10 +1131,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem>
                     <FormLabel>Teléfono Fijo</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="601 123 4567"
-                        {...field}
-                      />
+                      <Input placeholder="601 123 4567" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1144,7 +1158,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
 
               {emailsList.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic">
-                  No hay correos adicionales configurados. Presione &quot;Agregar Correo&quot; para añadir destinatarios.
+                  No hay correos adicionales configurados. Presione &quot;Agregar Correo&quot; para
+                  añadir destinatarios.
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -1174,7 +1189,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
               )}
 
               <p className="text-xs text-muted-foreground">
-                Al enviar informes, se enviarán al <strong>email principal</strong> + todos los correos adicionales aquí listados.
+                Al enviar informes, se enviarán al <strong>email principal</strong> + todos los
+                correos adicionales aquí listados.
               </p>
             </div>
 
@@ -1187,10 +1203,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem>
                     <FormLabel>Celular / WhatsApp</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="300 123 4567"
-                        {...field}
-                      />
+                      <Input placeholder="300 123 4567" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1204,10 +1217,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem>
                     <FormLabel>Ciudad</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="Cartagena"
-                        {...field}
-                      />
+                      <Input placeholder="Cartagena" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1221,10 +1231,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem>
                     <FormLabel>Departamento</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="Bolívar"
-                        {...field}
-                      />
+                      <Input placeholder="Bolívar" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1258,7 +1265,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                         />
                       </FormControl>
                       <FormDescription>
-                        Dirección física, número de inmueble, indicaciones de llegada o referencias visuales para el equipo técnico.
+                        Dirección física, número de inmueble, indicaciones de llegada o referencias
+                        visuales para el equipo técnico.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -1297,7 +1305,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           />
                         </FormControl>
                         <FormDescription>
-                          Enlace compartido de Google Maps, Waze, Apple Maps o coordenadas satelitales.
+                          Enlace compartido de Google Maps, Waze, Apple Maps o coordenadas
+                          satelitales.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -1313,9 +1322,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         <Card>
           <CardHeader>
             <CardTitle>Información del Cliente</CardTitle>
-            <CardDescription>
-              Configuración del servicio y clasificación
-            </CardDescription>
+            <CardDescription>Configuración del servicio y clasificación</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
@@ -1385,7 +1392,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormLabel>Firma Administrativa (Opcional)</FormLabel>
                   <Select
                     key={`firma-${field.value}`}
-                    onValueChange={(value) => field.onChange(value === 'none' ? null : parseInt(value))}
+                    onValueChange={(value) =>
+                      field.onChange(value === 'none' ? null : parseInt(value))
+                    }
                     value={field.value?.toString() || 'none'}
                   >
                     <FormControl>
@@ -1422,7 +1431,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormLabel>Asesor Asignado</FormLabel>
                   <Select
                     key={`asesor-${field.value}`}
-                    onValueChange={(value) => field.onChange(value === 'none' ? null : parseInt(value))}
+                    onValueChange={(value) =>
+                      field.onChange(value === 'none' ? null : parseInt(value))
+                    }
                     value={field.value?.toString() || 'none'}
                   >
                     <FormControl>
@@ -1433,10 +1444,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                     <SelectContent>
                       <SelectItem value="none">Sin asesor asignado</SelectItem>
                       {asesores.map((asesor) => (
-                        <SelectItem
-                          key={asesor.id_empleado}
-                          value={asesor.id_empleado.toString()}
-                        >
+                        <SelectItem key={asesor.id_empleado} value={asesor.id_empleado.toString()}>
                           {asesor.nombre_completo} ({asesor.cargo})
                         </SelectItem>
                       ))}
@@ -1462,7 +1470,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   </FormLabel>
                   <Select
                     key={`email-${field.value}`}
-                    onValueChange={(value) => field.onChange(value === 'none' ? null : parseInt(value))}
+                    onValueChange={(value) =>
+                      field.onChange(value === 'none' ? null : parseInt(value))
+                    }
                     value={field.value?.toString() || 'none'}
                   >
                     <FormControl>
@@ -1477,8 +1487,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           key={cuenta.id_cuenta_email}
                           value={cuenta.id_cuenta_email.toString()}
                         >
-                          {cuenta.nombre} ({cuenta.email})
-                          {cuenta.es_principal && ' ⭐'}
+                          {cuenta.nombre} ({cuenta.email}){cuenta.es_principal && ' ⭐'}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1497,9 +1506,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         <Card>
           <CardHeader>
             <CardTitle>Configuración Comercial</CardTitle>
-            <CardDescription>
-              Parámetros de descuento y crédito
-            </CardDescription>
+            <CardDescription>Parámetros de descuento y crédito</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
@@ -1517,7 +1524,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                         max={100}
                         step={0.01}
                         value={field.value ?? 0}
-                        onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -1537,7 +1546,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                         type="number"
                         min={0}
                         value={field.value ?? 0}
-                        onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseInt(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(e.target.value === '' ? 0 : parseInt(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -1555,15 +1566,10 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem className="flex items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
                       <FormLabel className="text-base">Tiene Crédito</FormLabel>
-                      <FormDescription>
-                        Permitir facturación a crédito
-                      </FormDescription>
+                      <FormDescription>Permitir facturación a crédito</FormDescription>
                     </div>
                     <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}
@@ -1581,7 +1587,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                         type="number"
                         min={0}
                         value={field.value ?? 0}
-                        onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -1607,15 +1615,10 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem className="flex items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
                       <FormLabel className="text-base">Cliente Activo</FormLabel>
-                      <FormDescription>
-                        El cliente puede recibir servicios
-                      </FormDescription>
+                      <FormDescription>El cliente puede recibir servicios</FormDescription>
                     </div>
                     <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}
@@ -1629,15 +1632,10 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem className="flex items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
                       <FormLabel className="text-base">Acceso Portal</FormLabel>
-                      <FormDescription>
-                        Puede acceder al portal de clientes
-                      </FormDescription>
+                      <FormDescription>Puede acceder al portal de clientes</FormDescription>
                     </div>
                     <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}
@@ -1697,7 +1695,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => clienteId ? router.push(`/clientes/${clienteId}`) : router.push('/clientes')}
+            onClick={() =>
+              clienteId ? router.push(`/clientes/${clienteId}`) : router.push('/clientes')
+            }
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Cancelar

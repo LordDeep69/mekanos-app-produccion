@@ -12,8 +12,14 @@ export class DetalleServiciosOrdenMapper {
       fechaInicioServicio: entity.fecha_inicio_servicio ?? undefined,
       fechaFinServicio: entity.fecha_fin_servicio ?? undefined,
       duracionServicioMinutos: entity.duracion_servicio_minutos ?? undefined,
-      precioUnitario: entity.precio_unitario instanceof Decimal ? entity.precio_unitario.toNumber() : entity.precio_unitario,
-      descuentoPorcentaje: entity.descuento_porcentaje instanceof Decimal ? entity.descuento_porcentaje.toNumber() : entity.descuento_porcentaje,
+      precioUnitario:
+        entity.precio_unitario instanceof Decimal
+          ? entity.precio_unitario.toNumber()
+          : entity.precio_unitario,
+      descuentoPorcentaje:
+        entity.descuento_porcentaje instanceof Decimal
+          ? entity.descuento_porcentaje.toNumber()
+          : entity.descuento_porcentaje,
       subtotal: entity.subtotal instanceof Decimal ? entity.subtotal.toNumber() : entity.subtotal,
       tieneGarantiaServicio: entity.tiene_garantia_servicio ?? undefined,
       mesesGarantiaServicio: entity.meses_garantia_servicio ?? undefined,
@@ -26,30 +32,33 @@ export class DetalleServiciosOrdenMapper {
       modificadoPor: entity.modificado_por ?? undefined,
     };
 
-    // ✅ Mapear relaciones si existen
-    if (entity.orden) {
+    // ✅ Mapear relaciones si existen (soporta nombres Prisma y alias legacy)
+    const ordenRel = entity.ordenes_servicio || entity.orden;
+    if (ordenRel) {
       dto.orden = {
-        idOrdenServicio: entity.orden.id_orden_servicio,
-        numeroOrden: entity.orden.numero_orden,
-        idCliente: entity.orden.id_cliente ?? undefined,
-        idEquipo: entity.orden.id_equipo ?? undefined,
+        idOrdenServicio: ordenRel.id_orden_servicio,
+        numeroOrden: ordenRel.numero_orden,
+        idCliente: ordenRel.id_cliente ?? undefined,
+        idEquipo: ordenRel.id_equipo ?? undefined,
       };
     }
 
-    if (entity.servicio) {
+    const servicioRel = entity.catalogo_servicios || entity.servicio;
+    if (servicioRel) {
       dto.servicio = {
-        idServicio: entity.servicio.id_servicio,
-        codigoServicio: entity.servicio.codigo_servicio,
-        nombreServicio: entity.servicio.nombre_servicio,
-        descripcion: entity.servicio.descripcion ?? undefined,
+        idServicio: servicioRel.id_servicio,
+        codigoServicio: servicioRel.codigo_servicio,
+        nombreServicio: servicioRel.nombre_servicio,
+        descripcion: servicioRel.descripcion ?? undefined,
       };
     }
 
-    if (entity.tecnico) {
+    const tecnicoRel = entity.empleados || entity.tecnico;
+    if (tecnicoRel) {
       dto.tecnico = {
-        idEmpleado: entity.tecnico.id_empleado,
-        idPersona: entity.tecnico.id_persona,
-        nombreCompleto: entity.tecnico.persona?.nombre_completo ?? undefined,
+        idEmpleado: tecnicoRel.id_empleado,
+        idPersona: tecnicoRel.id_persona,
+        nombreCompleto: tecnicoRel.persona?.nombre_completo ?? undefined,
       };
     }
 

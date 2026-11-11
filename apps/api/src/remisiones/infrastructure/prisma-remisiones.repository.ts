@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { getNextTableId } from '../../common/utils/next-id.helper';
 import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
@@ -48,12 +49,15 @@ export class PrismaRemisionesRepository {
         nombre_destinatario = tecnico?.persona?.nombre_completo;
       }
 
-      // Generate unique numero_remision
+      // Generate unique numero_remision & PK
       const timestamp = Date.now();
       const numero_remision = `REM-${timestamp}`;
+      const nextRemisionId = await getNextTableId(tx, 'remisiones', 'id_remision');
+      let nextDetalleId = await getNextTableId(tx, 'remisiones_detalle', 'id_detalle_remision');
 
       const nuevaRemision = await tx.remisiones.create({
         data: {
+          id_remision: nextRemisionId,
           numero_remision,
           fecha_remision: new Date(),
           tipo_destino: 'TECNICO',
@@ -68,17 +72,19 @@ export class PrismaRemisionesRepository {
       });
 
       // 2. Crear items de remisión
-        for (const item of data.items) {
+      for (const item of data.items) {
         const componente = await tx.catalogo_componentes.findUnique({
           where: { id_componente: item.id_componente },
         });
 
         await tx.remisiones_detalle.create({
           data: {
+            id_detalle_remision: nextDetalleId++,
             id_remision: nuevaRemision.id_remision,
             tipo_item: 'COMPONENTE', // REQUIRED field - all items are components in this flow
             id_componente: item.id_componente,
-            descripcion_item: componente?.descripcion_corta || componente?.referencia_fabricante || '',
+            descripcion_item:
+              componente?.descripcion_corta || componente?.referencia_fabricante || '',
             cantidad_entregada: item.cantidad,
             observaciones: item.observaciones,
           },
@@ -105,7 +111,7 @@ export class PrismaRemisionesRepository {
       return await tx.remisiones.findUnique({
         where: { id_remision: nuevaRemision.id_remision },
         include: {
-          detalles: {
+          remisiones_detalle: {
             include: {
               catalogo_componentes: {
                 select: {
@@ -115,9 +121,6 @@ export class PrismaRemisionesRepository {
                 },
               },
             },
-          },
-          usuarios: {
-            include: { persona: true },
           },
           ordenes_servicio: {
             select: { numero_orden: true },
@@ -153,13 +156,10 @@ export class PrismaRemisionesRepository {
         fecha_cierre: new Date(),
       },
       include: {
-        detalles: {
+        remisiones_detalle: {
           include: {
             catalogo_componentes: true,
           },
-        },
-        usuarios: {
-          include: { persona: true },
         },
       },
     });
@@ -176,7 +176,7 @@ export class PrismaRemisionesRepository {
     const remision = await this.prisma.remisiones.findUnique({
       where: { id_remision },
       include: {
-        detalles: true,
+        remisiones_detalle: true,
       },
     });
 
@@ -196,7 +196,7 @@ export class PrismaRemisionesRepository {
     // Cancelar con transacción (reversar movimientos)
     return await this.prisma.$transaction(async (tx) => {
       // 1. Registrar movimientos de ENTRADA (reversar las SALIDAS)
-      for (const item of remision.detalles) {
+      for (const item of remision.remisiones_detalle) {
         if (!item.id_componente) continue; // skip items without component id
         await tx.movimientos_inventario.create({
           data: {
@@ -220,7 +220,7 @@ export class PrismaRemisionesRepository {
           fecha_cierre: new Date(), // Mark as closed when cancelled
         },
         include: {
-          detalles: {
+          remisiones_detalle: {
             include: { catalogo_componentes: true },
           },
         },
@@ -273,13 +273,11 @@ export class PrismaRemisionesRepository {
         take: filters?.take || 50,
         orderBy: { fecha_remision: 'desc' },
         include: {
-          usuarios: {
-            include: { persona: true },
-          },
-          ordenes_servicio: { // FIX: correct relation name
+          ordenes_servicio: {
+            // FIX: correct relation name
             select: { numero_orden: true },
           },
-          detalles: {
+          remisiones_detalle: {
             include: {
               catalogo_componentes: {
                 select: {
@@ -304,13 +302,11 @@ export class PrismaRemisionesRepository {
     const remision = await this.prisma.remisiones.findUnique({
       where: { id_remision },
       include: {
-        usuarios: {
-          include: { persona: true },
-        },
-        ordenes_servicio: { // FIX: correct relation name
+        ordenes_servicio: {
+          // FIX: correct relation name
           select: { numero_orden: true, id_cliente: true },
         },
-        detalles: {
+        remisiones_detalle: {
           include: {
             catalogo_componentes: {
               select: {

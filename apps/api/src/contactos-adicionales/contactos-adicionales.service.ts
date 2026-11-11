@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { getNextTableId } from '../common/utils/next-id.helper';
 import { PrismaService } from '../database/prisma.service';
 import { CreateContactosAdicionalesDto } from './dto/create-contactos-adicionales.dto';
 import { UpdateContactosAdicionalesDto } from './dto/update-contactos-adicionales.dto';
@@ -7,39 +8,32 @@ import { UpdateContactosAdicionalesDto } from './dto/update-contactos-adicionale
 export class ContactosAdicionalesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(
-    createDto: CreateContactosAdicionalesDto,
-    userId: number,
-  ) {
+  async create(createDto: CreateContactosAdicionalesDto, userId: number) {
     // Validar que persona existe
     const persona = await this.prisma.personas.findUnique({
       where: { id_persona: createDto.id_persona },
     });
 
     if (!persona) {
-      throw new Error(
-        `Persona con ID ${createDto.id_persona} no existe`,
-      );
+      throw new Error(`Persona con ID ${createDto.id_persona} no existe`);
     }
+
+    const nextId = await getNextTableId(this.prisma, 'contactos_adicionales', 'id_contacto');
 
     return this.prisma.contactos_adicionales.create({
       data: {
         ...createDto,
+        id_contacto: nextId,
         registrado_por: userId,
         fecha_registro: new Date(),
       },
       include: {
-        personas: true,
+        persona: true,
       },
     });
   }
 
-  async findAll(params?: {
-    id_persona?: number;
-    activo?: boolean;
-    skip?: number;
-    take?: number;
-  }) {
+  async findAll(params?: { id_persona?: number; activo?: boolean; skip?: number; take?: number }) {
     const { id_persona, activo, skip = 0, take = 50 } = params || {};
 
     return this.prisma.contactos_adicionales.findMany({
@@ -48,7 +42,7 @@ export class ContactosAdicionalesService {
         ...(activo !== undefined && { activo }),
       },
       include: {
-        personas: true,
+        persona: true,
       },
       skip,
       take,
@@ -60,7 +54,7 @@ export class ContactosAdicionalesService {
     const contacto = await this.prisma.contactos_adicionales.findUnique({
       where: { id_contacto: id },
       include: {
-        personas: true,
+        persona: true,
       },
     });
 
@@ -71,11 +65,7 @@ export class ContactosAdicionalesService {
     return contacto;
   }
 
-  async update(
-    id: number,
-    updateDto: UpdateContactosAdicionalesDto,
-    userId: number,
-  ) {
+  async update(id: number, updateDto: UpdateContactosAdicionalesDto, userId: number) {
     await this.findOne(id);
 
     return this.prisma.contactos_adicionales.update({
@@ -86,7 +76,7 @@ export class ContactosAdicionalesService {
         fecha_modificacion: new Date(),
       },
       include: {
-        personas: true,
+        persona: true,
       },
     });
   }

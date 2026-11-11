@@ -1,13 +1,12 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * MEKANOS S.A.S - Portal Admin
  * Configuración NextAuth.js v5
- * 
+ *
  * ZERO TRUST: Esta configuración conecta con el backend NestJS
  * El JWT del backend se persiste en el token de NextAuth
  */
 
-import NextAuth from 'next-auth';
+import NextAuth, { type User } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 
 // Tipos para la respuesta del backend
@@ -23,15 +22,33 @@ interface BackendLoginResponse {
   };
 }
 
+interface AuthTokenPayload extends Record<string, unknown> {
+  id?: string;
+  nombre?: string;
+  rol?: string;
+  idEmpleado?: number;
+  accessToken?: string;
+  refreshToken?: string;
+  accessTokenExpires?: number;
+  error?: string;
+}
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 /**
  * Refresca el access token usando el refresh token
  */
-async function refreshAccessToken(token: any): Promise<any> {
+async function refreshAccessToken(token: AuthTokenPayload): Promise<AuthTokenPayload> {
+  if (!token.refreshToken) {
+    return {
+      ...token,
+      error: 'RefreshTokenError',
+    };
+  }
+
   try {
     console.log('[NextAuth] Refrescando access token...');
-    
+
     const response = await fetch(`${BACKEND_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -42,8 +59,11 @@ async function refreshAccessToken(token: any): Promise<any> {
       throw new Error('RefreshTokenError');
     }
 
-    const refreshedTokens = await response.json();
-    
+    const refreshedTokens = (await response.json()) as {
+      access_token: string;
+      refresh_token?: string;
+    };
+
     console.log('[NextAuth] Token refrescado exitosamente');
 
     return {
@@ -51,6 +71,7 @@ async function refreshAccessToken(token: any): Promise<any> {
       accessToken: refreshedTokens.access_token,
       refreshToken: refreshedTokens.refresh_token ?? token.refreshToken,
       accessTokenExpires: Date.now() + 3 * 60 * 60 * 1000, // 3 horas
+      error: undefined,
     };
   } catch (error) {
     console.error('[NextAuth] Error refrescando token:', error);
@@ -62,7 +83,10 @@ async function refreshAccessToken(token: any): Promise<any> {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'mekanos-jwt-secret-ultra-secure-2025-production-change-this-in-deployment',
+  secret:
+    process.env.AUTH_SECRET ||
+    process.env.NEXTAUTH_SECRET ||
+    'mekanos-jwt-secret-ultra-secure-2025-production-change-this-in-deployment',
   providers: [
     Credentials({
       name: 'Credentials',
@@ -72,7 +96,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         console.log('[NextAuth] Intentando login con:', credentials?.email);
-        
+
         if (!credentials?.email || !credentials?.password) {
           console.log('[NextAuth] Credenciales incompletas');
           return null;
@@ -108,7 +132,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             idEmpleado: data.user.idEmpleado,
             accessToken: data.access_token,
             refreshToken: data.refresh_token,
-          } as any;
+          } as User & AuthTokenPayload;
         } catch (error) {
           console.error('[NextAuth] Error en authorize:', error);
           return null;
@@ -122,10 +146,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      * CRÍTICO: Aquí persistimos el access_token del backend
      */
     async jwt({ token, user }) {
+      const typedToken = token as AuthTokenPayload;
       // Login inicial: guardar tokens del backend
       if (user) {
         console.log('[NextAuth] JWT callback - Login inicial');
-        const customUser = user as any;
+        const customUser = user as User & AuthTokenPayload;
         return {
           ...token,
           id: customUser.id,
@@ -138,14 +163,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         };
       }
 
+      // Evitar reintentos repetidos si el refresh ya falló o no hay refreshToken
+      if (typedToken.error === 'RefreshTokenError' || !typedToken.refreshToken) {
+        return typedToken;
+      }
+
       // Token aún válido
-      if (Date.now() < (token.accessTokenExpires as number)) {
+      if (Date.now() < (typedToken.accessTokenExpires ?? 0)) {
         return token;
       }
 
       // Token expirado, intentar refresh
       console.log('[NextAuth] Token expirado, refrescando...');
-      return refreshAccessToken(token);
+      return refreshAccessToken(typedToken);
     },
 
     /**

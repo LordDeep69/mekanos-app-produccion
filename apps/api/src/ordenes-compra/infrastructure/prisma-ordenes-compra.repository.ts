@@ -58,7 +58,10 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
     userIds: number[],
   ): Promise<Map<number, { id_usuario: number; nombre_completo: string; username: string }>> {
     const ids = Array.from(new Set(userIds.filter((id) => id && id > 0)));
-    const map = new Map<number, { id_usuario: number; nombre_completo: string; username: string }>();
+    const map = new Map<
+      number,
+      { id_usuario: number; nombre_completo: string; username: string }
+    >();
     if (ids.length === 0) return map;
 
     const usuarios = await this.prisma.usuarios.findMany({
@@ -129,7 +132,9 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
         });
 
         if (existente) {
-          throw new ConflictException(`Número orden compra '${numeroOrden}' ya existe en el sistema`);
+          throw new ConflictException(
+            `Número orden compra '${numeroOrden}' ya existe en el sistema`,
+          );
         }
       } else {
         // Autogeneración determinista formal via sequence_counter
@@ -184,12 +189,14 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
           const costoAnterior = vinculoPrevio
             ? Number(vinculoPrevio.costo_actual)
             : comp?.precio_compra
-            ? Number(comp.precio_compra)
-            : null;
+              ? Number(comp.precio_compra)
+              : null;
 
           let porcentajeVariacion: number | null = null;
           if (costoAnterior !== null && costoAnterior > 0) {
-            const variacionCalc = Number((((item.precio_unitario - costoAnterior) / costoAnterior) * 100).toFixed(2));
+            const variacionCalc = Number(
+              (((item.precio_unitario - costoAnterior) / costoAnterior) * 100).toFixed(2),
+            );
             porcentajeVariacion = Math.abs(variacionCalc) < 9999 ? variacionCalc : null;
           }
 
@@ -292,7 +299,9 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
     }
 
     if (orden.estado !== 'BORRADOR') {
-      throw new ConflictException(`Orden compra debe estar en BORRADOR para ser enviada/emitida (actual: ${orden.estado})`);
+      throw new ConflictException(
+        `Orden compra debe estar en BORRADOR para ser enviada/emitida (actual: ${orden.estado})`,
+      );
     }
 
     // Actualizar estado y registrar aprobador
@@ -345,7 +354,11 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
    * Cancela orden compra
    * Solo se puede cancelar si NO está COMPLETADA ni ya CANCELADA
    */
-  async cancelarOrdenCompra(idOrdenCompra: number, motivo: string, _userId: number): Promise<OrdenCompraResult> {
+  async cancelarOrdenCompra(
+    idOrdenCompra: number,
+    motivo: string,
+    _userId: number,
+  ): Promise<OrdenCompraResult> {
     const orden = await this.prisma.ordenes_compra.findUnique({
       where: { id_orden_compra: idOrdenCompra },
     });
@@ -367,7 +380,8 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
       where: { id_orden_compra: idOrdenCompra },
       data: {
         estado: 'CANCELADA',
-        observaciones: `${orden.observaciones ? orden.observaciones + '\n' : ''}[CANCELADA]: ${motivo}`.trim(),
+        observaciones:
+          `${orden.observaciones ? orden.observaciones + '\n' : ''}[CANCELADA]: ${motivo}`.trim(),
       },
       include: {
         proveedores: {
@@ -632,31 +646,34 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
    * KPIs agregados para el dashboard comercial de órdenes de compra
    */
   async getResumenKpis(): Promise<OrdenesCompraResumenKpis> {
-    const [total, borradores, enviadas, parciales, completadas, canceladas, ordenesActivas] = await Promise.all([
-      this.prisma.ordenes_compra.count(),
-      this.prisma.ordenes_compra.count({ where: { estado: 'BORRADOR' } }),
-      this.prisma.ordenes_compra.count({ where: { estado: 'ENVIADA' } }),
-      this.prisma.ordenes_compra.count({ where: { estado: 'PARCIAL' } }),
-      this.prisma.ordenes_compra.count({ where: { estado: 'COMPLETADA' } }),
-      this.prisma.ordenes_compra.count({ where: { estado: 'CANCELADA' } }),
-      this.prisma.ordenes_compra.findMany({
-        where: { estado: { in: ['ENVIADA', 'PARCIAL', 'COMPLETADA'] } },
-        select: {
-          ordenes_compra_detalle: {
-            select: {
-              subtotal: true,
-              cantidad: true,
-              precio_unitario: true,
+    const [total, borradores, enviadas, parciales, completadas, canceladas, ordenesActivas] =
+      await Promise.all([
+        this.prisma.ordenes_compra.count(),
+        this.prisma.ordenes_compra.count({ where: { estado: 'BORRADOR' } }),
+        this.prisma.ordenes_compra.count({ where: { estado: 'ENVIADA' } }),
+        this.prisma.ordenes_compra.count({ where: { estado: 'PARCIAL' } }),
+        this.prisma.ordenes_compra.count({ where: { estado: 'COMPLETADA' } }),
+        this.prisma.ordenes_compra.count({ where: { estado: 'CANCELADA' } }),
+        this.prisma.ordenes_compra.findMany({
+          where: { estado: { in: ['ENVIADA', 'PARCIAL', 'COMPLETADA'] } },
+          select: {
+            ordenes_compra_detalle: {
+              select: {
+                subtotal: true,
+                cantidad: true,
+                precio_unitario: true,
+              },
             },
           },
-        },
-      }),
-    ]);
+        }),
+      ]);
 
     let montoTotal = 0;
     for (const oc of ordenesActivas) {
       for (const d of oc.ordenes_compra_detalle) {
-        const sub = d.subtotal ? Number(d.subtotal) : Number(d.cantidad) * Number(d.precio_unitario);
+        const sub = d.subtotal
+          ? Number(d.subtotal)
+          : Number(d.cantidad) * Number(d.precio_unitario);
         montoTotal += sub * 1.19; // IVA 19%
       }
     }
@@ -731,9 +748,11 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
           costo_actual: Number(pactado.costo_actual),
           moneda: pactado.moneda,
           tiempo_entrega_dias: pactado.tiempo_entrega_dias,
-          cantidad_minima_compra: pactado.cantidad_minima_compra ? Number(pactado.cantidad_minima_compra) : null,
+          cantidad_minima_compra: pactado.cantidad_minima_compra
+            ? Number(pactado.cantidad_minima_compra)
+            : null,
           es_pactado: true,
-          stock_actual: c.stock_actual,
+          stock_actual: c.stock_actual ?? 0,
           unidad_medida: c.unidad_medida,
         };
       }
@@ -751,7 +770,7 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
         tiempo_entrega_dias: null,
         cantidad_minima_compra: null,
         es_pactado: false,
-        stock_actual: c.stock_actual,
+        stock_actual: c.stock_actual ?? 0,
         unidad_medida: c.unidad_medida,
       };
     });
@@ -760,7 +779,10 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
   /**
    * Obtiene el costo específico de un componente para un proveedor
    */
-  async getCostoComponente(idProveedor: number, idComponente: number): Promise<CostoComponenteResult> {
+  async getCostoComponente(
+    idProveedor: number,
+    idComponente: number,
+  ): Promise<CostoComponenteResult> {
     const pactado = await this.prisma.articulos_proveedores.findUnique({
       where: {
         id_componente_id_proveedor: {

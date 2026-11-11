@@ -3,7 +3,7 @@
 /**
  * Portal Admin - Abastecimiento y Cadena de Suministro
  * Directorio de Proveedores (/compras/proveedores)
- * 
+ *
  * Gestión centralizada de fuentes de suministro comercial, datos fiscales y condiciones de entrega.
  * Diseño Enterprise Calibrado: Modal espacioso de 2 columnas (sm:max-w-4xl md:max-w-5xl) con Header y Footer fijos,
  * tabla balanceada sin scroll horizontal, condiciones comerciales horizontales elegantes y micro-portales activos.
@@ -35,6 +35,7 @@ import {
 import { toast } from 'sonner';
 
 import { comprasService } from '@/lib/api/compras.service';
+import { getApiErrorMessage } from '@/lib/utils';
 import { ProveedorCompleto, getNombreProveedor } from '@/types/compras.types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,14 +43,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
 const RUBROS_CATALOGO_INSTITUCIONAL = [
   'Filtros y Elementos de Filtración',
@@ -126,7 +120,7 @@ const extractWebUrl = (prov: ProveedorCompleto): string => {
   const obs = prov.observaciones || '';
   const match = obs.match(/Web:\s*([^|]+)/i);
   if (match) return match[1].trim();
-  return (prov.persona as any)?.sitio_web || '';
+  return prov.persona?.sitio_web || '';
 };
 
 const extractEmailFacturacion = (prov: ProveedorCompleto): string => {
@@ -218,7 +212,7 @@ export default function ProveedoresPage() {
       setProveedores(res.data || []);
 
       if (showToast) toast.success('Directorio de proveedores actualizado');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Error al cargar proveedores:', e);
       toast.error('No se pudo cargar el listado de proveedores');
     } finally {
@@ -242,7 +236,17 @@ export default function ProveedoresPage() {
     const mixtos = proveedores.filter((p) => p.categoria_proveedor === 'MIXTO').length;
     const activos = proveedores.filter((p) => p.proveedor_activo).length;
     const inactivos = total - activos;
-    return { total, nacionales, repuestos, servicios, suministros, equipos, mixtos, activos, inactivos };
+    return {
+      total,
+      nacionales,
+      repuestos,
+      servicios,
+      suministros,
+      equipos,
+      mixtos,
+      activos,
+      inactivos,
+    };
   }, [proveedores]);
 
   // Filtrado reactivo
@@ -276,8 +280,8 @@ export default function ProveedoresPage() {
     // Actualización optimista local
     setProveedores((prev) =>
       prev.map((p) =>
-        p.id_proveedor === prov.id_proveedor ? { ...p, proveedor_activo: nuevoEstado } : p
-      )
+        p.id_proveedor === prov.id_proveedor ? { ...p, proveedor_activo: nuevoEstado } : p,
+      ),
     );
 
     try {
@@ -285,7 +289,7 @@ export default function ProveedoresPage() {
         proveedor_activo: nuevoEstado,
       });
       toast.success(`Proveedor "${nom}" marcado como ${nuevoEstado ? 'Activo' : 'Inactivo'}`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Error al alternar estado de proveedor:', e);
       toast.error('No se pudo actualizar el estado del proveedor');
       cargarProveedores();
@@ -402,10 +406,9 @@ export default function ProveedoresPage() {
 
       setModalOpen(false);
       cargarProveedores(true);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Error al guardar proveedor:', e);
-      const msg = e?.response?.data?.message || 'No se pudo guardar la información del proveedor';
-      toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
+      toast.error(getApiErrorMessage(e, 'No se pudo guardar la información del proveedor'));
     } finally {
       setSubmitting(false);
     }
@@ -425,7 +428,8 @@ export default function ProveedoresPage() {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-gray-600">
-            Administración de fuentes de suministro comercial, datos fiscales y condiciones de entrega.
+            Administración de fuentes de suministro comercial, datos fiscales y condiciones de
+            entrega.
           </p>
         </div>
 
@@ -567,7 +571,9 @@ export default function ProveedoresPage() {
                 <th className="px-2.5 py-3.5">Contacto & Portales</th>
                 <th className="px-2.5 py-3.5">Condiciones</th>
                 <th className="px-2 py-3.5 text-center">Estado</th>
-                <th className="px-3 py-3.5 text-center min-w-[195px] whitespace-nowrap">ACCIONES</th>
+                <th className="px-3 py-3.5 text-center min-w-[195px] whitespace-nowrap">
+                  ACCIONES
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -582,9 +588,13 @@ export default function ProveedoresPage() {
                 <tr>
                   <td colSpan={7} className="py-12 text-center">
                     <Truck className="mx-auto h-8 w-8 text-gray-300 mb-2" />
-                    <p className="text-sm font-semibold text-gray-700">No se encontraron proveedores</p>
+                    <p className="text-sm font-semibold text-gray-700">
+                      No se encontraron proveedores
+                    </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      {search ? 'Intenta con otro término de búsqueda' : 'No hay proveedores registrados en el directorio.'}
+                      {search
+                        ? 'Intenta con otro término de búsqueda'
+                        : 'No hay proveedores registrados en el directorio.'}
                     </p>
                     <div className="mt-4">
                       <Button
@@ -637,7 +647,9 @@ export default function ProveedoresPage() {
                               {prov.codigo_proveedor && (
                                 <>
                                   <span className="text-gray-300">•</span>
-                                  <span className="font-mono text-gray-400">{prov.codigo_proveedor}</span>
+                                  <span className="font-mono text-gray-400">
+                                    {prov.codigo_proveedor}
+                                  </span>
                                 </>
                               )}
                             </span>
@@ -647,7 +659,10 @@ export default function ProveedoresPage() {
 
                       {/* Categoría y Tipo */}
                       <td className="px-2.5 py-3.5 space-y-0.5 whitespace-nowrap">
-                        <Badge variant="outline" className="text-[10px] font-semibold text-blue-700 border-blue-200 bg-blue-50/50">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] font-semibold text-blue-700 border-blue-200 bg-blue-50/50"
+                        >
                           {prov.categoria_proveedor}
                         </Badge>
                         <span className="block text-[11px] text-gray-400">
@@ -839,13 +854,17 @@ export default function ProveedoresPage() {
               </div>
               <div>
                 <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">
-                  {modalMode === 'create' ? 'Nuevo Proveedor Comercial' : 'Editar Proveedor Comercial'}
+                  {modalMode === 'create'
+                    ? 'Nuevo Proveedor Comercial'
+                    : 'Editar Proveedor Comercial'}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-gray-500 mt-0.5">
                   {modalMode === 'create'
                     ? 'Registra un aliado de suministro para compras de insumos, repuestos y materias primas.'
                     : `Modificación integral de datos fiscales, comerciales y operativos de ${
-                        selectedProveedor?.persona?.razon_social || selectedProveedor?.persona?.nombre_comercial || 'Proveedor'
+                        selectedProveedor?.persona?.razon_social ||
+                        selectedProveedor?.persona?.nombre_comercial ||
+                        'Proveedor'
                       }.`}
                 </DialogDescription>
               </div>
@@ -856,7 +875,6 @@ export default function ProveedoresPage() {
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
             <div className="p-6 md:p-8 space-y-6 overflow-y-auto flex-1 max-h-[calc(92vh-145px)] pr-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                
                 {/* COLUMNA 1: IDENTIDAD JURÍDICA Y RUBROS */}
                 <div className="space-y-4">
                   <div className="border-b border-slate-200 pb-2">
@@ -869,7 +887,8 @@ export default function ProveedoresPage() {
                   {/* Razón Social */}
                   <div className="space-y-1.5">
                     <Label htmlFor="prov_razon" className="text-xs font-semibold text-gray-700">
-                      Razón Social o Nombre Comercial <span className="text-blue-600 font-bold">*</span>
+                      Razón Social o Nombre Comercial{' '}
+                      <span className="text-blue-600 font-bold">*</span>
                     </Label>
                     <Input
                       id="prov_razon"
@@ -891,7 +910,9 @@ export default function ProveedoresPage() {
                         id="prov_nit"
                         placeholder="Ej. 900.123.456-7"
                         value={formData.numero_identificacion}
-                        onChange={(e) => setFormData({ ...formData, numero_identificacion: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, numero_identificacion: e.target.value })
+                        }
                         className="h-10 text-sm bg-white border-gray-200 rounded-lg font-mono px-3"
                       />
                     </div>
@@ -903,7 +924,9 @@ export default function ProveedoresPage() {
                       <select
                         id="prov_tipo"
                         value={formData.tipo_proveedor}
-                        onChange={(e) => setFormData({ ...formData, tipo_proveedor: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, tipo_proveedor: e.target.value })
+                        }
                         className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:border-blue-500 focus:outline-none"
                       >
                         <option value="NACIONAL">NACIONAL</option>
@@ -921,7 +944,9 @@ export default function ProveedoresPage() {
                       <select
                         id="prov_cat"
                         value={formData.categoria_proveedor}
-                        onChange={(e) => setFormData({ ...formData, categoria_proveedor: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, categoria_proveedor: e.target.value })
+                        }
                         className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:border-blue-500 focus:outline-none"
                       >
                         <option value="REPUESTOS">REPUESTOS</option>
@@ -967,7 +992,8 @@ export default function ProveedoresPage() {
                     <div className="min-h-[42px] max-h-28 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 flex flex-wrap items-center gap-1.5">
                       {formData.rubros.length === 0 ? (
                         <span className="text-xs text-gray-400 italic">
-                          Sin rubros asignados. Agrega del catálogo institucional o escribe uno nuevo.
+                          Sin rubros asignados. Agrega del catálogo institucional o escribe uno
+                          nuevo.
                         </span>
                       ) : (
                         formData.rubros.map((rubro) => (
@@ -1039,7 +1065,10 @@ export default function ProveedoresPage() {
                   {/* Clasificación Secundaria / Tags */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="prov_tags" className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                      <Label
+                        htmlFor="prov_tags"
+                        className="text-xs font-semibold text-gray-700 flex items-center gap-1"
+                      >
                         <Tag className="h-3 w-3 text-gray-500" />
                         Etiquetas de Clasificación Secundarias
                       </Label>
@@ -1049,7 +1078,9 @@ export default function ProveedoresPage() {
                       id="prov_tags"
                       placeholder="Ej. HDPE, Conexiones, Soldaduras, Diésel..."
                       value={formData.etiquetas_secundarias}
-                      onChange={(e) => setFormData({ ...formData, etiquetas_secundarias: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, etiquetas_secundarias: e.target.value })
+                      }
                       className="h-10 text-xs bg-white border-gray-200 rounded-lg px-3"
                     />
                   </div>
@@ -1067,14 +1098,19 @@ export default function ProveedoresPage() {
                   {/* Asesor y Teléfono */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div className="space-y-1.5">
-                      <Label htmlFor="prov_contacto" className="text-xs font-semibold text-gray-700">
+                      <Label
+                        htmlFor="prov_contacto"
+                        className="text-xs font-semibold text-gray-700"
+                      >
                         Asesor Comercial / Contacto
                       </Label>
                       <Input
                         id="prov_contacto"
                         placeholder="Ej. Carlos Mendoza"
                         value={formData.persona_contacto}
-                        onChange={(e) => setFormData({ ...formData, persona_contacto: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, persona_contacto: e.target.value })
+                        }
                         className="h-10 text-sm bg-white border-gray-200 rounded-lg px-3"
                       />
                     </div>
@@ -1089,7 +1125,9 @@ export default function ProveedoresPage() {
                           id="prov_tel"
                           placeholder="Ej. +57 300 123 4567"
                           value={formData.telefono_principal}
-                          onChange={(e) => setFormData({ ...formData, telefono_principal: e.target.value })}
+                          onChange={(e) =>
+                            setFormData({ ...formData, telefono_principal: e.target.value })
+                          }
                           className="h-10 pl-9 pr-3 text-sm bg-white border-gray-200 rounded-lg"
                         />
                       </div>
@@ -1109,14 +1147,19 @@ export default function ProveedoresPage() {
                           type="email"
                           placeholder="Ej. pedidos@proveedor.com"
                           value={formData.email_principal}
-                          onChange={(e) => setFormData({ ...formData, email_principal: e.target.value })}
+                          onChange={(e) =>
+                            setFormData({ ...formData, email_principal: e.target.value })
+                          }
                           className="h-10 pl-9 pr-3 text-sm bg-white border-gray-200 rounded-lg"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="prov_email_fact" className="text-xs font-semibold text-gray-700">
+                      <Label
+                        htmlFor="prov_email_fact"
+                        className="text-xs font-semibold text-gray-700"
+                      >
                         Correo Facturación Electrónica
                       </Label>
                       <div className="relative">
@@ -1126,7 +1169,9 @@ export default function ProveedoresPage() {
                           type="email"
                           placeholder="Ej. facturas@proveedor.com"
                           value={formData.email_facturacion}
-                          onChange={(e) => setFormData({ ...formData, email_facturacion: e.target.value })}
+                          onChange={(e) =>
+                            setFormData({ ...formData, email_facturacion: e.target.value })
+                          }
                           className="h-10 pl-9 pr-3 text-sm bg-white border-gray-200 rounded-lg"
                         />
                       </div>
@@ -1142,7 +1187,9 @@ export default function ProveedoresPage() {
                       id="prov_dir"
                       placeholder="Ej. Zona Industrial Mamonal Km 3, Cartagena"
                       value={formData.direccion_principal}
-                      onChange={(e) => setFormData({ ...formData, direccion_principal: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, direccion_principal: e.target.value })
+                      }
                       className="h-10 text-sm bg-white border-gray-200 rounded-lg px-3"
                     />
                   </div>
@@ -1161,7 +1208,9 @@ export default function ProveedoresPage() {
                         id="prov_gps"
                         placeholder="https://maps.google.com/?q=..."
                         value={formData.url_ubicacion}
-                        onChange={(e) => setFormData({ ...formData, url_ubicacion: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, url_ubicacion: e.target.value })
+                        }
                         className="h-10 pl-9 pr-3 text-xs bg-white border-gray-200 rounded-lg font-mono text-[11px]"
                       />
                     </div>
@@ -1178,7 +1227,9 @@ export default function ProveedoresPage() {
                         <select
                           id="prov_plazo"
                           value={formData.terminos_credito}
-                          onChange={(e) => setFormData({ ...formData, terminos_credito: e.target.value })}
+                          onChange={(e) =>
+                            setFormData({ ...formData, terminos_credito: e.target.value })
+                          }
                           className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 focus:border-blue-500 focus:outline-none"
                         >
                           <option value="Contado (Pago inmediato)">Contado (Pago inmediato)</option>
@@ -1202,7 +1253,9 @@ export default function ProveedoresPage() {
                         type="number"
                         min="0"
                         value={formData.tiempo_entrega_dias}
-                        onChange={(e) => setFormData({ ...formData, tiempo_entrega_dias: Number(e.target.value) })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, tiempo_entrega_dias: Number(e.target.value) })
+                        }
                         className="h-10 text-sm bg-white border-gray-200 rounded-lg px-3"
                       />
                     </div>
@@ -1212,10 +1265,15 @@ export default function ProveedoresPage() {
                   <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label htmlFor="prov_iva" className="text-xs font-bold text-gray-800 cursor-pointer">
+                        <Label
+                          htmlFor="prov_iva"
+                          className="text-xs font-bold text-gray-800 cursor-pointer"
+                        >
                           Responsable de IVA
                         </Label>
-                        <p className="text-[10px] text-gray-500">Aplica impuestos en órdenes de compra.</p>
+                        <p className="text-[10px] text-gray-500">
+                          Aplica impuestos en órdenes de compra.
+                        </p>
                       </div>
                       <Switch
                         id="prov_iva"
@@ -1226,10 +1284,15 @@ export default function ProveedoresPage() {
 
                     <div className="flex items-center justify-between border-t border-gray-200/60 pt-2.5">
                       <div>
-                        <Label htmlFor="prov_entregas" className="text-xs font-bold text-gray-800 cursor-pointer">
+                        <Label
+                          htmlFor="prov_entregas"
+                          className="text-xs font-bold text-gray-800 cursor-pointer"
+                        >
                           Entrega a Domicilio / Sede Propia
                         </Label>
-                        <p className="text-[10px] text-gray-500">Entrega directa en taller o sede propia de la empresa.</p>
+                        <p className="text-[10px] text-gray-500">
+                          Entrega directa en taller o sede propia de la empresa.
+                        </p>
                       </div>
                       <Switch
                         id="prov_entregas"
@@ -1240,10 +1303,15 @@ export default function ProveedoresPage() {
 
                     <div className="flex items-center justify-between border-t border-gray-200/60 pt-2.5">
                       <div>
-                        <Label htmlFor="prov_activo" className="text-xs font-bold text-gray-800 cursor-pointer">
+                        <Label
+                          htmlFor="prov_activo"
+                          className="text-xs font-bold text-gray-800 cursor-pointer"
+                        >
                           Proveedor Activo
                         </Label>
-                        <p className="text-[10px] text-gray-500">Habilitado para abastecimiento y requisiciones.</p>
+                        <p className="text-[10px] text-gray-500">
+                          Habilitado para abastecimiento y requisiciones.
+                        </p>
                       </div>
                       <Switch
                         id="prov_activo"
@@ -1262,7 +1330,9 @@ export default function ProveedoresPage() {
                       id="prov_obs"
                       placeholder="Ej. Despacho semanal los martes, entregas en bodega..."
                       value={formData.observaciones_despacho}
-                      onChange={(e) => setFormData({ ...formData, observaciones_despacho: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, observaciones_despacho: e.target.value })
+                      }
                       className="h-10 text-sm bg-white border-gray-200 rounded-lg px-3"
                     />
                   </div>
@@ -1288,7 +1358,11 @@ export default function ProveedoresPage() {
                 disabled={submitting}
                 className="h-10 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-xs"
               >
-                {submitting ? 'Guardando...' : modalMode === 'create' ? 'Registrar Proveedor' : 'Guardar Cambios'}
+                {submitting
+                  ? 'Guardando...'
+                  : modalMode === 'create'
+                    ? 'Registrar Proveedor'
+                    : 'Guardar Cambios'}
               </Button>
             </div>
           </form>

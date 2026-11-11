@@ -19,7 +19,7 @@ export class CrearCatalogoServicioHandler implements ICommandHandler<CrearCatalo
     }
 
     // 2. Validar o resolver unicidad de código
-    let existente = await this.repository.findByCodigo(codigoNormalizado);
+    const existente = await this.repository.findByCodigo(codigoNormalizado);
     if (existente) {
       if (!command.codigoServicio || command.codigoServicio.trim() === '') {
         // Si fue auto-generado, añadir sufijo numérico único
@@ -41,7 +41,9 @@ export class CrearCatalogoServicioHandler implements ICommandHandler<CrearCatalo
         where: { id_tipo_servicio: command.tipoServicioId },
       });
       if (!tipoServicio) {
-        throw new BadRequestException(`Tipo de servicio con ID ${command.tipoServicioId} no existe`);
+        throw new BadRequestException(
+          `Tipo de servicio con ID ${command.tipoServicioId} no existe`,
+        );
       }
     }
 
@@ -78,8 +80,12 @@ export class CrearCatalogoServicioHandler implements ICommandHandler<CrearCatalo
       nombre_servicio: command.nombreServicio.trim(),
       descripcion: command.descripcion?.trim(),
       categoria: command.categoria as any,
-      tipos_servicio: command.tipoServicioId ? { connect: { id_tipo_servicio: command.tipoServicioId } } : undefined,
-      tipos_equipo: command.tipoEquipoId ? { connect: { id_tipo_equipo: command.tipoEquipoId } } : undefined,
+      tipos_servicio: command.tipoServicioId
+        ? { connect: { id_tipo_servicio: command.tipoServicioId } }
+        : undefined,
+      tipos_equipo: command.tipoEquipoId
+        ? { connect: { id_tipo_equipo: command.tipoEquipoId } }
+        : undefined,
       duracion_estimada_horas: command.duracionEstimadaHoras,
       requiere_certificacion: command.requiereCertificacion ?? false,
       tipo_certificacion_requerida: command.tipoCertificacionRequerida?.trim(),
@@ -139,7 +145,8 @@ export class CrearCatalogoServicioHandler implements ICommandHandler<CrearCatalo
       [/TANQUE|COMBUSTIBLE/i, 'COMB'],
     ];
 
-    const prefix = categoria === 'CORRECTIVO' ? 'CORR' : categoria === 'PREVENTIVO' ? 'PREV' : 'SRV';
+    const prefix =
+      categoria === 'CORRECTIVO' ? 'CORR' : categoria === 'PREVENTIVO' ? 'PREV' : 'SRV';
 
     let action = '';
     for (const [regex, code] of actionMap) {
@@ -161,8 +168,29 @@ export class CrearCatalogoServicioHandler implements ICommandHandler<CrearCatalo
       const words = cleanNombre
         .replace(/[^A-Z0-9\s]/g, '')
         .split(/\s+/)
-        .filter((w) => !['DE', 'DEL', 'LA', 'EL', 'Y', 'EN', 'PARA', 'CON', 'A', 'LOS', 'LAS', 'UN', 'UNA', 'AL'].includes(w));
-      action = words.slice(0, 3).map((w) => w.substring(0, 4)).join('-');
+        .filter(
+          (w) =>
+            ![
+              'DE',
+              'DEL',
+              'LA',
+              'EL',
+              'Y',
+              'EN',
+              'PARA',
+              'CON',
+              'A',
+              'LOS',
+              'LAS',
+              'UN',
+              'UNA',
+              'AL',
+            ].includes(w),
+        );
+      action = words
+        .slice(0, 3)
+        .map((w) => w.substring(0, 4))
+        .join('-');
     }
 
     const baseParts = [prefix, action, noun].filter(Boolean);

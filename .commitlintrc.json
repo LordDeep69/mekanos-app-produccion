@@ -9,7 +9,7 @@
     "scope-enum": [
       2,
       "always",
-      ["api", "database", "core", "shared", "mobile", "config", "monorepo"]
+      ["api", "admin", "database", "core", "shared", "mobile", "config", "monorepo"]
     ]
   }
 }

@@ -1,7 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal de Administración
  * Componente: Trazabilidad y Bitácora Estratégica de Servicios por Cliente
- * 
+ *
  * Data Grid Corporativo y Analítico de Alta Densidad para presentación ante
  * Consejos de Administración, Asambleas de Copropietarios y Auditorías Técnicas.
  */
@@ -82,13 +82,17 @@ function stripHtmlToPlainText(html?: string | null): string {
 /**
  * Helper para formatear de forma segura y completa el nombre del técnico
  */
-function formatNombreTecnico(empleado?: any): string {
+function formatNombreTecnico(
+  empleado?: TrazabilidadItem['empleados_ordenes_servicio_id_tecnico_asignadoToempleados'] | null,
+): string {
   if (!empleado?.persona) return 'Sin asignar';
   const p = empleado.persona;
   if (p.nombre_completo && p.nombre_completo.trim()) {
     return p.nombre_completo.trim();
   }
-  const parts = [p.primer_nombre, p.segundo_nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean);
+  const parts = [p.primer_nombre, p.segundo_nombre, p.primer_apellido, p.segundo_apellido].filter(
+    Boolean,
+  );
   if (parts.length > 0) {
     return parts.join(' ').trim();
   }
@@ -101,7 +105,9 @@ function formatNombreTecnico(empleado?: any): string {
 /**
  * Helper para extraer iniciales del técnico
  */
-function getInicialesTecnico(empleado?: any): string {
+function getInicialesTecnico(
+  empleado?: TrazabilidadItem['empleados_ordenes_servicio_id_tecnico_asignadoToempleados'] | null,
+): string {
   if (!empleado?.persona) return 'T';
   const p = empleado.persona;
   const i1 = (p.primer_nombre?.[0] || p.nombre_completo?.[0] || 'T').toUpperCase();
@@ -116,7 +122,8 @@ function getEquiposList(orden: TrazabilidadItem) {
   if (orden.ordenes_equipos && orden.ordenes_equipos.length > 0) {
     return orden.ordenes_equipos.map((oe) => ({
       id_equipo: oe.id_equipo,
-      nombre_equipo: oe.equipos?.nombre_equipo || oe.equipos?.codigo_equipo || `Equipo #${oe.id_equipo}`,
+      nombre_equipo:
+        oe.equipos?.nombre_equipo || oe.equipos?.codigo_equipo || `Equipo #${oe.id_equipo}`,
       codigo_equipo: oe.equipos?.codigo_equipo,
       tipo_nombre: oe.equipos?.tipos_equipo?.nombre_tipo || '',
       horas_actuales: oe.equipos?.horas_actuales,
@@ -124,14 +131,19 @@ function getEquiposList(orden: TrazabilidadItem) {
     }));
   }
   if (orden.equipos) {
-    return [{
-      id_equipo: orden.equipos.id_equipo,
-      nombre_equipo: orden.equipos.nombre_equipo || orden.equipos.codigo_equipo || `Equipo #${orden.equipos.id_equipo}`,
-      codigo_equipo: orden.equipos.codigo_equipo,
-      tipo_nombre: orden.equipos.tipos_equipo?.nombre_tipo || '',
-      horas_actuales: orden.equipos.horas_actuales,
-      ubicacion: orden.equipos.ubicacion_texto,
-    }];
+    return [
+      {
+        id_equipo: orden.equipos.id_equipo,
+        nombre_equipo:
+          orden.equipos.nombre_equipo ||
+          orden.equipos.codigo_equipo ||
+          `Equipo #${orden.equipos.id_equipo}`,
+        codigo_equipo: orden.equipos.codigo_equipo,
+        tipo_nombre: orden.equipos.tipos_equipo?.nombre_tipo || '',
+        horas_actuales: orden.equipos.horas_actuales,
+        ubicacion: orden.equipos.ubicacion_texto,
+      },
+    ];
   }
   return [];
 }
@@ -170,19 +182,30 @@ export function TrazabilidadServiciosCliente({
   // Derivados client-side: tipos de equipo únicos disponibles en las órdenes cargadas
   const tiposEquipoDisponibles = useMemo(() => {
     const tipos = new Set<string>();
-    ordenes.forEach((o) => getEquiposList(o).forEach((eq) => { if (eq.tipo_nombre) tipos.add(eq.tipo_nombre); }));
+    ordenes.forEach((o) =>
+      getEquiposList(o).forEach((eq) => {
+        if (eq.tipo_nombre) tipos.add(eq.tipo_nombre);
+      }),
+    );
     return Array.from(tipos).sort();
   }, [ordenes]);
 
   // Derivados client-side: equipos únicos disponibles en las órdenes cargadas
   const equiposDisponibles = useMemo(() => {
-    const map = new Map<number, { id_equipo: number; nombre_equipo: string; tipo_nombre: string }>();
+    const map = new Map<
+      number,
+      { id_equipo: number; nombre_equipo: string; tipo_nombre: string }
+    >();
     ordenes.forEach((o) =>
       getEquiposList(o).forEach((eq) => {
         if (!map.has(eq.id_equipo)) {
-          map.set(eq.id_equipo, { id_equipo: eq.id_equipo, nombre_equipo: eq.nombre_equipo, tipo_nombre: eq.tipo_nombre });
+          map.set(eq.id_equipo, {
+            id_equipo: eq.id_equipo,
+            nombre_equipo: eq.nombre_equipo,
+            tipo_nombre: eq.tipo_nombre,
+          });
         }
-      })
+      }),
     );
     return Array.from(map.values()).sort((a, b) => a.nombre_equipo.localeCompare(b.nombre_equipo));
   }, [ordenes]);
@@ -190,8 +213,16 @@ export function TrazabilidadServiciosCliente({
   // Órdenes filtradas client-side (encima de los filtros de categoría/fecha/búsqueda del backend)
   const ordenesFiltradas = useMemo(() => {
     return ordenes
-      .filter((o) => tipoEquipoFiltro === 'TODOS' || getEquiposList(o).some((eq) => eq.tipo_nombre === tipoEquipoFiltro))
-      .filter((o) => equiposSeleccionados.size === 0 || getEquiposList(o).some((eq) => equiposSeleccionados.has(eq.id_equipo)));
+      .filter(
+        (o) =>
+          tipoEquipoFiltro === 'TODOS' ||
+          getEquiposList(o).some((eq) => eq.tipo_nombre === tipoEquipoFiltro),
+      )
+      .filter(
+        (o) =>
+          equiposSeleccionados.size === 0 ||
+          getEquiposList(o).some((eq) => equiposSeleccionados.has(eq.id_equipo)),
+      );
   }, [ordenes, tipoEquipoFiltro, equiposSeleccionados]);
 
   // Manejador de Presets de Fecha
@@ -243,7 +274,7 @@ export function TrazabilidadServiciosCliente({
 
   // Helper para extraer URL de PDF
   const getPdfUrl = (orden: TrazabilidadItem): string | null => {
-    const docGen: any = orden.informes?.[0]?.documentos_generados;
+    const docGen = orden.informes?.[0]?.documentos_generados;
     if (!docGen) return null;
     if (Array.isArray(docGen)) {
       return docGen[0]?.ruta_archivo || docGen[0]?.url_documento || null;
@@ -272,15 +303,20 @@ export function TrazabilidadServiciosCliente({
     ];
 
     const rows = ordenesFiltradas.map((o) => {
-      const serviciosHijos = o.detalle_servicios_orden
-        ?.map((d) => d.catalogo_servicios?.nombre_servicio || '')
-        .filter(Boolean)
-        .join(' | ') || '';
+      const serviciosHijos =
+        o.detalle_servicios_orden
+          ?.map((d) => d.catalogo_servicios?.nombre_servicio || '')
+          .filter(Boolean)
+          .join(' | ') || '';
 
       const eqList = getEquiposList(o);
       const equipos = eqList.map((eq) => eq.nombre_equipo).join(', ');
-      const horometros = eqList.map((eq) => eq.horas_actuales != null ? `${eq.horas_actuales} hrs` : 'N/A').join(', ');
-      const tecnico = formatNombreTecnico(o.empleados_ordenes_servicio_id_tecnico_asignadoToempleados);
+      const horometros = eqList
+        .map((eq) => (eq.horas_actuales != null ? `${eq.horas_actuales} hrs` : 'N/A'))
+        .join(', ');
+      const tecnico = formatNombreTecnico(
+        o.empleados_ordenes_servicio_id_tecnico_asignadoToempleados,
+      );
 
       return [
         o.id_orden_servicio,
@@ -299,25 +335,40 @@ export function TrazabilidadServiciosCliente({
       ];
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const csvContent =
+      'data:text/csv;charset=utf-8,\uFEFF' +
+      [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `bitacora_servicios_${clienteNombre.replace(/\s+/g, '_')}_${new Date().toISOString().substring(0, 10)}.csv`);
+    link.setAttribute(
+      'download',
+      `bitacora_servicios_${clienteNombre.replace(/\s+/g, '_')}_${new Date().toISOString().substring(0, 10)}.csv`,
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   // Métricas calculadas
-  const totalPreventivos = ordenes.filter((o) => o.tipos_servicio?.categoria === 'PREVENTIVO').length;
-  const totalCorrectivos = ordenes.filter((o) => o.tipos_servicio?.categoria === 'CORRECTIVO').length;
-  const totalEmergencias = ordenes.filter((o) => o.tipos_servicio?.categoria === 'EMERGENCIA').length;
-  const totalEspecializados = ordenes.filter((o) => o.tipos_servicio?.categoria === 'ESPECIALIZADO').length;
+  const totalPreventivos = ordenes.filter(
+    (o) => o.tipos_servicio?.categoria === 'PREVENTIVO',
+  ).length;
+  const totalCorrectivos = ordenes.filter(
+    (o) => o.tipos_servicio?.categoria === 'CORRECTIVO',
+  ).length;
+  const totalEmergencias = ordenes.filter(
+    (o) => o.tipos_servicio?.categoria === 'EMERGENCIA',
+  ).length;
+  const totalEspecializados = ordenes.filter(
+    (o) => o.tipos_servicio?.categoria === 'ESPECIALIZADO',
+  ).length;
   const totalServicios = ordenes.length;
 
-  const pctPreventivos = totalServicios > 0 ? Math.round((totalPreventivos / totalServicios) * 100) : 0;
-  const pctCorrectivos = totalServicios > 0 ? Math.round((totalCorrectivos / totalServicios) * 100) : 0;
+  const pctPreventivos =
+    totalServicios > 0 ? Math.round((totalPreventivos / totalServicios) * 100) : 0;
+  const pctCorrectivos =
+    totalServicios > 0 ? Math.round((totalCorrectivos / totalServicios) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -327,8 +378,12 @@ export function TrazabilidadServiciosCliente({
         <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 rounded-2xl shadow-md border border-slate-700 relative overflow-hidden">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-[11px] font-bold tracking-wider text-slate-300 uppercase">Total Intervenciones</p>
-              <h3 className="text-3xl font-black mt-1 text-white tracking-tight">{totalServicios}</h3>
+              <p className="text-[11px] font-bold tracking-wider text-slate-300 uppercase">
+                Total Intervenciones
+              </p>
+              <h3 className="text-3xl font-black mt-1 text-white tracking-tight">
+                {totalServicios}
+              </h3>
             </div>
             <div className="p-2.5 bg-white/10 rounded-xl backdrop-blur-xs text-white">
               <History className="h-5 w-5" />
@@ -344,7 +399,9 @@ export function TrazabilidadServiciosCliente({
         <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-xs hover:border-blue-200 transition-all">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-[11px] font-bold tracking-wider text-blue-600 uppercase">Preventivos</p>
+              <p className="text-[11px] font-bold tracking-wider text-blue-600 uppercase">
+                Preventivos
+              </p>
               <div className="flex items-baseline gap-2 mt-1">
                 <h3 className="text-3xl font-black text-slate-900">{totalPreventivos}</h3>
                 <span className="text-xs font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
@@ -357,7 +414,10 @@ export function TrazabilidadServiciosCliente({
             </div>
           </div>
           <div className="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ width: `${pctPreventivos}%` }} />
+            <div
+              className="bg-blue-600 h-full rounded-full transition-all duration-500"
+              style={{ width: `${pctPreventivos}%` }}
+            />
           </div>
         </div>
 
@@ -365,7 +425,9 @@ export function TrazabilidadServiciosCliente({
         <div className="bg-white p-5 rounded-2xl border border-orange-100 shadow-xs hover:border-orange-200 transition-all">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-[11px] font-bold tracking-wider text-orange-600 uppercase">Correctivos Específicos</p>
+              <p className="text-[11px] font-bold tracking-wider text-orange-600 uppercase">
+                Correctivos Específicos
+              </p>
               <div className="flex items-baseline gap-2 mt-1">
                 <h3 className="text-3xl font-black text-slate-900">{totalCorrectivos}</h3>
                 <span className="text-xs font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md">
@@ -378,7 +440,10 @@ export function TrazabilidadServiciosCliente({
             </div>
           </div>
           <div className="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-orange-500 h-full rounded-full transition-all duration-500" style={{ width: `${pctCorrectivos}%` }} />
+            <div
+              className="bg-orange-500 h-full rounded-full transition-all duration-500"
+              style={{ width: `${pctCorrectivos}%` }}
+            />
           </div>
         </div>
 
@@ -386,9 +451,13 @@ export function TrazabilidadServiciosCliente({
         <div className="bg-white p-5 rounded-2xl border border-red-100 shadow-xs hover:border-red-200 transition-all">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-[11px] font-bold tracking-wider text-red-600 uppercase">Emergencias / Esp.</p>
+              <p className="text-[11px] font-bold tracking-wider text-red-600 uppercase">
+                Emergencias / Esp.
+              </p>
               <div className="flex items-baseline gap-2 mt-1">
-                <h3 className="text-3xl font-black text-slate-900">{totalEmergencias + totalEspecializados}</h3>
+                <h3 className="text-3xl font-black text-slate-900">
+                  {totalEmergencias + totalEspecializados}
+                </h3>
                 <span className="text-xs font-bold text-slate-400">
                   {totalEmergencias} urg / {totalEspecializados} esp
                 </span>
@@ -437,7 +506,9 @@ export function TrazabilidadServiciosCliente({
                   onClick={() => applyDatePreset('all')}
                   className={cn(
                     'px-2.5 py-1.5 rounded-lg transition-all',
-                    datePreset === 'all' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                    datePreset === 'all'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'hover:text-slate-900',
                   )}
                 >
                   Histórico
@@ -447,7 +518,9 @@ export function TrazabilidadServiciosCliente({
                   onClick={() => applyDatePreset('30d')}
                   className={cn(
                     'px-2.5 py-1.5 rounded-lg transition-all',
-                    datePreset === '30d' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                    datePreset === '30d'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'hover:text-slate-900',
                   )}
                 >
                   30 Días
@@ -457,7 +530,9 @@ export function TrazabilidadServiciosCliente({
                   onClick={() => applyDatePreset('quarter')}
                   className={cn(
                     'px-2.5 py-1.5 rounded-lg transition-all',
-                    datePreset === 'quarter' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                    datePreset === 'quarter'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'hover:text-slate-900',
                   )}
                 >
                   Trimestre (Q)
@@ -467,7 +542,9 @@ export function TrazabilidadServiciosCliente({
                   onClick={() => applyDatePreset('ytd')}
                   className={cn(
                     'px-2.5 py-1.5 rounded-lg transition-all',
-                    datePreset === 'ytd' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                    datePreset === 'ytd'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'hover:text-slate-900',
                   )}
                 >
                   Año (YTD)
@@ -547,14 +624,16 @@ export function TrazabilidadServiciosCliente({
                     'px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5',
                     categoriaFiltro === cat.key
                       ? 'bg-slate-900 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
                   )}
                 >
                   <span>{cat.label}</span>
                   <span
                     className={cn(
                       'text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black',
-                      categoriaFiltro === cat.key ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                      categoriaFiltro === cat.key
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-200 text-slate-700',
                     )}
                   >
                     {cat.count}
@@ -571,7 +650,9 @@ export function TrazabilidadServiciosCliente({
                   onClick={expandAllRows}
                   className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors px-2 py-1"
                 >
-                  {expandedRows.size === ordenesFiltradas.length ? 'Colapsar todo' : 'Expandir todo'}
+                  {expandedRows.size === ordenesFiltradas.length
+                    ? 'Colapsar todo'
+                    : 'Expandir todo'}
                 </button>
               )}
 
@@ -581,7 +662,9 @@ export function TrazabilidadServiciosCliente({
                   onClick={() => setViewMode('table')}
                   className={cn(
                     'p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all',
-                    viewMode === 'table' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                    viewMode === 'table'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800',
                   )}
                   title="Vista Tabla Estratégica (Matriz)"
                 >
@@ -593,7 +676,9 @@ export function TrazabilidadServiciosCliente({
                   onClick={() => setViewMode('timeline')}
                   className={cn(
                     'p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all',
-                    viewMode === 'timeline' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                    viewMode === 'timeline'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800',
                   )}
                   title="Vista Línea de Tiempo"
                 >
@@ -616,12 +701,15 @@ export function TrazabilidadServiciosCliente({
                   <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 overflow-x-auto max-w-full">
                     <button
                       type="button"
-                      onClick={() => { setTipoEquipoFiltro('TODOS'); setEquiposSeleccionados(new Set()); }}
+                      onClick={() => {
+                        setTipoEquipoFiltro('TODOS');
+                        setEquiposSeleccionados(new Set());
+                      }}
                       className={cn(
                         'px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0',
                         tipoEquipoFiltro === 'TODOS'
                           ? 'bg-white text-slate-900 shadow-2xs'
-                          : 'text-slate-500 hover:text-slate-800'
+                          : 'text-slate-500 hover:text-slate-800',
                       )}
                     >
                       Todos los tipos
@@ -630,12 +718,15 @@ export function TrazabilidadServiciosCliente({
                       <button
                         key={tipo}
                         type="button"
-                        onClick={() => { setTipoEquipoFiltro(tipo); setEquiposSeleccionados(new Set()); }}
+                        onClick={() => {
+                          setTipoEquipoFiltro(tipo);
+                          setEquiposSeleccionados(new Set());
+                        }}
                         className={cn(
                           'px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0',
                           tipoEquipoFiltro === tipo
                             ? 'bg-blue-600 text-white shadow-2xs'
-                            : 'text-slate-500 hover:text-slate-800'
+                            : 'text-slate-500 hover:text-slate-800',
                         )}
                       >
                         {tipo}
@@ -655,17 +746,27 @@ export function TrazabilidadServiciosCliente({
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all',
                       equiposSeleccionados.size > 0
                         ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50',
                     )}
                   >
                     <Filter className="h-3.5 w-3.5" />
-                    {equiposSeleccionados.size > 0 ? `${equiposSeleccionados.size} equipo(s)` : 'Equipos'}
-                    <ChevronDown className={cn('h-3 w-3 transition-transform duration-200', equipoPickerOpen && 'rotate-180')} />
+                    {equiposSeleccionados.size > 0
+                      ? `${equiposSeleccionados.size} equipo(s)`
+                      : 'Equipos'}
+                    <ChevronDown
+                      className={cn(
+                        'h-3 w-3 transition-transform duration-200',
+                        equipoPickerOpen && 'rotate-180',
+                      )}
+                    />
                   </button>
 
                   {equipoPickerOpen && (
                     <>
-                      <div className="fixed inset-0 z-10" onClick={() => setEquipoPickerOpen(false)} />
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setEquipoPickerOpen(false)}
+                      />
                       <div className="absolute top-full left-0 mt-1.5 z-20 bg-white rounded-2xl border border-slate-200 shadow-xl min-w-[260px] max-h-72 overflow-y-auto">
                         <div className="p-3 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
                           <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -683,7 +784,10 @@ export function TrazabilidadServiciosCliente({
                         </div>
                         <div className="p-2 space-y-0.5">
                           {equiposDisponibles
-                            .filter((eq) => tipoEquipoFiltro === 'TODOS' || eq.tipo_nombre === tipoEquipoFiltro)
+                            .filter(
+                              (eq) =>
+                                tipoEquipoFiltro === 'TODOS' || eq.tipo_nombre === tipoEquipoFiltro,
+                            )
                             .map((eq) => (
                               <label
                                 key={eq.id_equipo}
@@ -706,15 +810,24 @@ export function TrazabilidadServiciosCliente({
                                   className="rounded accent-blue-600 h-3.5 w-3.5 shrink-0"
                                 />
                                 <div className="min-w-0">
-                                  <div className="text-xs font-semibold text-slate-800 truncate">{eq.nombre_equipo}</div>
+                                  <div className="text-xs font-semibold text-slate-800 truncate">
+                                    {eq.nombre_equipo}
+                                  </div>
                                   {eq.tipo_nombre && (
-                                    <div className="text-[10px] text-slate-400 truncate">{eq.tipo_nombre}</div>
+                                    <div className="text-[10px] text-slate-400 truncate">
+                                      {eq.tipo_nombre}
+                                    </div>
                                   )}
                                 </div>
                               </label>
                             ))}
-                          {equiposDisponibles.filter((eq) => tipoEquipoFiltro === 'TODOS' || eq.tipo_nombre === tipoEquipoFiltro).length === 0 && (
-                            <p className="text-xs text-slate-400 italic px-3 py-2">Sin equipos para este tipo</p>
+                          {equiposDisponibles.filter(
+                            (eq) =>
+                              tipoEquipoFiltro === 'TODOS' || eq.tipo_nombre === tipoEquipoFiltro,
+                          ).length === 0 && (
+                            <p className="text-xs text-slate-400 italic px-3 py-2">
+                              Sin equipos para este tipo
+                            </p>
                           )}
                         </div>
                       </div>
@@ -747,19 +860,34 @@ export function TrazabilidadServiciosCliente({
         <div className="p-8 text-center bg-red-50 rounded-2xl border border-red-200 text-red-700">
           <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-500" />
           <p className="font-bold">Error al cargar la trazabilidad de servicios</p>
-          <p className="text-xs text-red-600 mt-1">{(error as Error)?.message || 'Error desconocido'}</p>
-          <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-4 bg-white font-bold">
+          <p className="text-xs text-red-600 mt-1">
+            {(error as Error)?.message || 'Error desconocido'}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            className="mt-4 bg-white font-bold"
+          >
             Reintentar
           </Button>
         </div>
       ) : ordenesFiltradas.length === 0 ? (
         <div className="p-16 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200 space-y-3">
           <History className="h-12 w-12 text-slate-300 mx-auto" />
-          <p className="font-bold text-slate-800 text-base">No hay registros de servicios para los filtros seleccionados</p>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Prueba ajustando el rango de fecha o los términos de búsqueda para visualizar las intervenciones de este cliente.
+          <p className="font-bold text-slate-800 text-base">
+            No hay registros de servicios para los filtros seleccionados
           </p>
-          {(search || fechaDesde || fechaHasta || categoriaFiltro !== 'TODOS' || tipoEquipoFiltro !== 'TODOS' || equiposSeleccionados.size > 0) && (
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Prueba ajustando el rango de fecha o los términos de búsqueda para visualizar las
+            intervenciones de este cliente.
+          </p>
+          {(search ||
+            fechaDesde ||
+            fechaHasta ||
+            categoriaFiltro !== 'TODOS' ||
+            tipoEquipoFiltro !== 'TODOS' ||
+            equiposSeleccionados.size > 0) && (
             <Button
               variant="outline"
               size="sm"
@@ -800,23 +928,35 @@ export function TrazabilidadServiciosCliente({
                   const isExpanded = expandedRows.has(orden.id_orden_servicio);
                   const fechaIntervencion = orden.fecha_programada || orden.fecha_creacion;
                   const pdfUrl = getPdfUrl(orden);
-                  const esCorrectivo = orden.tipos_servicio?.categoria === 'CORRECTIVO' || orden.tipos_servicio?.categoria === 'EMERGENCIA';
+                  const esCorrectivo =
+                    orden.tipos_servicio?.categoria === 'CORRECTIVO' ||
+                    orden.tipos_servicio?.categoria === 'EMERGENCIA';
                   const serviciosHijos = orden.detalle_servicios_orden || [];
                   const equiposList = getEquiposList(orden);
 
                   // Observaciones procesadas
                   const plainTrabajo = stripHtmlToPlainText(orden.trabajo_realizado);
                   const plainFalla = stripHtmlToPlainText(orden.descripcion_inicial);
-                  const plainCierre = stripHtmlToPlainText(orden.observaciones_cierre || orden.observaciones_tecnico);
-                  const nombreTecnico = formatNombreTecnico(orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados);
-                  const inicialesTecnico = getInicialesTecnico(orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados);
+                  const plainCierre = stripHtmlToPlainText(
+                    orden.observaciones_cierre || orden.observaciones_tecnico,
+                  );
+                  const nombreTecnico = formatNombreTecnico(
+                    orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados,
+                  );
+                  const inicialesTecnico = getInicialesTecnico(
+                    orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados,
+                  );
 
                   return (
                     <Fragment key={orden.id_orden_servicio}>
                       <tr
                         className={cn(
                           'group transition-colors hover:bg-blue-50/40',
-                          isExpanded ? 'bg-slate-100/80 font-medium' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'
+                          isExpanded
+                            ? 'bg-slate-100/80 font-medium'
+                            : idx % 2 === 0
+                              ? 'bg-white'
+                              : 'bg-slate-50/30',
                         )}
                       >
                         {/* 1. Toggle Expansión */}
@@ -843,7 +983,13 @@ export function TrazabilidadServiciosCliente({
                             </span>
                             <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
                               <Calendar className="h-3 w-3 text-slate-400" />
-                              <span>{formatDateSafe(fechaIntervencion, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                              <span>
+                                {formatDateSafe(fechaIntervencion, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </span>
                             </div>
                             {orden.estados_orden && (
                               <span
@@ -869,7 +1015,7 @@ export function TrazabilidadServiciosCliente({
                                 'text-[10px] font-black tracking-wider uppercase px-2 py-0.5',
                                 esCorrectivo
                                   ? 'bg-orange-50 text-orange-700 border-orange-200'
-                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200',
                               )}
                             >
                               {orden.tipos_servicio?.categoria || 'SERVICIO'}
@@ -909,7 +1055,9 @@ export function TrazabilidadServiciosCliente({
                                 </div>
                               ))
                             ) : (
-                              <span className="text-slate-400 italic text-[11px]">Sin equipo asignado</span>
+                              <span className="text-slate-400 italic text-[11px]">
+                                Sin equipo asignado
+                              </span>
                             )}
                           </div>
                         </td>
@@ -953,7 +1101,9 @@ export function TrazabilidadServiciosCliente({
                                   Atención de emergencia directa
                                 </span>
                               ) : (
-                                <span className="text-slate-400 text-[11px]">Rutina preventiva estándar</span>
+                                <span className="text-slate-400 text-[11px]">
+                                  Rutina preventiva estándar
+                                </span>
                               )}
                             </div>
                           )}
@@ -972,7 +1122,9 @@ export function TrazabilidadServiciosCliente({
                                 )}
                                 {plainFalla && plainFalla !== plainTrabajo && (
                                   <div className="text-[11.5px] text-slate-700 leading-relaxed break-words">
-                                    <strong className="text-slate-900 font-bold">Falla / Motivo:</strong>{' '}
+                                    <strong className="text-slate-900 font-bold">
+                                      Falla / Motivo:
+                                    </strong>{' '}
                                     <span className="whitespace-pre-line">{plainFalla}</span>
                                   </div>
                                 )}
@@ -992,14 +1144,17 @@ export function TrazabilidadServiciosCliente({
                                 </button>
                               </>
                             ) : (
-                              <span className="text-slate-400 italic text-[11px]">Sin observaciones registradas</span>
+                              <span className="text-slate-400 italic text-[11px]">
+                                Sin observaciones registradas
+                              </span>
                             )}
                           </div>
                         </td>
 
                         {/* 7. Técnico Responsable (Nombre Completo Sin Truncar) */}
                         <td className="py-3.5 px-4 align-top">
-                          {orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona ? (
+                          {orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados
+                            ?.persona ? (
                             <div className="flex items-center gap-2 text-slate-800 min-w-[150px]">
                               <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-800 font-bold text-[10px] flex items-center justify-center shrink-0 border border-slate-300">
                                 {inicialesTecnico}
@@ -1103,7 +1258,10 @@ export function TrazabilidadServiciosCliente({
                                           <p className="font-bold text-slate-800 text-xs">
                                             {det.catalogo_servicios?.nombre_servicio}
                                           </p>
-                                          <Badge variant="outline" className="text-[10px] bg-white font-mono shrink-0">
+                                          <Badge
+                                            variant="outline"
+                                            className="text-[10px] bg-white font-mono shrink-0"
+                                          >
                                             Cant: {det.cantidad}
                                           </Badge>
                                         </div>
@@ -1127,7 +1285,9 @@ export function TrazabilidadServiciosCliente({
                                   <div className="space-y-2 text-slate-700 max-h-48 overflow-y-auto pr-1">
                                     {plainFalla && (
                                       <div>
-                                        <span className="font-bold text-slate-900 block text-[10px] uppercase">Motivo / Falla Reportada:</span>
+                                        <span className="font-bold text-slate-900 block text-[10px] uppercase">
+                                          Motivo / Falla Reportada:
+                                        </span>
                                         <p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-800 mt-0.5 whitespace-pre-line">
                                           {plainFalla}
                                         </p>
@@ -1135,7 +1295,9 @@ export function TrazabilidadServiciosCliente({
                                     )}
                                     {plainTrabajo && (
                                       <div>
-                                        <span className="font-bold text-slate-900 block text-[10px] uppercase">Trabajo Realizado:</span>
+                                        <span className="font-bold text-slate-900 block text-[10px] uppercase">
+                                          Trabajo Realizado:
+                                        </span>
                                         <p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-800 mt-0.5 whitespace-pre-line">
                                           {plainTrabajo}
                                         </p>
@@ -1143,14 +1305,18 @@ export function TrazabilidadServiciosCliente({
                                     )}
                                     {plainCierre && (
                                       <div>
-                                        <span className="font-bold text-slate-900 block text-[10px] uppercase">Observaciones de Cierre:</span>
+                                        <span className="font-bold text-slate-900 block text-[10px] uppercase">
+                                          Observaciones de Cierre:
+                                        </span>
                                         <p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-800 mt-0.5 whitespace-pre-line">
                                           {plainCierre}
                                         </p>
                                       </div>
                                     )}
                                     {!plainFalla && !plainTrabajo && !plainCierre && (
-                                      <p className="text-slate-400 italic text-xs">Sin observaciones detalladas.</p>
+                                      <p className="text-slate-400 italic text-xs">
+                                        Sin observaciones detalladas.
+                                      </p>
                                     )}
                                   </div>
                                 </div>
@@ -1165,11 +1331,18 @@ export function TrazabilidadServiciosCliente({
                                     {equiposList.length > 0 ? (
                                       <div className="space-y-1.5">
                                         {equiposList.map((eq) => (
-                                          <div key={eq.id_equipo} className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
+                                          <div
+                                            key={eq.id_equipo}
+                                            className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center"
+                                          >
                                             <div>
-                                              <span className="font-bold text-slate-800 text-xs block">{eq.nombre_equipo}</span>
+                                              <span className="font-bold text-slate-800 text-xs block">
+                                                {eq.nombre_equipo}
+                                              </span>
                                               {eq.tipo_nombre && (
-                                                <span className="text-[10px] text-slate-400">{eq.tipo_nombre}</span>
+                                                <span className="text-[10px] text-slate-400">
+                                                  {eq.tipo_nombre}
+                                                </span>
                                               )}
                                             </div>
                                             {eq.horas_actuales != null && (
@@ -1181,7 +1354,9 @@ export function TrazabilidadServiciosCliente({
                                         ))}
                                       </div>
                                     ) : (
-                                      <p className="text-slate-400 italic text-xs">Sin equipo asignado</p>
+                                      <p className="text-slate-400 italic text-xs">
+                                        Sin equipo asignado
+                                      </p>
                                     )}
                                   </div>
 
@@ -1215,13 +1390,18 @@ export function TrazabilidadServiciosCliente({
           {ordenesFiltradas.map((orden) => {
             const fechaIntervencion = orden.fecha_programada || orden.fecha_creacion;
             const pdfUrl = getPdfUrl(orden);
-            const tieneCorrectivosEspecificos = orden.detalle_servicios_orden && orden.detalle_servicios_orden.length > 0;
-            const esCorrectivo = orden.tipos_servicio?.categoria === 'CORRECTIVO' || orden.tipos_servicio?.categoria === 'EMERGENCIA';
+            const tieneCorrectivosEspecificos =
+              orden.detalle_servicios_orden && orden.detalle_servicios_orden.length > 0;
+            const esCorrectivo =
+              orden.tipos_servicio?.categoria === 'CORRECTIVO' ||
+              orden.tipos_servicio?.categoria === 'EMERGENCIA';
             const equiposList = getEquiposList(orden);
 
             const plainFalla = stripHtmlToPlainText(orden.descripcion_inicial);
             const plainTrabajo = stripHtmlToPlainText(orden.trabajo_realizado);
-            const plainCierre = stripHtmlToPlainText(orden.observaciones_cierre || orden.observaciones_tecnico);
+            const plainCierre = stripHtmlToPlainText(
+              orden.observaciones_cierre || orden.observaciones_tecnico,
+            );
 
             return (
               <div key={orden.id_orden_servicio} className="relative group">
@@ -1229,7 +1409,7 @@ export function TrazabilidadServiciosCliente({
                 <div
                   className={cn(
                     'absolute -left-6 sm:-left-8 top-4 w-4 h-4 rounded-full border-4 border-white shadow-xs transition-transform group-hover:scale-125',
-                    esCorrectivo ? 'bg-orange-500' : 'bg-blue-600'
+                    esCorrectivo ? 'bg-orange-500' : 'bg-blue-600',
                   )}
                 />
 
@@ -1248,7 +1428,7 @@ export function TrazabilidadServiciosCliente({
                             'font-bold text-xs',
                             esCorrectivo
                               ? 'bg-orange-50 text-orange-700 border-orange-200'
-                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200',
                           )}
                         >
                           {orden.tipos_servicio.nombre_tipo}
@@ -1271,7 +1451,13 @@ export function TrazabilidadServiciosCliente({
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
                         <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        <span>{formatDateSafe(fechaIntervencion, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                        <span>
+                          {formatDateSafe(fechaIntervencion, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
                       </div>
                       <Link
                         href={`/ordenes/${orden.id_orden_servicio}`}
@@ -1317,17 +1503,20 @@ export function TrazabilidadServiciosCliente({
                     <div className="text-xs space-y-1.5 bg-slate-50 p-3 rounded-xl">
                       {plainFalla && (
                         <p className="text-slate-700 whitespace-pre-line">
-                          <strong className="text-slate-900">Descripción inicial / Falla:</strong> {plainFalla}
+                          <strong className="text-slate-900">Descripción inicial / Falla:</strong>{' '}
+                          {plainFalla}
                         </p>
                       )}
                       {plainTrabajo && (
                         <p className="text-slate-700 whitespace-pre-line">
-                          <strong className="text-slate-900">Trabajo realizado:</strong> {plainTrabajo}
+                          <strong className="text-slate-900">Trabajo realizado:</strong>{' '}
+                          {plainTrabajo}
                         </p>
                       )}
                       {plainCierre && (
                         <p className="text-slate-700 whitespace-pre-line">
-                          <strong className="text-slate-900">Observaciones técnicas:</strong> {plainCierre}
+                          <strong className="text-slate-900">Observaciones técnicas:</strong>{' '}
+                          {plainCierre}
                         </p>
                       )}
                     </div>
@@ -1348,7 +1537,9 @@ export function TrazabilidadServiciosCliente({
                           >
                             <span>{eq.nombre_equipo}</span>
                             {eq.horas_actuales != null && (
-                              <span className="text-[10px] text-slate-400">({eq.horas_actuales} hrs)</span>
+                              <span className="text-[10px] text-slate-400">
+                                ({eq.horas_actuales} hrs)
+                              </span>
                             )}
                           </Link>
                         ))
@@ -1362,7 +1553,9 @@ export function TrazabilidadServiciosCliente({
                         <div className="flex items-center gap-1 text-slate-700">
                           <User className="h-3.5 w-3.5 text-slate-400" />
                           <span className="font-medium">
-                            {formatNombreTecnico(orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados)}
+                            {formatNombreTecnico(
+                              orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados,
+                            )}
                           </span>
                         </div>
                       )}
@@ -1418,7 +1611,12 @@ export function TrazabilidadServiciosCliente({
                   Bitácora Integral de Intervención & Hallazgos
                 </h2>
                 <p className="text-xs text-slate-300">
-                  Fecha: {formatDateSafe(modalOrden.fecha_programada || modalOrden.fecha_creacion, { year: 'numeric', month: 'long', day: 'numeric' })}
+                  Fecha:{' '}
+                  {formatDateSafe(modalOrden.fecha_programada || modalOrden.fecha_creacion, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
                 </p>
               </div>
               <button
@@ -1458,33 +1656,44 @@ export function TrazabilidadServiciosCliente({
                   <div className="flex items-center gap-2">
                     <User className="h-3.5 w-3.5 text-slate-400" />
                     <span className="font-bold text-slate-900 text-xs">
-                      {formatNombreTecnico(modalOrden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados)}
+                      {formatNombreTecnico(
+                        modalOrden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados,
+                      )}
                     </span>
                   </div>
                 </div>
               </div>
 
               {/* Servicios Específicos */}
-              {modalOrden.detalle_servicios_orden && modalOrden.detalle_servicios_orden.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-orange-700 font-bold uppercase text-[11px]">
-                    <Layers className="h-4 w-4" />
-                    <span>Servicios Específicos Ejecutados ({modalOrden.detalle_servicios_orden.length})</span>
+              {modalOrden.detalle_servicios_orden &&
+                modalOrden.detalle_servicios_orden.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 text-orange-700 font-bold uppercase text-[11px]">
+                      <Layers className="h-4 w-4" />
+                      <span>
+                        Servicios Específicos Ejecutados (
+                        {modalOrden.detalle_servicios_orden.length})
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {modalOrden.detalle_servicios_orden.map((det) => (
+                        <div
+                          key={det.id_detalle_servicio}
+                          className="p-3 bg-orange-50/60 rounded-xl border border-orange-200/80 flex items-center justify-between"
+                        >
+                          <span className="font-bold text-slate-900 text-xs">
+                            {det.catalogo_servicios?.nombre_servicio}
+                          </span>
+                          {Number(det.cantidad) > 1 && (
+                            <Badge variant="outline" className="bg-white text-[10px] font-mono">
+                              Cant: {det.cantidad}
+                            </Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {modalOrden.detalle_servicios_orden.map((det) => (
-                      <div key={det.id_detalle_servicio} className="p-3 bg-orange-50/60 rounded-xl border border-orange-200/80 flex items-center justify-between">
-                        <span className="font-bold text-slate-900 text-xs">{det.catalogo_servicios?.nombre_servicio}</span>
-                        {Number(det.cantidad) > 1 && (
-                          <Badge variant="outline" className="bg-white text-[10px] font-mono">
-                            Cant: {det.cantidad}
-                          </Badge>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                )}
 
               {/* Secciones Narrativas de la Bitácora */}
               <div className="space-y-4">
@@ -1519,7 +1728,9 @@ export function TrazabilidadServiciosCliente({
                       3. Hallazgos Técnicos & Observaciones de Cierre:
                     </span>
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-slate-800 leading-relaxed whitespace-pre-line text-xs font-normal">
-                      {stripHtmlToPlainText(modalOrden.observaciones_cierre || modalOrden.observaciones_tecnico)}
+                      {stripHtmlToPlainText(
+                        modalOrden.observaciones_cierre || modalOrden.observaciones_tecnico,
+                      )}
                     </div>
                   </div>
                 )}
@@ -1540,16 +1751,24 @@ export function TrazabilidadServiciosCliente({
                       try {
                         setDownloadingOrderId(modalOrden.id_orden_servicio);
                         const filenameCanonico = buildInformeFilename({
-                          fechaServicio: modalOrden.fecha_fin_real || modalOrden.fecha_inicio_real || modalOrden.fecha_programada,
+                          fechaServicio:
+                            modalOrden.fecha_fin_real ||
+                            modalOrden.fecha_inicio_real ||
+                            modalOrden.fecha_programada,
                           codigoTipoServicio: modalOrden.tipos_servicio?.codigo_tipo,
                           nombreTipoServicio: modalOrden.tipos_servicio?.nombre_tipo,
-                          codigoTipoEquipo: (modalOrden.equipos as any)?.tipos_equipo?.codigo_tipo,
-                          nombreTipoEquipo: (modalOrden.equipos as any)?.tipos_equipo?.nombre_tipo,
+                          codigoTipoEquipo: modalOrden.equipos?.tipos_equipo?.codigo_tipo,
+                          nombreTipoEquipo: modalOrden.equipos?.tipos_equipo?.nombre_tipo,
                           nombreCliente: clienteNombre,
-                          nombreEquipo: modalOrden.equipos?.nombre_equipo || (modalOrden.equipos as any)?.nombre,
+                          nombreEquipo:
+                            modalOrden.equipos?.nombre_equipo || modalOrden.equipos?.nombre,
                           numeroOrden: modalOrden.numero_orden,
                         });
-                        await descargarInformePorOrdenAutenticado(apiClient, modalOrden.id_orden_servicio, filenameCanonico);
+                        await descargarInformePorOrdenAutenticado(
+                          apiClient,
+                          modalOrden.id_orden_servicio,
+                          filenameCanonico,
+                        );
                         invalidateReportes();
                       } catch (error) {
                         console.error('[Trazabilidad] Error descargando informe:', error);
@@ -1568,7 +1787,11 @@ export function TrazabilidadServiciosCliente({
                     ) : (
                       <Download className="h-4 w-4" />
                     )}
-                    <span>{downloadingOrderId === modalOrden.id_orden_servicio ? 'Descargando...' : 'Descargar PDF'}</span>
+                    <span>
+                      {downloadingOrderId === modalOrden.id_orden_servicio
+                        ? 'Descargando...'
+                        : 'Descargar PDF'}
+                    </span>
                   </button>
                 )}
                 <Link

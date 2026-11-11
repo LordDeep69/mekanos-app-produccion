@@ -91,18 +91,42 @@ export const MODO_RESPUESTA_PRESETS: PresetModoRespuesta[] = [
 
 export const ROL_SEMANTICO_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Ninguno (Actividad estándar de checklist)' },
-  { value: 'LECTURA_CONTADOR_ACTIVO', label: '🔢 LECTURA_CONTADOR_ACTIVO (Actualiza horómetro / ciclos / km)' },
-  { value: 'CORR_ESTADO_INICIAL', label: '⚡ CORR_ESTADO_INICIAL (Sección Correctivo: Estado Inicial)' },
+  {
+    value: 'LECTURA_CONTADOR_ACTIVO',
+    label: '🔢 LECTURA_CONTADOR_ACTIVO (Actualiza horómetro / ciclos / km)',
+  },
+  {
+    value: 'CORR_ESTADO_INICIAL',
+    label: '⚡ CORR_ESTADO_INICIAL (Sección Correctivo: Estado Inicial)',
+  },
   { value: 'CORR_ESTADO_FINAL', label: '🏁 CORR_ESTADO_FINAL (Sección Correctivo: Estado Final)' },
-  { value: 'CORR_SISTEMAS_AFECTADOS', label: '🧩 CORR_SISTEMAS_AFECTADOS (Sección Correctivo: Subsistemas)' },
+  {
+    value: 'CORR_SISTEMAS_AFECTADOS',
+    label: '🧩 CORR_SISTEMAS_AFECTADOS (Sección Correctivo: Subsistemas)',
+  },
   { value: 'CORR_PROBLEMA', label: '⚠️ CORR_PROBLEMA (Sección Correctivo: Problema Reportado)' },
   { value: 'CORR_FALLAS', label: '🔍 CORR_FALLAS (Sección Correctivo: Fallas Observadas)' },
-  { value: 'CORR_DIAGNOSTICO', label: '🩺 CORR_DIAGNOSTICO (Sección Correctivo: Diagnóstico Técnico)' },
+  {
+    value: 'CORR_DIAGNOSTICO',
+    label: '🩺 CORR_DIAGNOSTICO (Sección Correctivo: Diagnóstico Técnico)',
+  },
   { value: 'CORR_TRABAJOS', label: '🔧 CORR_TRABAJOS (Sección Correctivo: Trabajos Realizados)' },
-  { value: 'CORR_PENDIENTES', label: '📌 CORR_PENDIENTES (Sección Correctivo: Trabajos Pendientes)' },
-  { value: 'CORR_RECOMENDACIONES', label: '💡 CORR_RECOMENDACIONES (Sección Correctivo: Recomendaciones)' },
-  { value: 'CORR_REPUESTOS', label: '🔩 CORR_REPUESTOS (Sección Correctivo: Repuestos Utilizados)' },
-  { value: 'CORR_MATERIALES', label: '📦 CORR_MATERIALES (Sección Correctivo: Materiales e Insumos)' },
+  {
+    value: 'CORR_PENDIENTES',
+    label: '📌 CORR_PENDIENTES (Sección Correctivo: Trabajos Pendientes)',
+  },
+  {
+    value: 'CORR_RECOMENDACIONES',
+    label: '💡 CORR_RECOMENDACIONES (Sección Correctivo: Recomendaciones)',
+  },
+  {
+    value: 'CORR_REPUESTOS',
+    label: '🔩 CORR_REPUESTOS (Sección Correctivo: Repuestos Utilizados)',
+  },
+  {
+    value: 'CORR_MATERIALES',
+    label: '📦 CORR_MATERIALES (Sección Correctivo: Materiales e Insumos)',
+  },
 ];
 
 export const SEMAFORO_META: Record<
@@ -142,22 +166,24 @@ const DEFAULT_CUSTOM_OPTIONS: OpcionInputDeclarativo[] = [
   { valor: 'OP_3', etiqueta: 'Crítico', semaforo: 'M' },
 ];
 
-export function parseConfigInputJson(raw: any): ConfigInputDeclarativo {
+export function parseConfigInputJson(raw: unknown): ConfigInputDeclarativo {
   if (!raw) return {};
   if (typeof raw === 'string') {
     try {
       const parsed = JSON.parse(raw);
-      return typeof parsed === 'object' && parsed !== null ? parsed : {};
+      return typeof parsed === 'object' && parsed !== null
+        ? (parsed as ConfigInputDeclarativo)
+        : {};
     } catch {
       return {};
     }
   }
-  return typeof raw === 'object' ? raw : {};
+  return typeof raw === 'object' ? (raw as ConfigInputDeclarativo) : {};
 }
 
 export function getPresetOptions(
   tipoControlInput?: string | null,
-  configInputJson?: any,
+  configInputJson?: unknown,
 ): OpcionInputDeclarativo[] {
   const tipo = (tipoControlInput || 'ESCALA_ESTADO').toUpperCase();
   const cfg = parseConfigInputJson(configInputJson);
@@ -205,7 +231,7 @@ export function getPresetOptions(
 
 export function getModoRespuestaBadgeLabel(
   tipoControlInput?: string | null,
-  configInputJson?: any,
+  configInputJson?: unknown,
 ): string {
   const tipo = (tipoControlInput || 'ESCALA_ESTADO').toUpperCase();
   if (tipo === 'PERSONALIZADO') {
@@ -276,7 +302,10 @@ export function ModoRespuestaSelector({
     });
   };
 
-  const updateCustomOptions = (nextOpts: OpcionInputDeclarativo[], extra?: Partial<ConfigInputDeclarativo>) => {
+  const updateCustomOptions = (
+    nextOpts: OpcionInputDeclarativo[],
+    extra?: Partial<ConfigInputDeclarativo>,
+  ) => {
     onChange({
       tipoControlInput: 'PERSONALIZADO',
       configInputJson: {
@@ -301,10 +330,7 @@ export function ModoRespuestaSelector({
     updateCustomOptions(customOptions.filter((_, i) => i !== index));
   };
 
-  const updateOptionField = (
-    index: number,
-    patch: Partial<OpcionInputDeclarativo>,
-  ) => {
+  const updateOptionField = (index: number, patch: Partial<OpcionInputDeclarativo>) => {
     const next = customOptions.map((op, i) => {
       if (i !== index) return op;
       const updated = { ...op, ...patch };
@@ -331,7 +357,8 @@ export function ModoRespuestaSelector({
             ✨ Configurador de Botones / Respuestas Personalizadas
           </p>
           <p className="text-[11px] text-indigo-700">
-            Cada botón define su etiqueta visible en campo y su semáforo (B / R / M / C / NA) para reportes y alertas.
+            Cada botón define su etiqueta visible en campo y su semáforo (B / R / M / C / NA) para
+            reportes y alertas.
           </p>
         </div>
         <button
@@ -362,7 +389,9 @@ export function ModoRespuestaSelector({
             />
             <select
               value={op.semaforo}
-              onChange={(e) => updateOptionField(idx, { semaforo: e.target.value as SemaforoCodigo })}
+              onChange={(e) =>
+                updateOptionField(idx, { semaforo: e.target.value as SemaforoCodigo })
+              }
               className="px-2.5 py-1.5 text-xs font-bold border border-slate-300 rounded-lg bg-slate-50"
               title="Semáforo semántico equivalente"
             >
@@ -560,7 +589,9 @@ export function ModoRespuestaSelector({
               onChange({
                 tipoControlInput: normalizedTipo,
                 configInputJson:
-                  normalizedTipo === 'PERSONALIZADO' ? { ...cfg, opciones: customOptions } : configInputJson || null,
+                  normalizedTipo === 'PERSONALIZADO'
+                    ? { ...cfg, opciones: customOptions }
+                    : configInputJson || null,
                 rolSemantico: e.target.value,
               })
             }

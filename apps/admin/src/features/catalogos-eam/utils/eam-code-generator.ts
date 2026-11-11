@@ -119,16 +119,16 @@ export function verificarCodigoDuplicado(
 }
 
 export const SIMBOLOS_CANONICOS: Record<string, string> = {
-  'Ω': 'OHM',
-  'mΩ': 'MOHM',
-  'kΩ': 'KOHM',
-  'MΩ': 'MEOHM',
-  'µ': 'U',
-  'µm': 'UM',
-  'µF': 'UF',
-  'uF': 'UF',
-  'µs': 'US',
-  'µg': 'UG',
+  Ω: 'OHM',
+  mΩ: 'MOHM',
+  kΩ: 'KOHM',
+  MΩ: 'MEOHM',
+  µ: 'U',
+  µm: 'UM',
+  µF: 'UF',
+  uF: 'UF',
+  µs: 'US',
+  µg: 'UG',
   'm/s': 'MS',
   'm/s²': 'MS2',
   'ft/s': 'FPS',
@@ -136,46 +136,46 @@ export const SIMBOLOS_CANONICOS: Record<string, string> = {
   'km/h': 'KMH',
   'N·m': 'NM',
   'N.m': 'NM',
-  'Nm': 'NM',
+  Nm: 'NM',
   'kg/m³': 'KGM3',
   'g/cm³': 'GCM3',
   'mm²/s': 'MM2S',
   'mm/s': 'MMS',
   '°C': 'CEL',
   '°F': 'FAH',
-  'K': 'KEL',
+  K: 'KEL',
   '°': 'DEG',
   '%': 'PCT',
   'l/min': 'LPM',
   'L/min': 'LPM',
   'gal/min': 'GPM',
-  'pulg': 'IN',
-  'pie': 'FT',
-  'pies': 'FT',
-  'mm': 'MM',
-  'cm': 'CM',
-  'm': 'M',
-  'kg': 'KG',
-  'g': 'G',
-  'lb': 'LB',
-  'ton': 'TON',
-  'VAC': 'VAC',
-  'VDC': 'VDC',
-  'V': 'V',
-  'A': 'A',
-  'mA': 'MA',
-  'Hz': 'HZ',
-  'kW': 'KW',
-  'W': 'W',
-  'HP': 'HP',
-  'kVA': 'KVA',
-  'RPM': 'RPM',
-  'PSI': 'PSI',
-  'BAR': 'BAR',
-  'bar': 'BAR',
-  's': 'S',
-  'min': 'MIN',
-  'h': 'H',
+  pulg: 'IN',
+  pie: 'FT',
+  pies: 'FT',
+  mm: 'MM',
+  cm: 'CM',
+  m: 'M',
+  kg: 'KG',
+  g: 'G',
+  lb: 'LB',
+  ton: 'TON',
+  VAC: 'VAC',
+  VDC: 'VDC',
+  V: 'V',
+  A: 'A',
+  mA: 'MA',
+  Hz: 'HZ',
+  kW: 'KW',
+  W: 'W',
+  HP: 'HP',
+  kVA: 'KVA',
+  RPM: 'RPM',
+  PSI: 'PSI',
+  BAR: 'BAR',
+  bar: 'BAR',
+  s: 'S',
+  min: 'MIN',
+  h: 'H',
 };
 
 /**
@@ -185,7 +185,7 @@ export function limpiarSimboloUnidad(simbolo?: string): string {
   if (!simbolo || !simbolo.trim()) return '';
   const s = simbolo.trim();
   if (SIMBOLOS_CANONICOS[s]) return SIMBOLOS_CANONICOS[s];
-  let limpia = s
+  const limpia = s
     .replace(/[µμ]/g, 'U')
     .replace(/²/g, '2')
     .replace(/³/g, '3')
@@ -207,14 +207,31 @@ export function generarCodigoCampoTecnico(
   maxLen = 60,
 ): string {
   if (!nombre.trim()) return '';
-  const stopWords = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'en', 'para', 'con', 'por']);
+  const stopWords = new Set([
+    'de',
+    'del',
+    'la',
+    'el',
+    'los',
+    'las',
+    'un',
+    'una',
+    'en',
+    'para',
+    'con',
+    'por',
+  ]);
   const nomClean = normalizarTexto(nombre).toLowerCase();
   const palabras = nomClean
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 0 && !stopWords.has(w));
 
-  let base = (palabras.length > 0 ? palabras.join('_') : generarSlugGenerico(nombre, { maxLen, uppercase: false, separator: '_' })).slice(0, maxLen);
+  let base = (
+    palabras.length > 0
+      ? palabras.join('_')
+      : generarSlugGenerico(nombre, { maxLen, uppercase: false, separator: '_' })
+  ).slice(0, maxLen);
 
   if (unidadSimbolo && unidadSimbolo.trim()) {
     const simLimpio = limpiarSimboloUnidad(unidadSimbolo).toLowerCase();
@@ -222,7 +239,11 @@ export function generarCodigoCampoTecnico(
       base = `${base.slice(0, maxLen - simLimpio.length - 1)}_${simLimpio}`;
     }
   }
-  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+  return resolverColisionDeterminista(base, codigosExistentes, {
+    maxLen,
+    separator: '_',
+    caseSensitive: false,
+  });
 }
 
 /**
@@ -239,17 +260,48 @@ export function generarCodigoParteModulo(
   if (!nombre.trim()) return '';
   const nomClean = normalizarTexto(nombre).toLowerCase();
   const stopWords = new Set([
-    'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una',
-    'y', 'e', 'o', 'u', 'en', 'para', 'con', 'sin', 'por', 'sobre',
-    'sistema', 'sistemas', 'modulo', 'modulos', 'subsistema', 'subsistemas', 'parte', 'partes'
+    'de',
+    'del',
+    'la',
+    'el',
+    'los',
+    'las',
+    'un',
+    'una',
+    'y',
+    'e',
+    'o',
+    'u',
+    'en',
+    'para',
+    'con',
+    'sin',
+    'por',
+    'sobre',
+    'sistema',
+    'sistemas',
+    'modulo',
+    'modulos',
+    'subsistema',
+    'subsistemas',
+    'parte',
+    'partes',
   ]);
   const palabras = nomClean
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 0 && !stopWords.has(w));
 
-  const base = (palabras.length > 0 ? palabras.join('_') : generarSlugGenerico(nombre, { maxLen, uppercase: false, separator: '_' })).slice(0, maxLen);
-  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+  const base = (
+    palabras.length > 0
+      ? palabras.join('_')
+      : generarSlugGenerico(nombre, { maxLen, uppercase: false, separator: '_' })
+  ).slice(0, maxLen);
+  return resolverColisionDeterminista(base, codigosExistentes, {
+    maxLen,
+    separator: '_',
+    caseSensitive: false,
+  });
 }
 
 /**
@@ -262,19 +314,30 @@ export function generarCodigoModeloOem(
   codigosExistentes: Set<string>,
   maxLen = 60,
 ): string {
-  const mClean = normalizarTexto(marca).toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const modClean = normalizarTexto(modelo).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const mClean = normalizarTexto(marca)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  const modClean = normalizarTexto(modelo)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
   if (!mClean && !modClean) return '';
 
   const base = `MOD-${mClean || 'OEM'}-${modClean || 'STD'}`.slice(0, maxLen);
-  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
+  return resolverColisionDeterminista(base, codigosExistentes, {
+    maxLen,
+    separator: '-',
+    caseSensitive: false,
+  });
 }
 
 const DICCIONARIO_TAGS_INDUSTRIALES: Array<{ pattern: RegExp; tag: string }> = [
   { pattern: /\b(ascensor|elevador)\b/i, tag: 'ELEV' },
   { pattern: /\bmontacargas\b/i, tag: 'MONT' },
   { pattern: /\bescalera\b/i, tag: 'ESC' },
-  { pattern: /\b(chiller|enfriador|climatizad|aire acondicionado|fan coil|uma|hvac)\b/i, tag: 'HVAC' },
+  {
+    pattern: /\b(chiller|enfriador|climatizad|aire acondicionado|fan coil|uma|hvac)\b/i,
+    tag: 'HVAC',
+  },
   { pattern: /\b(generador|planta electrica|grupo electrogeno)\b/i, tag: 'GEN' },
   { pattern: /\b(bomba|motobomba|electrobomba)\b/i, tag: 'BOM' },
   { pattern: /\bcompresor\b/i, tag: 'COMP' },
@@ -295,9 +358,35 @@ const DICCIONARIO_TAGS_INDUSTRIALES: Array<{ pattern: RegExp; tag: string }> = [
 ];
 
 const STOPWORDS_ES = new Set([
-  'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas',
-  'para', 'en', 'y', 'e', 'o', 'u', 'a', 'al', 'con', 'sin', 'por', 'sobre',
-  'tipo', 'equipo', 'sistema', 'unidad', 'planta', 'maquina', 'maquinaria'
+  'de',
+  'del',
+  'la',
+  'el',
+  'los',
+  'las',
+  'un',
+  'una',
+  'unos',
+  'unas',
+  'para',
+  'en',
+  'y',
+  'e',
+  'o',
+  'u',
+  'a',
+  'al',
+  'con',
+  'sin',
+  'por',
+  'sobre',
+  'tipo',
+  'equipo',
+  'sistema',
+  'unidad',
+  'planta',
+  'maquina',
+  'maquinaria',
 ]);
 
 /**
@@ -315,10 +404,20 @@ export function generarCodigoTipoEquipo(
 
   // 1. Si contiene paréntesis conciso (ej: "Ascensor de Pasajeros (ELEV)" o "Tablero (ATS)")
   const matchParentesis = nombre.match(/\(([^)]+)\)/);
-  if (matchParentesis && matchParentesis[1].trim().length >= 2 && matchParentesis[1].trim().length <= 6) {
-    const pClean = normalizarTexto(matchParentesis[1]).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (
+    matchParentesis &&
+    matchParentesis[1].trim().length >= 2 &&
+    matchParentesis[1].trim().length <= 6
+  ) {
+    const pClean = normalizarTexto(matchParentesis[1])
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
     if (pClean.length >= 2) {
-      return resolverColisionDeterminista(pClean, codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
+      return resolverColisionDeterminista(pClean, codigosExistentes, {
+        maxLen,
+        separator: '-',
+        caseSensitive: false,
+      });
     }
   }
 
@@ -326,7 +425,11 @@ export function generarCodigoTipoEquipo(
   const norm = normalizarTexto(nombre).toLowerCase();
   const dictMatch = DICCIONARIO_TAGS_INDUSTRIALES.find((d) => d.pattern.test(norm));
   if (dictMatch) {
-    return resolverColisionDeterminista(dictMatch.tag, codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
+    return resolverColisionDeterminista(dictMatch.tag, codigosExistentes, {
+      maxLen,
+      separator: '-',
+      caseSensitive: false,
+    });
   }
 
   // 3. Extracción de acrónimo inteligente (3 a 5 letras mayúsculas)
@@ -359,7 +462,11 @@ export function generarCodigoTipoEquipo(
     tagCandidato = 'EQP';
   }
 
-  return resolverColisionDeterminista(tagCandidato || 'EQP', codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
+  return resolverColisionDeterminista(tagCandidato || 'EQP', codigosExistentes, {
+    maxLen,
+    separator: '-',
+    caseSensitive: false,
+  });
 }
 
 /**
@@ -372,7 +479,11 @@ export function generarCodigoMagnitudInteligente(
 ): string {
   if (!nombre || !nombre.trim()) return '';
   const base = generarSlugGenerico(nombre, { maxLen, uppercase: true, separator: '_' });
-  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+  return resolverColisionDeterminista(base, codigosExistentes, {
+    maxLen,
+    separator: '_',
+    caseSensitive: false,
+  });
 }
 
 /**
@@ -409,7 +520,11 @@ export function generarCodigoUnidadInteligente(
   }
 
   if (!raiz && nom) {
-    raiz = generarSlugGenerico(nom, { maxLen: Math.min(10, maxLen), uppercase: true, separator: '_' });
+    raiz = generarSlugGenerico(nom, {
+      maxLen: Math.min(10, maxLen),
+      uppercase: true,
+      separator: '_',
+    });
   }
 
   if (!raiz) return '';
@@ -421,11 +536,16 @@ export function generarCodigoUnidadInteligente(
   if (codigoMagnitudPadre) {
     const magParts = codigoMagnitudPadre.split('_').filter(Boolean);
     const ultimaParte = magParts[magParts.length - 1] || '';
-    const sufijoContexto = (ultimaParte.length > 4 ? ultimaParte.slice(0, 3) : ultimaParte).toUpperCase();
+    const sufijoContexto = (
+      ultimaParte.length > 4 ? ultimaParte.slice(0, 3) : ultimaParte
+    ).toUpperCase();
 
     if (sufijoContexto) {
       const candidatoContextual = `${raiz.slice(0, maxLen - sufijoContexto.length - 1)}_${sufijoContexto}`;
-      if (!codigosExistentes.has(candidatoContextual.toLowerCase()) && !codigosExistentes.has(candidatoContextual)) {
+      if (
+        !codigosExistentes.has(candidatoContextual.toLowerCase()) &&
+        !codigosExistentes.has(candidatoContextual)
+      ) {
         return candidatoContextual;
       }
     }
@@ -534,14 +654,39 @@ export function generarCodigoServicioComercial(
     const words = cleanNombre
       .replace(/[^A-Z0-9\s]/g, '')
       .split(/\s+/)
-      .filter((w) => !['DE', 'DEL', 'LA', 'EL', 'Y', 'EN', 'PARA', 'CON', 'A', 'LOS', 'LAS', 'UN', 'UNA', 'AL'].includes(w));
-    action = words.slice(0, 3).map((w) => w.substring(0, 4)).join('-');
+      .filter(
+        (w) =>
+          ![
+            'DE',
+            'DEL',
+            'LA',
+            'EL',
+            'Y',
+            'EN',
+            'PARA',
+            'CON',
+            'A',
+            'LOS',
+            'LAS',
+            'UN',
+            'UNA',
+            'AL',
+          ].includes(w),
+      );
+    action = words
+      .slice(0, 3)
+      .map((w) => w.substring(0, 4))
+      .join('-');
   }
 
   const baseParts = [prefix, action, noun].filter(Boolean);
   const base = baseParts.join('-').slice(0, maxLen);
 
-  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
+  return resolverColisionDeterminista(base, codigosExistentes, {
+    maxLen,
+    separator: '-',
+    caseSensitive: false,
+  });
 }
 
 /**
@@ -576,13 +721,37 @@ export function generarCodigoTipoServicio(
 
   // 2. Determinar protocolo base conciso
   let protocolo = '';
-  if (/\b(TIPO\s*A|NIVEL\s*A|\bA\b)\b/i.test(nomClean) && (nomClean.includes('TIPO') || nomClean.includes('NIVEL') || nomClean.includes('PREVENTIVO') || categoria === 'PREVENTIVO')) {
+  if (
+    /\b(TIPO\s*A|NIVEL\s*A|\bA\b)\b/i.test(nomClean) &&
+    (nomClean.includes('TIPO') ||
+      nomClean.includes('NIVEL') ||
+      nomClean.includes('PREVENTIVO') ||
+      categoria === 'PREVENTIVO')
+  ) {
     protocolo = 'PREV_A';
-  } else if (/\b(TIPO\s*B|NIVEL\s*B|\bB\b)\b/i.test(nomClean) && (nomClean.includes('TIPO') || nomClean.includes('NIVEL') || nomClean.includes('PREVENTIVO') || categoria === 'PREVENTIVO')) {
+  } else if (
+    /\b(TIPO\s*B|NIVEL\s*B|\bB\b)\b/i.test(nomClean) &&
+    (nomClean.includes('TIPO') ||
+      nomClean.includes('NIVEL') ||
+      nomClean.includes('PREVENTIVO') ||
+      categoria === 'PREVENTIVO')
+  ) {
     protocolo = 'PREV_B';
-  } else if (/\b(TIPO\s*C|NIVEL\s*C|\bC\b)\b/i.test(nomClean) && (nomClean.includes('TIPO') || nomClean.includes('NIVEL') || nomClean.includes('PREVENTIVO') || categoria === 'PREVENTIVO')) {
+  } else if (
+    /\b(TIPO\s*C|NIVEL\s*C|\bC\b)\b/i.test(nomClean) &&
+    (nomClean.includes('TIPO') ||
+      nomClean.includes('NIVEL') ||
+      nomClean.includes('PREVENTIVO') ||
+      categoria === 'PREVENTIVO')
+  ) {
     protocolo = 'PREV_C';
-  } else if (/\b(TIPO\s*D|NIVEL\s*D|\bD\b)\b/i.test(nomClean) && (nomClean.includes('TIPO') || nomClean.includes('NIVEL') || nomClean.includes('PREVENTIVO') || categoria === 'PREVENTIVO')) {
+  } else if (
+    /\b(TIPO\s*D|NIVEL\s*D|\bD\b)\b/i.test(nomClean) &&
+    (nomClean.includes('TIPO') ||
+      nomClean.includes('NIVEL') ||
+      nomClean.includes('PREVENTIVO') ||
+      categoria === 'PREVENTIVO')
+  ) {
     protocolo = 'PREV_D';
   } else if (/OVERHAUL|MAYOR/i.test(nomClean)) {
     protocolo = 'OVERHAUL';
@@ -612,13 +781,49 @@ export function generarCodigoTipoServicio(
 
   // 3. Stopwords técnicas y redundancias
   const stopWords = new Set([
-    'MANTENIMIENTO', 'MANTENIMIENTOS', 'SERVICIO', 'SERVICIOS',
-    'PREVENTIVO', 'PREVENTIVA', 'PREVENTIVOS', 'PREVENTIVAS',
-    'CORRECTIVO', 'CORRECTIVA', 'CORRECTIVOS', 'CORRECTIVAS',
-    'TIPO', 'TIPOS', 'NIVEL', 'NIVELES',
-    'DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'UN', 'UNA', 'UNOS', 'UNAS',
-    'Y', 'E', 'O', 'U', 'A', 'AL', 'EN', 'PARA', 'CON', 'SIN', 'POR', 'SOBRE',
-    'INSPECCION', 'INSPECCIONES', 'RUTINA', 'RUTINARIA', 'RUTINARIO',
+    'MANTENIMIENTO',
+    'MANTENIMIENTOS',
+    'SERVICIO',
+    'SERVICIOS',
+    'PREVENTIVO',
+    'PREVENTIVA',
+    'PREVENTIVOS',
+    'PREVENTIVAS',
+    'CORRECTIVO',
+    'CORRECTIVA',
+    'CORRECTIVOS',
+    'CORRECTIVAS',
+    'TIPO',
+    'TIPOS',
+    'NIVEL',
+    'NIVELES',
+    'DE',
+    'DEL',
+    'LA',
+    'EL',
+    'LOS',
+    'LAS',
+    'UN',
+    'UNA',
+    'UNOS',
+    'UNAS',
+    'Y',
+    'E',
+    'O',
+    'U',
+    'A',
+    'AL',
+    'EN',
+    'PARA',
+    'CON',
+    'SIN',
+    'POR',
+    'SOBRE',
+    'INSPECCION',
+    'INSPECCIONES',
+    'RUTINA',
+    'RUTINARIA',
+    'RUTINARIO',
   ]);
 
   if (protocolo.startsWith('PREV_')) {
@@ -629,11 +834,24 @@ export function generarCodigoTipoServicio(
   }
 
   const equipoKeywords = [
-    'ASCENSOR', 'ASCENSORES', 'ELEVADOR', 'ELEVADORES',
-    'GENERADOR', 'GENERADORES', 'PLANTA', 'PLANTAS',
-    'CHILLER', 'CHILLERS', 'BOMBA', 'BOMBAS',
-    'COMPRESOR', 'COMPRESORES', 'MOTOR', 'MOTORES',
-    'EQUIPO', 'ACTIVO'
+    'ASCENSOR',
+    'ASCENSORES',
+    'ELEVADOR',
+    'ELEVADORES',
+    'GENERADOR',
+    'GENERADORES',
+    'PLANTA',
+    'PLANTAS',
+    'CHILLER',
+    'CHILLERS',
+    'BOMBA',
+    'BOMBAS',
+    'COMPRESOR',
+    'COMPRESORES',
+    'MOTOR',
+    'MOTORES',
+    'EQUIPO',
+    'ACTIVO',
   ];
   if (eqTag) {
     equipoKeywords.forEach((k) => stopWords.add(k));
@@ -664,7 +882,9 @@ export function generarCodigoTipoServicio(
       palabrasCompactas.push(`${p}H`);
       i++;
     } else {
-      palabrasCompactas.push(abreviaturas[p] || (p.length > 8 && palabras.length > 2 ? p.slice(0, 5) : p));
+      palabrasCompactas.push(
+        abreviaturas[p] || (p.length > 8 && palabras.length > 2 ? p.slice(0, 5) : p),
+      );
     }
   }
 
@@ -678,7 +898,11 @@ export function generarCodigoTipoServicio(
   }
 
   const limpio = base.replace(/^_+|_+$/g, '').slice(0, maxLen);
-  return resolverColisionDeterminista(limpio, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+  return resolverColisionDeterminista(limpio, codigosExistentes, {
+    maxLen,
+    separator: '_',
+    caseSensitive: false,
+  });
 }
 
 /**
@@ -725,9 +949,17 @@ export function generarCodigoSistema(
     .filter((w) => w.length > 0 && !stopWords.has(w));
 
   if (palabras.length === 0) {
-    const slug = generarSlugGenerico(nombre, { maxLen: maxLen - 4, uppercase: true, separator: '_' });
+    const slug = generarSlugGenerico(nombre, {
+      maxLen: maxLen - 4,
+      uppercase: true,
+      separator: '_',
+    });
     const base = `SIS_${slug}`.slice(0, maxLen);
-    return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+    return resolverColisionDeterminista(base, codigosExistentes, {
+      maxLen,
+      separator: '_',
+      caseSensitive: false,
+    });
   }
 
   // Diccionario de contracciones técnicas para compacidad
@@ -755,7 +987,9 @@ export function generarCodigoSistema(
     TRANSMISION: 'TRANS',
   };
 
-  const palabrasCompactas = palabras.map((p) => abreviaturas[p] || (p.length > 8 && palabras.length > 2 ? p.slice(0, 5) : p));
+  const palabrasCompactas = palabras.map(
+    (p) => abreviaturas[p] || (p.length > 8 && palabras.length > 2 ? p.slice(0, 5) : p),
+  );
 
   // Acumular hasta 2 o 3 términos significativos que no superen maxLen
   const elegidas: string[] = [];
@@ -776,7 +1010,11 @@ export function generarCodigoSistema(
   }
 
   const base = `SIS_${elegidas.join('_')}`.slice(0, maxLen);
-  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+  return resolverColisionDeterminista(base, codigosExistentes, {
+    maxLen,
+    separator: '_',
+    caseSensitive: false,
+  });
 }
 
 /**
@@ -875,9 +1113,36 @@ export function generarCodigoActividad(
   };
 
   const stopWords = new Set([
-    'DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'UN', 'UNA', 'UNOS', 'UNAS',
-    'Y', 'E', 'O', 'U', 'A', 'AL', 'EN', 'PARA', 'CON', 'SIN', 'POR', 'SOBRE',
-    'QUE', 'SE', 'SU', 'SUS', 'ESTADO', 'CONDICION', 'CORRECTO', 'ADECUADO',
+    'DE',
+    'DEL',
+    'LA',
+    'EL',
+    'LOS',
+    'LAS',
+    'UN',
+    'UNA',
+    'UNOS',
+    'UNAS',
+    'Y',
+    'E',
+    'O',
+    'U',
+    'A',
+    'AL',
+    'EN',
+    'PARA',
+    'CON',
+    'SIN',
+    'POR',
+    'SOBRE',
+    'QUE',
+    'SE',
+    'SU',
+    'SUS',
+    'ESTADO',
+    'CONDICION',
+    'CORRECTO',
+    'ADECUADO',
   ]);
 
   const palabras = descLimpia
@@ -885,11 +1150,20 @@ export function generarCodigoActividad(
     .split(/\s+/)
     .filter((w) => w.length > 0 && !stopWords.has(w));
 
-  const tokens = palabras.map((p) => ACCIONES_ACT[p] || SUSTANTIVOS_ACT[p] || (p.length > 8 && palabras.length > 2 ? p.slice(0, 5) : p));
+  const tokens = palabras.map(
+    (p) =>
+      ACCIONES_ACT[p] ||
+      SUSTANTIVOS_ACT[p] ||
+      (p.length > 8 && palabras.length > 2 ? p.slice(0, 5) : p),
+  );
   const elegidos = tokens.slice(0, 4);
 
   const base = `ACT_${elegidos.join('_')}`.slice(0, maxLen);
-  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+  return resolverColisionDeterminista(base, codigosExistentes, {
+    maxLen,
+    separator: '_',
+    caseSensitive: false,
+  });
 }
 
 /**
@@ -936,7 +1210,24 @@ export function generarCodigoParametro(
   };
 
   const stopWords = new Set([
-    'DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'UN', 'UNA', 'Y', 'E', 'O', 'EN', 'PARA', 'POR', 'CON', 'SIN', 'A', 'AL'
+    'DE',
+    'DEL',
+    'LA',
+    'EL',
+    'LOS',
+    'LAS',
+    'UN',
+    'UNA',
+    'Y',
+    'E',
+    'O',
+    'EN',
+    'PARA',
+    'POR',
+    'CON',
+    'SIN',
+    'A',
+    'AL',
   ]);
 
   const palabras = nomClean
@@ -955,7 +1246,11 @@ export function generarCodigoParametro(
   }
 
   const limpio = base.slice(0, maxLen);
-  return resolverColisionDeterminista(limpio, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+  return resolverColisionDeterminista(limpio, codigosExistentes, {
+    maxLen,
+    separator: '_',
+    caseSensitive: false,
+  });
 }
 
 /**
@@ -990,9 +1285,36 @@ export function generarCodigoPendiente(
   }
 
   const stopWords = new Set([
-    'DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'UN', 'UNA', 'UNOS', 'UNAS',
-    'Y', 'E', 'O', 'U', 'A', 'AL', 'EN', 'PARA', 'CON', 'SIN', 'POR', 'SOBRE',
-    'QUE', 'SE', 'SU', 'SUS', 'PRESENTA', 'TIENE', 'HAY', 'SE_REQUIERE',
+    'DE',
+    'DEL',
+    'LA',
+    'EL',
+    'LOS',
+    'LAS',
+    'UN',
+    'UNA',
+    'UNOS',
+    'UNAS',
+    'Y',
+    'E',
+    'O',
+    'U',
+    'A',
+    'AL',
+    'EN',
+    'PARA',
+    'CON',
+    'SIN',
+    'POR',
+    'SOBRE',
+    'QUE',
+    'SE',
+    'SU',
+    'SUS',
+    'PRESENTA',
+    'TIENE',
+    'HAY',
+    'SE_REQUIERE',
   ]);
 
   const palabras = descClean
@@ -1002,5 +1324,9 @@ export function generarCodigoPendiente(
 
   const clave = palabras.slice(0, 3).join('_');
   const base = `${prefix}_${clave}`.slice(0, maxLen);
-  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+  return resolverColisionDeterminista(base, codigosExistentes, {
+    maxLen,
+    separator: '_',
+    caseSensitive: false,
+  });
 }

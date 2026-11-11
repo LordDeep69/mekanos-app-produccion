@@ -36,15 +36,6 @@
     "node": "20.x",
     "pnpm": ">=8.0.0"
   },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,md}": [
-      "prettier --write"
-    ]
-  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "@prisma/client",

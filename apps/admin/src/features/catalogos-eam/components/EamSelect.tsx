@@ -1,6 +1,17 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+  useSyncExternalStore,
+} from 'react';
+
+const subscribeNoop = () => () => {};
+const getClientMounted = () => true;
+const getServerMounted = () => false;
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search, X, Scale } from 'lucide-react';
 
@@ -87,7 +98,7 @@ export function EamSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeNoop, getClientMounted, getServerMounted);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -100,10 +111,6 @@ export function EamSelect({
     width: number;
     openUpward: boolean;
   } | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const options = useMemo(() => normalizeOptions(rawOptions), [rawOptions]);
 
@@ -140,17 +147,21 @@ export function EamSelect({
     const rect = triggerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const popoverWidth = dropdownWidth
-      ? (typeof dropdownWidth === 'number' ? dropdownWidth : parseInt(String(dropdownWidth), 10) || 320)
+      ? typeof dropdownWidth === 'number'
+        ? dropdownWidth
+        : parseInt(String(dropdownWidth), 10) || 320
       : Math.max(rect.width, minDropdownWidth);
 
-    const estimatedHeight = Math.min(320, filteredOptions.length * 40 + (shouldShowSearch ? 50 : 20));
+    const estimatedHeight = Math.min(
+      320,
+      filteredOptions.length * 40 + (shouldShowSearch ? 50 : 20),
+    );
     // Solo abrir hacia arriba si abajo no cabe y arriba sí cabe holgadamente
     const openUpward = spaceBelow < estimatedHeight && rect.top >= estimatedHeight + 10;
 
     // Alinear al borde derecho del trigger si está en la mitad derecha o desbordaría a la derecha
     const shouldAlignRight =
-      rect.left + popoverWidth > window.innerWidth - 16 ||
-      rect.right > window.innerWidth * 0.55;
+      rect.left + popoverWidth > window.innerWidth - 16 || rect.right > window.innerWidth * 0.55;
     let targetLeft = shouldAlignRight ? rect.right - popoverWidth : rect.left;
     targetLeft = Math.max(12, Math.min(targetLeft, window.innerWidth - popoverWidth - 12));
 
@@ -167,6 +178,7 @@ export function EamSelect({
     if (disabled) return;
     if (!isOpen) {
       setSearchTerm('');
+      setHighlightedIndex(-1);
       if (usePortal) {
         const nextCoords = calculatePosition();
         if (nextCoords) setCoords(nextCoords);
@@ -177,6 +189,11 @@ export function EamSelect({
       setCoords(null);
     }
   };
+
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   const handleSelect = (val: string) => {
     onChange(val);
@@ -194,7 +211,6 @@ export function EamSelect({
 
   useEffect(() => {
     if (!isOpen) return;
-    setHighlightedIndex(-1);
 
     if (shouldShowSearch) {
       setTimeout(() => {
@@ -222,19 +238,15 @@ export function EamSelect({
         triggerRef.current?.focus();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setHighlightedIndex((prev) =>
-          prev < filteredOptions.length - 1 ? prev + 1 : 0,
-        );
+        setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : 0));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setHighlightedIndex((prev) =>
-          prev > 0 ? prev - 1 : filteredOptions.length - 1,
-        );
+        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : filteredOptions.length - 1));
       } else if (e.key === 'Enter') {
         if (highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
           e.preventDefault();
           const chosen = filteredOptions[highlightedIndex];
-          onChange(chosen.value);
+          onChangeRef.current(chosen.value);
           setIsOpen(false);
           setCoords(null);
           triggerRef.current?.focus();
@@ -287,7 +299,7 @@ export function EamSelect({
       window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleResize);
     };
-  }, [isOpen, calculatePosition, filteredOptions, highlightedIndex, shouldShowSearch]);
+  }, [isOpen, usePortal, calculatePosition, filteredOptions, highlightedIndex, shouldShowSearch]);
 
   // Clases por variante y tamaño
   const isDark = variant === 'dark';
@@ -354,12 +366,12 @@ export function EamSelect({
                       ? 'bg-blue-600/30 text-blue-300 font-bold border border-blue-500/40 shadow-xs'
                       : 'bg-blue-50/90 text-blue-800 font-bold border border-blue-200/80 shadow-xs'
                     : isHighlighted
-                    ? isDark
-                      ? 'bg-slate-800 text-white'
-                      : 'bg-slate-100/90 text-slate-900'
-                    : isDark
-                    ? 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
+                      ? isDark
+                        ? 'bg-slate-800 text-white'
+                        : 'bg-slate-100/90 text-slate-900'
+                      : isDark
+                        ? 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -380,9 +392,7 @@ export function EamSelect({
                   {op.badge && (
                     <span
                       className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        isDark
-                          ? 'bg-slate-800 text-slate-300'
-                          : 'bg-slate-100 text-slate-600'
+                        isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
                       }`}
                     >
                       {op.badge}
@@ -390,9 +400,7 @@ export function EamSelect({
                   )}
                   {isSelected && (
                     <Check
-                      className={`h-4 w-4 shrink-0 ${
-                        isDark ? 'text-blue-400' : 'text-blue-600'
-                      }`}
+                      className={`h-4 w-4 shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}
                     />
                   )}
                 </div>
@@ -405,7 +413,9 @@ export function EamSelect({
   );
 
   return (
-    <div className={`relative inline-block w-full ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}>
+    <div
+      className={`relative inline-block w-full ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+    >
       <button
         ref={triggerRef}
         type="button"
@@ -419,9 +429,7 @@ export function EamSelect({
         <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
           {icon && <span className="shrink-0">{icon}</span>}
           {selectedOption ? (
-            <span className="truncate font-bold">
-              {selectedOption.label}
-            </span>
+            <span className="truncate font-bold">{selectedOption.label}</span>
           ) : (
             <span className={isDark ? 'text-slate-400' : 'text-slate-400 font-normal truncate'}>
               {placeholder}
@@ -435,7 +443,9 @@ export function EamSelect({
               type="button"
               onClick={handleClear}
               className={`p-0.5 rounded-full hover:bg-slate-200/80 transition-colors ${
-                isDark ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-slate-400 hover:text-slate-700'
+                isDark
+                  ? 'text-slate-400 hover:text-white hover:bg-slate-700'
+                  : 'text-slate-400 hover:text-slate-700'
               }`}
               title="Limpiar selección"
             >
@@ -460,7 +470,9 @@ export function EamSelect({
             maxWidth: 'calc(100vw - 24px)',
           }}
           className={`absolute ${
-            dropUp ? 'bottom-full mb-1.5 z-50 max-h-60 overflow-y-auto shadow-xl' : 'z-50 mt-1.5 top-full overflow-hidden'
+            dropUp
+              ? 'bottom-full mb-1.5 z-50 max-h-60 overflow-y-auto shadow-xl'
+              : 'z-50 mt-1.5 top-full overflow-hidden'
           } rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 ${
             align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'
           } ${
@@ -539,7 +551,7 @@ export function EamUomSelect({
   usePortal = false,
 }: EamUomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeNoop, getClientMounted, getServerMounted);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -548,10 +560,6 @@ export function EamUomSelect({
     right: number;
     openUpward: boolean;
   } | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const currentUnit = useMemo(() => {
     if (!value) return units[0] || null;
@@ -655,7 +663,7 @@ export function EamUomSelect({
       window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleResize);
     };
-  }, [isOpen, calculatePosition]);
+  }, [isOpen, usePortal, calculatePosition]);
 
   // Si no hay unidades o sólo hay 1, mostramos una etiqueta estática sin flecha
   if (units.length <= 1) {
@@ -683,9 +691,7 @@ export function EamUomSelect({
           <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700">
             Unidad de Medida
           </div>
-          <div className="text-[10px] text-blue-700 font-semibold">
-            Conversión en vivo
-          </div>
+          <div className="text-[10px] text-blue-700 font-semibold">Conversión en vivo</div>
         </div>
       </div>
 
@@ -715,14 +721,10 @@ export function EamUomSelect({
                 <span className="font-mono font-extrabold text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded text-[11px] min-w-[28px] text-center shrink-0">
                   {u.simbolo || u.codigo}
                 </span>
-                <span className="text-slate-700 text-xs truncate">
-                  {u.nombre || u.codigo}
-                </span>
+                <span className="text-slate-700 text-xs truncate">{u.nombre || u.codigo}</span>
               </div>
 
-              {isSelected && (
-                <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-              )}
+              {isSelected && <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />}
             </button>
           );
         })}

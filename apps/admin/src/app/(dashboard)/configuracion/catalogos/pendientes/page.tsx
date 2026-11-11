@@ -8,22 +8,18 @@ import {
   useUpdateCatalogoPendiente,
   type CatalogoPendiente,
 } from '@/features/catalogos';
-import { tiposEquipoService, type TipoEquipoOption } from '@/features/equipos/lib/tipos-equipo.service';
+import {
+  tiposEquipoService,
+  type TipoEquipoOption,
+} from '@/features/equipos/lib/tipos-equipo.service';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import {
   AlertCircle,
   Check,
   CheckCircle2,
-  Clock,
-  Cpu,
-  Droplets,
   Edit,
-  Flame,
   Globe,
-  Hash,
-  HelpCircle,
-  Layers,
   ListTodo,
   Loader2,
   Plus,
@@ -36,7 +32,6 @@ import {
   Trash2,
   Wrench,
   X,
-  Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -104,15 +99,21 @@ export default function CatalogoPendientesPage() {
     refetch,
   } = useCatalogoPendientes({
     categoria: categoriaFiltro !== 'TODAS' ? categoriaFiltro : undefined,
-    idTipoEquipo: tipoEquipoFiltro !== 'TODOS' && tipoEquipoFiltro !== 'UNIVERSAL' ? Number(tipoEquipoFiltro) : undefined,
+    idTipoEquipo:
+      tipoEquipoFiltro !== 'TODOS' && tipoEquipoFiltro !== 'UNIVERSAL'
+        ? Number(tipoEquipoFiltro)
+        : undefined,
     incluirInactivos: mostrarInactivos,
     busqueda: busqueda.trim() || undefined,
   });
 
-  const rawPendientes = response?.data || [];
+  const rawPendientes = useMemo(() => response?.data || [], [response?.data]);
+  const [categoriasApiFailed, setCategoriasApiFailed] = useState(false);
   const pendientes = useMemo(() => {
     if (tipoEquipoFiltro === 'UNIVERSAL') {
-      return rawPendientes.filter((p) => p.id_tipo_equipo === null || p.id_tipo_equipo === undefined);
+      return rawPendientes.filter(
+        (p) => p.id_tipo_equipo === null || p.id_tipo_equipo === undefined,
+      );
     }
     return rawPendientes;
   }, [rawPendientes, tipoEquipoFiltro]);
@@ -124,7 +125,10 @@ export default function CatalogoPendientesPage() {
 
   // Cargar tipos de equipo reales de la BD
   useEffect(() => {
-    tiposEquipoService.listarTodos().then(setTiposEquipo).catch(() => {});
+    tiposEquipoService
+      .listarTodos()
+      .then(setTiposEquipo)
+      .catch(() => {});
   }, []);
 
   // Cargar categorías dinámicas de la API
@@ -134,19 +138,21 @@ export default function CatalogoPendientesPage() {
       .then((res) => {
         if (res.data?.success && Array.isArray(res.data.data)) {
           setCategoriasDinamicas(res.data.data);
+          setCategoriasApiFailed(false);
         }
       })
       .catch(() => {
-        // Fallback: extraer de los pendientes cargados
-        if (rawPendientes.length > 0) {
-          const fromItems = rawPendientes
-            .map((p) => p.categoria?.trim().toUpperCase())
-            .filter((c): c is string => Boolean(c));
-          const union = Array.from(new Set([...CATEGORIAS_DEFAULT, ...fromItems])).sort();
-          setCategoriasDinamicas(union);
-        }
+        setCategoriasApiFailed(true);
       });
-  }, [rawPendientes.length]);
+  }, []);
+
+  const categoriasDisponibles = useMemo(() => {
+    if (!categoriasApiFailed || rawPendientes.length === 0) return categoriasDinamicas;
+    const fromItems = rawPendientes
+      .map((p) => p.categoria?.trim().toUpperCase())
+      .filter((c): c is string => Boolean(c));
+    return Array.from(new Set([...categoriasDinamicas, ...fromItems])).sort();
+  }, [categoriasApiFailed, categoriasDinamicas, rawPendientes]);
 
   // Lista de códigos existentes para verificación de unicidad
   const existingCodes = useMemo(() => {
@@ -157,11 +163,7 @@ export default function CatalogoPendientesPage() {
   }, [rawPendientes, editingItem]);
 
   // Función inteligente de generación de código anti-colisión
-  const generarCodigoInteligente = (
-    desc: string,
-    idTipo: string | number,
-    cat: string
-  ): string => {
+  const generarCodigoInteligente = (desc: string, idTipo: string | number, cat: string): string => {
     if (!desc.trim()) return '';
 
     // 1. Determinar prefijo según tipo de equipo o categoría
@@ -190,7 +192,24 @@ export default function CatalogoPendientesPage() {
 
     // 2. Extraer palabras clave de la descripción eliminando stopwords en español
     const stopwords = new Set([
-      'DE', 'LA', 'EL', 'EN', 'UN', 'UNA', 'LOS', 'LAS', 'CON', 'PARA', 'POR', 'O', 'Y', 'AL', 'DEL', 'SE', 'SU', 'SUS'
+      'DE',
+      'LA',
+      'EL',
+      'EN',
+      'UN',
+      'UNA',
+      'LOS',
+      'LAS',
+      'CON',
+      'PARA',
+      'POR',
+      'O',
+      'Y',
+      'AL',
+      'DEL',
+      'SE',
+      'SU',
+      'SUS',
     ]);
 
     const words = desc
@@ -229,14 +248,21 @@ export default function CatalogoPendientesPage() {
 
   // Botón explícito de autogenerar código
   const handleForzarGenerarCodigo = () => {
-    const code = generarCodigoInteligente(formData.descripcion, formData.idTipoEquipo, formData.categoria);
+    const code = generarCodigoInteligente(
+      formData.descripcion,
+      formData.idTipoEquipo,
+      formData.categoria,
+    );
     setFormData({ ...formData, codigo: code });
     setIsCodigoManual(false);
   };
 
   // Crear nueva categoría en caliente
   const handleCrearNuevaCategoria = () => {
-    const catLimpia = nuevaCategoriaInput.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+    const catLimpia = nuevaCategoriaInput
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_]/g, '_');
     if (!catLimpia) return;
 
     if (!categoriasDinamicas.includes(catLimpia)) {
@@ -245,7 +271,10 @@ export default function CatalogoPendientesPage() {
     setFormData((prev) => ({
       ...prev,
       categoria: catLimpia,
-      codigo: !isCodigoManual && !editingItem ? generarCodigoInteligente(prev.descripcion, prev.idTipoEquipo, catLimpia) : prev.codigo,
+      codigo:
+        !isCodigoManual && !editingItem
+          ? generarCodigoInteligente(prev.descripcion, prev.idTipoEquipo, catLimpia)
+          : prev.codigo,
     }));
     setNuevaCategoriaInput('');
     setIsAddingCategoria(false);
@@ -337,7 +366,10 @@ export default function CatalogoPendientesPage() {
   // Métricas rápidas
   const totalActivos = rawPendientes.filter((p) => p.activo).length;
   const totalInactivos = rawPendientes.length - totalActivos;
-  const totalUsosEnOrdenes = rawPendientes.reduce((acc, p) => acc + (p._count?.ordenes_pendientes || 0), 0);
+  const totalUsosEnOrdenes = rawPendientes.reduce(
+    (acc, p) => acc + (p._count?.ordenes_pendientes || 0),
+    0,
+  );
 
   return (
     <div className="space-y-6">
@@ -349,7 +381,8 @@ export default function CatalogoPendientesPage() {
             Catálogo Maestro de Pendientes
           </h1>
           <p className="text-gray-500 mt-1">
-            Plantillas sugeridas de hallazgos y trabajos pendientes para sincronizar con técnicos móviles
+            Plantillas sugeridas de hallazgos y trabajos pendientes para sincronizar con técnicos
+            móviles
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -374,7 +407,9 @@ export default function CatalogoPendientesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Plantillas</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Total Plantillas
+            </p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{rawPendientes.length}</p>
           </div>
           <div className="p-3 bg-amber-50 rounded-lg text-amber-600">
@@ -384,7 +419,9 @@ export default function CatalogoPendientesPage() {
 
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Activos en Móvil</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Activos en Móvil
+            </p>
             <p className="text-2xl font-bold text-green-600 mt-1">{totalActivos}</p>
           </div>
           <div className="p-3 bg-green-50 rounded-lg text-green-600">
@@ -394,7 +431,9 @@ export default function CatalogoPendientesPage() {
 
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Desactivados</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Desactivados
+            </p>
             <p className="text-2xl font-bold text-gray-500 mt-1">{totalInactivos}</p>
           </div>
           <div className="p-3 bg-gray-100 rounded-lg text-gray-500">
@@ -404,7 +443,9 @@ export default function CatalogoPendientesPage() {
 
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Usos en Órdenes</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Usos en Órdenes
+            </p>
             <p className="text-2xl font-bold text-blue-600 mt-1">{totalUsosEnOrdenes}</p>
           </div>
           <div className="p-3 bg-blue-50 rounded-lg text-blue-600">
@@ -482,12 +523,12 @@ export default function CatalogoPendientesPage() {
               'px-3 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer',
               categoriaFiltro === 'TODAS'
                 ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
             )}
           >
             Todas ({rawPendientes.length})
           </button>
-          {categoriasDinamicas.map((cat) => {
+          {categoriasDisponibles.map((cat) => {
             const count = rawPendientes.filter((p) => p.categoria === cat).length;
             const icon = CATEGORIA_ICONS[cat] || '🏷️';
             const isSelected = categoriaFiltro === cat;
@@ -499,7 +540,7 @@ export default function CatalogoPendientesPage() {
                   'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer',
                   isSelected
                     ? 'bg-amber-600 text-white shadow-xs'
-                    : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                    : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100',
                 )}
               >
                 <span>{icon}</span>
@@ -508,7 +549,9 @@ export default function CatalogoPendientesPage() {
                   <span
                     className={cn(
                       'text-[10px] px-1.5 py-0.2 rounded-full font-bold',
-                      isSelected ? 'bg-amber-800/40 text-amber-100' : 'bg-gray-200/80 text-gray-600'
+                      isSelected
+                        ? 'bg-amber-800/40 text-amber-100'
+                        : 'bg-gray-200/80 text-gray-600',
                     )}
                   >
                     {count}
@@ -573,14 +616,15 @@ export default function CatalogoPendientesPage() {
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
                 {pendientes.map((item, idx) => {
-                  const catStyle = CATEGORIA_COLORS[item.categoria || 'GENERAL'] || CATEGORIA_COLORS.GENERAL;
+                  const catStyle =
+                    CATEGORIA_COLORS[item.categoria || 'GENERAL'] || CATEGORIA_COLORS.GENERAL;
                   const catIcon = CATEGORIA_ICONS[item.categoria || 'GENERAL'] || '🏷️';
                   return (
                     <tr
                       key={item.id_pendiente_catalogo}
                       className={cn(
                         'hover:bg-amber-50/30 transition-colors group',
-                        !item.activo && 'opacity-60 bg-gray-50/40'
+                        !item.activo && 'opacity-60 bg-gray-50/40',
                       )}
                     >
                       <td className="py-3 px-4 text-center text-xs font-mono text-gray-400">
@@ -616,7 +660,7 @@ export default function CatalogoPendientesPage() {
                             'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold border uppercase tracking-wider',
                             catStyle.bg,
                             catStyle.text,
-                            catStyle.border
+                            catStyle.border,
                           )}
                         >
                           <span>{catIcon}</span>
@@ -655,10 +699,15 @@ export default function CatalogoPendientesPage() {
                             'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-colors cursor-pointer',
                             item.activo
                               ? 'bg-green-100 text-green-800 hover:bg-green-200 border border-green-200'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200',
                           )}
                         >
-                          <span className={cn('h-1.5 w-1.5 rounded-full', item.activo ? 'bg-green-600' : 'bg-gray-400')} />
+                          <span
+                            className={cn(
+                              'h-1.5 w-1.5 rounded-full',
+                              item.activo ? 'bg-green-600' : 'bg-gray-400',
+                            )}
+                          />
                           {item.activo ? 'Activo' : 'Inactivo'}
                         </button>
                       </td>
@@ -723,7 +772,8 @@ export default function CatalogoPendientesPage() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Descripción del Trabajo o Falla Pendiente <span className="text-red-500">*</span>
+                    Descripción del Trabajo o Falla Pendiente{' '}
+                    <span className="text-red-500">*</span>
                   </label>
                   <span className="text-[10px] text-gray-400 font-mono">
                     {formData.descripcion.length}/300
@@ -745,7 +795,9 @@ export default function CatalogoPendientesPage() {
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                   <span>Tipo de Equipo al que Aplica</span>
                   <span className="text-[11px] text-amber-700 font-normal">
-                    {formData.idTipoEquipo ? 'Específico a una familia' : 'Universal (Aplica a cualquier activo)'}
+                    {formData.idTipoEquipo
+                      ? 'Específico a una familia'
+                      : 'Universal (Aplica a cualquier activo)'}
                   </span>
                 </label>
                 <div className="relative">
@@ -756,7 +808,11 @@ export default function CatalogoPendientesPage() {
                       setFormData((prev) => {
                         const updated = { ...prev, idTipoEquipo: val };
                         if (!isCodigoManual && !editingItem) {
-                          updated.codigo = generarCodigoInteligente(prev.descripcion, val, prev.categoria);
+                          updated.codigo = generarCodigoInteligente(
+                            prev.descripcion,
+                            val,
+                            prev.categoria,
+                          );
                         }
                         return updated;
                       });
@@ -826,7 +882,7 @@ export default function CatalogoPendientesPage() {
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
-                    {categoriasDinamicas.map((cat) => {
+                    {categoriasDisponibles.map((cat) => {
                       const isSelected = formData.categoria === cat;
                       const icon = CATEGORIA_ICONS[cat] || '🏷️';
                       return (
@@ -837,7 +893,11 @@ export default function CatalogoPendientesPage() {
                             setFormData((prev) => {
                               const updated = { ...prev, categoria: cat };
                               if (!isCodigoManual && !editingItem) {
-                                updated.codigo = generarCodigoInteligente(prev.descripcion, prev.idTipoEquipo, cat);
+                                updated.codigo = generarCodigoInteligente(
+                                  prev.descripcion,
+                                  prev.idTipoEquipo,
+                                  cat,
+                                );
                               }
                               return updated;
                             });
@@ -846,7 +906,7 @@ export default function CatalogoPendientesPage() {
                             'px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer',
                             isSelected
                               ? 'bg-amber-600 text-white shadow-xs scale-102 ring-2 ring-amber-400/50'
-                              : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                              : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100',
                           )}
                         >
                           <span>{icon}</span>
@@ -880,14 +940,17 @@ export default function CatalogoPendientesPage() {
                       value={formData.codigo}
                       onChange={(e) => {
                         setIsCodigoManual(true);
-                        setFormData({ ...formData, codigo: e.target.value.toUpperCase().replace(/\s+/g, '-') });
+                        setFormData({
+                          ...formData,
+                          codigo: e.target.value.toUpperCase().replace(/\s+/g, '-'),
+                        });
                       }}
                       placeholder="Ej: PEND-GEN-FILT-AIRE"
                       className={cn(
                         'w-full px-3.5 py-2 bg-white border rounded-lg text-xs font-mono font-bold uppercase transition-colors',
                         isCodigoDuplicado
                           ? 'border-red-400 focus:ring-2 focus:ring-red-400 text-red-700'
-                          : 'border-gray-300 focus:ring-2 focus:ring-amber-500 text-gray-900'
+                          : 'border-gray-300 focus:ring-2 focus:ring-amber-500 text-gray-900',
                       )}
                     />
                   </div>
@@ -896,17 +959,22 @@ export default function CatalogoPendientesPage() {
                 <div className="flex items-center justify-between text-[11px]">
                   {isCodigoDuplicado ? (
                     <span className="text-red-600 font-semibold flex items-center gap-1">
-                      <AlertCircle className="h-3.5 w-3.5" /> Código ya en uso en otra plantilla del catálogo
+                      <AlertCircle className="h-3.5 w-3.5" /> Código ya en uso en otra plantilla del
+                      catálogo
                     </span>
                   ) : formData.codigo.trim() ? (
                     <span className="text-emerald-700 font-semibold flex items-center gap-1">
                       <Check className="h-3.5 w-3.5" /> Código único y válido
                     </span>
                   ) : (
-                    <span className="text-gray-400">Se generará automáticamente con la descripción</span>
+                    <span className="text-gray-400">
+                      Se generará automáticamente con la descripción
+                    </span>
                   )}
                   {isCodigoManual && (
-                    <span className="text-[10px] text-gray-500 italic">Personalizado manualmente</span>
+                    <span className="text-[10px] text-gray-500 italic">
+                      Personalizado manualmente
+                    </span>
                   )}
                 </div>
               </div>
@@ -920,7 +988,9 @@ export default function CatalogoPendientesPage() {
                   <input
                     type="number"
                     value={formData.ordenVisual}
-                    onChange={(e) => setFormData({ ...formData, ordenVisual: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, ordenVisual: Number(e.target.value) })
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium text-gray-900"
                   />
                 </div>
@@ -933,9 +1003,7 @@ export default function CatalogoPendientesPage() {
                       onChange={(e) => setFormData({ ...formData, activo: e.target.checked })}
                       className="rounded border-gray-300 text-amber-600 focus:ring-amber-500 h-4 w-4 cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-gray-800">
-                      Activo en app móvil
-                    </span>
+                    <span className="text-xs font-bold text-gray-800">Activo en app móvil</span>
                   </label>
                 </div>
               </div>
@@ -951,7 +1019,9 @@ export default function CatalogoPendientesPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={crearPendiente.isPending || actualizarPendiente.isPending || isCodigoDuplicado}
+                  disabled={
+                    crearPendiente.isPending || actualizarPendiente.isPending || isCodigoDuplicado
+                  }
                   className="flex items-center gap-2 px-5 py-2 bg-amber-600 text-white rounded-xl text-sm font-bold hover:bg-amber-700 transition-colors disabled:opacity-50 shadow-sm shadow-amber-600/20 cursor-pointer"
                 >
                   {(crearPendiente.isPending || actualizarPendiente.isPending) && (

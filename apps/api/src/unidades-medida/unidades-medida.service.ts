@@ -1,12 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { QueryUnidadMedidaDto } from './dto/query-unidad-medida.dto';
 
 @Injectable()
 export class UnidadesMedidaService {
-  private readonly logger = new Logger(UnidadesMedidaService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -26,10 +24,7 @@ export class UnidadesMedidaService {
 
     return this.prisma.unidades_medida.findMany({
       where,
-      orderBy: [
-        { tipo_magnitud: 'asc' },
-        { nombre: 'asc' },
-      ],
+      orderBy: [{ tipo_magnitud: 'asc' }, { nombre: 'asc' }],
       select: {
         codigo: true,
         nombre: true,

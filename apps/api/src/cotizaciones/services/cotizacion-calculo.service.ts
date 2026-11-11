@@ -94,17 +94,14 @@ export class CotizacionCalculoService {
     }
 
     // Obtener todos los items de servicios
-    const itemsServicios = await this.prisma.items_cotizacion_servicios.findMany(
-      {
-        where: { id_cotizacion: idCotizacion },
-      },
-    );
+    const itemsServicios = await this.prisma.items_cotizacion_servicios.findMany({
+      where: { id_cotizacion: idCotizacion },
+    });
 
     // Obtener todos los items de componentes
-    const itemsComponentes =
-      await this.prisma.items_cotizacion_componentes.findMany({
-        where: { id_cotizacion: idCotizacion },
-      });
+    const itemsComponentes = await this.prisma.items_cotizacion_componentes.findMany({
+      where: { id_cotizacion: idCotizacion },
+    });
 
     // Recalcular subtotales de cada item de servicio
     let subtotalServicios = new Decimal(0);
@@ -230,10 +227,7 @@ export class CotizacionCalculoService {
   /**
    * Actualiza el IVA y recalcula
    */
-  async actualizarIva(
-    idCotizacion: number,
-    ivaPorcentaje: number,
-  ): Promise<CalculoTotalesResult> {
+  async actualizarIva(idCotizacion: number, ivaPorcentaje: number): Promise<CalculoTotalesResult> {
     // Validar rango de IVA
     if (ivaPorcentaje < 0 || ivaPorcentaje > 100) {
       throw new Error('IVA debe estar entre 0 y 100');
@@ -250,14 +244,12 @@ export class CotizacionCalculoService {
   /**
    * Obtiene un resumen de los totales actuales sin recalcular
    */
-  async obtenerTotalesActuales(
-    idCotizacion: number,
-  ): Promise<CalculoTotalesResult | null> {
+  async obtenerTotalesActuales(idCotizacion: number): Promise<CalculoTotalesResult | null> {
     const cotizacion = await this.prisma.cotizaciones.findUnique({
       where: { id_cotizacion: idCotizacion },
       include: {
-        items_servicios: true,
-        items_componentes: true,
+        items_cotizacion_servicios: true,
+        items_cotizacion_componentes: true,
       },
     });
 
@@ -271,8 +263,8 @@ export class CotizacionCalculoService {
       subtotal_con_descuento: cotizacion.subtotal_con_descuento || new Decimal(0),
       iva_valor: cotizacion.iva_valor || new Decimal(0),
       total_cotizacion: cotizacion.total_cotizacion || new Decimal(0),
-      cantidad_items_servicios: cotizacion.items_servicios.length,
-      cantidad_items_componentes: cotizacion.items_componentes.length,
+      cantidad_items_servicios: cotizacion.items_cotizacion_servicios.length,
+      cantidad_items_componentes: cotizacion.items_cotizacion_componentes.length,
     };
   }
 }

@@ -1,13 +1,12 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Componente: Tab Bitácora para Cliente Principal
- * 
+ *
  * Permite previsualizar informes mensuales agrupados por sede,
  * renombrar PDFs, y enviar email masivo con todos los adjuntos.
  */
 
 'use client';
-
 
 import {
   AlertDialog,
@@ -21,14 +20,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -57,11 +57,16 @@ import {
   Plus,
   Send,
   Trash2,
-  XCircle
+  XCircle,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { InformePreview, SedeGroup } from '../api/bitacoras.service';
-import { useBitacoraHistorial, useBitacoraPreview, useEnviarBitacora, useMesesDisponibles } from '../hooks/use-bitacoras';
+import {
+  useBitacoraHistorial,
+  useBitacoraPreview,
+  useEnviarBitacora,
+  useMesesDisponibles,
+} from '../hooks/use-bitacoras';
 import { apiClient } from '@/lib/api';
 import { previsualizarInformeAutenticado } from '@/lib/pdf-naming';
 
@@ -135,7 +140,9 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
   // ✅ NUEVO: Estado para diálogo de envío con progreso
   const [showSendingDialog, setShowSendingDialog] = useState(false);
-  const [sendingStep, setSendingStep] = useState<'preparing' | 'downloading' | 'sending' | 'completed' | 'error'>('preparing');
+  const [sendingStep, setSendingStep] = useState<
+    'preparing' | 'downloading' | 'sending' | 'completed' | 'error'
+  >('preparing');
   const [sendingProgress, setSendingProgress] = useState({ current: 0, total: 0, batchInfo: '' });
 
   // Hooks
@@ -146,7 +153,10 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
     error: previewError,
     refetch: refetchPreview,
   } = useBitacoraPreview(
-    clienteId, mes, anio, categoria || undefined,
+    clienteId,
+    mes,
+    anio,
+    categoria || undefined,
     { enabled: showPreview },
     modoRango ? fechaInicio : undefined,
     modoRango ? fechaFin : undefined,
@@ -156,7 +166,10 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   const { data: historial, isLoading: loadingHistorial } = useBitacoraHistorial(clienteId);
 
   const { data: mesesData, isLoading: loadingMeses } = useMesesDisponibles(
-    clienteId, categoria || undefined, undefined, tipoServicio || undefined,
+    clienteId,
+    categoria || undefined,
+    undefined,
+    tipoServicio || undefined,
   );
 
   const enviarMutation = useEnviarBitacora();
@@ -164,13 +177,13 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   // ✅ NUEVO: Efecto para inicializar documentos seleccionados cuando carga el preview
   const documentosDisponibles = useMemo(() => {
     if (!preview?.sedes) return [];
-    return preview.sedes.flatMap(s => s.informes);
+    return preview.sedes.flatMap((s) => s.informes);
   }, [preview]);
 
   // Inicializar todos los documentos como seleccionados cuando cambian los documentos disponibles
   useEffect(() => {
     if (documentosDisponibles.length > 0) {
-      setDocumentosSeleccionados(new Set(documentosDisponibles.map(d => d.id_documento)));
+      setDocumentosSeleccionados(new Set(documentosDisponibles.map((d) => d.id_documento)));
     }
   }, [documentosDisponibles]);
 
@@ -191,7 +204,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   };
 
   const toggleSede = (id: number) => {
-    setExpandedSedes(prev => {
+    setExpandedSedes((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -201,17 +214,17 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
   const expandAll = () => {
     if (!preview?.sedes) return;
-    setExpandedSedes(new Set(preview.sedes.map(s => s.id_cliente)));
+    setExpandedSedes(new Set(preview.sedes.map((s) => s.id_cliente)));
   };
 
   const handleRename = (informeId: number, newName: string) => {
-    setNombresCustom(prev => ({ ...prev, [informeId]: newName }));
+    setNombresCustom((prev) => ({ ...prev, [informeId]: newName }));
     setEditingId(null);
   };
 
   // ✅ NUEVO: Funciones para manejar selección de documentos
   const toggleDocumentoSeleccionado = (idDocumento: number) => {
-    setDocumentosSeleccionados(prev => {
+    setDocumentosSeleccionados((prev) => {
       const next = new Set(prev);
       if (next.has(idDocumento)) {
         next.delete(idDocumento);
@@ -223,7 +236,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   };
 
   const seleccionarTodos = () => {
-    setDocumentosSeleccionados(new Set(documentosDisponibles.map(d => d.id_documento)));
+    setDocumentosSeleccionados(new Set(documentosDisponibles.map((d) => d.id_documento)));
   };
 
   const deseleccionarTodos = () => {
@@ -231,9 +244,9 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   };
 
   const seleccionarSede = (sede: SedeGroup, seleccionar: boolean) => {
-    setDocumentosSeleccionados(prev => {
+    setDocumentosSeleccionados((prev) => {
       const next = new Set(prev);
-      sede.informes.forEach(informe => {
+      sede.informes.forEach((informe) => {
         if (seleccionar) {
           next.add(informe.id_documento);
         } else {
@@ -255,11 +268,11 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   };
 
   const eliminarEmail = (index: number) => {
-    setEmailsEditables(prev => prev.filter((_, i) => i !== index));
+    setEmailsEditables((prev) => prev.filter((_, i) => i !== index));
   };
 
   const editarEmail = (index: number, nuevoValor: string) => {
-    setEmailsEditables(prev => {
+    setEmailsEditables((prev) => {
       const nuevos = [...prev];
       nuevos[index] = nuevoValor;
       return nuevos;
@@ -268,7 +281,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   };
 
   const documentosSeleccionadosList = useMemo(() => {
-    return documentosDisponibles.filter(d => documentosSeleccionados.has(d.id_documento));
+    return documentosDisponibles.filter((d) => documentosSeleccionados.has(d.id_documento));
   }, [documentosDisponibles, documentosSeleccionados]);
 
   const handleEnviar = async () => {
@@ -304,12 +317,16 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
       setSendingStep('downloading');
       // Simular progreso de descarga de PDFs
       for (let i = 1; i <= Math.min(3, documentosSeleccionados.size); i++) {
-        await new Promise(r => setTimeout(r, 300));
-        setSendingProgress(prev => ({ ...prev, current: i }));
+        await new Promise((r) => setTimeout(r, 300));
+        setSendingProgress((prev) => ({ ...prev, current: i }));
       }
 
       setSendingStep('sending');
-      setSendingProgress(prev => ({ ...prev, current: documentosSeleccionados.size, batchInfo: 'Enviando emails...' }));
+      setSendingProgress((prev) => ({
+        ...prev,
+        current: documentosSeleccionados.size,
+        batchInfo: 'Enviando emails...',
+      }));
 
       const result = await enviarMutation.mutateAsync({
         id_cliente_principal: clienteId,
@@ -322,13 +339,18 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         // ✅ NUEVO: Usar emails editables en lugar de los del sistema
         email_destino: emailsEditables.join(','),
         // ✅ Rango de fechas (si aplica)
-        ...(modoRango && fechaInicio && fechaFin ? { fecha_inicio: fechaInicio, fecha_fin: fechaFin } : {}),
+        ...(modoRango && fechaInicio && fechaFin
+          ? { fecha_inicio: fechaInicio, fecha_fin: fechaFin }
+          : {}),
       });
 
       setSendingStep('completed');
       // Usar el conteo de destinatarios como proxy para batches (1 batch por cada 20 PDFs aprox)
       const estimatedBatches = Math.ceil(documentosSeleccionados.size / 20);
-      setSendingProgress(prev => ({ ...prev, batchInfo: `${estimatedBatches} email(s) enviado(s)` }));
+      setSendingProgress((prev) => ({
+        ...prev,
+        batchInfo: `${estimatedBatches} email(s) enviado(s)`,
+      }));
 
       setSendResult({
         success: result.email_enviado,
@@ -344,18 +366,18 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
           setTimeout(() => setSendingStep('preparing'), 300);
         }, 2500);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
       setSendingStep('error');
       setSendResult({
         success: false,
-        message: err?.response?.data?.message || err?.message || 'Error inesperado al enviar',
+        message: apiErr?.response?.data?.message || apiErr?.message || 'Error inesperado al enviar',
       });
     }
   };
 
-  const mesLabel = MESES.find(m => m.value === mes)?.label || '';
-  const catLabel = CATEGORIAS.find(c => c.value === categoria)?.label || 'Todas';
-  const tipoServicioLabel = TIPOS_SERVICIO.find(t => t.value === tipoServicio)?.label || 'Todos';
+  const mesLabel = MESES.find((m) => m.value === mes)?.label || '';
+  const catLabel = CATEGORIAS.find((c) => c.value === categoria)?.label || 'Todas';
 
   // Años disponibles
   const anios = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
@@ -400,28 +422,26 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                 <Input
                   type="date"
                   value={fechaInicio}
-                  onChange={e => setFechaInicio(e.target.value)}
+                  onChange={(e) => setFechaInicio(e.target.value)}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label>Fecha Fin</Label>
-                <Input
-                  type="date"
-                  value={fechaFin}
-                  onChange={e => setFechaFin(e.target.value)}
-                />
+                <Input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
               </div>
 
               <div className="space-y-2">
                 <Label>Tipo de Equipo</Label>
-                <Select value={categoria} onValueChange={v => setCategoria(v)}>
+                <Select value={categoria} onValueChange={(v) => setCategoria(v)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIAS.map(c => (
-                      <SelectItem key={c.value} value={c.value || '_all'}>{c.label}</SelectItem>
+                    {CATEGORIAS.map((c) => (
+                      <SelectItem key={c.value} value={c.value || '_all'}>
+                        {c.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -429,13 +449,18 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
               <div className="space-y-2">
                 <Label>Tipo de Servicio</Label>
-                <Select value={tipoServicio || '_all'} onValueChange={v => setTipoServicio(v === '_all' ? '' : v)}>
+                <Select
+                  value={tipoServicio || '_all'}
+                  onValueChange={(v) => setTipoServicio(v === '_all' ? '' : v)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TIPOS_SERVICIO.map(t => (
-                      <SelectItem key={t.value} value={t.value || '_all'}>{t.label}</SelectItem>
+                    {TIPOS_SERVICIO.map((t) => (
+                      <SelectItem key={t.value} value={t.value || '_all'}>
+                        {t.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -454,13 +479,15 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
               <div className="space-y-2">
                 <Label>Mes</Label>
-                <Select value={String(mes)} onValueChange={v => setMes(Number(v))}>
+                <Select value={String(mes)} onValueChange={(v) => setMes(Number(v))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {MESES.map(m => (
-                      <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
+                    {MESES.map((m) => (
+                      <SelectItem key={m.value} value={String(m.value)}>
+                        {m.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -468,13 +495,15 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
               <div className="space-y-2">
                 <Label>Año</Label>
-                <Select value={String(anio)} onValueChange={v => setAnio(Number(v))}>
+                <Select value={String(anio)} onValueChange={(v) => setAnio(Number(v))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {anios.map(a => (
-                      <SelectItem key={a} value={String(a)}>{a}</SelectItem>
+                    {anios.map((a) => (
+                      <SelectItem key={a} value={String(a)}>
+                        {a}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -482,13 +511,15 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
               <div className="space-y-2">
                 <Label>Tipo de Equipo</Label>
-                <Select value={categoria} onValueChange={v => setCategoria(v)}>
+                <Select value={categoria} onValueChange={(v) => setCategoria(v)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIAS.map(c => (
-                      <SelectItem key={c.value} value={c.value || '_all'}>{c.label}</SelectItem>
+                    {CATEGORIAS.map((c) => (
+                      <SelectItem key={c.value} value={c.value || '_all'}>
+                        {c.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -496,13 +527,18 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
               <div className="space-y-2">
                 <Label>Tipo de Servicio</Label>
-                <Select value={tipoServicio || '_all'} onValueChange={v => setTipoServicio(v === '_all' ? '' : v)}>
+                <Select
+                  value={tipoServicio || '_all'}
+                  onValueChange={(v) => setTipoServicio(v === '_all' ? '' : v)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TIPOS_SERVICIO.map(t => (
-                      <SelectItem key={t.value} value={t.value || '_all'}>{t.label}</SelectItem>
+                    {TIPOS_SERVICIO.map((t) => (
+                      <SelectItem key={t.value} value={t.value || '_all'}>
+                        {t.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -532,19 +568,25 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                   Meses con informes disponibles ({catLabel})
                 </p>
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {mesesData.meses.map(m => {
+                  {mesesData.meses.map((m) => {
                     const isSelected = m.mes === mes && m.anio === anio;
                     return (
                       <button
                         key={`${m.anio}-${m.mes}`}
-                        onClick={() => { setMes(m.mes); setAnio(m.anio); }}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${isSelected
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-100'
-                          }`}
+                        onClick={() => {
+                          setMes(m.mes);
+                          setAnio(m.anio);
+                        }}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          isSelected
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-100'
+                        }`}
                       >
-                        {MESES.find(mm => mm.value === m.mes)?.label} {m.anio}
-                        <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">{m.count}</Badge>
+                        {MESES.find((mm) => mm.value === m.mes)?.label} {m.anio}
+                        <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                          {m.count}
+                        </Badge>
                       </button>
                     );
                   })}
@@ -570,7 +612,11 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
       {/* Resultado: Feedback de envío */}
       {sendResult && (
-        <Card className={sendResult.success ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}>
+        <Card
+          className={
+            sendResult.success ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'
+          }
+        >
           <CardContent className="py-4">
             <div className="flex items-center gap-3">
               {sendResult.success ? (
@@ -599,7 +645,9 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         <Card className="border-red-300">
           <CardContent className="py-6 text-center">
             <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-            <p className="text-red-700">{(previewError as Error)?.message || 'Error al cargar preview'}</p>
+            <p className="text-red-700">
+              {(previewError as Error)?.message || 'Error al cargar preview'}
+            </p>
           </CardContent>
         </Card>
       )}
@@ -616,7 +664,11 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">{preview.total_informes} informes</Badge>
-                  <Badge variant={preview.total_con_pdf === preview.total_informes ? 'default' : 'destructive'}>
+                  <Badge
+                    variant={
+                      preview.total_con_pdf === preview.total_informes ? 'default' : 'destructive'
+                    }
+                  >
                     {preview.total_con_pdf} con PDF
                   </Badge>
                   {preview.total_sin_pdf > 0 && (
@@ -632,14 +684,19 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                   <div className="flex items-center gap-2">
                     <Checkbox
                       id="select-all"
-                      checked={documentosSeleccionados.size === documentosDisponibles.length && documentosDisponibles.length > 0}
+                      checked={
+                        documentosSeleccionados.size === documentosDisponibles.length &&
+                        documentosDisponibles.length > 0
+                      }
                       onCheckedChange={(checked) => {
                         if (checked) seleccionarTodos();
                         else deseleccionarTodos();
                       }}
                     />
                     <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                      {documentosSeleccionados.size === documentosDisponibles.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                      {documentosSeleccionados.size === documentosDisponibles.length
+                        ? 'Deseleccionar todos'
+                        : 'Seleccionar todos'}
                     </label>
                   </div>
                   <Badge variant="outline" className="text-[10px]">
@@ -664,7 +721,9 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
             <Card>
               <CardContent className="py-12 text-center">
                 <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-40" />
-                <p className="text-muted-foreground text-lg font-medium">No se encontraron informes</p>
+                <p className="text-muted-foreground text-lg font-medium">
+                  No se encontraron informes
+                </p>
                 <p className="text-muted-foreground text-sm mt-1">
                   No hay informes generados para {catLabel} en {mesLabel} {anio}
                 </p>
@@ -707,10 +766,12 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-semibold text-blue-900">
-                      {documentosSeleccionados.size} de {documentosDisponibles.length} informe(s) seleccionados para enviar
+                      {documentosSeleccionados.size} de {documentosDisponibles.length} informe(s)
+                      seleccionados para enviar
                     </p>
                     <p className="text-sm text-blue-700">
-                      Se enviarán a: {emailsEditables.length > 0
+                      Se enviarán a:{' '}
+                      {emailsEditables.length > 0
                         ? emailsEditables.join(', ')
                         : preview?.emails_destinatarios.join(', ') || 'Sin destinatarios'}
                     </p>
@@ -758,7 +819,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
             </p>
           ) : (
             <div className="space-y-2">
-              {historial.map(b => (
+              {historial.map((b) => (
                 <div
                   key={b.id_bitacora}
                   className="flex items-center justify-between p-3 rounded-lg border bg-card"
@@ -768,12 +829,21 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                     <div>
                       <p className="text-sm font-medium">{b.numero_bitacora}</p>
                       <p className="text-xs text-muted-foreground">
-                        {MESES.find(m => m.value === b.mes)?.label} {b.anio} - {b.cantidad_informes} informes
+                        {MESES.find((m) => m.value === b.mes)?.label} {b.anio} -{' '}
+                        {b.cantidad_informes} informes
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={b.estado_bitacora === 'ENVIADA' ? 'default' : b.estado_bitacora === 'APROBADA' ? 'default' : 'secondary'}>
+                    <Badge
+                      variant={
+                        b.estado_bitacora === 'ENVIADA'
+                          ? 'default'
+                          : b.estado_bitacora === 'APROBADA'
+                            ? 'default'
+                            : 'secondary'
+                      }
+                    >
                       {b.estado_bitacora}
                     </Badge>
                     {b.enviada_cliente_fecha && (
@@ -798,20 +868,29 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
               <div className="text-sm text-muted-foreground space-y-4">
                 <span className="block">
                   Se enviará la bitácora de <strong>{catLabel}</strong> de{' '}
-                  <strong>{mesLabel} {anio}</strong> para <strong>{clienteNombre}</strong>.
+                  <strong>
+                    {mesLabel} {anio}
+                  </strong>{' '}
+                  para <strong>{clienteNombre}</strong>.
                 </span>
 
                 {/* ✅ NUEVO: Resumen de documentos seleccionados */}
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                   <p className="font-semibold text-green-900 text-sm mb-2">
                     <Check className="h-4 w-4 inline mr-1" />
-                    Documentos seleccionados ({documentosSeleccionados.size} de {documentosDisponibles.length})
+                    Documentos seleccionados ({documentosSeleccionados.size} de{' '}
+                    {documentosDisponibles.length})
                   </p>
                   <div className="max-h-32 overflow-y-auto space-y-1">
                     {documentosSeleccionadosList.map((doc) => (
-                      <div key={doc.id_documento} className="text-xs text-green-800 flex items-center gap-2 bg-white rounded p-1.5">
+                      <div
+                        key={doc.id_documento}
+                        className="text-xs text-green-800 flex items-center gap-2 bg-white rounded p-1.5"
+                      >
                         <FileText className="h-3 w-3" />
-                        <span className="truncate">{nombresCustom[doc.id_documento] || doc.nombre_sugerido}</span>
+                        <span className="truncate">
+                          {nombresCustom[doc.id_documento] || doc.nombre_sugerido}
+                        </span>
                         <span className="text-gray-400">|</span>
                         <span className="text-gray-500">{doc.nombre_sede}</span>
                       </div>
@@ -829,7 +908,10 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                   {/* Lista de emails editables */}
                   <div className="space-y-2">
                     {emailsEditables.map((email, index) => (
-                      <div key={index} className="flex items-center gap-2 bg-white rounded border border-blue-100 p-2">
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 bg-white rounded border border-blue-100 p-2"
+                      >
                         {emailEditando === index ? (
                           <>
                             <Input
@@ -842,7 +924,12 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                               className="h-7 text-sm flex-1"
                               autoFocus
                             />
-                            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEmailEditando(null)}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              onClick={() => setEmailEditando(null)}
+                            >
                               <Check className="h-3.5 w-3.5 text-green-600" />
                             </Button>
                           </>
@@ -917,18 +1004,24 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
       </AlertDialog>
 
       {/* Dialog de progreso de envío */}
-      <Dialog open={showSendingDialog} onOpenChange={(open) => {
-        // No permitir cerrar manualmente mientras se está enviando
-        if (!open && (sendingStep === 'completed' || sendingStep === 'error')) {
-          setShowSendingDialog(false);
-        }
-      }}>
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => {
-          // Prevenir cierre al hacer clic fuera
-          if (sendingStep !== 'completed' && sendingStep !== 'error') {
-            e.preventDefault();
+      <Dialog
+        open={showSendingDialog}
+        onOpenChange={(open) => {
+          // No permitir cerrar manualmente mientras se está enviando
+          if (!open && (sendingStep === 'completed' || sendingStep === 'error')) {
+            setShowSendingDialog(false);
           }
-        }}>
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-md"
+          onPointerDownOutside={(e) => {
+            // Prevenir cierre al hacer clic fuera
+            if (sendingStep !== 'completed' && sendingStep !== 'error') {
+              e.preventDefault();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {sendingStep === 'completed' ? (
@@ -951,7 +1044,8 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">
                       {sendingStep === 'preparing' && 'Verificando documentos y destinatarios...'}
-                      {sendingStep === 'downloading' && `Descargando ${sendingProgress.total} documentos...`}
+                      {sendingStep === 'downloading' &&
+                        `Descargando ${sendingProgress.total} documentos...`}
                       {sendingStep === 'sending' && 'Enviando emails con adjuntos...'}
                       {sendingStep === 'completed' && 'Todos los emails han sido enviados'}
                       {sendingStep === 'error' && sendResult?.message}
@@ -961,14 +1055,22 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                   {/* Barra de progreso visual */}
                   <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                     <div
-                      className={`h-full transition-all duration-500 ${sendingStep === 'error' ? 'bg-red-500' :
-                        sendingStep === 'completed' ? 'bg-green-500' : 'bg-blue-600'
-                        }`}
+                      className={`h-full transition-all duration-500 ${
+                        sendingStep === 'error'
+                          ? 'bg-red-500'
+                          : sendingStep === 'completed'
+                            ? 'bg-green-500'
+                            : 'bg-blue-600'
+                      }`}
                       style={{
-                        width: sendingStep === 'completed' ? '100%' :
-                          sendingStep === 'error' ? '100%' :
-                            sendingStep === 'sending' ? '75%' :
-                              `${(sendingProgress.current / Math.max(sendingProgress.total, 1)) * 50}%`
+                        width:
+                          sendingStep === 'completed'
+                            ? '100%'
+                            : sendingStep === 'error'
+                              ? '100%'
+                              : sendingStep === 'sending'
+                                ? '75%'
+                                : `${(sendingProgress.current / Math.max(sendingProgress.total, 1)) * 50}%`,
                       }}
                     />
                   </div>
@@ -1042,8 +1144,10 @@ function SedeCard({
   onSeleccionarSede,
 }: SedeCardProps) {
   // Verificar si todos los documentos de esta sede están seleccionados
-  const todosSeleccionados = sede.informes.every(i => documentosSeleccionados.has(i.id_documento));
-  const algunoSeleccionado = sede.informes.some(i => documentosSeleccionados.has(i.id_documento));
+  const todosSeleccionados = sede.informes.every((i) =>
+    documentosSeleccionados.has(i.id_documento),
+  );
+  const algunoSeleccionado = sede.informes.some((i) => documentosSeleccionados.has(i.id_documento));
 
   return (
     <Card>
@@ -1059,17 +1163,20 @@ function SedeCard({
               onSeleccionarSede(sede, checked as boolean);
             }}
             onClick={(e) => e.stopPropagation()}
-            className={algunoSeleccionado && !todosSeleccionados ? "bg-blue-100" : ""}
+            className={algunoSeleccionado && !todosSeleccionados ? 'bg-blue-100' : ''}
           />
           <Building2 className="h-4 w-4 text-blue-600" />
           <span className="font-semibold">{sede.nombre_sede}</span>
           <Badge variant="outline" className="text-[10px]">
-            {sede.informes.filter(i => documentosSeleccionados.has(i.id_documento)).length} / {sede.informes.length} seleccionados
+            {sede.informes.filter((i) => documentosSeleccionados.has(i.id_documento)).length} /{' '}
+            {sede.informes.length} seleccionados
           </Badge>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline">{sede.informes.length} informe(s)</Badge>
-          <Badge variant="default" className="bg-green-600 text-[10px]">{sede.informes.length} PDF</Badge>
+          <Badge variant="default" className="bg-green-600 text-[10px]">
+            {sede.informes.length} PDF
+          </Badge>
         </div>
       </div>
 
@@ -1128,7 +1235,10 @@ function InformeRow({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const displayName = customName || informe.nombre_sugerido;
   const fechaStr = informe.fecha_servicio
-    ? new Date(informe.fecha_servicio).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
+    ? new Date(informe.fecha_servicio).toLocaleDateString('es-CO', {
+        day: '2-digit',
+        month: 'short',
+      })
     : 'Sin fecha';
 
   // ✅ NUEVO: Visualizar PDF del informe en nueva pestaña
@@ -1160,13 +1270,11 @@ function InformeRow({
   const tienePdf = Boolean(informe.pdf_url) || Boolean(informe.id_documento);
 
   return (
-    <div className={`flex items-center gap-3 p-2.5 rounded-lg border bg-white transition-colors ${isSelected ? 'border-blue-300 bg-blue-50/30' : ''}`}>
+    <div
+      className={`flex items-center gap-3 p-2.5 rounded-lg border bg-white transition-colors ${isSelected ? 'border-blue-300 bg-blue-50/30' : ''}`}
+    >
       {/* ✅ NUEVO: Checkbox de selección */}
-      <Checkbox
-        checked={isSelected}
-        onCheckedChange={onToggleSelect}
-        className="flex-shrink-0"
-      />
+      <Checkbox checked={isSelected} onCheckedChange={onToggleSelect} className="flex-shrink-0" />
 
       <FileText className="h-4 w-4 flex-shrink-0 text-green-600" />
 
@@ -1175,24 +1283,35 @@ function InformeRow({
           <div className="flex items-center gap-2">
             <Input
               value={editValue}
-              onChange={e => setEditValue(e.target.value)}
+              onChange={(e) => setEditValue(e.target.value)}
               className="h-7 text-xs"
               autoFocus
-              onKeyDown={e => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter') onRename(editValue);
                 if (e.key === 'Escape') onCancelEdit();
               }}
             />
-            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => onRename(editValue)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2"
+              onClick={() => onRename(editValue)}
+            >
               <CheckCircle2 className="h-3.5 w-3.5" />
             </Button>
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <p className={`text-xs font-mono truncate ${isSelected ? 'font-semibold' : ''}`} title={displayName}>
+            <p
+              className={`text-xs font-mono truncate ${isSelected ? 'font-semibold' : ''}`}
+              title={displayName}
+            >
               {displayName}
             </p>
-            <button onClick={onStartEdit} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+            <button
+              onClick={onStartEdit}
+              className="text-muted-foreground hover:text-foreground flex-shrink-0"
+            >
               <Pencil className="h-3 w-3" />
             </button>
           </div>
@@ -1230,7 +1349,10 @@ function InformeRow({
         </Button>
       )}
 
-      <Badge variant="outline" className={`text-[10px] flex-shrink-0 ${isSelected ? 'text-blue-700 border-blue-300 bg-blue-50' : 'text-green-700 border-green-300 bg-green-50'}`}>
+      <Badge
+        variant="outline"
+        className={`text-[10px] flex-shrink-0 ${isSelected ? 'text-blue-700 border-blue-300 bg-blue-50' : 'text-green-700 border-green-300 bg-green-50'}`}
+      >
         {isSelected ? 'INCLUIR' : 'PDF'}
       </Badge>
     </div>

@@ -1,7 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Middleware de Protección de Rutas
- * 
+ *
  * ZERO TRUST: Todas las rutas están protegidas excepto:
  * - /login (página de autenticación)
  * - /api/auth/* (endpoints de NextAuth)
@@ -10,18 +10,13 @@
  */
 
 import { auth } from '@/auth';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 // Rutas públicas que no requieren autenticación
 const PUBLIC_ROUTES = ['/login'];
 
 // Prefijos de rutas que no requieren autenticación
-const PUBLIC_PREFIXES = [
-  '/api/auth',
-  '/_next',
-  '/favicon.ico',
-  '/images',
-];
+const PUBLIC_PREFIXES = ['/api/auth', '/_next', '/favicon.ico', '/images'];
 
 // Cookies de sesión de NextAuth (v5 y v4, HTTP y HTTPS)
 const SESSION_COOKIE_NAMES = [
@@ -31,9 +26,20 @@ const SESSION_COOKIE_NAMES = [
   '__Secure-next-auth.session-token',
 ];
 
-function clearSessionCookies(response: NextResponse) {
+function clearSessionCookies(response: NextResponse, req?: NextRequest) {
   for (const name of SESSION_COOKIE_NAMES) {
     response.cookies.delete(name);
+  }
+  if (req) {
+    for (const cookie of req.cookies.getAll()) {
+      if (
+        SESSION_COOKIE_NAMES.some(
+          (base) => cookie.name === base || cookie.name.startsWith(`${base}.`),
+        )
+      ) {
+        response.cookies.delete(cookie.name);
+      }
+    }
   }
   return response;
 }
@@ -46,20 +52,23 @@ export default auth((req) => {
 
   // Verificar si es una ruta pública
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
-  const isPublicPrefix = PUBLIC_PREFIXES.some((prefix) => 
-    pathname.startsWith(prefix)
-  );
+  const isPublicPrefix = PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   // Rutas públicas: permitir acceso
   // Sesión con refresh token inválido: limpiar cookie y forzar re-login.
   // Evita el bucle /dashboard -> API 401 -> /login -> /dashboard.
-  if (sessionError && !isPublicPrefix) {
-    if (pathname === '/login') {
-      return clearSessionCookies(NextResponse.next());
+  if (sessionError) {
+    if (pathname === '/api/auth/session') {
+      return clearSessionCookies(NextResponse.next(), req);
     }
-    const loginUrl = new URL('/login', nextUrl);
-    loginUrl.searchParams.set('error', 'SessionExpired');
-    return clearSessionCookies(NextResponse.redirect(loginUrl));
+    if (!isPublicPrefix) {
+      if (pathname === '/login') {
+        return clearSessionCookies(NextResponse.next(), req);
+      }
+      const loginUrl = new URL('/login', nextUrl);
+      loginUrl.searchParams.set('error', 'SessionExpired');
+      return clearSessionCookies(NextResponse.redirect(loginUrl), req);
+    }
   }
 
   if (isPublicRoute || isPublicPrefix) {

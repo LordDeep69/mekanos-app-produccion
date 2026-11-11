@@ -11,7 +11,7 @@ import { UpdateUsuariosDto } from './dto/update-usuarios.dto';
 
 @Injectable()
 export class UsuariosService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(createDto: CreateUsuariosDto) {
     try {
@@ -21,9 +21,7 @@ export class UsuariosService {
       });
 
       if (!persona) {
-        throw new NotFoundException(
-          `Persona con ID ${createDto.id_persona} no existe`,
-        );
+        throw new NotFoundException(`Persona con ID ${createDto.id_persona} no existe`);
       }
 
       // Validar unicidad de username y email
@@ -41,7 +39,7 @@ export class UsuariosService {
       const password_hash = await bcrypt.hash(createDto.password, salt);
 
       // Remove password from dto
-      const { password, ...rest } = createDto;
+      const { password: _password, ...rest } = createDto;
 
       return await this.prisma.usuarios.create({
         data: {
@@ -51,10 +49,7 @@ export class UsuariosService {
         },
       });
     } catch (error: unknown) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ConflictException
-      ) {
+      if (error instanceof NotFoundException || error instanceof ConflictException) {
         throw error;
       }
       throw new InternalServerErrorException(
@@ -130,20 +125,17 @@ export class UsuariosService {
         data: dataToUpdate,
       });
     } catch (error: any) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ConflictException
-      ) {
+      if (error instanceof NotFoundException || error instanceof ConflictException) {
         throw error;
       }
       if (error?.code === 'P2002') {
         const target = error.meta?.target;
-        const targetStr = Array.isArray(target) ? target.join(', ') : (target || '');
+        const targetStr = Array.isArray(target) ? target.join(', ') : target || '';
         const campo = targetStr.includes('email')
           ? 'correo electrónico'
           : targetStr.includes('username')
-          ? 'nombre de usuario'
-          : 'campo único';
+            ? 'nombre de usuario'
+            : 'campo único';
         throw new ConflictException(
           `El ${campo} ya está registrado en el sistema por otro usuario.`,
         );
@@ -220,10 +212,13 @@ export class UsuariosService {
       return {
         id_usuario: record.id_usuario,
         username: record.username,
-        password_hash_preview: record.password_hash ? `${record.password_hash.substring(0, 20)}...` : 'Sin contraseña',
+        password_hash_preview: record.password_hash
+          ? `${record.password_hash.substring(0, 20)}...`
+          : 'Sin contraseña',
         fecha_ultimo_cambio: record.fecha_ultimo_cambio_password,
         debe_cambiar_password: record.debe_cambiar_password,
-        mensaje: 'Por seguridad, solo se muestra una preview del hash. Use "Restablecer" para cambiar la contraseña.',
+        mensaje:
+          'Por seguridad, solo se muestra una preview del hash. Use "Restablecer" para cambiar la contraseña.',
       };
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {
@@ -245,10 +240,18 @@ export class UsuariosService {
 
       // Normalizar estado
       const estadoNormalizado = estado.toUpperCase();
-      const estadosValidos = ['ACTIVO', 'INACTIVO', 'PENDIENTE_ACTIVACION', 'SUSPENDIDO', 'ELIMINADO'];
+      const estadosValidos = [
+        'ACTIVO',
+        'INACTIVO',
+        'PENDIENTE_ACTIVACION',
+        'SUSPENDIDO',
+        'ELIMINADO',
+      ];
 
       if (!estadosValidos.includes(estadoNormalizado)) {
-        throw new ConflictException(`Estado inválido. Estados válidos: ${estadosValidos.join(', ')}`);
+        throw new ConflictException(
+          `Estado inválido. Estados válidos: ${estadosValidos.join(', ')}`,
+        );
       }
 
       const updateData: any = { estado: estadoNormalizado };

@@ -19,47 +19,187 @@ const MARCAS_ESTANDAR_OEM: Array<{
   descripcion?: string;
 }> = [
   // Generación Eléctrica y Fuerza Motriz
-  { nombre: 'CUMMINS', pais_origen: 'Estados Unidos', descripcion: 'Fabricante de motores diésel, gas y generadores' },
-  { nombre: 'PERKINS', pais_origen: 'Reino Unido', descripcion: 'Motores diésel industriales y agrícolas' },
-  { nombre: 'CATERPILLAR', pais_origen: 'Estados Unidos', descripcion: 'Maquinaria pesada, motores y grupos electrógenos' },
-  { nombre: 'DOOSAN', pais_origen: 'Corea del Sur', descripcion: 'Equipos industriales, motores y generadores' },
-  { nombre: 'VOLVO PENTA', pais_origen: 'Suecia', descripcion: 'Motores marinos e industriales de combustión' },
-  { nombre: 'DEUTZ', pais_origen: 'Alemania', descripcion: 'Motores diésel refrigerados por aire y agua' },
-  { nombre: 'JOHN DEERE', pais_origen: 'Estados Unidos', descripcion: 'Motores diésel industriales y maquinaria pesada' },
-  { nombre: 'KOHLER', pais_origen: 'Estados Unidos', descripcion: 'Grupos electrógenos y motores industriales' },
-  { nombre: 'SDMO', pais_origen: 'Francia', descripcion: 'Grupos electrógenos y plantas de energía' },
+  {
+    nombre: 'CUMMINS',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Fabricante de motores diésel, gas y generadores',
+  },
+  {
+    nombre: 'PERKINS',
+    pais_origen: 'Reino Unido',
+    descripcion: 'Motores diésel industriales y agrícolas',
+  },
+  {
+    nombre: 'CATERPILLAR',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Maquinaria pesada, motores y grupos electrógenos',
+  },
+  {
+    nombre: 'DOOSAN',
+    pais_origen: 'Corea del Sur',
+    descripcion: 'Equipos industriales, motores y generadores',
+  },
+  {
+    nombre: 'VOLVO PENTA',
+    pais_origen: 'Suecia',
+    descripcion: 'Motores marinos e industriales de combustión',
+  },
+  {
+    nombre: 'DEUTZ',
+    pais_origen: 'Alemania',
+    descripcion: 'Motores diésel refrigerados por aire y agua',
+  },
+  {
+    nombre: 'JOHN DEERE',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Motores diésel industriales y maquinaria pesada',
+  },
+  {
+    nombre: 'KOHLER',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Grupos electrógenos y motores industriales',
+  },
+  {
+    nombre: 'SDMO',
+    pais_origen: 'Francia',
+    descripcion: 'Grupos electrógenos y plantas de energía',
+  },
   // Generadores Eléctricos / Alternadores
-  { nombre: 'STAMFORD', pais_origen: 'Reino Unido', descripcion: 'Alternadores síncronos industriales' },
-  { nombre: 'MARATHON', pais_origen: 'Estados Unidos', descripcion: 'Generadores eléctricos y alternadores' },
-  { nombre: 'LEROY SOMER', pais_origen: 'Francia', descripcion: 'Alternadores y motores eléctricos industriales' },
+  {
+    nombre: 'STAMFORD',
+    pais_origen: 'Reino Unido',
+    descripcion: 'Alternadores síncronos industriales',
+  },
+  {
+    nombre: 'MARATHON',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Generadores eléctricos y alternadores',
+  },
+  {
+    nombre: 'LEROY SOMER',
+    pais_origen: 'Francia',
+    descripcion: 'Alternadores y motores eléctricos industriales',
+  },
   // Bombeo e Hidráulica
-  { nombre: 'GOULDS', pais_origen: 'Estados Unidos', descripcion: 'Bombas centrífugas industriales y sumergibles' },
-  { nombre: 'PEDROLLO', pais_origen: 'Italia', descripcion: 'Bombas eléctricas de agua y sistemas de presión' },
-  { nombre: 'BARNES', pais_origen: 'Colombia / EE.UU.', descripcion: 'Bombas autocebantes, sumergibles y de achique' },
-  { nombre: 'KSB', pais_origen: 'Alemania', descripcion: 'Bombas centrífugas y válvulas de proceso' },
-  { nombre: 'GRUNDFOS', pais_origen: 'Dinamarca', descripcion: 'Sistemas avanzados de bombeo e hidroflo' },
+  {
+    nombre: 'GOULDS',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Bombas centrífugas industriales y sumergibles',
+  },
+  {
+    nombre: 'PEDROLLO',
+    pais_origen: 'Italia',
+    descripcion: 'Bombas eléctricas de agua y sistemas de presión',
+  },
+  {
+    nombre: 'BARNES',
+    pais_origen: 'Colombia / EE.UU.',
+    descripcion: 'Bombas autocebantes, sumergibles y de achique',
+  },
+  {
+    nombre: 'KSB',
+    pais_origen: 'Alemania',
+    descripcion: 'Bombas centrífugas y válvulas de proceso',
+  },
+  {
+    nombre: 'GRUNDFOS',
+    pais_origen: 'Dinamarca',
+    descripcion: 'Sistemas avanzados de bombeo e hidroflo',
+  },
   // Motores Eléctricos y Automatización
-  { nombre: 'WEG', pais_origen: 'Brasil', descripcion: 'Motores eléctricos, variadores y transformadores' },
-  { nombre: 'SIEMENS', pais_origen: 'Alemania', descripcion: 'Automatización industrial, motores y control' },
-  { nombre: 'BALDOR', pais_origen: 'Estados Unidos', descripcion: 'Motores eléctricos industriales y reductores (ABB)' },
-  { nombre: 'ABB', pais_origen: 'Suiza', descripcion: 'Electrificación, robótica, variadores y potencia' },
-  { nombre: 'SCHNEIDER ELECTRIC', pais_origen: 'Francia', descripcion: 'Distribución eléctrica, arrancadores y protecciones' },
+  {
+    nombre: 'WEG',
+    pais_origen: 'Brasil',
+    descripcion: 'Motores eléctricos, variadores y transformadores',
+  },
+  {
+    nombre: 'SIEMENS',
+    pais_origen: 'Alemania',
+    descripcion: 'Automatización industrial, motores y control',
+  },
+  {
+    nombre: 'BALDOR',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Motores eléctricos industriales y reductores (ABB)',
+  },
+  {
+    nombre: 'ABB',
+    pais_origen: 'Suiza',
+    descripcion: 'Electrificación, robótica, variadores y potencia',
+  },
+  {
+    nombre: 'SCHNEIDER ELECTRIC',
+    pais_origen: 'Francia',
+    descripcion: 'Distribución eléctrica, arrancadores y protecciones',
+  },
   // Climatización, Refrigeración y HVAC
-  { nombre: 'TRANE', pais_origen: 'Estados Unidos', descripcion: 'Sistemas HVAC, chillers y unidades manejadoras' },
-  { nombre: 'CARRIER', pais_origen: 'Estados Unidos', descripcion: 'Climatización industrial, chillers y refrigeración' },
-  { nombre: 'YORK', pais_origen: 'Estados Unidos', descripcion: 'Chillers centrífugos, rooftop y climatización (JCI)' },
-  { nombre: 'DAIKIN', pais_origen: 'Japón', descripcion: 'Sistemas VRF, chillers y bombas de calor' },
+  {
+    nombre: 'TRANE',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Sistemas HVAC, chillers y unidades manejadoras',
+  },
+  {
+    nombre: 'CARRIER',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Climatización industrial, chillers y refrigeración',
+  },
+  {
+    nombre: 'YORK',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Chillers centrífugos, rooftop y climatización (JCI)',
+  },
+  {
+    nombre: 'DAIKIN',
+    pais_origen: 'Japón',
+    descripcion: 'Sistemas VRF, chillers y bombas de calor',
+  },
   // Transporte Vertical, Elevación y Carga
-  { nombre: 'OTIS', pais_origen: 'Estados Unidos', descripcion: 'Ascensores de pasajeros, montacargas y escaleras mecánicas' },
-  { nombre: 'SCHINDLER', pais_origen: 'Suiza', descripcion: 'Ascensores, escaleras mecánicas y pasillos rodantes' },
-  { nombre: 'KONE', pais_origen: 'Finlandia', descripcion: 'Ascensores y puertas automáticas eco-eficientes' },
-  { nombre: 'MITSUBISHI', pais_origen: 'Japón', descripcion: 'Ascensores de alta velocidad y tracción' },
-  { nombre: 'THYSSENKRUPP', pais_origen: 'Alemania', descripcion: 'Sistemas de elevación y movilidad urbana (TK Elevator)' },
+  {
+    nombre: 'OTIS',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Ascensores de pasajeros, montacargas y escaleras mecánicas',
+  },
+  {
+    nombre: 'SCHINDLER',
+    pais_origen: 'Suiza',
+    descripcion: 'Ascensores, escaleras mecánicas y pasillos rodantes',
+  },
+  {
+    nombre: 'KONE',
+    pais_origen: 'Finlandia',
+    descripcion: 'Ascensores y puertas automáticas eco-eficientes',
+  },
+  {
+    nombre: 'MITSUBISHI',
+    pais_origen: 'Japón',
+    descripcion: 'Ascensores de alta velocidad y tracción',
+  },
+  {
+    nombre: 'THYSSENKRUPP',
+    pais_origen: 'Alemania',
+    descripcion: 'Sistemas de elevación y movilidad urbana (TK Elevator)',
+  },
   // Aire Comprimido y Neumática
-  { nombre: 'KAESER', pais_origen: 'Alemania', descripcion: 'Compresores de tornillo y tratamiento de aire' },
-  { nombre: 'INGERSOLL RAND', pais_origen: 'Estados Unidos', descripcion: 'Compresores industriales y herramientas neumáticas' },
-  { nombre: 'ATLAS COPCO', pais_origen: 'Suecia', descripcion: 'Compresores de aire, generadores de nitrógeno y vacío' },
-  { nombre: 'SULLAIR', pais_origen: 'Estados Unidos', descripcion: 'Compresores de tornillo rotativo estacionarios y portátiles' },
+  {
+    nombre: 'KAESER',
+    pais_origen: 'Alemania',
+    descripcion: 'Compresores de tornillo y tratamiento de aire',
+  },
+  {
+    nombre: 'INGERSOLL RAND',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Compresores industriales y herramientas neumáticas',
+  },
+  {
+    nombre: 'ATLAS COPCO',
+    pais_origen: 'Suecia',
+    descripcion: 'Compresores de aire, generadores de nitrógeno y vacío',
+  },
+  {
+    nombre: 'SULLAIR',
+    pais_origen: 'Estados Unidos',
+    descripcion: 'Compresores de tornillo rotativo estacionarios y portátiles',
+  },
 ];
 
 @Injectable()
@@ -72,7 +212,9 @@ export class MarcasService implements OnModuleInit {
     try {
       await this.seedMarcasEstandar();
     } catch (err: any) {
-      this.logger.warn(`No se pudo sincronizar el banco maestro de marcas OEM en arranque: ${err?.message || err}`);
+      this.logger.warn(
+        `No se pudo sincronizar el banco maestro de marcas OEM en arranque: ${err?.message || err}`,
+      );
     }
   }
 
@@ -92,7 +234,7 @@ export class MarcasService implements OnModuleInit {
     for (const item of MARCAS_ESTANDAR_OEM) {
       const nombreNorm = item.nombre.toUpperCase().trim();
       if (!nombresSet.has(nombreNorm)) {
-        let baseSlug = slugify(nombreNorm) || 'marca';
+        const baseSlug = slugify(nombreNorm) || 'marca';
         let slugFinal = baseSlug;
         let count = 1;
         while (slugsSet.has(slugFinal)) {
@@ -124,7 +266,7 @@ export class MarcasService implements OnModuleInit {
         if (!m.marca || !m.marca.trim()) continue;
         const nombreNorm = m.marca.toUpperCase().trim();
         if (!nombresSet.has(nombreNorm)) {
-          let baseSlug = slugify(nombreNorm) || 'marca';
+          const baseSlug = slugify(nombreNorm) || 'marca';
           let slugFinal = baseSlug;
           let count = 1;
           while (slugsSet.has(slugFinal)) {
@@ -149,7 +291,9 @@ export class MarcasService implements OnModuleInit {
     }
 
     if (creadas > 0) {
-      this.logger.log(`Catálogo Maestro de Marcas inicializado: ${creadas} nuevas marcas OEM sembradas.`);
+      this.logger.log(
+        `Catálogo Maestro de Marcas inicializado: ${creadas} nuevas marcas OEM sembradas.`,
+      );
     }
   }
 
@@ -200,10 +344,7 @@ export class MarcasService implements OnModuleInit {
           },
         },
       },
-      orderBy: [
-        { es_fabricante_oem: 'desc' },
-        { nombre: 'asc' },
-      ],
+      orderBy: [{ es_fabricante_oem: 'desc' }, { nombre: 'asc' }],
     });
   }
 
@@ -250,7 +391,9 @@ export class MarcasService implements OnModuleInit {
     });
 
     if (existente) {
-      this.logger.log(`Marca ya existente detectada: '${existente.nombre}' (ID: ${existente.id_marca}). Retornando registro existente.`);
+      this.logger.log(
+        `Marca ya existente detectada: '${existente.nombre}' (ID: ${existente.id_marca}). Retornando registro existente.`,
+      );
       return {
         id_marca: existente.id_marca,
         nombre: existente.nombre,
@@ -266,7 +409,9 @@ export class MarcasService implements OnModuleInit {
     }
 
     // 2. Generación o validación de slug único
-    const baseSlug = dto.slug?.trim() ? slugify(dto.slug.trim()) : slugify(nombreSanitizado) || 'marca';
+    const baseSlug = dto.slug?.trim()
+      ? slugify(dto.slug.trim())
+      : slugify(nombreSanitizado) || 'marca';
     let slugFinal = baseSlug;
     let contador = 1;
 
@@ -279,7 +424,9 @@ export class MarcasService implements OnModuleInit {
       contador++;
     }
 
-    this.logger.log(`Registrando nueva marca: ${nombreSanitizado.toUpperCase()} (slug: ${slugFinal})`);
+    this.logger.log(
+      `Registrando nueva marca: ${nombreSanitizado.toUpperCase()} (slug: ${slugFinal})`,
+    );
 
     // 3. Inserción con mayúsculas industriales normalizadas
     return this.prisma.marcas.create({

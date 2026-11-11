@@ -7,23 +7,16 @@
 
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
-  AlertCircle,
-  ArrowUpDown,
-  Building2,
   Calendar,
   CheckCircle2,
   Clock,
-  ExternalLink,
   Eye,
-  FileCheck,
   FileSpreadsheet,
   FileText,
-  Filter,
-  Layers,
   Loader2,
   PackageCheck,
   Plus,
@@ -31,7 +24,6 @@ import {
   RefreshCw,
   Search,
   Send,
-  ShieldAlert,
   ShieldCheck,
   ShoppingBag,
   TrendingUp,
@@ -43,7 +35,7 @@ import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -61,10 +53,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  FiltrosOrdenesCompra,
-  ordenesCompraService,
-} from '@/lib/api/ordenes-compra.service';
+import { FiltrosOrdenesCompra, ordenesCompraService } from '@/lib/api/ordenes-compra.service';
 import { recepcionesCompraService } from '@/lib/api/recepciones-compra.service';
 import { comprasService } from '@/lib/api/compras.service';
 import {
@@ -77,8 +66,7 @@ import {
 import { ProveedorCompleto } from '@/types/compras.types';
 
 export default function OrdenesCompraPage() {
-  const { data: session } = useSession();
-  const [isPending, startTransition] = useTransition();
+  useSession();
 
   // Helper para sanitizar nombres de usuario y erradicar textos quemados (White-label institucional)
   const sanitizarNombreUsuario = (nombre: string | null | undefined): string => {
@@ -95,9 +83,6 @@ export default function OrdenesCompraPage() {
     }
     return trimmed;
   };
-
-  // Usuario de sesión para auditoría white-label
-  const usuarioActual = sanitizarNombreUsuario(session?.user?.name);
 
   // Estados de datos
   const [ordenes, setOrdenes] = useState<OrdenCompra[]>([]);
@@ -157,6 +142,8 @@ export default function OrdenesCompraPage() {
       cantidad_rechazada: number;
       calidad: 'OK' | 'PARCIAL_DA_ADO' | 'RECHAZADO';
       observacion_linea: string;
+      numero_lote_fabricante?: string;
+      fecha_vencimiento?: string;
     }>
   >([]);
 
@@ -168,8 +155,8 @@ export default function OrdenesCompraPage() {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
-      minimumFractionDigits: (forceDecimals || hasDecimals) ? 2 : 0,
-      maximumFractionDigits: (forceDecimals || hasDecimals) ? 2 : 0,
+      minimumFractionDigits: forceDecimals || hasDecimals ? 2 : 0,
+      maximumFractionDigits: forceDecimals || hasDecimals ? 2 : 0,
     }).format(num);
   };
 
@@ -193,62 +180,65 @@ export default function OrdenesCompraPage() {
     if (!texto) return '';
     return texto
       .normalize('NFC')
-      .replace(/\bRecepcin\b/gi, (match) => match[0] === 'R' ? 'Recepción' : 'recepción')
+      .replace(/\bRecepcin\b/gi, (match) => (match[0] === 'R' ? 'Recepción' : 'recepción'))
       .replace(/\bSegunda recepcin\b/gi, 'Segunda recepción')
       .replace(/\bPrimera recepcin\b/gi, 'Primera recepción')
-      .replace(/\bUbicacin\b/gi, (match) => match[0] === 'U' ? 'Ubicación' : 'ubicación')
-      .replace(/\bAprobacin\b/gi, (match) => match[0] === 'A' ? 'Aprobación' : 'aprobación')
-      .replace(/\bTransaccin\b/gi, (match) => match[0] === 'T' ? 'Transacción' : 'transacción')
-      .replace(/\bEdicin\b/gi, (match) => match[0] === 'E' ? 'Edición' : 'edición')
-      .replace(/\bDescripcin\b/gi, (match) => match[0] === 'D' ? 'Descripción' : 'descripción')
-      .replace(/\bDevolucin\b/gi, (match) => match[0] === 'D' ? 'Devolución' : 'devolución')
-      .replace(/\bCondicin\b/gi, (match) => match[0] === 'C' ? 'Condición' : 'condición')
-      .replace(/\bRetencin\b/gi, (match) => match[0] === 'R' ? 'Retención' : 'retención')
+      .replace(/\bUbicacin\b/gi, (match) => (match[0] === 'U' ? 'Ubicación' : 'ubicación'))
+      .replace(/\bAprobacin\b/gi, (match) => (match[0] === 'A' ? 'Aprobación' : 'aprobación'))
+      .replace(/\bTransaccin\b/gi, (match) => (match[0] === 'T' ? 'Transacción' : 'transacción'))
+      .replace(/\bEdicin\b/gi, (match) => (match[0] === 'E' ? 'Edición' : 'edición'))
+      .replace(/\bDescripcin\b/gi, (match) => (match[0] === 'D' ? 'Descripción' : 'descripción'))
+      .replace(/\bDevolucin\b/gi, (match) => (match[0] === 'D' ? 'Devolución' : 'devolución'))
+      .replace(/\bCondicin\b/gi, (match) => (match[0] === 'C' ? 'Condición' : 'condición'))
+      .replace(/\bRetencin\b/gi, (match) => (match[0] === 'R' ? 'Retención' : 'retención'))
       .replace(/\uFFFD/g, '')
       .trim();
   };
 
   // Cargar datos iniciales
-  const cargarDatos = async (pagina = paginaActual) => {
-    setLoading(true);
-    try {
-      const filtros: FiltrosOrdenesCompra = {
-        page: pagina,
-        limit: 10,
-      };
+  const cargarDatos = useCallback(
+    async (pagina = 1) => {
+      setLoading(true);
+      try {
+        const filtros: FiltrosOrdenesCompra = {
+          page: pagina,
+          limit: 10,
+        };
 
-      if (busqueda.trim()) {
-        filtros.numero_orden = busqueda.trim();
-      }
-      if (filtroEstado !== 'TODOS') {
-        filtros.estado = filtroEstado;
-      }
-      if (filtroProveedor !== 'TODOS') {
-        filtros.id_proveedor = parseInt(filtroProveedor, 10);
-      }
+        if (busqueda.trim()) {
+          filtros.numero_orden = busqueda.trim();
+        }
+        if (filtroEstado !== 'TODOS') {
+          filtros.estado = filtroEstado;
+        }
+        if (filtroProveedor !== 'TODOS') {
+          filtros.id_proveedor = parseInt(filtroProveedor, 10);
+        }
 
-      const [resOrdenes, resKpis, resProveedores] = await Promise.all([
-        ordenesCompraService.getOrdenes(filtros),
-        ordenesCompraService.getResumenKpis(),
-        comprasService.getProveedoresDirectorio(1, 100),
-      ]);
+        const [resOrdenes, resKpis, resProveedores] = await Promise.all([
+          ordenesCompraService.getOrdenes(filtros),
+          ordenesCompraService.getResumenKpis(),
+          comprasService.getProveedoresDirectorio(1, 100),
+        ]);
 
-      setOrdenes(resOrdenes.data || []);
-      setMeta(resOrdenes.meta || { total: 0, page: 1, limit: 10, totalPages: 1 });
-      setKpis(resKpis);
-      setProveedores(resProveedores.data || []);
-    } catch (err: any) {
-      console.error('Error al cargar órdenes de compra:', err);
-      toast.error('No se pudieron cargar las órdenes de compra');
-    } finally {
-      setLoading(false);
-    }
-  };
+        setOrdenes(resOrdenes.data || []);
+        setMeta(resOrdenes.meta || { total: 0, page: 1, limit: 10, totalPages: 1 });
+        setKpis(resKpis);
+        setProveedores(resProveedores.data || []);
+      } catch (err: unknown) {
+        console.error('Error al cargar órdenes de compra:', err);
+        toast.error('No se pudieron cargar las órdenes de compra');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [busqueda, filtroEstado, filtroProveedor],
+  );
 
   useEffect(() => {
     cargarDatos(1);
     setPaginaActual(1);
-  }, [busqueda, filtroEstado, filtroProveedor]);
+  }, [cargarDatos]);
 
   const cambiarPagina = (nuevaPagina: number) => {
     if (nuevaPagina < 1 || nuevaPagina > meta.totalPages) return;
@@ -261,31 +251,46 @@ export default function OrdenesCompraPage() {
     switch (estado) {
       case 'BORRADOR':
         return (
-          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1.5 font-medium">
+          <Badge
+            variant="outline"
+            className="bg-amber-50 text-amber-700 border-amber-200 gap-1.5 font-medium"
+          >
             <Clock className="w-3 h-3 text-amber-600" /> Borrador
           </Badge>
         );
       case 'ENVIADA':
         return (
-          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 gap-1.5 font-medium">
+          <Badge
+            variant="outline"
+            className="bg-blue-50 text-blue-700 border-blue-200 gap-1.5 font-medium"
+          >
             <Send className="w-3 h-3 text-blue-600" /> Enviada
           </Badge>
         );
       case 'PARCIAL':
         return (
-          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 gap-1.5 font-medium">
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200 gap-1.5 font-medium"
+          >
             <Truck className="w-3 h-3 text-purple-600" /> Parcial
           </Badge>
         );
       case 'COMPLETADA':
         return (
-          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1.5 font-medium">
+          <Badge
+            variant="outline"
+            className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1.5 font-medium"
+          >
             <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Completada
           </Badge>
         );
       case 'CANCELADA':
         return (
-          <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 gap-1.5 font-medium">
+          <Badge
+            variant="outline"
+            className="bg-rose-50 text-rose-700 border-rose-200 gap-1.5 font-medium"
+          >
             <XCircle className="w-3 h-3 text-rose-600" /> Cancelada
           </Badge>
         );
@@ -304,8 +309,9 @@ export default function OrdenesCompraPage() {
       setModalEnviarOpen(false);
       setOrdenParaEnviar(null);
       await cargarDatos(paginaActual);
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Error al emitir la orden de compra');
+    } catch (e: unknown) {
+      const apiErr = e as { response?: { data?: { message?: string } } };
+      toast.error(apiErr.response?.data?.message || 'Error al emitir la orden de compra');
     } finally {
       setAccionEnProgreso(false);
     }
@@ -329,8 +335,9 @@ export default function OrdenesCompraPage() {
       setOrdenParaCancelar(null);
       setMotivoCancelacion('');
       await cargarDatos(paginaActual);
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Error al cancelar la orden de compra');
+    } catch (e: unknown) {
+      const apiErr = e as { response?: { data?: { message?: string } } };
+      toast.error(apiErr.response?.data?.message || 'Error al cancelar la orden de compra');
     } finally {
       setAccionEnProgreso(false);
     }
@@ -386,9 +393,10 @@ export default function OrdenesCompraPage() {
       setGuiaRemision('');
       setObservacionesRecepcion('');
       setModalRecepcionOpen(true);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const apiErr = e as { response?: { data?: { message?: string } } };
       console.error('Error al abrir modal de recepción:', e);
-      toast.error(e.response?.data?.message || 'Error al preparar la recepción de almacén');
+      toast.error(apiErr.response?.data?.message || 'Error al preparar la recepción de almacén');
     } finally {
       setAccionEnProgreso(false);
     }
@@ -501,17 +509,23 @@ export default function OrdenesCompraPage() {
 
     const totalAceptado = itemsAProcesar.reduce((acc, it) => acc + it.cantidad_aceptada, 0);
     if (totalAceptado > 0 && !ubicacionSeleccionada) {
-      toast.warning('Debe seleccionar la bodega / ubicación de destino para el ingreso físico a inventario');
+      toast.warning(
+        'Debe seleccionar la bodega / ubicación de destino para el ingreso físico a inventario',
+      );
       return;
     }
 
     for (const it of itemsAProcesar) {
       if (it.cantidad_recibir !== it.cantidad_aceptada + it.cantidad_rechazada) {
-        toast.error(`Inconsistencia en "${it.descripcion}": la cantidad recibida (${it.cantidad_recibir}) debe ser igual a aceptada (${it.cantidad_aceptada}) + rechazada (${it.cantidad_rechazada})`);
+        toast.error(
+          `Inconsistencia en "${it.descripcion}": la cantidad recibida (${it.cantidad_recibir}) debe ser igual a aceptada (${it.cantidad_aceptada}) + rechazada (${it.cantidad_rechazada})`,
+        );
         return;
       }
       if (it.cantidad_recibir > it.saldo_pendiente) {
-        toast.error(`La cantidad recibida de "${it.descripcion}" excede el saldo pendiente (${it.saldo_pendiente})`);
+        toast.error(
+          `La cantidad recibida de "${it.descripcion}" excede el saldo pendiente (${it.saldo_pendiente})`,
+        );
         return;
       }
     }
@@ -520,7 +534,9 @@ export default function OrdenesCompraPage() {
       setAccionEnProgreso(true);
       const payload: RegistrarRecepcionLotePayload = {
         id_orden_compra: ordenParaRecibir.id_orden_compra,
-        id_ubicacion_destino: ubicacionSeleccionada ? parseInt(ubicacionSeleccionada, 10) : undefined,
+        id_ubicacion_destino: ubicacionSeleccionada
+          ? parseInt(ubicacionSeleccionada, 10)
+          : undefined,
         guia_remision: sanitizarTextoUTF8(guiaRemision) || undefined,
         observaciones: sanitizarTextoUTF8(observacionesRecepcion) || undefined,
         items: itemsAProcesar.map((it) => ({
@@ -547,12 +563,15 @@ export default function OrdenesCompraPage() {
 
       // Si el modal de detalle 360° estaba abierto, recargarlo con los nuevos datos
       if (modalDetalleOpen && ordenDetalle?.id_orden_compra === ordenParaRecibir.id_orden_compra) {
-        const ordenActualizada = await ordenesCompraService.getOrdenById(ordenParaRecibir.id_orden_compra);
+        const ordenActualizada = await ordenesCompraService.getOrdenById(
+          ordenParaRecibir.id_orden_compra,
+        );
         setOrdenDetalle(ordenActualizada);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const apiErr = e as { response?: { data?: { message?: string } } };
       console.error('Error al registrar recepción:', e);
-      toast.error(e.response?.data?.message || 'Error al procesar la recepción física');
+      toast.error(apiErr.response?.data?.message || 'Error al procesar la recepción física');
     } finally {
       setAccionEnProgreso(false);
     }
@@ -564,7 +583,7 @@ export default function OrdenesCompraPage() {
       const detalleCompleto = await ordenesCompraService.getOrdenById(orden.id_orden_compra);
       setOrdenDetalle(detalleCompleto);
       setModalDetalleOpen(true);
-    } catch (e) {
+    } catch {
       setOrdenDetalle(orden);
       setModalDetalleOpen(true);
     }
@@ -771,12 +790,16 @@ export default function OrdenesCompraPage() {
           </div>
         </div>
 
-        ${orden.observaciones ? `
+        ${
+          orden.observaciones
+            ? `
           <div class="info-box" style="margin-bottom: 20px;">
             <div class="info-box-title">Observaciones / Justificación de Compra</div>
             <div style="font-size: 12px; color: #334155;">${orden.observaciones}</div>
           </div>
-        ` : ''}
+        `
+            : ''
+        }
 
         <table>
           <thead>
@@ -841,7 +864,9 @@ export default function OrdenesCompraPage() {
       printWindow.document.write(htmlContent);
       printWindow.document.close();
     } else {
-      toast.error('Permita las ventanas emergentes en el navegador para imprimir la orden de compra');
+      toast.error(
+        'Permita las ventanas emergentes en el navegador para imprimir la orden de compra',
+      );
     }
   };
 
@@ -899,7 +924,9 @@ export default function OrdenesCompraPage() {
         {/* Total Órdenes */}
         <Card className="border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-all rounded-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Órdenes</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Total Órdenes
+            </span>
             <div className="p-2 rounded-lg bg-slate-100 text-slate-700">
               <FileText className="h-4 w-4" />
             </div>
@@ -911,7 +938,9 @@ export default function OrdenesCompraPage() {
         {/* Borradores */}
         <Card className="border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-all rounded-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Borradores</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Borradores
+            </span>
             <div className="p-2 rounded-lg bg-amber-100 text-amber-700">
               <Clock className="h-4 w-4" />
             </div>
@@ -923,7 +952,9 @@ export default function OrdenesCompraPage() {
         {/* Enviadas */}
         <Card className="border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-all rounded-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Enviadas</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Enviadas
+            </span>
             <div className="p-2 rounded-lg bg-blue-100 text-blue-700">
               <Send className="h-4 w-4" />
             </div>
@@ -935,7 +966,9 @@ export default function OrdenesCompraPage() {
         {/* Parciales */}
         <Card className="border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-all rounded-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Parciales</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Parciales
+            </span>
             <div className="p-2 rounded-lg bg-purple-100 text-purple-700">
               <Truck className="h-4 w-4" />
             </div>
@@ -947,7 +980,9 @@ export default function OrdenesCompraPage() {
         {/* Completadas */}
         <Card className="border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-all rounded-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Completadas</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Completadas
+            </span>
             <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700">
               <CheckCircle2 className="h-4 w-4" />
             </div>
@@ -959,12 +994,17 @@ export default function OrdenesCompraPage() {
         {/* Monto Comprometido */}
         <Card className="border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-all rounded-xl col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Comprometido</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Comprometido
+            </span>
             <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700">
               <TrendingUp className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-2 text-base sm:text-lg font-extrabold text-emerald-700 truncate" title={formatCOP(kpis.monto_total_comprometido)}>
+          <p
+            className="mt-2 text-base sm:text-lg font-extrabold text-emerald-700 truncate"
+            title={formatCOP(kpis.monto_total_comprometido)}
+          >
             {formatCOP(kpis.monto_total_comprometido)}
           </p>
           <span className="text-[11px] text-slate-400">En órdenes activas</span>
@@ -1022,7 +1062,9 @@ export default function OrdenesCompraPage() {
                   <SelectItem value="TODOS">Todos los Proveedores</SelectItem>
                   {proveedores.map((p) => (
                     <SelectItem key={p.id_proveedor} value={String(p.id_proveedor)}>
-                      {p.persona?.razon_social || p.persona?.nombre_completo || `Proveedor #${p.id_proveedor}`}
+                      {p.persona?.razon_social ||
+                        p.persona?.nombre_completo ||
+                        `Proveedor #${p.id_proveedor}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1079,9 +1121,12 @@ export default function OrdenesCompraPage() {
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-slate-500">
                     <FileSpreadsheet className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-                    <p className="font-semibold text-slate-800">No se encontraron órdenes de compra</p>
+                    <p className="font-semibold text-slate-800">
+                      No se encontraron órdenes de compra
+                    </p>
                     <p className="text-xs text-slate-500 mt-1">
-                      Ajuste los filtros o emita una nueva orden de compra para abastecer inventario.
+                      Ajuste los filtros o emita una nueva orden de compra para abastecer
+                      inventario.
                     </p>
                   </td>
                 </tr>
@@ -1105,7 +1150,9 @@ export default function OrdenesCompraPage() {
                     {/* Proveedor */}
                     <td className="py-3.5 px-4">
                       <div className="font-semibold text-slate-900">
-                        {orden.proveedor?.razon_social || orden.proveedor?.nombre_completo || 'Proveedor N/A'}
+                        {orden.proveedor?.razon_social ||
+                          orden.proveedor?.nombre_completo ||
+                          'Proveedor N/A'}
                       </div>
                       {orden.proveedor?.numero_identificacion && (
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
@@ -1151,9 +1198,7 @@ export default function OrdenesCompraPage() {
                     </td>
 
                     {/* Estado */}
-                    <td className="py-3.5 px-4 text-center">
-                      {renderBadgeEstado(orden.estado)}
-                    </td>
+                    <td className="py-3.5 px-4 text-center">{renderBadgeEstado(orden.estado)}</td>
 
                     {/* Acciones */}
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
@@ -1286,7 +1331,8 @@ export default function OrdenesCompraPage() {
                         Orden de Compra: {ordenDetalle.numero_orden_compra}
                       </DialogTitle>
                       <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                        ID Sistema #{ordenDetalle.id_orden_compra} • Emitida el {formatFecha(ordenDetalle.fecha_solicitud)}
+                        ID Sistema #{ordenDetalle.id_orden_compra} • Emitida el{' '}
+                        {formatFecha(ordenDetalle.fecha_solicitud)}
                       </DialogDescription>
                     </div>
                   </div>
@@ -1299,7 +1345,8 @@ export default function OrdenesCompraPage() {
                 <div>
                   <span className="text-slate-500 block font-semibold">Proveedor:</span>
                   <p className="text-slate-900 font-bold mt-0.5">
-                    {ordenDetalle.proveedor?.razon_social || ordenDetalle.proveedor?.nombre_completo}
+                    {ordenDetalle.proveedor?.razon_social ||
+                      ordenDetalle.proveedor?.nombre_completo}
                   </p>
                   {ordenDetalle.proveedor?.numero_identificacion && (
                     <p className="text-slate-500 font-mono mt-0.5">
@@ -1329,11 +1376,14 @@ export default function OrdenesCompraPage() {
                 <div>
                   <span className="text-slate-500 block font-semibold">Fechas Críticas:</span>
                   <p className="text-slate-800 mt-0.5">
-                    <span className="text-slate-500 font-medium">Emisión:</span> {formatFecha(ordenDetalle.fecha_solicitud)}
+                    <span className="text-slate-500 font-medium">Emisión:</span>{' '}
+                    {formatFecha(ordenDetalle.fecha_solicitud)}
                   </p>
                   <p className="text-slate-800 mt-0.5">
                     <span className="text-slate-500 font-medium">Necesidad:</span>{' '}
-                    <span className="font-medium text-slate-700">{formatFecha(ordenDetalle.fecha_necesidad) || 'Inmediata'}</span>
+                    <span className="font-medium text-slate-700">
+                      {formatFecha(ordenDetalle.fecha_necesidad) || 'Inmediata'}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -1341,8 +1391,12 @@ export default function OrdenesCompraPage() {
               {/* Observaciones si existen */}
               {ordenDetalle.observaciones && (
                 <div className="p-3.5 bg-amber-50/40 rounded-xl border border-amber-200/80 text-xs">
-                  <span className="text-amber-900 font-semibold block mb-1">Observaciones / Notas:</span>
-                  <p className="text-amber-950 whitespace-pre-line">{sanitizarTextoUTF8(ordenDetalle.observaciones)}</p>
+                  <span className="text-amber-900 font-semibold block mb-1">
+                    Observaciones / Notas:
+                  </span>
+                  <p className="text-amber-950 whitespace-pre-line">
+                    {sanitizarTextoUTF8(ordenDetalle.observaciones)}
+                  </p>
                 </div>
               )}
 
@@ -1370,7 +1424,8 @@ export default function OrdenesCompraPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {ordenDetalle.detalles?.map((det, idx) => {
-                        const subtotalCalculado = Number(det.cantidad) * Number(det.precio_unitario);
+                        const subtotalCalculado =
+                          Number(det.cantidad) * Number(det.precio_unitario);
                         const recibidaPrevia = Number(det.cantidad_recibida_acumulada || 0);
                         const saldoPendiente =
                           det.cantidad_pendiente !== undefined
@@ -1380,9 +1435,13 @@ export default function OrdenesCompraPage() {
 
                         return (
                           <tr key={det.id_detalle} className="hover:bg-slate-50/60">
-                            <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-xs">{idx + 1}</td>
+                            <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-xs">
+                              {idx + 1}
+                            </td>
                             <td className="py-2.5 px-3 font-mono text-slate-600 font-medium">
-                              {det.componente?.codigo_interno || det.componente?.referencia_fabricante || '—'}
+                              {det.componente?.codigo_interno ||
+                                det.componente?.referencia_fabricante ||
+                                '—'}
                             </td>
                             <td className="py-2.5 px-3">
                               <div className="font-semibold text-slate-900 flex items-center gap-1.5">
@@ -1435,7 +1494,8 @@ export default function OrdenesCompraPage() {
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-600 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <PackageCheck className="w-4 h-4 text-emerald-600" />
-                    Historial de Recepciones Físicas y Control de Calidad ({ordenDetalle.recepciones?.length || 0})
+                    Historial de Recepciones Físicas y Control de Calidad (
+                    {ordenDetalle.recepciones?.length || 0})
                   </span>
                   {(ordenDetalle.estado === 'ENVIADA' || ordenDetalle.estado === 'PARCIAL') && (
                     <Button
@@ -1483,7 +1543,10 @@ export default function OrdenesCompraPage() {
                                 </Badge>
                               );
                             }
-                            if (rec.calidad === 'PARCIAL_DA_ADO' || rec.calidad === 'PARCIAL_DAÑADO') {
+                            if (
+                              rec.calidad === 'PARCIAL_DA_ADO' ||
+                              rec.calidad === 'PARCIAL_DAÑADO'
+                            ) {
                               return (
                                 <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
                                   Parcial Dañado
@@ -1512,11 +1575,16 @@ export default function OrdenesCompraPage() {
                                       {detalleAsociado.componente?.descripcion_corta || 'Artículo'}
                                     </div>
                                     <div className="text-[11px] font-mono text-slate-500">
-                                      SKU: {detalleAsociado.componente?.codigo_interno || detalleAsociado.componente?.referencia_fabricante || '—'}
+                                      SKU:{' '}
+                                      {detalleAsociado.componente?.codigo_interno ||
+                                        detalleAsociado.componente?.referencia_fabricante ||
+                                        '—'}
                                     </div>
                                   </div>
                                 ) : (
-                                  <span className="text-slate-400 font-mono text-[11px]">Línea #{rec.id_detalle_orden || 'General'}</span>
+                                  <span className="text-slate-400 font-mono text-[11px]">
+                                    Línea #{rec.id_detalle_orden || 'General'}
+                                  </span>
                                 )}
                               </td>
                               <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-800">
@@ -1535,7 +1603,8 @@ export default function OrdenesCompraPage() {
                                 </span>
                               </td>
                               <td className="py-2.5 px-3 text-slate-500 italic">
-                                {sanitizarTextoUTF8(rec.observaciones) || 'Ingreso conforme sin novedades'}
+                                {sanitizarTextoUTF8(rec.observaciones) ||
+                                  'Ingreso conforme sin novedades'}
                               </td>
                             </tr>
                           );
@@ -1546,7 +1615,10 @@ export default function OrdenesCompraPage() {
                 ) : (
                   <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-500">
                     <Truck className="w-5 h-5 mx-auto text-slate-400 mb-1" />
-                    <span>Aún no se registran recepciones físicas para esta orden de compra. La mercancía está pendiente de arribo a almacén.</span>
+                    <span>
+                      Aún no se registran recepciones físicas para esta orden de compra. La
+                      mercancía está pendiente de arribo a almacén.
+                    </span>
                   </div>
                 )}
               </div>
@@ -1630,14 +1702,21 @@ export default function OrdenesCompraPage() {
             </div>
             <DialogDescription className="text-xs text-slate-500">
               ¿Está seguro de emitir formalmente la orden{' '}
-              <span className="font-semibold text-slate-900">{ordenParaEnviar?.numero_orden_compra}</span> al proveedor?
+              <span className="font-semibold text-slate-900">
+                {ordenParaEnviar?.numero_orden_compra}
+              </span>{' '}
+              al proveedor?
             </DialogDescription>
           </DialogHeader>
 
           <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
-            <p>• La orden cambiará de estado a <strong>ENVIADA</strong>.</p>
+            <p>
+              • La orden cambiará de estado a <strong>ENVIADA</strong>.
+            </p>
             <p>• Quedará habilitada para recepción física en almacén (Ciclo 4.B).</p>
-            <p>• Monto total comprometido: <strong>{formatCOP(ordenParaEnviar?.total)}</strong>.</p>
+            <p>
+              • Monto total comprometido: <strong>{formatCOP(ordenParaEnviar?.total)}</strong>.
+            </p>
           </div>
 
           <DialogFooter className="gap-2 pt-2">
@@ -1678,16 +1757,23 @@ export default function OrdenesCompraPage() {
           <DialogHeader>
             <div className="flex items-center gap-2.5 text-rose-600 mb-1">
               <XCircle className="w-5 h-5" />
-              <DialogTitle className="text-slate-900 font-bold">Cancelar Orden de Compra</DialogTitle>
+              <DialogTitle className="text-slate-900 font-bold">
+                Cancelar Orden de Compra
+              </DialogTitle>
             </div>
             <DialogDescription className="text-xs text-slate-500">
               Esta acción invalidará la orden{' '}
-              <span className="font-semibold text-slate-900">{ordenParaCancelar?.numero_orden_compra}</span>.
+              <span className="font-semibold text-slate-900">
+                {ordenParaCancelar?.numero_orden_compra}
+              </span>
+              .
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2 pt-2">
-            <label className="text-xs font-semibold text-slate-700">Motivo de Cancelación (Requerido):</label>
+            <label className="text-xs font-semibold text-slate-700">
+              Motivo de Cancelación (Requerido):
+            </label>
             <Textarea
               placeholder="Ej: Proveedor sin disponibilidad inmediata, cotización modificada..."
               value={motivoCancelacion}
@@ -1741,9 +1827,14 @@ export default function OrdenesCompraPage() {
                         Recepción Física de Mercancías en Almacén
                       </DialogTitle>
                       <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                        Orden de Compra: <span className="font-semibold text-slate-800">{ordenParaRecibir.numero_orden_compra}</span> • Proveedor:{' '}
+                        Orden de Compra:{' '}
                         <span className="font-semibold text-slate-800">
-                          {ordenParaRecibir.proveedor?.razon_social || ordenParaRecibir.proveedor?.nombre_completo}
+                          {ordenParaRecibir.numero_orden_compra}
+                        </span>{' '}
+                        • Proveedor:{' '}
+                        <span className="font-semibold text-slate-800">
+                          {ordenParaRecibir.proveedor?.razon_social ||
+                            ordenParaRecibir.proveedor?.nombre_completo}
                         </span>
                       </DialogDescription>
                     </div>
@@ -1833,7 +1924,9 @@ export default function OrdenesCompraPage() {
                       <th className="py-2.5 px-3">Componente / SKU</th>
                       <th className="py-2.5 px-3 text-right w-20">Pendiente</th>
                       <th className="py-2.5 px-3 text-center w-24">Cant. Recibida</th>
-                      <th className="py-2.5 px-3 text-center w-24 text-emerald-700">Aceptada (OK)</th>
+                      <th className="py-2.5 px-3 text-center w-24 text-emerald-700">
+                        Aceptada (OK)
+                      </th>
                       <th className="py-2.5 px-3 text-center w-24 text-rose-700">Rechazada</th>
                       <th className="py-2.5 px-3 text-center w-28">Calidad</th>
                       <th className="py-2.5 px-3 w-28">Lote Fab.</th>
@@ -1860,7 +1953,8 @@ export default function OrdenesCompraPage() {
                           <td className="py-2.5 px-3">
                             <div className="font-semibold text-slate-900">{item.descripcion}</div>
                             <div className="text-[11px] font-mono text-slate-500">
-                              Ref: {item.sku} • Solicitado: {item.cantidad_solicitada} {item.unidad_medida} (Recibido prev: {item.cantidad_recibida_previa})
+                              Ref: {item.sku} • Solicitado: {item.cantidad_solicitada}{' '}
+                              {item.unidad_medida} (Recibido prev: {item.cantidad_recibida_previa})
                             </div>
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap text-amber-700">
@@ -1976,7 +2070,8 @@ export default function OrdenesCompraPage() {
                 const totalAceptado = itemsRecepcion.reduce((a, b) => a + b.cantidad_aceptada, 0);
                 const totalRechazado = itemsRecepcion.reduce((a, b) => a + b.cantidad_rechazada, 0);
                 const todasLasLineasCompletas = itemsRecepcion.every(
-                  (it) => it.cantidad_recibida_previa + it.cantidad_recibir >= it.cantidad_solicitada,
+                  (it) =>
+                    it.cantidad_recibida_previa + it.cantidad_recibir >= it.cantidad_solicitada,
                 );
 
                 return (
@@ -1989,7 +2084,9 @@ export default function OrdenesCompraPage() {
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block">Ingreso a Kardex (Stock Actual):</span>
+                        <span className="text-slate-500 block">
+                          Ingreso a Kardex (Stock Actual):
+                        </span>
                         <span className="font-mono font-bold text-emerald-700 text-sm">
                           +{totalAceptado} UND
                         </span>
@@ -2003,7 +2100,9 @@ export default function OrdenesCompraPage() {
                     </div>
 
                     <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
-                      <span className="text-slate-500 block font-medium">Estado Resultante Proyectado:</span>
+                      <span className="text-slate-500 block font-medium">
+                        Estado Resultante Proyectado:
+                      </span>
                       <span className="font-bold flex items-center gap-1.5 mt-0.5">
                         {todasLasLineasCompletas ? (
                           <>

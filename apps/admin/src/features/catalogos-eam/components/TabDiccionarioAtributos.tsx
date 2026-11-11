@@ -11,7 +11,6 @@ import {
   Tag,
   Trash2,
   X,
-  CheckCircle2,
   Lock,
   Unlock,
 } from 'lucide-react';
@@ -67,10 +66,11 @@ export function TabDiccionarioAtributos() {
     try {
       await deleteAttrMut.mutateAsync(deleteTarget.codigo_atributo);
       setDeleteTarget(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
       const msg =
-        err?.response?.data?.message ||
-        err?.message ||
+        apiErr?.response?.data?.message ||
+        apiErr?.message ||
         'Ocurrió un error al procesar la eliminación';
       setDeleteError(msg);
     }
@@ -156,7 +156,10 @@ export function TabDiccionarioAtributos() {
       id_magnitud: attr.id_magnitud ? String(attr.id_magnitud) : '',
       unidad_defecto_codigo: attr.unidad_defecto_codigo || '',
       rol_semantico: attr.rol_semantico || 'ESTANDAR',
-      opciones_csv: parsedOps.map((o) => o.label).filter(Boolean).join(', '),
+      opciones_csv: parsedOps
+        .map((o) => o.label)
+        .filter(Boolean)
+        .join(', '),
     });
     setShowModal(true);
   };
@@ -164,8 +167,7 @@ export function TabDiccionarioAtributos() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const isSelect = form.tipo_control === 'SELECTOR' || form.tipo_control === 'SELECT';
-    const isNumMag =
-      form.tipo_control === 'NUMERICO_MAGNITUD' || form.tipo_control === 'NUMERICO';
+    const isNumMag = form.tipo_control === 'NUMERICO_MAGNITUD' || form.tipo_control === 'NUMERICO';
 
     const opciones_json =
       isSelect && form.opciones_csv.trim()
@@ -536,9 +538,7 @@ export function TabDiccionarioAtributos() {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    Código Identificador *
-                  </label>
+                  <label className="text-xs font-bold text-slate-700">Código Identificador *</label>
                   {!editingAttr && (
                     <button
                       type="button"
@@ -581,7 +581,8 @@ export function TabDiccionarioAtributos() {
                 />
                 {isCodigoDuplicado ? (
                   <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
-                    ✕ Este código "{form.codigo_atributo}" ya existe en el diccionario. Modifícalo para que sea único.
+                    ✕ Este código &ldquo;{form.codigo_atributo}&rdquo; ya existe en el diccionario.
+                    Modifícalo para que sea único.
                   </p>
                 ) : form.codigo_atributo && !editingAttr ? (
                   <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
@@ -589,13 +590,13 @@ export function TabDiccionarioAtributos() {
                   </p>
                 ) : isAutoCodigo && !editingAttr ? (
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Generado automáticamente garantizando unicidad. Pulsa en "Personalizar código" para editarlo.
+                    Generado automáticamente garantizando unicidad. Pulsa en &ldquo;Personalizar
+                    código&rdquo; para editarlo.
                   </p>
                 ) : null}
               </div>
 
-              {(form.tipo_control === 'NUMERICO_MAGNITUD' ||
-                form.tipo_control === 'NUMERICO') && (
+              {(form.tipo_control === 'NUMERICO_MAGNITUD' || form.tipo_control === 'NUMERICO') && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-blue-50/60 p-4 rounded-xl border border-blue-200">
                   <div>
                     <label className="block text-xs font-bold text-blue-900 mb-1">
@@ -606,13 +607,14 @@ export function TabDiccionarioAtributos() {
                       onChange={(idMag) => {
                         const magObj = magnitudes.find((m) => String(m.id_magnitud) === idMag);
                         const nuevaU = magObj?.unidad_base_codigo || '';
-                        const auto = isAutoCodigo && !editingAttr
-                          ? generarCodigoCampoTecnico(
-                              form.nombre_atributo,
-                              codigosAtributosExistentes,
-                              nuevaU || undefined,
-                            )
-                          : form.codigo_atributo;
+                        const auto =
+                          isAutoCodigo && !editingAttr
+                            ? generarCodigoCampoTecnico(
+                                form.nombre_atributo,
+                                codigosAtributosExistentes,
+                                nuevaU || undefined,
+                              )
+                            : form.codigo_atributo;
                         setForm({
                           ...form,
                           id_magnitud: idMag,
@@ -640,9 +642,14 @@ export function TabDiccionarioAtributos() {
                     <EamSelect
                       value={form.unidad_defecto_codigo}
                       onChange={(unidad) => {
-                        const auto = isAutoCodigo && !editingAttr
-                          ? generarCodigoCampoTecnico(form.nombre_atributo, codigosAtributosExistentes, unidad || undefined)
-                          : form.codigo_atributo;
+                        const auto =
+                          isAutoCodigo && !editingAttr
+                            ? generarCodigoCampoTecnico(
+                                form.nombre_atributo,
+                                codigosAtributosExistentes,
+                                unidad || undefined,
+                              )
+                            : form.codigo_atributo;
                         setForm({
                           ...form,
                           unidad_defecto_codigo: unidad,
@@ -746,12 +753,8 @@ export function TabDiccionarioAtributos() {
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="text-base font-bold text-slate-900">
-                  ¿Eliminar Campo Técnico?
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Confirmación de seguridad requerida
-                </p>
+                <h4 className="text-base font-bold text-slate-900">¿Eliminar Campo Técnico?</h4>
+                <p className="text-xs text-slate-500 mt-0.5">Confirmación de seguridad requerida</p>
               </div>
               <button
                 type="button"
@@ -778,7 +781,9 @@ export function TabDiccionarioAtributos() {
                 {deleteTarget.magnitud && (
                   <p className="text-[11px] text-slate-500 font-medium">
                     Magnitud: {deleteTarget.magnitud.nombre_magnitud}
-                    {deleteTarget.unidad_defecto_codigo ? ` (${deleteTarget.unidad_defecto_codigo})` : ''}
+                    {deleteTarget.unidad_defecto_codigo
+                      ? ` (${deleteTarget.unidad_defecto_codigo})`
+                      : ''}
                   </p>
                 )}
               </div>
@@ -786,7 +791,10 @@ export function TabDiccionarioAtributos() {
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-amber-900">
                 <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                 <div className="text-[11px] leading-relaxed">
-                  <strong className="font-bold">Advertencia de trazabilidad:</strong> Si este campo técnico no está asignado a ninguna parte o subsistema, se eliminará del diccionario. Los valores históricos registrados en equipos existentes preservarán su integridad de datos.
+                  <strong className="font-bold">Advertencia de trazabilidad:</strong> Si este campo
+                  técnico no está asignado a ninguna parte o subsistema, se eliminará del
+                  diccionario. Los valores históricos registrados en equipos existentes preservarán
+                  su integridad de datos.
                 </div>
               </div>
 

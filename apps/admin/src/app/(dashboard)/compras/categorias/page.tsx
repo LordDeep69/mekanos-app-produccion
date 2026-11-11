@@ -3,7 +3,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Familias y Taxonomía Jerárquica (/compras/categorias)
- * 
+ *
  * Vista de Árbol Jerárquico Interactivo, Nodos Expandibles/Colapsables,
  * Creación de Familias Raíz, Subcategorías y Edición de Taxonomía.
  */
@@ -23,9 +23,7 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
   Tag,
-  CheckCircle2,
   X,
   Boxes,
 } from 'lucide-react';
@@ -85,7 +83,7 @@ export default function CategoriasTaxonomiaPage() {
       setExpandedNodes(rootIds);
 
       if (showToast) toast.success('Taxonomía jerárquica actualizada');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Error al cargar árbol taxonómico:', e);
       toast.error('No se pudo cargar la jerarquía de categorías');
     } finally {
@@ -222,9 +220,10 @@ export default function CategoriasTaxonomiaPage() {
 
       setModalOpen(false);
       cargarArbol();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error al guardar categoría:', error);
-      const msg = error.response?.data?.message || 'Error al procesar la categoría';
+      const apiErr = error as { response?: { data?: { message?: string } } };
+      const msg = apiErr.response?.data?.message || 'Error al procesar la categoría';
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -249,10 +248,11 @@ export default function CategoriasTaxonomiaPage() {
         nivel === 1
           ? 'bg-blue-100 text-blue-800 border-blue-200'
           : nivel === 2
-          ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
-          : 'bg-emerald-100 text-emerald-800 border-emerald-200';
+            ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+            : 'bg-emerald-100 text-emerald-800 border-emerald-200';
 
-      const levelLabel = nivel === 1 ? 'L1 Familia' : nivel === 2 ? 'L2 Subfamilia' : `L${nivel} Especialidad`;
+      const levelLabel =
+        nivel === 1 ? 'L1 Familia' : nivel === 2 ? 'L2 Subfamilia' : `L${nivel} Especialidad`;
 
       return (
         <div key={nodo.id_categoria} className="space-y-1">
@@ -295,20 +295,21 @@ export default function CategoriasTaxonomiaPage() {
               <div className="truncate">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-sm text-gray-900 truncate">{nodo.nombre}</span>
-                  <Badge variant="outline" className="font-mono text-[10px] text-gray-500 bg-gray-50">
+                  <Badge
+                    variant="outline"
+                    className="font-mono text-[10px] text-gray-500 bg-gray-50"
+                  >
                     {nodo.codigo_categoria}
                   </Badge>
                   <Badge className={`${levelColor} text-[10px] py-0 px-1.5`}>{levelLabel}</Badge>
                 </div>
-                <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                  {nodo.ruta_jerarquica}
-                </p>
+                <p className="text-[11px] text-gray-400 truncate mt-0.5">{nodo.ruta_jerarquica}</p>
               </div>
             </div>
 
             {/* Lado derecho: Contador artículos con pluralización y navegación cruzada + Botones de acción */}
             <div className="flex items-center gap-2 shrink-0 ml-4">
-              {((nodo.total_articulos ?? nodo._count?.catalogo_componentes) !== undefined) && (
+              {(nodo.total_articulos ?? nodo._count?.catalogo_componentes) !== undefined &&
                 (() => {
                   const cant = nodo.total_articulos ?? nodo._count?.catalogo_componentes ?? 0;
                   const label = `${cant} ${cant === 1 ? 'artículo' : 'artículos'}`;
@@ -327,8 +328,7 @@ export default function CategoriasTaxonomiaPage() {
                       0 artículos
                     </span>
                   );
-                })()
-              )}
+                })()}
 
               <Button
                 variant="outline"
@@ -337,8 +337,7 @@ export default function CategoriasTaxonomiaPage() {
                 className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                 title="Agregar subcategoría hija a este nodo"
               >
-                <FolderPlus className="h-3.5 w-3.5 mr-1" />
-                + Subfamilia
+                <FolderPlus className="h-3.5 w-3.5 mr-1" />+ Subfamilia
               </Button>
 
               <Button
@@ -372,12 +371,11 @@ export default function CategoriasTaxonomiaPage() {
             <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 sm:text-3xl">
               Familias y Taxonomía
             </h1>
-            <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-              Árbol Jerárquico
-            </Badge>
+            <Badge className="bg-blue-100 text-blue-700 border-blue-200">Árbol Jerárquico</Badge>
           </div>
           <p className="mt-1 text-sm text-gray-600">
-            Estructuración taxonómica y clasificación técnica del catálogo maestro de recursos y repuestos.
+            Estructuración taxonómica y clasificación técnica del catálogo maestro de recursos y
+            repuestos.
           </p>
         </div>
 
@@ -397,8 +395,7 @@ export default function CategoriasTaxonomiaPage() {
             onClick={abrirCrearRaiz}
             className="h-10 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm"
           >
-            <Plus className="mr-1.5 h-4 w-4" />
-            + Nueva Familia Raíz (L1)
+            <Plus className="mr-1.5 h-4 w-4" />+ Nueva Familia Raíz (L1)
           </Button>
         </div>
       </div>
@@ -425,7 +422,9 @@ export default function CategoriasTaxonomiaPage() {
 
         <Card className="border border-indigo-100 bg-indigo-50/30 p-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-indigo-800">Subfamilias / Especialidades</span>
+            <span className="text-xs font-semibold text-indigo-800">
+              Subfamilias / Especialidades
+            </span>
             <Tag className="h-4 w-4 text-indigo-600" />
           </div>
           <p className="mt-2 text-2xl font-extrabold text-indigo-900">{metricas.subfamilias}</p>
@@ -516,8 +515,8 @@ export default function CategoriasTaxonomiaPage() {
               {isEditing
                 ? `Editar Categoría: ${selectedNode?.nombre}`
                 : formData.id_padre
-                ? `Nueva Subcategoría bajo: ${selectedNode?.nombre}`
-                : 'Nueva Familia Raíz (Nivel 1)'}
+                  ? `Nueva Subcategoría bajo: ${selectedNode?.nombre}`
+                  : 'Nueva Familia Raíz (Nivel 1)'}
             </DialogTitle>
             <DialogDescription className="text-xs text-gray-500">
               {isEditing
@@ -571,7 +570,9 @@ export default function CategoriasTaxonomiaPage() {
               <div className="space-y-2">
                 {(() => {
                   const cantArticulos =
-                    selectedNode?.total_articulos ?? selectedNode?._count?.catalogo_componentes ?? 0;
+                    selectedNode?.total_articulos ??
+                    selectedNode?._count?.catalogo_componentes ??
+                    0;
                   const hijos = selectedNode?.hijos || selectedNode?.subcategorias || [];
                   const tieneHijosActivos = hijos.some((h) => h.activo);
                   const bloqueado = cantArticulos > 0 || tieneHijosActivos;
@@ -600,7 +601,10 @@ export default function CategoriasTaxonomiaPage() {
                     <>
                       <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3">
                         <div className="space-y-0.5">
-                          <Label htmlFor="cat_activo" className="text-xs font-bold text-gray-800 cursor-pointer">
+                          <Label
+                            htmlFor="cat_activo"
+                            className="text-xs font-bold text-gray-800 cursor-pointer"
+                          >
                             Rama Activa en Catálogo
                           </Label>
                           <p className="text-[11px] text-gray-500">
@@ -619,9 +623,17 @@ export default function CategoriasTaxonomiaPage() {
                         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
                           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
                           <div className="space-y-0.5 text-[11px] leading-relaxed">
-                            <p className="font-bold text-amber-950">Protección de Integridad Referencial</p>
+                            <p className="font-bold text-amber-950">
+                              Protección de Integridad Referencial
+                            </p>
                             <p className="text-amber-800">
-                              Esta rama agrupa <strong>{cantArticulos} {cantArticulos === 1 ? 'artículo activo' : 'artículos activos'}</strong> en el catálogo maestro. Para desactivarla, debe reubicar primero los artículos en otra categoría técnica.
+                              Esta rama agrupa{' '}
+                              <strong>
+                                {cantArticulos}{' '}
+                                {cantArticulos === 1 ? 'artículo activo' : 'artículos activos'}
+                              </strong>{' '}
+                              en el catálogo maestro. Para desactivarla, debe reubicar primero los
+                              artículos en otra categoría técnica.
                             </p>
                           </div>
                         </div>
@@ -631,9 +643,12 @@ export default function CategoriasTaxonomiaPage() {
                         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
                           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
                           <div className="space-y-0.5 text-[11px] leading-relaxed">
-                            <p className="font-bold text-amber-950">Protección de Jerarquía Activa</p>
+                            <p className="font-bold text-amber-950">
+                              Protección de Jerarquía Activa
+                            </p>
                             <p className="text-amber-800">
-                              Esta rama contiene subcategorías hijas activas. Para desactivarla, desactive o reubique primero las subfamilias dependientes.
+                              Esta rama contiene subcategorías hijas activas. Para desactivarla,
+                              desactive o reubique primero las subfamilias dependientes.
                             </p>
                           </div>
                         </div>

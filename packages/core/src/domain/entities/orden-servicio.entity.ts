@@ -42,10 +42,31 @@ export interface OrdenServicioProps {
   userId?: number;
 }
 
+export interface OrdenServicioObject {
+  id: string;
+  numeroOrden: string;
+  estado: EstadoOrdenEnum;
+  prioridad: PrioridadOrdenEnum;
+  equipoId: number;
+  clienteId: number;
+  sedeClienteId: number | null;
+  tipoServicioId: number;
+  descripcion: string | null;
+  fechaProgramada: Date | null;
+  tecnicoAsignadoId: number | null;
+  fechaInicio: Date | null;
+  fechaFin: Date | null;
+  observaciones: string | null;
+  firmaClienteUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date | null;
+  userId: number | null;
+}
+
 /**
  * Entity: OrdenServicioEntity
  * Aggregate Root para el módulo de Órdenes de Servicio
- * 
+ *
  * Workflow:
  * BORRADOR → PROGRAMADA → ASIGNADA → EN_PROCESO → EJECUTADA → EN_REVISION → APROBADA
  */
@@ -68,8 +89,8 @@ export class OrdenServicioEntity {
     private _firmaClienteUrl: string | null,
     private readonly _createdAt: Date,
     private _updatedAt: Date | null,
-    private readonly _userId: number | null
-  ) { }
+    private readonly _userId: number | null,
+  ) {}
 
   /**
    * Factory method para crear una nueva Orden de Servicio
@@ -78,17 +99,21 @@ export class OrdenServicioEntity {
     // Validaciones de negocio
     this.validateCreateProps(props);
 
+    const descNorm = props.descripcion?.trim();
+
     return new OrdenServicioEntity(
       OrdenServicioId.create(),
       NumeroOrden.from(props.numeroOrden),
       EstadoOrden.borrador(), // Estado inicial siempre BORRADOR
-      props.prioridad ? PrioridadOrden.from(props.prioridad) : PrioridadOrden.normal(),
+      props.prioridad !== undefined
+        ? PrioridadOrden.from(props.prioridad)
+        : PrioridadOrden.normal(),
       props.equipoId,
       props.clienteId,
-      props.sedeClienteId || null,
+      props.sedeClienteId ?? null,
       props.tipoServicioId,
-      props.descripcion?.trim() || null,
-      props.fechaProgramada || null,
+      descNorm !== undefined && descNorm.length > 0 ? descNorm : null,
+      props.fechaProgramada ?? null,
       null, // Sin técnico asignado al crear
       null, // Sin fecha inicio
       null, // Sin fecha fin
@@ -96,7 +121,7 @@ export class OrdenServicioEntity {
       null, // Sin firma
       new Date(),
       null,
-      props.userId || null
+      props.userId ?? null,
     );
   }
 
@@ -111,40 +136,44 @@ export class OrdenServicioEntity {
       PrioridadOrden.from(props.prioridad),
       props.equipoId,
       props.clienteId,
-      props.sedeClienteId || null,
+      props.sedeClienteId ?? null,
       props.tipoServicioId,
-      props.descripcion || null,
-      props.fechaProgramada || null,
-      props.tecnicoAsignadoId || null,
-      props.fechaInicio || null,
-      props.fechaFin || null,
-      props.observaciones || null,
-      props.firmaClienteUrl || null,
+      props.descripcion !== undefined && props.descripcion.length > 0 ? props.descripcion : null,
+      props.fechaProgramada ?? null,
+      props.tecnicoAsignadoId ?? null,
+      props.fechaInicio ?? null,
+      props.fechaFin ?? null,
+      props.observaciones !== undefined && props.observaciones.length > 0
+        ? props.observaciones
+        : null,
+      props.firmaClienteUrl !== undefined && props.firmaClienteUrl.length > 0
+        ? props.firmaClienteUrl
+        : null,
       props.createdAt,
-      props.updatedAt || null,
-      props.userId || null
+      props.updatedAt ?? null,
+      props.userId ?? null,
     );
   }
 
   private static validateCreateProps(props: CreateOrdenServicioProps): void {
-    if (!props.numeroOrden?.trim()) {
+    if ((props.numeroOrden ?? '').trim().length === 0) {
       throw new Error('Número de orden es requerido');
     }
 
-    if (!props.equipoId || props.equipoId <= 0) {
+    if (props.equipoId <= 0) {
       throw new Error('EquipoId inválido');
     }
 
-    if (!props.clienteId || props.clienteId <= 0) {
+    if (props.clienteId <= 0) {
       throw new Error('ClienteId inválido');
     }
 
-    if (!props.tipoServicioId || props.tipoServicioId <= 0) {
+    if (props.tipoServicioId <= 0) {
       throw new Error('TipoServicioId inválido');
     }
 
     // Validar fecha programada si se proporciona
-    if (props.fechaProgramada) {
+    if (props.fechaProgramada !== undefined) {
       const fecha = new Date(props.fechaProgramada);
       if (isNaN(fecha.getTime())) {
         throw new Error('Fecha programada inválida');
@@ -161,9 +190,7 @@ export class OrdenServicioEntity {
    */
   programar(fechaProgramada: Date, observaciones?: string): void {
     if (!this._estado.esBorrador()) {
-      throw new Error(
-        `No se puede programar una orden en estado ${this._estado.getValue()}`
-      );
+      throw new Error(`No se puede programar una orden en estado ${this._estado.getValue()}`);
     }
 
     // Validar fecha válida
@@ -172,8 +199,10 @@ export class OrdenServicioEntity {
       throw new Error('Fecha programada inválida');
     }
 
+    const obsNorm = observaciones?.trim();
     this._fechaProgramada = fecha;
-    this._observaciones = observaciones?.trim() || this._observaciones;
+    this._observaciones =
+      obsNorm !== undefined && obsNorm.length > 0 ? obsNorm : this._observaciones;
     this._estado = EstadoOrden.programada();
     this._updatedAt = new Date();
   }
@@ -185,15 +214,15 @@ export class OrdenServicioEntity {
   asignarTecnico(tecnicoId: number): void {
     if (!this._estado.esProgramada()) {
       throw new Error(
-        `No se puede asignar técnico a una orden en estado ${this._estado.getValue()}`
+        `No se puede asignar técnico a una orden en estado ${this._estado.getValue()}`,
       );
     }
 
-    if (!tecnicoId || tecnicoId <= 0) {
+    if (tecnicoId <= 0) {
       throw new Error('TecnicoId inválido');
     }
 
-    if (!this._fechaProgramada) {
+    if (this._fechaProgramada == null) {
       throw new Error('Debe programar la orden antes de asignar técnico');
     }
 
@@ -208,17 +237,15 @@ export class OrdenServicioEntity {
    */
   iniciar(): void {
     if (!this._estado.esAsignada()) {
-      throw new Error(
-        `No se puede iniciar una orden en estado ${this._estado.getValue()}`
-      );
+      throw new Error(`No se puede iniciar una orden en estado ${this._estado.getValue()}`);
     }
 
-    if (!this._tecnicoAsignadoId) {
+    if (this._tecnicoAsignadoId == null) {
       throw new Error('Debe asignar un técnico antes de iniciar');
     }
 
     // Validar que la fecha programada no sea futura (salvo casos urgentes)
-    if (this._fechaProgramada && !this._prioridad.esUrgente()) {
+    if (this._fechaProgramada != null && !this._prioridad.esUrgente()) {
       const hoy = new Date();
       hoy.setHours(0, 0, 0, 0);
       const fechaProg = new Date(this._fechaProgramada);
@@ -240,17 +267,17 @@ export class OrdenServicioEntity {
    */
   finalizar(observaciones?: string): void {
     if (!this._estado.esEnProceso()) {
-      throw new Error(
-        `No se puede finalizar una orden en estado ${this._estado.getValue()}`
-      );
+      throw new Error(`No se puede finalizar una orden en estado ${this._estado.getValue()}`);
     }
 
-    if (!this._fechaInicio) {
+    if (this._fechaInicio == null) {
       throw new Error('Orden sin fecha de inicio');
     }
 
+    const obsNorm = observaciones?.trim();
     this._fechaFin = new Date();
-    this._observaciones = observaciones?.trim() || this._observaciones;
+    this._observaciones =
+      obsNorm !== undefined && obsNorm.length > 0 ? obsNorm : this._observaciones;
     this._estado = EstadoOrden.ejecutada();
     this._updatedAt = new Date();
   }
@@ -262,7 +289,7 @@ export class OrdenServicioEntity {
   enviarARevision(): void {
     if (!this._estado.esEjecutada()) {
       throw new Error(
-        `No se puede enviar a revisión una orden en estado ${this._estado.getValue()}`
+        `No se puede enviar a revisión una orden en estado ${this._estado.getValue()}`,
       );
     }
 
@@ -280,9 +307,7 @@ export class OrdenServicioEntity {
    */
   aprobar(firmaClienteUrl: string): void {
     if (!this._estado.esEnRevision()) {
-      throw new Error(
-        `No se puede aprobar una orden en estado ${this._estado.getValue()}`
-      );
+      throw new Error(`No se puede aprobar una orden en estado ${this._estado.getValue()}`);
     }
 
     if (!firmaClienteUrl?.trim()) {
@@ -299,9 +324,7 @@ export class OrdenServicioEntity {
    */
   rechazarYReejecutar(observaciones: string): void {
     if (!this._estado.esEnRevision()) {
-      throw new Error(
-        `No se puede rechazar una orden en estado ${this._estado.getValue()}`
-      );
+      throw new Error(`No se puede rechazar una orden en estado ${this._estado.getValue()}`);
     }
 
     if (!observaciones?.trim()) {
@@ -321,9 +344,7 @@ export class OrdenServicioEntity {
    */
   actualizarDescripcion(descripcion: string): void {
     if (!this._estado.puedeSerModificada()) {
-      throw new Error(
-        `No se puede modificar descripción en estado ${this._estado.getValue()}`
-      );
+      throw new Error(`No se puede modificar descripción en estado ${this._estado.getValue()}`);
     }
 
     this._descripcion = descripcion.trim();
@@ -335,9 +356,7 @@ export class OrdenServicioEntity {
    */
   actualizarPrioridad(prioridad: PrioridadOrdenEnum): void {
     if (!this._estado.puedeSerModificada()) {
-      throw new Error(
-        `No se puede cambiar prioridad en estado ${this._estado.getValue()}`
-      );
+      throw new Error(`No se puede cambiar prioridad en estado ${this._estado.getValue()}`);
     }
 
     this._prioridad = PrioridadOrden.from(prioridad);
@@ -417,7 +436,7 @@ export class OrdenServicioEntity {
   /**
    * Serializa la entidad a objeto plano
    */
-  toObject() {
+  toObject(): OrdenServicioObject {
     return {
       id: this._id.getValue(),
       numeroOrden: this._numeroOrden.getValue(),

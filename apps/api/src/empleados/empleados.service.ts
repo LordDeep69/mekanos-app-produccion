@@ -5,7 +5,7 @@ import { UpdateEmpleadosDto } from './dto/update-empleados.dto';
 
 @Injectable()
 export class EmpleadosService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * ✅ MULTI-ASESOR: Query ligera para selector de asesores
@@ -31,10 +31,11 @@ export class EmpleadosService {
       orderBy: { persona: { primer_nombre: 'asc' } },
     });
 
-    return asesores.map(a => ({
+    return asesores.map((a) => ({
       id_empleado: a.id_empleado,
       codigo_empleado: a.codigo_empleado,
-      nombre: a.persona?.nombre_completo ||
+      nombre:
+        a.persona?.nombre_completo ||
         `${a.persona?.primer_nombre || ''} ${a.persona?.primer_apellido || ''}`.trim() ||
         `Asesor #${a.id_empleado}`,
     }));
@@ -51,14 +52,12 @@ export class EmpleadosService {
     }
 
     // Validar que persona no esté ya asociada a otro empleado
-    const empleadoExistente = await this.prisma.empleados.findUnique({
+    const empleadoExistente = await this.prisma.empleados.findFirst({
       where: { id_persona: createDto.id_persona },
     });
 
     if (empleadoExistente) {
-      throw new Error(
-        `Persona con ID ${createDto.id_persona} ya está asociada a un empleado`,
-      );
+      throw new Error(`Persona con ID ${createDto.id_persona} ya está asociada a un empleado`);
     }
 
     // Validar jefe_inmediato si existe
@@ -68,9 +67,7 @@ export class EmpleadosService {
       });
 
       if (!jefe) {
-        throw new Error(
-          `Jefe inmediato con ID ${createDto.jefe_inmediato} no existe`,
-        );
+        throw new Error(`Jefe inmediato con ID ${createDto.jefe_inmediato} no existe`);
       }
     }
 
@@ -78,9 +75,7 @@ export class EmpleadosService {
       data: {
         ...createDto,
         fecha_ingreso: new Date(createDto.fecha_ingreso),
-        fecha_retiro: createDto.fecha_retiro
-          ? new Date(createDto.fecha_retiro)
-          : undefined,
+        fecha_retiro: createDto.fecha_retiro ? new Date(createDto.fecha_retiro) : undefined,
         fecha_vencimiento_licencia: createDto.fecha_vencimiento_licencia
           ? new Date(createDto.fecha_vencimiento_licencia)
           : undefined,
@@ -101,8 +96,7 @@ export class EmpleadosService {
     skip?: number;
     take?: number;
   }) {
-    const { es_tecnico, es_asesor, empleado_activo, search, skip = 0, take = 50 } =
-      params || {};
+    const { es_tecnico, es_asesor, empleado_activo, search, skip = 0, take = 50 } = params || {};
 
     const where: any = {
       ...(es_tecnico !== undefined && { es_tecnico }),
@@ -169,10 +163,12 @@ export class EmpleadosService {
     const usuario = empleado.persona?.usuarios;
     const resultado = {
       ...empleado,
-      usuario: usuario ? {
-        ...usuario,
-        usuarios_roles: usuario.usuarios_roles,
-      } : null,
+      usuario: usuario
+        ? {
+            ...usuario,
+            usuarios_roles: usuario.usuarios_roles,
+          }
+        : null,
     };
 
     return resultado;
@@ -189,9 +185,7 @@ export class EmpleadosService {
       });
 
       if (!jefe) {
-        throw new Error(
-          `Jefe inmediato con ID ${updateDto.jefe_inmediato} no existe`,
-        );
+        throw new Error(`Jefe inmediato con ID ${updateDto.jefe_inmediato} no existe`);
       }
     }
 

@@ -1,4 +1,4 @@
-import { ConflictException, Inject, NotFoundException } from '@nestjs/common';
+import { Inject, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { ICatalogoSistemasRepository } from '../../domain/catalogo-sistemas.repository.interface';
 import { CatalogoSistemasMapper } from '../../infrastructure/catalogo-sistemas.mapper';
@@ -6,7 +6,9 @@ import { ActualizarCatalogoSistemasCommand } from '../commands/actualizar-catalo
 import { CatalogoSistemasResponseDto } from '../dto/catalogo-sistemas-response.dto';
 
 @CommandHandler(ActualizarCatalogoSistemasCommand)
-export class ActualizarCatalogoSistemasHandler implements ICommandHandler<ActualizarCatalogoSistemasCommand> {
+export class ActualizarCatalogoSistemasHandler
+  implements ICommandHandler<ActualizarCatalogoSistemasCommand>
+{
   constructor(
     @Inject('ICatalogoSistemasRepository')
     private readonly repository: ICatalogoSistemasRepository,
@@ -25,12 +27,15 @@ export class ActualizarCatalogoSistemasHandler implements ICommandHandler<Actual
     if (command.intercalar && ordenFinal && ordenFinal > 0) {
       const todos = await this.repository.findActivos();
       const targetAplica = command.aplicaA !== undefined ? command.aplicaA : existe.aplica_a;
-      const sistemasDelAmbito = (targetAplica && targetAplica.length > 0)
-        ? todos.filter(s => (s.aplica_a || []).some(t => targetAplica.includes(t)))
-        : todos.filter(s => !s.aplica_a || s.aplica_a.length === 0);
+      const sistemasDelAmbito =
+        targetAplica && targetAplica.length > 0
+          ? todos.filter((s) => (s.aplica_a || []).some((t) => targetAplica.includes(t)))
+          : todos.filter((s) => !s.aplica_a || s.aplica_a.length === 0);
 
       const aDesplazar = sistemasDelAmbito
-        .filter(s => s.id_sistema !== command.idSistema && (s.orden_visualizacion || 0) >= ordenFinal)
+        .filter(
+          (s) => s.id_sistema !== command.idSistema && (s.orden_visualizacion || 0) >= ordenFinal,
+        )
         .sort((a, b) => (b.orden_visualizacion || 0) - (a.orden_visualizacion || 0));
 
       for (const s of aDesplazar) {

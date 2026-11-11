@@ -4,7 +4,7 @@ import { estados_orden } from '@prisma/client';
 
 /**
  * Repository para estados_orden
- * 
+ *
  * CARACTERÍSTICAS:
  * - Sin foreign keys (tabla catálogo independiente)
  * - Sin includes (no relaciones directas)
@@ -61,7 +61,7 @@ export class PrismaEstadosOrdenRepository {
    * Buscar estado por código (UNIQUE)
    */
   async findByCodigo(codigo_estado: string): Promise<estados_orden | null> {
-    return this.prisma.estados_orden.findUnique({
+    return this.prisma.estados_orden.findFirst({
       where: { codigo_estado },
     });
   }
@@ -110,10 +110,7 @@ export class PrismaEstadosOrdenRepository {
   async findActivos(): Promise<estados_orden[]> {
     return this.prisma.estados_orden.findMany({
       where: { activo: true },
-      orderBy: [
-        { orden_visualizacion: 'asc' },
-        { id_estado: 'asc' },
-      ],
+      orderBy: [{ orden_visualizacion: 'asc' }, { id_estado: 'asc' }],
     });
   }
 

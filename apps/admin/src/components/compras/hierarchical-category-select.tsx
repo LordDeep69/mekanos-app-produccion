@@ -3,7 +3,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Selector Jerárquico de Categorías Taxonómicas Enterprise (HierarchicalCategorySelect)
- * 
+ *
  * Arquitectura de Navegación Enfocada Progresiva (Exclusive Drill-Down Focus & Popover Control):
  * - Activación Bajo Demanda: "El cuadro" de categorías sólo se refleja cuando el buscador/selector
  *   tiene el clic activado, manteniéndose oculto en reposo para preservar la limpieza visual.
@@ -22,7 +22,6 @@ import {
   Check,
   ChevronRight,
   ChevronsUpDown,
-  FolderPlus,
   FolderTree,
   Loader2,
   Plus,
@@ -77,7 +76,7 @@ interface FlatCategoryItem extends CategoriaNodo {
 }
 
 function getChildren(node: CategoriaNodo): CategoriaNodo[] {
-  return node.subcategorias || (node as any).hijos || [];
+  return node.subcategorias || node.hijos || [];
 }
 
 function flattenTree(nodes: CategoriaNodo[], indent = 0): FlatCategoryItem[] {
@@ -283,7 +282,11 @@ export function HierarchicalCategorySelect({
   const canDrillDownSelected = useMemo(() => {
     if (!selectedInCurrentLevel) return false;
     const hijos = getChildren(selectedInCurrentLevel);
-    return Array.isArray(hijos) && hijos.length > 0 && currentParentId !== selectedInCurrentLevel.id_categoria;
+    return (
+      Array.isArray(hijos) &&
+      hijos.length > 0 &&
+      currentParentId !== selectedInCurrentLevel.id_categoria
+    );
   }, [selectedInCurrentLevel, currentParentId]);
 
   const drillDownHijosCount = useMemo(() => {
@@ -365,7 +368,7 @@ export function HierarchicalCategorySelect({
       setCurrentParentId(null);
       return;
     }
-    
+
     // Retroceder un escalón exacto hacia el padre del nivel actual
     const nuevoPadreId = currentParentNode.id_padre || null;
     isInternalChangeRef.current = true;
@@ -405,7 +408,7 @@ export function HierarchicalCategorySelect({
         (c) =>
           c.nombre.toLowerCase().includes(q) ||
           (c.ruta_jerarquica && c.ruta_jerarquica.toLowerCase().includes(q)) ||
-          (c.codigo_categoria && c.codigo_categoria.toLowerCase().includes(q))
+          (c.codigo_categoria && c.codigo_categoria.toLowerCase().includes(q)),
       )
       .slice(0, 8);
   }, [flatList, searchGlobal]);
@@ -466,11 +469,7 @@ export function HierarchicalCategorySelect({
 
     let codigo = modalForm.codigo_categoria?.trim();
     if (!codigo) {
-      codigo = modalForm.nombre
-        .trim()
-        .slice(0, 10)
-        .toUpperCase()
-        .replace(/\s+/g, '_');
+      codigo = modalForm.nombre.trim().slice(0, 10).toUpperCase().replace(/\s+/g, '_');
     }
 
     setIsCreating(true);
@@ -504,9 +503,14 @@ export function HierarchicalCategorySelect({
 
       onChange(nueva.id_categoria, nueva);
       setIsModalOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creando categoría:', error);
-      const msg = error?.response?.data?.message || error?.message || 'Error al registrar categoría';
+      const apiErr = error as {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      };
+      const msg =
+        apiErr?.response?.data?.message || apiErr?.message || 'Error al registrar categoría';
       toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
     } finally {
       setIsCreating(false);
@@ -515,9 +519,7 @@ export function HierarchicalCategorySelect({
 
   // Migas de pan de ancestros activos
   const rutaBreadcrumbs = useMemo(() => {
-    return selectedPath
-      .map((id) => mapPorId.get(id))
-      .filter((c): c is CategoriaNodo => !!c);
+    return selectedPath.map((id) => mapPorId.get(id)).filter((c): c is CategoriaNodo => !!c);
   }, [selectedPath, mapPorId]);
 
   // ============================================================================
@@ -541,11 +543,17 @@ export function HierarchicalCategorySelect({
                   <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                     Taxonomía Asignada
                   </span>
-                  <Badge variant="outline" className="bg-white text-blue-700 border-blue-200 text-[10px] font-bold">
+                  <Badge
+                    variant="outline"
+                    className="bg-white text-blue-700 border-blue-200 text-[10px] font-bold"
+                  >
                     Nivel {selectedCat.nivel}
                   </Badge>
                   {selectedCat.codigo_categoria && (
-                    <Badge variant="outline" className="bg-white text-gray-600 border-gray-200 text-[10px] font-mono">
+                    <Badge
+                      variant="outline"
+                      className="bg-white text-gray-600 border-gray-200 text-[10px] font-mono"
+                    >
                       {selectedCat.codigo_categoria}
                     </Badge>
                   )}
@@ -564,7 +572,7 @@ export function HierarchicalCategorySelect({
                             'font-semibold px-2 py-0.5 rounded-md transition-colors text-left flex items-center gap-1',
                             isLast
                               ? 'bg-blue-600 text-white font-bold shadow-xs'
-                              : 'bg-white border border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50/60'
+                              : 'bg-white border border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50/60',
                           )}
                           title={`Ir a ${node.nombre}`}
                         >
@@ -635,7 +643,7 @@ export function HierarchicalCategorySelect({
                 'flex items-center justify-between rounded-xl border border-gray-300 bg-white px-3.5 py-2.5 text-xs shadow-xs transition-all group',
                 disabled
                   ? 'opacity-50 cursor-not-allowed bg-gray-50'
-                  : 'cursor-pointer hover:border-blue-500 hover:bg-blue-50/20'
+                  : 'cursor-pointer hover:border-blue-500 hover:bg-blue-50/20',
               )}
             >
               <div className="flex items-center gap-2.5 text-gray-400 group-hover:text-gray-600">
@@ -644,7 +652,10 @@ export function HierarchicalCategorySelect({
                   {placeholder || 'Haz clic aquí para buscar o seleccionar categoría taxonómica...'}
                 </span>
               </div>
-              <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 shrink-0 font-medium">
+              <Badge
+                variant="outline"
+                className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 shrink-0 font-medium"
+              >
                 Explorar categorías ▾
               </Badge>
             </div>
@@ -731,9 +742,7 @@ export function HierarchicalCategorySelect({
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
                   <span>
-                    {currentParentId === null
-                      ? 'Nueva Familia Raíz'
-                      : 'Nueva Subcategoría'}
+                    {currentParentId === null ? 'Nueva Familia Raíz' : 'Nueva Subcategoría'}
                   </span>
                 </Button>
               </div>
@@ -754,8 +763,12 @@ export function HierarchicalCategorySelect({
                     <span>Volver</span>
                   </Button>
                   <div className="truncate">
-                    <span className="text-[11px] text-gray-500 font-medium">Subcategorías de: </span>
-                    <span className="font-bold text-blue-950 uppercase">{currentParentNode.nombre}</span>
+                    <span className="text-[11px] text-gray-500 font-medium">
+                      Subcategorías de:{' '}
+                    </span>
+                    <span className="font-bold text-blue-950 uppercase">
+                      {currentParentNode.nombre}
+                    </span>
                   </div>
                 </div>
 
@@ -770,7 +783,10 @@ export function HierarchicalCategorySelect({
                   >
                     ✓ Usar esta familia
                   </Button>
-                  <Badge variant="outline" className="text-[10px] bg-white border-blue-300 text-blue-700 font-mono">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-white border-blue-300 text-blue-700 font-mono"
+                  >
                     Nivel {nivelVisualizado} ({itemsEnfoqueActual.length})
                   </Badge>
                 </div>
@@ -804,8 +820,8 @@ export function HierarchicalCategorySelect({
                           isSelected
                             ? 'bg-blue-600 text-white font-semibold border-blue-600 shadow-sm ring-2 ring-blue-500/20'
                             : isInPath
-                            ? 'bg-blue-50/70 border-blue-200 text-blue-950 font-medium'
-                            : 'bg-white hover:bg-gray-50 border-gray-100 hover:border-gray-200 text-gray-800'
+                              ? 'bg-blue-50/70 border-blue-200 text-blue-950 font-medium'
+                              : 'bg-white hover:bg-gray-50 border-gray-100 hover:border-gray-200 text-gray-800',
                         )}
                       >
                         {/* Lado Izquierdo: Icono + Nombre + Badges */}
@@ -816,8 +832,8 @@ export function HierarchicalCategorySelect({
                               isSelected
                                 ? 'bg-blue-500 text-white'
                                 : cat.nivel === 1
-                                ? 'bg-blue-50 text-blue-600'
-                                : 'bg-gray-100 text-gray-600'
+                                  ? 'bg-blue-50 text-blue-600'
+                                  : 'bg-gray-100 text-gray-600',
                             )}
                           >
                             <IconComp className="h-4 w-4" />
@@ -831,7 +847,7 @@ export function HierarchicalCategorySelect({
                               <span
                                 className={cn(
                                   'text-[10px] font-mono',
-                                  isSelected ? 'text-blue-100' : 'text-gray-400'
+                                  isSelected ? 'text-blue-100' : 'text-gray-400',
                                 )}
                               >
                                 {cat.codigo_categoria}
@@ -860,7 +876,7 @@ export function HierarchicalCategorySelect({
                               }}
                               className={cn(
                                 'flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer',
-                                isSelected ? 'hover:bg-blue-700' : 'hover:bg-blue-100/60'
+                                isSelected ? 'hover:bg-blue-700' : 'hover:bg-blue-100/60',
                               )}
                               title={`Explorar ${hijos.length} subcategorías directas`}
                             >
@@ -870,7 +886,7 @@ export function HierarchicalCategorySelect({
                                   'text-[10px] px-1.5 py-0 font-mono',
                                   isSelected
                                     ? 'bg-blue-700 border-blue-500 text-white'
-                                    : 'bg-blue-50 border-blue-200 text-blue-700 font-semibold'
+                                    : 'bg-blue-50 border-blue-200 text-blue-700 font-semibold',
                                 )}
                               >
                                 {hijos.length} {hijos.length === 1 ? 'subcat' : 'subcats'}
@@ -878,7 +894,9 @@ export function HierarchicalCategorySelect({
                               <ChevronRight
                                 className={cn(
                                   'h-4 w-4 transition-transform group-hover:translate-x-0.5',
-                                  isSelected ? 'text-white' : 'text-gray-400 group-hover:text-blue-600'
+                                  isSelected
+                                    ? 'text-white'
+                                    : 'text-gray-400 group-hover:text-blue-600',
                                 )}
                               />
                             </div>
@@ -889,7 +907,7 @@ export function HierarchicalCategorySelect({
                                 'text-[9px] px-1.5 py-0 font-mono',
                                 isSelected
                                   ? 'bg-emerald-600 text-white border-emerald-500'
-                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200',
                               )}
                             >
                               Terminal
@@ -924,7 +942,9 @@ export function HierarchicalCategorySelect({
                 {selectedCat ? (
                   <span className="inline-flex items-center gap-1.5 text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full text-xs">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span>Seleccionado: {selectedCat.nombre} (Nivel {selectedCat.nivel})</span>
+                    <span>
+                      Seleccionado: {selectedCat.nombre} (Nivel {selectedCat.nivel})
+                    </span>
                   </span>
                 ) : (
                   <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-medium">
@@ -984,6 +1004,7 @@ export function HierarchicalCategorySelect({
           tabIndex={disabled ? -1 : 0}
           role="combobox"
           aria-expanded={isOpenCombobox}
+          aria-controls={`${id || 'hierarchical-category'}-listbox`}
           onClick={() => {
             if (!disabled) {
               const willOpen = !isOpenCombobox;
@@ -1008,24 +1029,30 @@ export function HierarchicalCategorySelect({
               ? 'cursor-not-allowed opacity-50 bg-gray-50 border-gray-200'
               : 'cursor-pointer bg-white hover:border-blue-400',
             isOpenCombobox && 'border-blue-500 ring-2 ring-blue-500/20',
-            selectedCat ? 'border-blue-300 bg-blue-50/30' : 'border-gray-300'
+            selectedCat ? 'border-blue-300 bg-blue-50/30' : 'border-gray-300',
           )}
         >
           <div className="flex items-center gap-2 overflow-hidden truncate">
-            <IconSelected className={cn('h-4 w-4 shrink-0', selectedCat ? 'text-blue-600' : 'text-gray-400')} />
+            <IconSelected
+              className={cn('h-4 w-4 shrink-0', selectedCat ? 'text-blue-600' : 'text-gray-400')}
+            />
             {selectedCat ? (
               <div
                 className="flex items-center gap-1.5 truncate"
                 title={selectedCat.ruta_jerarquica || selectedCat.nombre}
               >
-                <span className="font-semibold text-gray-900 truncate">
-                  {displayRuta}
-                </span>
-                <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 bg-white text-blue-700 border-blue-200 shrink-0">
+                <span className="font-semibold text-gray-900 truncate">{displayRuta}</span>
+                <Badge
+                  variant="outline"
+                  className="text-[9px] font-mono px-1.5 py-0 bg-white text-blue-700 border-blue-200 shrink-0"
+                >
                   N{selectedCat.nivel}
                 </Badge>
                 {selectedCat.codigo_categoria && (
-                  <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 bg-gray-50 text-gray-600 border-gray-200 shrink-0 hidden md:inline-flex">
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] font-mono px-1.5 py-0 bg-gray-50 text-gray-600 border-gray-200 shrink-0 hidden md:inline-flex"
+                  >
                     {selectedCat.codigo_categoria}
                   </Badge>
                 )}
@@ -1128,7 +1155,10 @@ export function HierarchicalCategorySelect({
                   <span className="font-bold text-[11px] text-blue-950 uppercase truncate">
                     {currentParentNode.nombre}
                   </span>
-                  <Badge variant="outline" className="text-[9px] bg-white border-blue-300 text-blue-700 font-mono px-1 py-0 shrink-0">
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] bg-white border-blue-300 text-blue-700 font-mono px-1 py-0 shrink-0"
+                  >
                     N{nivelVisualizado}
                   </Badge>
                 </div>
@@ -1144,7 +1174,9 @@ export function HierarchicalCategorySelect({
             ) : (
               <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase px-1">
                 <span>Familias Principales ({arbol.length})</span>
-                <span className="text-[10px] font-normal lowercase text-gray-400">clic para explorar</span>
+                <span className="text-[10px] font-normal lowercase text-gray-400">
+                  clic para explorar
+                </span>
               </div>
             )}
 
@@ -1171,11 +1203,16 @@ export function HierarchicalCategorySelect({
                         'w-full flex items-center justify-between p-2 rounded-lg text-xs text-left transition-colors group',
                         isSelected
                           ? 'bg-blue-600 text-white font-semibold'
-                          : 'hover:bg-gray-100 text-gray-800'
+                          : 'hover:bg-gray-100 text-gray-800',
                       )}
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <IconComp className={cn('h-3.5 w-3.5 shrink-0', isSelected ? 'text-white' : 'text-blue-600')} />
+                        <IconComp
+                          className={cn(
+                            'h-3.5 w-3.5 shrink-0',
+                            isSelected ? 'text-white' : 'text-blue-600',
+                          )}
+                        />
                         <span className="truncate">{cat.nombre}</span>
                       </div>
 
@@ -1193,14 +1230,19 @@ export function HierarchicalCategorySelect({
                               'flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer',
                               isSelected
                                 ? 'hover:bg-blue-700 text-blue-100'
-                                : 'hover:bg-gray-200 text-gray-500 hover:text-blue-700'
+                                : 'hover:bg-gray-200 text-gray-500 hover:text-blue-700',
                             )}
                             title={`Ver ${hijos.length} subcategorías directas`}
                           >
                             <span className="text-[10px] font-mono font-medium">
                               {hijos.length}
                             </span>
-                            <ChevronRight className={cn('h-3.5 w-3.5', isSelected ? 'text-white' : 'text-gray-400')} />
+                            <ChevronRight
+                              className={cn(
+                                'h-3.5 w-3.5',
+                                isSelected ? 'text-white' : 'text-gray-400',
+                              )}
+                            />
                           </div>
                         ) : (
                           isSelected && <Check className="h-3.5 w-3.5 text-white" />
@@ -1258,7 +1300,11 @@ export function HierarchicalCategorySelect({
                   variant="ghost"
                   onClick={() => handleOpenCreateModal(currentParentId)}
                   className="h-7 text-xs text-blue-700 hover:bg-blue-50 font-semibold flex items-center gap-1 px-2"
-                  title={currentParentId === null ? 'Crear nueva familia principal' : `Crear subcategoría dentro de ${currentParentNode?.nombre}`}
+                  title={
+                    currentParentId === null
+                      ? 'Crear nueva familia principal'
+                      : `Crear subcategoría dentro de ${currentParentNode?.nombre}`
+                  }
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>{currentParentId === null ? 'Nueva Familia' : 'Nueva Subcategoría'}</span>
@@ -1303,9 +1349,7 @@ export function HierarchicalCategorySelect({
                 <select
                   id="modal-cat-padre"
                   value={modalPadreId || ''}
-                  onChange={(e) =>
-                    setModalPadreId(e.target.value ? Number(e.target.value) : null)
-                  }
+                  onChange={(e) => setModalPadreId(e.target.value ? Number(e.target.value) : null)}
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
                 >
                   <option value="">[ Ninguna - Categoría Raíz Nivel 1 ]</option>

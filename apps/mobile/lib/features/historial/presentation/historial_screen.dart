@@ -287,7 +287,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
         ),
         Text(
           label,
-          style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 12),
         ),
       ],
     );

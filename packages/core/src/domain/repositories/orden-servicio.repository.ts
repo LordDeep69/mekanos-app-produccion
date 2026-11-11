@@ -18,6 +18,25 @@ export interface FindOrdenesFilters {
   take?: number;
 }
 
+export interface OrdenWithEquiposInput {
+  numero_orden: string;
+  id_cliente: number;
+  id_sede?: number | null;
+  id_equipo: number;
+  id_tipo_servicio?: number | null;
+  id_cronograma?: number | null;
+  fecha_programada?: Date | null;
+  hora_programada?: Date | null;
+  prioridad?: string;
+  origen_solicitud?: string;
+  id_tecnico_asignado?: number | null;
+  fecha_asignacion?: Date | null;
+  id_estado_actual: number;
+  descripcion_inicial?: string | null;
+  requiere_firma_cliente?: boolean;
+  creado_por: number;
+}
+
 /**
  * Repository Port: IOrdenServicioRepository
  * Define el contrato para la persistencia de Órdenes de Servicio
@@ -85,7 +104,11 @@ export interface IOrdenServicioRepository {
    * @param equiposIds - Lista de IDs de equipos a vincular
    * @returns Orden persistida
    */
-  saveWithEquipos(orden: any, equiposIds: number[]): Promise<any>;
+  saveWithEquipos(
+    orden: OrdenWithEquiposInput,
+    equiposIds: number[],
+    serviciosIds?: number[],
+  ): Promise<unknown>;
 
   /**
    * Guarda una orden (crear o actualizar)

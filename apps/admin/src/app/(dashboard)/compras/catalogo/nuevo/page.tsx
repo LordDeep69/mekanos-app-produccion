@@ -3,7 +3,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Creación de Recurso en Catálogo Maestro (Abastecimiento y Catálogo)
- * 
+ *
  * Utiliza el componente maestro unificado ArticuloForm (mode="create")
  * garantizando coherencia arquitectónica y reglas inmutables de apertura en Kardex.
  */
@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { comprasService } from '@/lib/api/compras.service';
 import { ArticuloForm, ArticuloFormValues } from '@/components/compras/articulo-form';
 import { Button } from '@/components/ui/button';
+import type { CreateArticuloMaestroPayload } from '@/types/compras.types';
 
 export default function NuevoArticuloPage() {
   const router = useRouter();
@@ -28,17 +29,25 @@ export default function NuevoArticuloPage() {
       toast.loading('Registrando recurso en catálogo maestro...', { id: 'create-item' });
 
       // Sanitizar payloads y tipos numéricos
-      const payload: any = {
+      const payload: CreateArticuloMaestroPayload = {
         ...values,
         id_marca: values.id_marca ? Number(values.id_marca) : undefined,
         id_categoria: values.id_categoria ? Number(values.id_categoria) : undefined,
         codigo_unidad_medida: values.codigo_unidad_medida || undefined,
         frecuencia_mantenimiento_meses: values.frecuencia_mantenimiento_meses || undefined,
-        precio_compra: values.precio_compra !== null && values.precio_compra !== undefined ? Number(values.precio_compra) : undefined,
-        precio_venta: values.precio_venta !== null && values.precio_venta !== undefined ? Number(values.precio_venta) : undefined,
-        margen_utilidad_porcentaje: values.margen_utilidad_porcentaje !== null && values.margen_utilidad_porcentaje !== undefined
-          ? Number(values.margen_utilidad_porcentaje)
-          : undefined,
+        precio_compra:
+          values.precio_compra !== null && values.precio_compra !== undefined
+            ? Number(values.precio_compra)
+            : undefined,
+        precio_venta:
+          values.precio_venta !== null && values.precio_venta !== undefined
+            ? Number(values.precio_venta)
+            : undefined,
+        margen_utilidad_porcentaje:
+          values.margen_utilidad_porcentaje !== null &&
+          values.margen_utilidad_porcentaje !== undefined
+            ? Number(values.margen_utilidad_porcentaje)
+            : undefined,
         stock_minimo: Number(values.stock_minimo || 0),
         stock_actual: Number(values.stock_actual || 0),
         proveedores_iniciales: values.proveedores_iniciales?.map((p) => ({
@@ -60,9 +69,14 @@ export default function NuevoArticuloPage() {
 
       // Redireccionar inmediatamente a la Ficha 360° del artículo creado
       router.push(`/compras/catalogo/${creado.id_componente}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error al registrar artículo:', error);
-      const msg = error?.response?.data?.message || error?.message || 'Error al procesar el registro.';
+      const apiErr = error as {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      };
+      const msg =
+        apiErr?.response?.data?.message || apiErr?.message || 'Error al procesar el registro.';
       toast.error('No se pudo crear el artículo', {
         id: 'create-item',
         description: Array.isArray(msg) ? msg.join(', ') : msg,
@@ -93,7 +107,8 @@ export default function NuevoArticuloPage() {
             Alta de Recurso Maestro
           </h1>
           <p className="text-xs sm:text-sm text-gray-600">
-            Registra un nuevo repuesto, insumo o activo en el catálogo con identidad técnica neutral y matriz de abastecimiento.
+            Registra un nuevo repuesto, insumo o activo en el catálogo con identidad técnica neutral
+            y matriz de abastecimiento.
           </p>
         </div>
 

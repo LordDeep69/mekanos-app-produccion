@@ -17,12 +17,9 @@
 
 import { PrismaService } from '@mekanos/database';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import {
-    criterio_intervalo_enum,
-    estado_contrato_enum,
-    periodicidad_enum
-} from '@prisma/client';
-import { NumeracionService } from './numeracion.service';
+import { criterio_intervalo_enum, estado_contrato_enum, periodicidad_enum } from '@prisma/client';
+import { getNextTableId } from '../utils/next-id.helper';
+import { DocumentType, NumeracionService } from './numeracion.service';
 
 // ==================== TIPOS DE ENTRADA ====================
 
@@ -48,7 +45,14 @@ export interface CrearContratoInput {
   idCliente: number;
   idAsesorResponsable: number;
   tipoContrato?: 'PREVENTIVO_RECURRENTE' | 'CORRECTIVO_DEMANDA' | 'FULL_SERVICE' | 'EMERGENCIAS';
-  periodicidadDefault?: 'SEMANAL' | 'QUINCENAL' | 'MENSUAL' | 'BIMESTRAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL';
+  periodicidadDefault?:
+    | 'SEMANAL'
+    | 'QUINCENAL'
+    | 'MENSUAL'
+    | 'BIMESTRAL'
+    | 'TRIMESTRAL'
+    | 'SEMESTRAL'
+    | 'ANUAL';
   fechaInicio: Date;
   fechaFin?: Date;
   generaAutomaticamente?: boolean;
@@ -122,6 +126,10 @@ export interface EventoCalendario {
 export class ProgramacionFacadeService {
   private readonly logger = new Logger(ProgramacionFacadeService.name);
 
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly numeracionService: NumeracionService,
@@ -167,8 +175,8 @@ export class ProgramacionFacadeService {
           codigo_contrato: codigoContrato,
           id_cliente: input.idCliente,
           id_asesor_responsable: input.idAsesorResponsable,
-          tipo_contrato: input.tipoContrato as any || 'PREVENTIVO_RECURRENTE',
-          periodicidad_default: input.periodicidadDefault as periodicidad_enum || 'MENSUAL',
+          tipo_contrato: (input.tipoContrato as any) || 'PREVENTIVO_RECURRENTE',
+          periodicidad_default: (input.periodicidadDefault as periodicidad_enum) || 'MENSUAL',
           fecha_inicio: input.fechaInicio,
           fecha_fin: input.fechaFin,
           estado_contrato: 'ACTIVO',
@@ -178,7 +186,7 @@ export class ProgramacionFacadeService {
           creado_por: input.creadoPor,
         },
         include: {
-          cliente: { include: { persona: true } },
+          clientes: { include: { persona: true } },
         },
       });
 
@@ -195,8 +203,9 @@ export class ProgramacionFacadeService {
         },
       };
     } catch (error) {
-      this.logger.error(`Error creando contrato: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Error creando contrato: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -225,7 +234,7 @@ export class ProgramacionFacadeService {
       if (!transicionesPermitidas.includes(nuevoEstado)) {
         throw new BadRequestException(
           `Transición no permitida: ${estadoActual} → ${nuevoEstado}. ` +
-          `Transiciones válidas: ${transicionesPermitidas.join(', ') || 'Ninguna (estado terminal)'}`
+            `Transiciones válidas: ${transicionesPermitidas.join(', ') || 'Ninguna (estado terminal)'}`,
         );
       }
 
@@ -236,14 +245,15 @@ export class ProgramacionFacadeService {
       });
 
       // Registrar en historial
+      const idHistorial = await getNextTableId(this.prisma, 'historial_contrato', 'id_historial');
       await this.prisma.historial_contrato.create({
         data: {
+          id_historial: idHistorial,
           id_contrato: idContrato,
-          tipo_cambio: 'CAMBIO_ESTADO',
-          descripcion_cambio: `Estado cambiado: ${estadoActual} → ${nuevoEstado}`,
+          campo_modificado: 'estado_contrato',
           valor_anterior: estadoActual,
           valor_nuevo: nuevoEstado,
-          observaciones,
+          motivo_cambio: observaciones || `Estado cambiado: ${estadoActual} → ${nuevoEstado}`,
           modificado_por: modificadoPor,
           fecha_cambio: new Date(),
         },
@@ -257,7 +267,7 @@ export class ProgramacionFacadeService {
         data: { estadoAnterior: estadoActual, estadoNuevo: nuevoEstado },
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: this.getErrorMessage(error) };
     }
   }
 
@@ -265,7 +275,9 @@ export class ProgramacionFacadeService {
    * Obtiene contratos próximos a vencer (30 días o menos)
    * Usado para alertas de renovación
    */
-  async obtenerContratosProximosVencer(diasAnticipacion: number = 30): Promise<ContratoProximoVencer[]> {
+  async obtenerContratosProximosVencer(
+    diasAnticipacion: number = 30,
+  ): Promise<ContratoProximoVencer[]> {
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() + diasAnticipacion);
 
@@ -278,12 +290,12 @@ export class ProgramacionFacadeService {
         },
       },
       include: {
-        cliente: { include: { persona: true } },
+        clientes: { include: { persona: true } },
       },
       orderBy: { fecha_fin: 'asc' },
     });
 
-    return contratos.map(c => {
+    return contratos.map((c) => {
       const hoy = new Date();
       const fechaFin = new Date(c.fecha_fin!);
       const diasRestantes = Math.ceil((fechaFin.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
@@ -291,7 +303,7 @@ export class ProgramacionFacadeService {
       return {
         idContrato: c.id_contrato,
         codigoContrato: c.codigo_contrato,
-        nombreCliente: c.cliente.persona.razon_social || c.cliente.persona.nombre_completo || '',
+        nombreCliente: c.clientes.persona.razon_social || c.clientes.persona.nombre_completo || '',
         fechaFin: fechaFin,
         diasRestantes,
         estado: c.estado_contrato,
@@ -303,10 +315,12 @@ export class ProgramacionFacadeService {
    * Marca automáticamente contratos próximos a vencer como RENOVACION_PENDIENTE
    * Se debe ejecutar como CRON job diario
    */
-  async procesarContratosProximosVencer(diasAnticipacion: number = 30): Promise<ProgramacionResult> {
+  async procesarContratosProximosVencer(
+    diasAnticipacion: number = 30,
+  ): Promise<ProgramacionResult> {
     try {
       const contratosProximos = await this.obtenerContratosProximosVencer(diasAnticipacion);
-      
+
       let actualizados = 0;
       for (const contrato of contratosProximos) {
         if (contrato.estado !== 'RENOVACION_PENDIENTE') {
@@ -328,7 +342,7 @@ export class ProgramacionFacadeService {
         data: { procesados: contratosProximos.length, actualizados },
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: this.getErrorMessage(error) };
     }
   }
 
@@ -350,7 +364,7 @@ export class ProgramacionFacadeService {
 
       if (contrato.estado_contrato !== 'ACTIVO') {
         throw new BadRequestException(
-          `Solo se pueden agregar equipos a contratos ACTIVOS. Estado actual: ${contrato.estado_contrato}`
+          `Solo se pueden agregar equipos a contratos ACTIVOS. Estado actual: ${contrato.estado_contrato}`,
         );
       }
 
@@ -373,13 +387,19 @@ export class ProgramacionFacadeService {
 
       if (existente) {
         throw new BadRequestException(
-          `Equipo ${equipo.codigo_equipo} ya está incluido en este contrato`
+          `Equipo ${equipo.codigo_equipo} ya está incluido en este contrato`,
         );
       }
 
       // Crear relación equipo-contrato
+      const idEquipoContrato = await getNextTableId(
+        this.prisma,
+        'equipos_contrato',
+        'id_equipo_contrato',
+      );
       const equipoContrato = await this.prisma.equipos_contrato.create({
         data: {
+          id_equipo_contrato: idEquipoContrato,
           id_contrato: input.idContrato,
           id_equipo: input.idEquipo,
           tipo_servicio_default: input.idTipoServicioDefault,
@@ -391,7 +411,9 @@ export class ProgramacionFacadeService {
         },
       });
 
-      this.logger.log(`✅ Equipo ${equipo.codigo_equipo} agregado a contrato ${contrato.codigo_contrato}`);
+      this.logger.log(
+        `✅ Equipo ${equipo.codigo_equipo} agregado a contrato ${contrato.codigo_contrato}`,
+      );
 
       return {
         success: true,
@@ -403,7 +425,7 @@ export class ProgramacionFacadeService {
         },
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: this.getErrorMessage(error) };
     }
   }
 
@@ -423,7 +445,7 @@ export class ProgramacionFacadeService {
           equipos_contrato: {
             where: { activo_en_contrato: true },
             include: {
-              equipo: true,
+              equipos: true,
               tipos_servicio: true,
             },
           },
@@ -435,9 +457,7 @@ export class ProgramacionFacadeService {
       }
 
       if (contrato.estado_contrato !== 'ACTIVO') {
-        throw new BadRequestException(
-          `Solo se pueden generar cronogramas para contratos ACTIVOS`
-        );
+        throw new BadRequestException(`Solo se pueden generar cronogramas para contratos ACTIVOS`);
       }
 
       const mesesAdelante = input.mesesAdelante || 1;
@@ -458,21 +478,18 @@ export class ProgramacionFacadeService {
         });
 
         // Calcular fecha base
-        let fechaBase = ultimoCronograma 
+        let fechaBase = ultimoCronograma
           ? new Date(ultimoCronograma.fecha_prevista)
           : new Date(contrato.fecha_inicio);
 
         // Generar cronogramas hasta la fecha límite
-        while (true) {
-          // Calcular próxima fecha según intervalo
-          const proximaFecha = this.calcularProximaFecha(
-            fechaBase,
-            equipoContrato.criterio_intervalo,
-            equipoContrato.intervalo_dias || 30,
-          );
+        let proximaFecha = this.calcularProximaFecha(
+          fechaBase,
+          equipoContrato.criterio_intervalo,
+          equipoContrato.intervalo_dias || 30,
+        );
 
-          if (proximaFecha > fechaLimite) break;
-
+        while (proximaFecha <= fechaLimite) {
           // Verificar que no existe ya un cronograma para esta fecha
           const existente = await this.prisma.cronogramas_servicio.findFirst({
             where: {
@@ -507,17 +524,24 @@ export class ProgramacionFacadeService {
             cronogramasCreados++;
             resultados.push({
               idCronograma: cronograma.id_cronograma,
-              equipo: equipoContrato.equipo.codigo_equipo,
+              equipo: equipoContrato.equipos.codigo_equipo,
               fechaPrevista: proximaFecha,
-              tipoServicio: equipoContrato.tipos_servicio.nombre_servicio,
+              tipoServicio: equipoContrato.tipos_servicio.nombre_tipo,
             });
           }
 
           fechaBase = proximaFecha;
+          proximaFecha = this.calcularProximaFecha(
+            fechaBase,
+            equipoContrato.criterio_intervalo,
+            equipoContrato.intervalo_dias || 30,
+          );
         }
       }
 
-      this.logger.log(`✅ Generados ${cronogramasCreados} cronogramas para contrato ${contrato.codigo_contrato}`);
+      this.logger.log(
+        `✅ Generados ${cronogramasCreados} cronogramas para contrato ${contrato.codigo_contrato}`,
+      );
 
       return {
         success: true,
@@ -529,8 +553,9 @@ export class ProgramacionFacadeService {
         },
       };
     } catch (error) {
-      this.logger.error(`Error generando cronogramas: ${error.message}`);
-      return { success: false, error: error.message };
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Error generando cronogramas: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -550,12 +575,12 @@ export class ProgramacionFacadeService {
           id_orden_servicio_generada: null,
         },
         include: {
-          contrato: {
+          contratos_mantenimiento: {
             include: {
-              cliente: { include: { persona: true } },
+              clientes: { include: { persona: true } },
             },
           },
-          equipo: true,
+          equipos: true,
           tipos_servicio: true,
           equipos_contrato: true,
         },
@@ -566,7 +591,9 @@ export class ProgramacionFacadeService {
 
       for (const cronograma of cronogramasPendientes) {
         // Generar número de orden
-        const numeracion = await this.numeracionService.generarNumero('ORDEN_SERVICIO');
+        const numeracion = await this.numeracionService.generateNextNumber(
+          DocumentType.ORDEN_SERVICIO,
+        );
 
         // Obtener estado PROGRAMADA
         const estadoProgramada = await this.prisma.estados_orden.findFirst({
@@ -576,15 +603,15 @@ export class ProgramacionFacadeService {
         // Crear orden de servicio borrador
         const orden = await this.prisma.ordenes_servicio.create({
           data: {
-            numero_orden: numeracion.codigo,
-            id_cliente: cronograma.contrato.id_cliente,
+            numero_orden: numeracion.code,
+            id_cliente: cronograma.contratos_mantenimiento.id_cliente,
             id_sede: null, // Se asigna después
             id_equipo: cronograma.id_equipo,
             id_tipo_servicio: cronograma.tipo_servicio_programado,
             id_estado_actual: estadoProgramada?.id_estado || 1,
-            descripcion_inicial: `Servicio programado: ${cronograma.tipos_servicio?.nombre_servicio || 'Mantenimiento'}`,
+            descripcion_inicial: `Servicio programado: ${cronograma.tipos_servicio?.nombre_tipo || 'Mantenimiento'}`,
             prioridad: cronograma.prioridad || 'NORMAL',
-            origen_solicitud: 'CONTRATO',
+            origen_solicitud: 'PROGRAMADO',
             fecha_programada: cronograma.fecha_prevista,
             creado_por: 1, // Sistema
           },
@@ -604,7 +631,7 @@ export class ProgramacionFacadeService {
         resultados.push({
           idOrden: orden.id_orden_servicio,
           numeroOrden: orden.numero_orden,
-          equipo: cronograma.equipo.codigo_equipo,
+          equipo: cronograma.equipos.codigo_equipo,
           fechaProgramada: cronograma.fecha_prevista,
         });
       }
@@ -617,7 +644,7 @@ export class ProgramacionFacadeService {
         data: { ordenesCreadas, detalles: resultados },
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: this.getErrorMessage(error) };
     }
   }
 
@@ -638,11 +665,11 @@ export class ProgramacionFacadeService {
       where: {
         fecha_prevista: { gte: fechaInicio, lte: fechaFin },
         estado_cronograma: { in: ['PENDIENTE', 'PROGRAMADA'] },
-        ...(idCliente ? { contrato: { id_cliente: idCliente } } : {}),
+        ...(idCliente ? { contratos_mantenimiento: { id_cliente: idCliente } } : {}),
       },
       include: {
-        contrato: { include: { cliente: { include: { persona: true } } } },
-        equipo: true,
+        contratos_mantenimiento: { include: { clientes: { include: { persona: true } } } },
+        equipos: true,
         tipos_servicio: true,
       },
     });
@@ -650,13 +677,16 @@ export class ProgramacionFacadeService {
     for (const c of cronogramas) {
       eventos.push({
         id: c.id_cronograma,
-        titulo: `${c.tipos_servicio?.nombre_servicio || 'Servicio'} - ${c.equipo.codigo_equipo}`,
+        titulo: `${c.tipos_servicio?.nombre_tipo || 'Servicio'} - ${c.equipos.codigo_equipo}`,
         fecha: c.fecha_prevista,
         tipo: 'SERVICIO_PROGRAMADO',
         prioridad: c.prioridad || 'NORMAL',
         estado: c.estado_cronograma,
-        cliente: c.contrato.cliente.persona.razon_social || c.contrato.cliente.persona.nombre_completo || '',
-        equipo: c.equipo.codigo_equipo,
+        cliente:
+          c.contratos_mantenimiento.clientes.persona.razon_social ||
+          c.contratos_mantenimiento.clientes.persona.nombre_completo ||
+          '',
+        equipo: c.equipos.codigo_equipo,
         idContrato: c.id_contrato,
         idOrdenServicio: c.id_orden_servicio_generada || undefined,
       });
@@ -742,7 +772,7 @@ export class ProgramacionFacadeService {
     intervaloDias: number,
   ): Date {
     const proximaFecha = new Date(fechaBase);
-    
+
     switch (criterio) {
       case 'DIAS':
         proximaFecha.setDate(proximaFecha.getDate() + intervaloDias);
@@ -763,4 +793,3 @@ export class ProgramacionFacadeService {
     return proximaFecha;
   }
 }
-

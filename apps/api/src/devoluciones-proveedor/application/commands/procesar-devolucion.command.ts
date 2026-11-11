@@ -27,17 +27,11 @@ export class ProcesarDevolucionHandler implements ICommandHandler<ProcesarDevolu
   ) {}
 
   async execute(command: ProcesarDevolucionCommand): Promise<any> {
-    try {
-      const devolucion = await this.repository.procesar(
-        command.id_devolucion,
-        command.estado_devolucion,
-        command.procesada_por,
-        command.observaciones_procesamiento,
-      );
-
-      return devolucion;
-    } catch (error) {
-      throw error;
-    }
+    return this.repository.procesar(
+      command.id_devolucion,
+      command.estado_devolucion,
+      command.procesada_por,
+      command.observaciones_procesamiento,
+    );
   }
 }

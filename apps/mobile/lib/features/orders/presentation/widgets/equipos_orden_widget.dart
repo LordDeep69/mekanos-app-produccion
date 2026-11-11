@@ -99,7 +99,7 @@ class EquiposOrdenWidget extends ConsumerWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: equipos.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final equipo = equipos[index];
               final isSelected = equipoSeleccionadoId == equipo.idOrdenEquipo;
