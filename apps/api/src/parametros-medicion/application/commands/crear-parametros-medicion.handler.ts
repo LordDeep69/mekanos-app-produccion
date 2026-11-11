@@ -1,9 +1,9 @@
 import { PrismaService } from '@mekanos/database';
 import {
-    BadRequestException,
-    ConflictException,
-    Injectable,
-    NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { PrismaParametrosMedicionRepository } from '../../infrastructure/prisma-parametros-medicion.repository';
@@ -11,7 +11,7 @@ import { CrearParametrosMedicionCommand } from './crear-parametros-medicion.comm
 
 /**
  * Handler: Crear nuevo parámetro de medición
- * 
+ *
  * Validaciones críticas:
  * 1. Código único (normalizado UPPER TRIM)
  * 2. Rangos coherentes (mínimo < máximo para normal y crítico)
@@ -37,9 +37,7 @@ export class CrearParametrosMedicionHandler
     // 2. Validar unicidad de código
     const existente = await this.repository.findByCodigo(codigoNormalizado);
     if (existente) {
-      throw new ConflictException(
-        `Ya existe un parámetro con código '${codigoNormalizado}'`,
-      );
+      throw new ConflictException(`Ya existe un parámetro con código '${codigoNormalizado}'`);
     }
 
     // 3. Validar FK tipo_equipo si se proporciona
@@ -48,9 +46,7 @@ export class CrearParametrosMedicionHandler
         where: { id_tipo_equipo: command.tipoEquipoId },
       });
       if (!tipoEquipo) {
-        throw new NotFoundException(
-          `Tipo de equipo con ID ${command.tipoEquipoId} no existe`,
-        );
+        throw new NotFoundException(`Tipo de equipo con ID ${command.tipoEquipoId} no existe`);
       }
     }
 
@@ -60,9 +56,7 @@ export class CrearParametrosMedicionHandler
         where: { id_usuario: command.creadoPor },
       });
       if (!usuario) {
-        throw new NotFoundException(
-          `Usuario creador con ID ${command.creadoPor} no existe`,
-        );
+        throw new NotFoundException(`Usuario creador con ID ${command.creadoPor} no existe`);
       }
     }
 
@@ -71,9 +65,7 @@ export class CrearParametrosMedicionHandler
       command.decimalesPrecision !== undefined &&
       (command.decimalesPrecision < 0 || command.decimalesPrecision > 4)
     ) {
-      throw new BadRequestException(
-        'decimales_precision debe estar entre 0 y 4',
-      );
+      throw new BadRequestException('decimales_precision debe estar entre 0 y 4');
     }
 
     // 6. Validar rangos para tipo NUMERICO
@@ -128,8 +120,7 @@ export class CrearParametrosMedicionHandler
     if (command.esCriticoSeguridad === true) {
       if (
         tipoDato === 'NUMERICO' &&
-        (command.valorMinimoCritico === undefined ||
-          command.valorMaximoCritico === undefined)
+        (command.valorMinimoCritico === undefined || command.valorMaximoCritico === undefined)
       ) {
         throw new BadRequestException(
           'Un parámetro crítico de seguridad tipo NUMERICO debe tener rangos críticos definidos',
@@ -159,11 +150,10 @@ export class CrearParametrosMedicionHandler
       ...(command.tipoEquipoId && {
         tipos_equipo: { connect: { id_tipo_equipo: command.tipoEquipoId } },
       }),
-      ...(command.creadoPor && {
-        usuarios_parametros_medicion_creado_porTousuarios: {
-          connect: { id_usuario: command.creadoPor },
-        },
-      }),
+      ...(command.creadoPor !== undefined &&
+        command.creadoPor !== null && {
+          creado_por: command.creadoPor,
+        }),
     });
   }
 }

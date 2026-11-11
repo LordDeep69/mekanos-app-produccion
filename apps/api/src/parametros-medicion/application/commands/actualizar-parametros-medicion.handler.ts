@@ -1,9 +1,9 @@
 import { PrismaService } from '@mekanos/database';
 import {
-    BadRequestException,
-    ConflictException,
-    Injectable,
-    NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { PrismaParametrosMedicionRepository } from '../../infrastructure/prisma-parametros-medicion.repository';
@@ -11,7 +11,7 @@ import { ActualizarParametrosMedicionCommand } from './actualizar-parametros-med
 
 /**
  * Handler: Actualizar parámetro de medición existente
- * 
+ *
  * Validaciones críticas:
  * 1. Parámetro existe
  * 2. Código único si cambió (normalizado UPPER TRIM)
@@ -33,9 +33,7 @@ export class ActualizarParametrosMedicionHandler
     // 1. Verificar que el parámetro existe
     const parametroExistente = await this.repository.findById(command.id);
     if (!parametroExistente) {
-      throw new NotFoundException(
-        `Parámetro de medición con ID ${command.id} no existe`,
-      );
+      throw new NotFoundException(`Parámetro de medición con ID ${command.id} no existe`);
     }
 
     // 2. Normalizar código si se proporciona
@@ -45,13 +43,9 @@ export class ActualizarParametrosMedicionHandler
 
       // Validar unicidad solo si el código cambió
       if (codigoNormalizado !== parametroExistente.codigo_parametro) {
-        const existente = await this.repository.findByCodigo(
-          codigoNormalizado,
-        );
+        const existente = await this.repository.findByCodigo(codigoNormalizado);
         if (existente) {
-          throw new ConflictException(
-            `Ya existe un parámetro con código '${codigoNormalizado}'`,
-          );
+          throw new ConflictException(`Ya existe un parámetro con código '${codigoNormalizado}'`);
         }
       }
     }
@@ -62,9 +56,7 @@ export class ActualizarParametrosMedicionHandler
         where: { id_tipo_equipo: command.tipoEquipoId },
       });
       if (!tipoEquipo) {
-        throw new NotFoundException(
-          `Tipo de equipo con ID ${command.tipoEquipoId} no existe`,
-        );
+        throw new NotFoundException(`Tipo de equipo con ID ${command.tipoEquipoId} no existe`);
       }
     }
 
@@ -85,38 +77,35 @@ export class ActualizarParametrosMedicionHandler
       command.decimalesPrecision !== undefined &&
       (command.decimalesPrecision < 0 || command.decimalesPrecision > 4)
     ) {
-      throw new BadRequestException(
-        'decimales_precision debe estar entre 0 y 4',
-      );
+      throw new BadRequestException('decimales_precision debe estar entre 0 y 4');
     }
 
     // 6. Preparar valores combinados (actuales + nuevos) para validación rangos
-    const tipoDato =
-      command.tipoDato ?? parametroExistente.tipo_dato ?? 'NUMERICO';
+    const tipoDato = command.tipoDato ?? parametroExistente.tipo_dato ?? 'NUMERICO';
     const valorMinimoNormal =
       command.valorMinimoNormal !== undefined
         ? command.valorMinimoNormal
         : parametroExistente.valor_minimo_normal
-        ? Number(parametroExistente.valor_minimo_normal)
-        : undefined;
+          ? Number(parametroExistente.valor_minimo_normal)
+          : undefined;
     const valorMaximoNormal =
       command.valorMaximoNormal !== undefined
         ? command.valorMaximoNormal
         : parametroExistente.valor_maximo_normal
-        ? Number(parametroExistente.valor_maximo_normal)
-        : undefined;
+          ? Number(parametroExistente.valor_maximo_normal)
+          : undefined;
     const valorMinimoCritico =
       command.valorMinimoCritico !== undefined
         ? command.valorMinimoCritico
         : parametroExistente.valor_minimo_critico
-        ? Number(parametroExistente.valor_minimo_critico)
-        : undefined;
+          ? Number(parametroExistente.valor_minimo_critico)
+          : undefined;
     const valorMaximoCritico =
       command.valorMaximoCritico !== undefined
         ? command.valorMaximoCritico
         : parametroExistente.valor_maximo_critico
-        ? Number(parametroExistente.valor_maximo_critico)
-        : undefined;
+          ? Number(parametroExistente.valor_maximo_critico)
+          : undefined;
     const esCriticoSeguridad =
       command.esCriticoSeguridad ?? parametroExistente.es_critico_seguridad;
 
@@ -237,11 +226,9 @@ export class ActualizarParametrosMedicionHandler
         : { disconnect: true };
     }
 
-    // Modificado por: SOLO conectar si tiene valor válido
+    // Modificado por: asignar columna escalar (sin relación Prisma inexistente)
     if (command.modificadoPor !== undefined && command.modificadoPor !== null) {
-      updateData.usuarios_parametros_medicion_modificado_porTousuarios = {
-        connect: { id_usuario: command.modificadoPor },
-      };
+      updateData.modificado_por = command.modificadoPor;
     }
 
     return this.repository.update(command.id, updateData);

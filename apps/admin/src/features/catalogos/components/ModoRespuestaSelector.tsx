@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Plus, Settings2, Smartphone, Trash2, X } from 'lucide-react';
+import { Loader2, Plus, Settings2, Smartphone, Trash2, X } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 
 export type SemaforoCodigo = 'B' | 'R' | 'M' | 'C' | 'NA';
@@ -255,6 +255,23 @@ interface ModoRespuestaSelectorProps {
     rolSemantico: string;
   }) => void;
   compact?: boolean;
+  /** En modo completo (edición inline), abre configurador en modal para mantener compacto el formulario */
+  enableModalInFull?: boolean;
+  /** Callback opcional ejecutado al pulsar "Listo, aplicar configuración" en el modal */
+  onApplyModal?: (next: {
+    tipoControlInput: string;
+    configInputJson: ConfigInputDeclarativo | null;
+    rolSemantico: string;
+  }) => void | Promise<void>;
+  /** Muestra estado de carga mientras se persiste la configuración desde el modal */
+  savingModal?: boolean;
+  /** Contexto/título de la tarea mostrado en el encabezado del modal */
+  modalSubtitle?: string;
+  /** Control externo del modal (ej. clic directo sobre pill de fila) */
+  externalModalOpen?: boolean;
+  onExternalModalOpenChange?: (open: boolean) => void;
+  /** Si es true, solo renderiza el modal controlado externamente */
+  modalOnly?: boolean;
 }
 
 export function ModoRespuestaSelector({
@@ -263,8 +280,23 @@ export function ModoRespuestaSelector({
   rolSemantico,
   onChange,
   compact = false,
+  enableModalInFull = false,
+  onApplyModal,
+  savingModal = false,
+  modalSubtitle,
+  externalModalOpen,
+  onExternalModalOpenChange,
+  modalOnly = false,
 }: ModoRespuestaSelectorProps) {
-  const [modalOpen, setModalOpen] = useState(false);
+  const [internalModalOpen, setInternalModalOpen] = useState(false);
+  const modalOpen = externalModalOpen ?? internalModalOpen;
+  const setModalOpen = (open: boolean) => {
+    if (onExternalModalOpenChange) {
+      onExternalModalOpenChange(open);
+    } else {
+      setInternalModalOpen(open);
+    }
+  };
 
   const normalizedTipo = tipoControlInput || 'ESCALA_ESTADO';
   const cfg = useMemo(() => parseConfigInputJson(configInputJson), [configInputJson]);
@@ -272,8 +304,16 @@ export function ModoRespuestaSelector({
     if (Array.isArray(cfg.opciones) && cfg.opciones.length > 0) {
       return cfg.opciones;
     }
+    if (
+      normalizedTipo !== 'PERSONALIZADO' &&
+      normalizedTipo !== 'ESCALA_ESTADO' &&
+      normalizedTipo !== 'LECTURA_CONTADOR' &&
+      normalizedTipo !== 'SUBSISTEMAS'
+    ) {
+      return getPresetOptions(normalizedTipo, configInputJson);
+    }
     return DEFAULT_CUSTOM_OPTIONS;
-  }, [cfg.opciones]);
+  }, [cfg.opciones, configInputJson, normalizedTipo]);
 
   const handleTipoChange = (newTipo: string) => {
     const preset = MODO_RESPUESTA_PRESETS.find((p) => p.value === newTipo);
@@ -290,7 +330,7 @@ export function ModoRespuestaSelector({
         ...cfg,
         opciones: customOptions,
       };
-      if (compact) setModalOpen(true);
+      if (compact || enableModalInFull) setModalOpen(true);
     } else if (preset?.autoRolSemantico && !nextRol) {
       nextRol = preset.autoRolSemantico;
     }
@@ -374,7 +414,7 @@ export function ModoRespuestaSelector({
       <div className="space-y-2">
         {customOptions.map((op, idx) => (
           <div
-            key={`${idx}-${op.valor}`}
+            key={idx}
             className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-white p-2 rounded-xl border border-indigo-100"
           >
             <span className="text-[11px] font-mono font-bold text-slate-400 w-5 text-center">
@@ -472,6 +512,173 @@ export function ModoRespuestaSelector({
     </div>
   );
 
+  const openCustomConfiguratorModal = () => {
+    if (normalizedTipo !== 'PERSONALIZADO') {
+      onChange({
+        tipoControlInput: 'PERSONALIZADO',
+        configInputJson: {
+          ...cfg,
+          opciones: customOptions,
+        },
+        rolSemantico,
+      });
+    }
+    setModalOpen(true);
+  };
+
+  const handleConfirmModal = async () => {
+    const nextPayload = {
+      tipoControlInput: normalizedTipo,
+      configInputJson:
+        normalizedTipo === 'PERSONALIZADO'
+          ? { ...cfg, opciones: customOptions }
+          : (configInputJson ?? null),
+      rolSemantico,
+    };
+    onChange(nextPayload);
+    if (onApplyModal) {
+      await onApplyModal(nextPayload);
+    }
+    setModalOpen(false);
+  };
+
+  const renderModal = () => {
+    if (!modalOpen) return null;
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl max-w-xl w-full p-5 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-start justify-between border-b border-slate-100 pb-3 gap-3">
+            <div className="min-w-0">
+              <h3 className="text-sm font-black text-slate-900">
+                Configurar Respuesta y Semáforo (Mobile &amp; Web)
+              </h3>
+              {modalSubtitle && (
+                <p className="text-[11px] text-slate-500 mt-0.5 truncate" title={modalSubtitle}>
+                  Actividad: <span className="font-semibold text-slate-700">{modalSubtitle}</span>
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer shrink-0"
+              disabled={savingModal}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {(modalOnly || enableModalInFull) && (
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Modo de Respuesta / Control Input
+              </label>
+              <select
+                value={normalizedTipo}
+                onChange={(e) => handleTipoChange(e.target.value)}
+                className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-800"
+              >
+                {MODO_RESPUESTA_PRESETS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {normalizedTipo === 'PERSONALIZADO' ? (
+            renderConfiguratorPanel()
+          ) : (
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  Vista Previa del Modo Seleccionado
+                </span>
+                <button
+                  type="button"
+                  onClick={openCustomConfiguratorModal}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Settings2 className="h-3 w-3" />
+                  <span>Personalizar botones</span>
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  MODO_RESPUESTA_PRESETS.find((p) => p.value === normalizedTipo)?.previewBadges || [
+                    'B',
+                    'R',
+                    'M',
+                    'C',
+                    'NA',
+                  ]
+                ).map((b, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-700"
+                  >
+                    {b}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Rol Semántico Opcional (Mapeo Automático en PDF / Hoja de Vida)
+            </label>
+            <select
+              value={rolSemantico}
+              onChange={(e) =>
+                onChange({
+                  tipoControlInput: normalizedTipo,
+                  configInputJson:
+                    normalizedTipo === 'PERSONALIZADO'
+                      ? { ...cfg, opciones: customOptions }
+                      : (configInputJson ?? null),
+                  rolSemantico: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 text-xs font-medium bg-white border border-slate-300 rounded-xl"
+            >
+              {ROL_SEMANTICO_OPTIONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              disabled={savingModal}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmModal}
+              disabled={savingModal}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-60"
+            >
+              {savingModal && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              <span>Listo, aplicar configuración</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (modalOnly) {
+    return renderModal();
+  }
+
   if (compact) {
     return (
       <>
@@ -502,59 +709,7 @@ export function ModoRespuestaSelector({
           )}
         </div>
 
-        {modalOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-xl w-full p-5 shadow-2xl border border-slate-200 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-900">
-                  Configurar Respuesta Personalizada y Semáforo
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {renderConfiguratorPanel()}
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Rol Semántico Opcional (Mapeo Automático en PDF / Hoja de Vida)
-                </label>
-                <select
-                  value={rolSemantico}
-                  onChange={(e) =>
-                    onChange({
-                      tipoControlInput: normalizedTipo,
-                      configInputJson: { ...cfg, opciones: customOptions },
-                      rolSemantico: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 text-xs font-medium bg-white border border-slate-300 rounded-xl"
-                >
-                  {ROL_SEMANTICO_OPTIONS.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex justify-end pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer"
-                >
-                  Listo, aplicar configuración
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {renderModal()}
       </>
     );
   }
@@ -566,17 +721,33 @@ export function ModoRespuestaSelector({
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
             Modo de Respuesta / Control Input (Mobile &amp; Web)
           </label>
-          <select
-            value={normalizedTipo}
-            onChange={(e) => handleTipoChange(e.target.value)}
-            className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:border-blue-500"
-          >
-            {MODO_RESPUESTA_PRESETS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              value={normalizedTipo}
+              onChange={(e) => handleTipoChange(e.target.value)}
+              className="flex-1 min-w-0 px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:border-blue-500"
+            >
+              {MODO_RESPUESTA_PRESETS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            {enableModalInFull && (
+              <button
+                type="button"
+                onClick={openCustomConfiguratorModal}
+                className="px-3 py-2 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 inline-flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
+                title="Abrir configurador visual de botones personalizados y semáforo"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                <span>
+                  Configurar botones
+                  {normalizedTipo === 'PERSONALIZADO' ? ` (${customOptions.length})` : ''}
+                </span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div>
@@ -606,29 +777,61 @@ export function ModoRespuestaSelector({
         </div>
       </div>
 
-      {normalizedTipo === 'PERSONALIZADO' ? (
+      {normalizedTipo === 'PERSONALIZADO' && !enableModalInFull ? (
         renderConfiguratorPanel()
       ) : (
         <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold text-slate-500">Vista rápida en campo:</span>
-          {(
-            MODO_RESPUESTA_PRESETS.find((p) => p.value === normalizedTipo)?.previewBadges || [
-              'B',
-              'R',
-              'M',
-              'C',
-              'NA',
-            ]
-          ).map((b, idx) => (
-            <span
-              key={idx}
-              className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-white border border-slate-200 text-slate-700"
-            >
-              {b}
-            </span>
-          ))}
+          {normalizedTipo === 'PERSONALIZADO' ? (
+            <>
+              {customOptions.map((op, idx) => (
+                <span
+                  key={idx}
+                  className={cn(
+                    'px-2 py-0.5 rounded-md text-[11px] font-bold border',
+                    SEMAFORO_META[op.semaforo]?.badgeClass || SEMAFORO_META.B.badgeClass,
+                  )}
+                >
+                  {op.etiqueta || 'Opción'}
+                </span>
+              ))}
+              {cfg.permitirTextoLibre && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-300 text-slate-600">
+                  📝 {cfg.etiquetaTextoLibre || 'Detalle'}
+                </span>
+              )}
+              {enableModalInFull && (
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(true)}
+                  className="ml-auto text-[11px] font-bold text-indigo-700 hover:text-indigo-900 underline cursor-pointer"
+                >
+                  Editar botones
+                </button>
+              )}
+            </>
+          ) : (
+            (
+              MODO_RESPUESTA_PRESETS.find((p) => p.value === normalizedTipo)?.previewBadges || [
+                'B',
+                'R',
+                'M',
+                'C',
+                'NA',
+              ]
+            ).map((b, idx) => (
+              <span
+                key={idx}
+                className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-white border border-slate-200 text-slate-700"
+              >
+                {b}
+              </span>
+            ))
+          )}
         </div>
       )}
+
+      {enableModalInFull && renderModal()}
     </div>
   );
 }

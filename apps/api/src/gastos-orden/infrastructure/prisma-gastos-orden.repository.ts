@@ -38,12 +38,6 @@ export class PrismaGastosOrdenRepository implements IGastosOrdenRepository {
         codigo_empleado: true,
       },
     },
-    usuarios_gastos_orden_aprobado_porTousuarios: {
-      select: {
-        id_usuario: true,
-        username: true,
-      },
-    },
   };
 
   async create(data: CreateGastoOrdenData): Promise<any> {

@@ -164,7 +164,7 @@ apiClient.interceptors.response.use(
           const rawMsg = (error.response?.data as { message?: string | string[] } | undefined)
             ?.message;
           const exactMsg = Array.isArray(rawMsg) ? rawMsg.join(', ') : rawMsg;
-          console.error('[API] 400 Solicitud inválida:', exactMsg ?? error.response?.data);
+          console.warn('[API] 400 Solicitud inválida:', exactMsg ?? error.response?.data);
           if (exactMsg && typeof exactMsg === 'string') {
             // Propagar el mensaje exacto del backend para que los toasts lo muestren
             error.message = exactMsg;
@@ -173,7 +173,7 @@ apiClient.interceptors.response.use(
         }
         case 401:
           // Token expirado o inválido - ACCIÓN INMEDIATA
-          console.error('[API] 401 No autorizado - Evaluando redirección');
+          console.warn('[API] 401 No autorizado - Evaluando redirección');
           // ✅ OPTIMIZACIÓN: Invalidar cache del token
           invalidateTokenCache();
           if (typeof window !== 'undefined') {
@@ -195,10 +195,10 @@ apiClient.interceptors.response.use(
           }
           break;
         case 403:
-          console.error('[API] 403 Acceso denegado - Sin permisos');
+          console.warn('[API] 403 Acceso denegado - Sin permisos');
           break;
         case 404:
-          console.error('[API] 404 Recurso no encontrado');
+          console.warn('[API] 404 Recurso no encontrado');
           break;
         case 409:
           // Conflicto - Duplicidad de datos
@@ -211,6 +211,8 @@ apiClient.interceptors.response.use(
           console.error(`[API] Error HTTP ${status}`);
       }
 
+      const logDetail = status >= 500 ? console.error : console.warn;
+
       // Log detallado del error para debugging
       if (error.response?.data) {
         if (typeof Blob !== 'undefined' && error.response.data instanceof Blob) {
@@ -219,16 +221,16 @@ apiClient.interceptors.response.use(
             .then((text: string) => {
               try {
                 const parsed = JSON.parse(text);
-                console.error('[API] Detalle del error (Blob decodificado):', parsed);
+                logDetail('[API] Detalle del error (Blob decodificado):', parsed);
               } catch {
-                console.error('[API] Detalle del error (Blob texto):', text);
+                logDetail('[API] Detalle del error (Blob texto):', text);
               }
             })
             .catch(() => {
-              console.error('[API] Detalle del error:', error.response?.data);
+              logDetail('[API] Detalle del error:', error.response?.data);
             });
         } else {
-          console.error('[API] Detalle del error:', error.response.data);
+          logDetail('[API] Detalle del error:', error.response.data);
         }
       }
     } else if (error.request) {

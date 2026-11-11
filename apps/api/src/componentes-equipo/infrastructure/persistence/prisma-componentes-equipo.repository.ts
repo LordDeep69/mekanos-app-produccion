@@ -82,9 +82,7 @@ export class PrismaComponentesEquipoRepository {
       posicion_descripcion: data.posicion_descripcion,
       unidades_por_cambio: data.unidades_por_cambio || 1,
       activo: true,
-      usuarios_componentes_equipo_creado_porTousuarios: {
-        connect: { id_usuario: data.creado_por },
-      },
+      creado_por: data.creado_por,
     };
 
     if (data.id_componente) {
@@ -196,9 +194,7 @@ export class PrismaComponentesEquipoRepository {
 
     const updateData: any = {
       fecha_modificacion: new Date(),
-      usuarios_componentes_equipo_modificado_porTousuarios: {
-        connect: { id_usuario: data.modificado_por || 1 },
-      },
+      modificado_por: data.modificado_por || 1,
     };
 
     if (data.id_componente !== undefined) {

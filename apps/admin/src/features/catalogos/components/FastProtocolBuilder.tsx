@@ -185,6 +185,17 @@ export function FastProtocolBuilder({
   const [editMax, setEditMax] = useState<string>('');
   const [editUnidad, setEditUnidad] = useState<string>('');
   const [savingEditId, setSavingEditId] = useState<number | null>(null);
+  const [rowModalAct, setRowModalAct] = useState<ActividadDetalle | null>(null);
+  const [rowModalState, setRowModalState] = useState<{
+    tipoControlInput: string;
+    configInputJson: ConfigInputDeclarativo | null;
+    rolSemantico: string;
+  }>({
+    tipoControlInput: 'ESCALA_ESTADO',
+    configInputJson: null,
+    rolSemantico: '',
+  });
+  const [savingModalControl, setSavingModalControl] = useState(false);
 
   // Estados para Quick-Add de Medición Cuantitativa (Zona B)
   const [medNombre, setMedNombre] = useState('');
@@ -642,6 +653,76 @@ export function FastProtocolBuilder({
     }
   };
 
+  const openRowControlModal = (act: ActividadDetalle) => {
+    setRowModalAct(act);
+    setRowModalState({
+      tipoControlInput: act.tipo_control_input || 'ESCALA_ESTADO',
+      configInputJson: act.config_input_json ?? null,
+      rolSemantico: act.rol_semantico || '',
+    });
+  };
+
+  const handleSaveModalControl = async (
+    act: ActividadDetalle,
+    next: {
+      tipoControlInput: string;
+      configInputJson: ConfigInputDeclarativo | null;
+      rolSemantico: string;
+    },
+    options?: { fromInlineEdit?: boolean },
+  ) => {
+    const fromInlineEdit = Boolean(options?.fromInlineEdit);
+    if (fromInlineEdit || editingTaskId === act.id_actividad_catalogo) {
+      setEditControlType(next.tipoControlInput);
+      setEditControlConfig(next.configInputJson);
+      setEditRolSemantico(next.rolSemantico);
+    }
+
+    const useInlineCustomNat = fromInlineEdit && editTipo === 'OTRA_PERSONALIZADA';
+    const descToSave = fromInlineEdit
+      ? editDesc.trim() || act.descripcion_actividad
+      : act.descripcion_actividad;
+    const tipoToSave = fromInlineEdit
+      ? useInlineCustomNat
+        ? editCustomNature.trim()
+          ? ('INSPECCION' as TipoActividad)
+          : (act.tipo_actividad as TipoActividad) || 'INSPECCION'
+        : (editTipo as TipoActividad)
+      : (act.tipo_actividad as TipoActividad) || 'INSPECCION';
+    const natToSave = fromInlineEdit
+      ? useInlineCustomNat
+        ? editCustomNature.trim() || act.naturaleza_personalizada || null
+        : null
+      : (act.naturaleza_personalizada ?? null);
+    const sistemaToSave = fromInlineEdit
+      ? editSistemaId
+        ? Number(editSistemaId)
+        : null
+      : (act.id_sistema ?? null);
+
+    setSavingModalControl(true);
+    try {
+      await updateCatalogoActividad(act.id_actividad_catalogo, {
+        descripcionActividad: descToSave,
+        tipoActividad: tipoToSave,
+        naturalezaPersonalizada: natToSave,
+        tipoControlInput: next.tipoControlInput || 'ESCALA_ESTADO',
+        configInputJson: next.tipoControlInput === 'PERSONALIZADO' ? next.configInputJson : null,
+        rolSemantico: next.rolSemantico.trim() || null,
+        idSistema: sistemaToSave,
+      });
+      if (!fromInlineEdit) {
+        setRowModalAct(null);
+      }
+      await refreshAll();
+      toast.success('Botones y modo de respuesta guardados en la actividad');
+    } catch {
+      toast.error('Error al guardar el modo de respuesta');
+    } finally {
+      setSavingModalControl(false);
+    }
+  };
+
   const handleDeleteTask = async (act: ActividadDetalle) => {
     try {
       await deleteCatalogoActividad(act.id_actividad_catalogo);
@@ -1019,6 +1100,9 @@ export function FastProtocolBuilder({
             const currentInput = quickTaskText[sec.key] || '';
             const currentType = quickTaskType[sec.key] || 'INSPECCION';
             const isSavingThis = savingSubsystemKey === sec.key;
+            const isEditingInThisSection = sec.tareasCualitativas.some(
+              (t) => t.id_actividad_catalogo === editingTaskId,
+            );
 
             return (
               <div
@@ -1133,6 +1217,9 @@ export function FastProtocolBuilder({
                               </div>
 
                               <ModoRespuestaSelector
+                                enableModalInFull
+                                savingModal={savingModalControl}
+                                modalSubtitle={editDesc || act.descripcion_actividad}
                                 tipoControlInput={editControlType}
                                 configInputJson={editControlConfig}
                                 rolSemantico={editRolSemantico}
@@ -1141,6 +1228,9 @@ export function FastProtocolBuilder({
                                   setEditControlConfig(next.configInputJson);
                                   setEditRolSemantico(next.rolSemantico);
                                 }}
+                                onApplyModal={(next) =>
+                                  handleSaveModalControl(act, next, { fromInlineEdit: true })
+                                }
                               />
 
                               <div className="flex justify-end gap-2">
@@ -1228,21 +1318,23 @@ export function FastProtocolBuilder({
                                       : act.rol_semantico}
                                   </span>
                                 )}
-                                <span
-                                  title="Modo de respuesta configurado para Mobile y Web"
+                                <button
+                                  type="button"
+                                  onClick={() => openRowControlModal(act)}
+                                  title="Clic para configurar botones personalizados, semáforo y modo de respuesta"
                                   className={cn(
-                                    'hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] font-mono border max-w-[200px] truncate',
+                                    'hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] font-mono border max-w-[200px] truncate cursor-pointer transition-colors hover:ring-2 hover:ring-indigo-200',
                                     act.tipo_control_input &&
                                       act.tipo_control_input !== 'ESCALA_ESTADO'
-                                      ? 'font-bold text-indigo-700 bg-indigo-50 border-indigo-200'
-                                      : 'text-slate-500 bg-slate-50 border-slate-200',
+                                      ? 'font-bold text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100'
+                                      : 'text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100',
                                   )}
                                 >
                                   {getModoRespuestaBadgeLabel(
                                     act.tipo_control_input,
                                     act.config_input_json,
                                   )}
-                                </span>
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => startEditTask(act)}
@@ -1268,97 +1360,119 @@ export function FastProtocolBuilder({
                   )}
                 </div>
 
-                {/* BARRA DE CREACIÓN RÁPIDA INLINE (1 SOLA LÍNEA + ENTER) */}
-                <div className="px-4 py-2.5 bg-slate-100/80 border-t border-slate-200/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <div className="relative flex-1">
-                    <Plus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
-                    <input
-                      ref={(el) => {
-                        quickInputRefs.current[sec.key] = el;
-                      }}
-                      type="text"
-                      value={currentInput}
-                      onChange={(e) =>
-                        setQuickTaskText((prev) => ({ ...prev, [sec.key]: e.target.value }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleQuickAddTask(sec.key, sec.id_sistema);
-                        }
-                      }}
-                      placeholder={`Escribe una nueva tarea de inspección para «${sec.nombre_sistema}» y presiona Enter...`}
-                      className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <select
-                      value={currentType}
-                      onChange={(e) =>
-                        setQuickTaskType((prev) => ({
-                          ...prev,
-                          [sec.key]: e.target.value,
-                        }))
-                      }
-                      className="px-3 py-2 text-xs font-bold bg-white border border-slate-300 rounded-xl text-slate-700 focus:outline-none focus:border-blue-500"
-                    >
-                      {TIPOS_CUALITATIVOS.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                      <option value="OTRA_PERSONALIZADA">+ Otra naturaleza personalizada...</option>
-                    </select>
-
-                    {currentType === 'OTRA_PERSONALIZADA' && (
+                {/* BARRA DE CREACIÓN RÁPIDA INLINE (OCULTA MIENTRAS SE EDITA UNA TAREA EN ESTE SUBSISTEMA) */}
+                {!isEditingInThisSection ? (
+                  <div className="px-4 py-2.5 bg-slate-100/80 border-t border-slate-200/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative flex-1">
+                      <Plus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
                       <input
+                        ref={(el) => {
+                          quickInputRefs.current[sec.key] = el;
+                        }}
                         type="text"
-                        value={quickCustomNature[sec.key] || ''}
+                        value={currentInput}
                         onChange={(e) =>
-                          setQuickCustomNature((prev) => ({
+                          setQuickTaskText((prev) => ({ ...prev, [sec.key]: e.target.value }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleQuickAddTask(sec.key, sec.id_sistema);
+                          }
+                        }}
+                        placeholder={`Escribe una nueva tarea de inspección para «${sec.nombre_sistema}» y presiona Enter...`}
+                        className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <select
+                        value={currentType}
+                        onChange={(e) =>
+                          setQuickTaskType((prev) => ({
                             ...prev,
                             [sec.key]: e.target.value,
                           }))
                         }
-                        placeholder="Ej: Calibración Láser"
-                        className="px-3 py-2 text-xs font-semibold bg-white border border-indigo-300 rounded-xl w-40 focus:outline-none focus:border-indigo-500"
+                        className="px-3 py-2 text-xs font-bold bg-white border border-slate-300 rounded-xl text-slate-700 focus:outline-none focus:border-blue-500"
+                      >
+                        {TIPOS_CUALITATIVOS.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                        <option value="OTRA_PERSONALIZADA">
+                          + Otra naturaleza personalizada...
+                        </option>
+                      </select>
+
+                      {currentType === 'OTRA_PERSONALIZADA' && (
+                        <input
+                          type="text"
+                          value={quickCustomNature[sec.key] || ''}
+                          onChange={(e) =>
+                            setQuickCustomNature((prev) => ({
+                              ...prev,
+                              [sec.key]: e.target.value,
+                            }))
+                          }
+                          placeholder="Ej: Calibración Láser"
+                          className="px-3 py-2 text-xs font-semibold bg-white border border-indigo-300 rounded-xl w-40 focus:outline-none focus:border-indigo-500"
+                        />
+                      )}
+
+                      <ModoRespuestaSelector
+                        compact
+                        modalSubtitle={`Nueva tarea en «${sec.nombre_sistema}»`}
+                        tipoControlInput={quickControlType[sec.key] || 'ESCALA_ESTADO'}
+                        configInputJson={quickControlConfig[sec.key] ?? null}
+                        rolSemantico={quickRolSemantico[sec.key] || ''}
+                        onChange={(next) => {
+                          setQuickControlType((prev) => ({
+                            ...prev,
+                            [sec.key]: next.tipoControlInput,
+                          }));
+                          setQuickControlConfig((prev) => ({
+                            ...prev,
+                            [sec.key]: next.configInputJson,
+                          }));
+                          setQuickRolSemantico((prev) => ({
+                            ...prev,
+                            [sec.key]: next.rolSemantico,
+                          }));
+                        }}
                       />
-                    )}
 
-                    <ModoRespuestaSelector
-                      compact
-                      tipoControlInput={quickControlType[sec.key] || 'ESCALA_ESTADO'}
-                      configInputJson={quickControlConfig[sec.key] ?? null}
-                      rolSemantico={quickRolSemantico[sec.key] || ''}
-                      onChange={(next) => {
-                        setQuickControlType((prev) => ({
-                          ...prev,
-                          [sec.key]: next.tipoControlInput,
-                        }));
-                        setQuickControlConfig((prev) => ({
-                          ...prev,
-                          [sec.key]: next.configInputJson,
-                        }));
-                        setQuickRolSemantico((prev) => ({ ...prev, [sec.key]: next.rolSemantico }));
-                      }}
-                    />
-
+                      <button
+                        type="button"
+                        disabled={!currentInput.trim() || isSavingThis}
+                        onClick={() => handleQuickAddTask(sec.key, sec.id_sistema)}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-all inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                      >
+                        {isSavingThis ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="h-3.5 w-3.5" />
+                        )}
+                        <span>+ Agregar (Enter)</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-4 py-2 bg-blue-50/70 border-t border-blue-200/80 flex items-center justify-between gap-2 text-[11px] text-blue-800">
+                    <span className="font-semibold">
+                      Editando tarea arriba — guarda o cancela la edición para agregar nuevas tareas
+                      en «{sec.nombre_sistema}».
+                    </span>
                     <button
                       type="button"
-                      disabled={!currentInput.trim() || isSavingThis}
-                      onClick={() => handleQuickAddTask(sec.key, sec.id_sistema)}
-                      className="px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-all inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                      onClick={() => setEditingTaskId(null)}
+                      className="font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer shrink-0"
                     >
-                      {isSavingThis ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Plus className="h-3.5 w-3.5" />
-                      )}
-                      <span>+ Agregar (Enter)</span>
+                      Salir de edición
                     </button>
                   </div>
-                </div>
+                )}
               </div>
             );
           })}
@@ -2080,6 +2194,24 @@ export function FastProtocolBuilder({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal directo al hacer clic en el pill de modo de respuesta de una fila */}
+      {rowModalAct && (
+        <ModoRespuestaSelector
+          modalOnly
+          externalModalOpen={Boolean(rowModalAct)}
+          onExternalModalOpenChange={(open) => {
+            if (!open) setRowModalAct(null);
+          }}
+          modalSubtitle={rowModalAct.descripcion_actividad}
+          tipoControlInput={rowModalState.tipoControlInput}
+          configInputJson={rowModalState.configInputJson}
+          rolSemantico={rowModalState.rolSemantico}
+          savingModal={savingModalControl}
+          onChange={(next) => setRowModalState(next)}
+          onApplyModal={(next) => handleSaveModalControl(rowModalAct, next)}
+        />
       )}
     </div>
   );
