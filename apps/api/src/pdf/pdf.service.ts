@@ -913,7 +913,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * Mapea nombres de parámetros a campos del módulo
    */
   private extraerDatosModuloDesdelMediciones(
-    mediciones: Array<{ parametro: string; valor?: number | null }>,
+    mediciones: Array<{ parametro: string; valor?: number | null; unidad?: string | null }>,
   ): {
     rpm?: number;
     presionAceite?: number;
@@ -929,9 +929,13 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     for (const m of mediciones) {
       if (m.valor == null) continue;
       const param = m.parametro.toLowerCase();
+      const unidad = String(m.unidad || '').toLowerCase();
 
-      // Mapeo flexible de nombres de parámetros
-      if (param.includes('velocidad') || param.includes('rpm')) {
+      // Mapeo flexible de nombres de parámetros (solo RPM reales, nunca m/s ni otras magnitudes)
+      if (
+        param.includes('rpm') ||
+        (param.includes('velocidad') && (!unidad || unidad.includes('rpm')))
+      ) {
         modulo.rpm = m.valor;
       } else if (param.includes('presion') && param.includes('aceite')) {
         modulo.presionAceite = m.valor;

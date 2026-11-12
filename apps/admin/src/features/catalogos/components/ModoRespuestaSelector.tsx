@@ -1,5 +1,6 @@
 'use client';
 
+import { EamSelect, type EamSelectOption } from '@/features/catalogos-eam';
 import { cn } from '@/lib/utils';
 import { Loader2, Plus, Settings2, Smartphone, Trash2, X } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
@@ -160,6 +161,39 @@ export const SEMAFORO_META: Record<
   },
 };
 
+const MODO_RESPUESTA_EAM_OPTIONS: EamSelectOption[] = MODO_RESPUESTA_PRESETS.map((p) => ({
+  value: p.value,
+  label: p.label,
+  description: p.description,
+  badge: p.shortLabel,
+}));
+
+const ROL_SEMANTICO_EAM_OPTIONS: EamSelectOption[] = ROL_SEMANTICO_OPTIONS.map((r) => {
+  if (!r.value) {
+    return {
+      value: r.value,
+      label: r.label,
+      description: 'Actividad estándar de checklist / inspección',
+      badge: 'ESTÁNDAR',
+    };
+  }
+  const match = r.label.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+  return {
+    value: r.value,
+    label: match ? match[1].trim() : r.label,
+    description: match ? match[2].trim() : undefined,
+    badge: r.value,
+  };
+});
+
+const SEMAFORO_EAM_OPTIONS: EamSelectOption[] = (
+  ['B', 'R', 'M', 'C', 'NA'] as SemaforoCodigo[]
+).map((cod) => ({
+  value: cod,
+  label: SEMAFORO_META[cod].label,
+  badge: cod,
+}));
+
 const DEFAULT_CUSTOM_OPTIONS: OpcionInputDeclarativo[] = [
   { valor: 'OP_1', etiqueta: 'Exacta', semaforo: 'B' },
   { valor: 'OP_2', etiqueta: 'Leve', semaforo: 'R' },
@@ -243,6 +277,99 @@ export function getModoRespuestaBadgeLabel(
   }
   const found = MODO_RESPUESTA_PRESETS.find((p) => p.value === tipo);
   return found ? found.shortLabel : 'B / R / M / C / NA';
+}
+
+const CHIPS_PREVIEW_MODES = new Set([
+  'PERSONALIZADO',
+  'BINARIO',
+  'CONFORMIDAD',
+  'ESTADO_OPERATIVO',
+]);
+
+export interface ModoRespuestaBadgesProps {
+  tipoControlInput?: string | null;
+  configInputJson?: unknown;
+  align?: 'start' | 'end' | 'center';
+  showTextFreeChip?: boolean;
+  showSemaforoCode?: boolean;
+}
+
+/**
+ * Renderiza el modo de respuesta en chips completos con color de semáforo sin truncamiento.
+ */
+export function ModoRespuestaBadges({
+  tipoControlInput,
+  configInputJson,
+  align = 'start',
+  showTextFreeChip = false,
+  showSemaforoCode = false,
+}: ModoRespuestaBadgesProps) {
+  const tipo = (tipoControlInput || 'ESCALA_ESTADO').toUpperCase();
+  const cfg = parseConfigInputJson(configInputJson);
+  const alignClass =
+    align === 'end' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
+
+  if (CHIPS_PREVIEW_MODES.has(tipo)) {
+    const opciones = getPresetOptions(tipo, configInputJson);
+    if (opciones.length > 0) {
+      return (
+        <span className={cn('inline-flex flex-wrap items-center gap-1', alignClass)}>
+          {opciones.map((op, idx) => {
+            const sem = SEMAFORO_META[op.semaforo] || SEMAFORO_META.B;
+            return (
+              <span
+                key={`${op.valor}-${idx}`}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border whitespace-nowrap',
+                  sem.badgeClass,
+                )}
+              >
+                {showSemaforoCode && (
+                  <span className="font-mono text-[9px] font-black opacity-75">{op.semaforo}</span>
+                )}
+                <span>{op.etiqueta || 'Opción'}</span>
+              </span>
+            );
+          })}
+          {showTextFreeChip && tipo === 'PERSONALIZADO' && cfg.permitirTextoLibre && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white text-slate-600 border border-slate-300 whitespace-nowrap">
+              📝 {cfg.etiquetaTextoLibre?.trim() || 'Detalle'}
+            </span>
+          )}
+        </span>
+      );
+    }
+  }
+
+  if (tipo === 'LECTURA_CONTADOR') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 whitespace-nowrap">
+        🔢 Lectura Contador{cfg.unidad?.trim() ? ` (${cfg.unidad.trim()})` : ''}
+      </span>
+    );
+  }
+
+  if (tipo === 'SUBSISTEMAS_EQUIPO' || tipo === 'SUBSISTEMAS') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 whitespace-nowrap">
+        🧩 Subsistemas Dinámicos
+      </span>
+    );
+  }
+
+  if (tipo === 'NIVEL') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 whitespace-nowrap">
+        🛢️ Nivel (Lleno..Vacío)
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono text-slate-600 bg-slate-50 border border-slate-200 whitespace-nowrap">
+      {getModoRespuestaBadgeLabel(tipo, configInputJson)}
+    </span>
+  );
 }
 
 interface ModoRespuestaSelectorProps {
@@ -427,20 +554,20 @@ export function ModoRespuestaSelector({
               placeholder="Etiqueta del botón (Ej: Exacta, Leve, Crítico...)"
               className="flex-1 min-w-[140px] px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500"
             />
-            <select
-              value={op.semaforo}
-              onChange={(e) =>
-                updateOptionField(idx, { semaforo: e.target.value as SemaforoCodigo })
-              }
-              className="px-2.5 py-1.5 text-xs font-bold border border-slate-300 rounded-lg bg-slate-50"
-              title="Semáforo semántico equivalente"
-            >
-              {(['B', 'R', 'M', 'C', 'NA'] as SemaforoCodigo[]).map((cod) => (
-                <option key={cod} value={cod}>
-                  {SEMAFORO_META[cod].label}
-                </option>
-              ))}
-            </select>
+            <div className="w-full sm:w-[155px] shrink-0">
+              <EamSelect
+                value={op.semaforo}
+                onChange={(val) =>
+                  updateOptionField(idx, { semaforo: (val || 'B') as SemaforoCodigo })
+                }
+                options={SEMAFORO_EAM_OPTIONS}
+                usePortal={true}
+                searchable={false}
+                size="sm"
+                minDropdownWidth={200}
+                title="Semáforo semántico equivalente"
+              />
+            </div>
             <button
               type="button"
               disabled={customOptions.length <= 1}
@@ -569,21 +696,18 @@ export function ModoRespuestaSelector({
           </div>
 
           {(modalOnly || enableModalInFull) && (
-            <div>
+            <div className="min-w-0">
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Modo de Respuesta / Control Input
               </label>
-              <select
+              <EamSelect
                 value={normalizedTipo}
-                onChange={(e) => handleTipoChange(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-800"
-              >
-                {MODO_RESPUESTA_PRESETS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => handleTipoChange(val || 'ESCALA_ESTADO')}
+                options={MODO_RESPUESTA_EAM_OPTIONS}
+                usePortal={true}
+                minDropdownWidth={360}
+                searchPlaceholder="Buscar modo de respuesta..."
+              />
             </div>
           )}
 
@@ -625,30 +749,27 @@ export function ModoRespuestaSelector({
             </div>
           )}
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
               Rol Semántico Opcional (Mapeo Automático en PDF / Hoja de Vida)
             </label>
-            <select
+            <EamSelect
               value={rolSemantico}
-              onChange={(e) =>
+              onChange={(val) =>
                 onChange({
                   tipoControlInput: normalizedTipo,
                   configInputJson:
                     normalizedTipo === 'PERSONALIZADO'
                       ? { ...cfg, opciones: customOptions }
                       : (configInputJson ?? null),
-                  rolSemantico: e.target.value,
+                  rolSemantico: val,
                 })
               }
-              className="w-full px-3 py-2 text-xs font-medium bg-white border border-slate-300 rounded-xl"
-            >
-              {ROL_SEMANTICO_OPTIONS.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
+              options={ROL_SEMANTICO_EAM_OPTIONS}
+              usePortal={true}
+              minDropdownWidth={380}
+              searchPlaceholder="Buscar rol semántico..."
+            />
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -682,26 +803,26 @@ export function ModoRespuestaSelector({
   if (compact) {
     return (
       <>
-        <div className="flex items-center gap-1.5">
-          <select
-            value={normalizedTipo}
-            onChange={(e) => handleTipoChange(e.target.value)}
-            title="Modo de Respuesta en Móvil y Web"
-            className="px-2.5 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-700 focus:outline-none focus:border-blue-500 max-w-[230px]"
-          >
-            {MODO_RESPUESTA_PRESETS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="min-w-[175px] max-w-[235px] flex-1">
+            <EamSelect
+              value={normalizedTipo}
+              onChange={(val) => handleTipoChange(val || 'ESCALA_ESTADO')}
+              options={MODO_RESPUESTA_EAM_OPTIONS}
+              usePortal={true}
+              size="sm"
+              minDropdownWidth={340}
+              searchPlaceholder="Buscar modo de respuesta..."
+              title="Modo de Respuesta en Móvil y Web"
+            />
+          </div>
 
           {normalizedTipo === 'PERSONALIZADO' && (
             <button
               type="button"
               onClick={() => setModalOpen(true)}
               className="px-2.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 inline-flex items-center gap-1 cursor-pointer shrink-0"
-              title="Configurar botones y semáforo personalizados"
+              title={`Configurar botones (${customOptions.map((o) => `${o.etiqueta} [${o.semaforo}]`).join(' · ')})`}
             >
               <Settings2 className="h-3.5 w-3.5" />
               <span>({customOptions.length})</span>
@@ -715,24 +836,23 @@ export function ModoRespuestaSelector({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
+    <div className="space-y-3 min-w-0">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+        <div className="min-w-0">
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            Modo de Respuesta / Control Input (Mobile &amp; Web)
+            Modo de Respuesta / Input (Mobile &amp; Web)
           </label>
-          <div className="flex items-center gap-2">
-            <select
-              value={normalizedTipo}
-              onChange={(e) => handleTipoChange(e.target.value)}
-              className="flex-1 min-w-0 px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:border-blue-500"
-            >
-              {MODO_RESPUESTA_PRESETS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex-1 min-w-0">
+              <EamSelect
+                value={normalizedTipo}
+                onChange={(val) => handleTipoChange(val || 'ESCALA_ESTADO')}
+                options={MODO_RESPUESTA_EAM_OPTIONS}
+                usePortal={true}
+                minDropdownWidth={360}
+                searchPlaceholder="Buscar modo de respuesta..."
+              />
+            </div>
             {enableModalInFull && (
               <button
                 type="button"
@@ -750,30 +870,27 @@ export function ModoRespuestaSelector({
           </div>
         </div>
 
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
             Rol Semántico Especial (Opcional)
           </label>
-          <select
+          <EamSelect
             value={rolSemantico}
-            onChange={(e) =>
+            onChange={(val) =>
               onChange({
                 tipoControlInput: normalizedTipo,
                 configInputJson:
                   normalizedTipo === 'PERSONALIZADO'
                     ? { ...cfg, opciones: customOptions }
                     : configInputJson || null,
-                rolSemantico: e.target.value,
+                rolSemantico: val,
               })
             }
-            className="w-full px-3 py-2 text-xs font-medium bg-white border border-slate-300 rounded-xl text-slate-700 focus:outline-none focus:border-blue-500"
-          >
-            {ROL_SEMANTICO_OPTIONS.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
+            options={ROL_SEMANTICO_EAM_OPTIONS}
+            usePortal={true}
+            minDropdownWidth={380}
+            searchPlaceholder="Buscar rol semántico..."
+          />
         </div>
       </div>
 

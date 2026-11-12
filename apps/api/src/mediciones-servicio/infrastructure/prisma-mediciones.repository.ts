@@ -9,7 +9,7 @@ import { IMedicionesRepository } from '../domain/mediciones.repository.interface
 
 @Injectable()
 export class PrismaMedicionesRepository implements IMedicionesRepository {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   private get fullIncludes() {
     return {
@@ -27,6 +27,8 @@ export class PrismaMedicionesRepository implements IMedicionesRepository {
     idParametroMedicion: number;
     valorNumerico?: number;
     valorTexto?: string;
+    unidadMedida?: string;
+    fueraDeRango?: boolean;
     nivelAlerta?: string;
     mensajeAlerta?: string;
     observaciones?: string;
@@ -42,6 +44,8 @@ export class PrismaMedicionesRepository implements IMedicionesRepository {
         id_parametro_medicion: data.idParametroMedicion,
         valor_numerico: data.valorNumerico,
         valor_texto: data.valorTexto,
+        unidad_medida: data.unidadMedida,
+        fuera_de_rango: data.fueraDeRango,
         nivel_alerta: data.nivelAlerta as any,
         mensaje_alerta: data.mensajeAlerta,
         observaciones: data.observaciones,
@@ -50,7 +54,6 @@ export class PrismaMedicionesRepository implements IMedicionesRepository {
         fecha_medicion: data.fechaMedicion ?? new Date(),
         medido_por: data.medidoPor,
         instrumento_medicion: data.instrumentoMedicion,
-        // ⚠️ Trigger BD establece: fuera_de_rango, unidad_medida
         fecha_registro: new Date(),
       },
       include: this.fullIncludes,
@@ -65,6 +68,8 @@ export class PrismaMedicionesRepository implements IMedicionesRepository {
     data: {
       valorNumerico?: number;
       valorTexto?: string;
+      unidadMedida?: string;
+      fueraDeRango?: boolean;
       nivelAlerta?: string;
       mensajeAlerta?: string;
       observaciones?: string;
@@ -77,26 +82,20 @@ export class PrismaMedicionesRepository implements IMedicionesRepository {
   ): Promise<any> {
     // Spread dinámico para solo actualizar campos provistos
     const updateData: any = {};
-    if (data.valorNumerico !== undefined)
-      updateData.valor_numerico = data.valorNumerico;
-    if (data.valorTexto !== undefined)
-      updateData.valor_texto = data.valorTexto;
-    if (data.nivelAlerta !== undefined)
-      updateData.nivel_alerta = data.nivelAlerta;
-    if (data.mensajeAlerta !== undefined)
-      updateData.mensaje_alerta = data.mensajeAlerta;
-    if (data.observaciones !== undefined)
-      updateData.observaciones = data.observaciones;
+    if (data.valorNumerico !== undefined) updateData.valor_numerico = data.valorNumerico;
+    if (data.valorTexto !== undefined) updateData.valor_texto = data.valorTexto;
+    if (data.unidadMedida !== undefined) updateData.unidad_medida = data.unidadMedida;
+    if (data.fueraDeRango !== undefined) updateData.fuera_de_rango = data.fueraDeRango;
+    if (data.nivelAlerta !== undefined) updateData.nivel_alerta = data.nivelAlerta;
+    if (data.mensajeAlerta !== undefined) updateData.mensaje_alerta = data.mensajeAlerta;
+    if (data.observaciones !== undefined) updateData.observaciones = data.observaciones;
     if (data.temperaturaAmbiente !== undefined)
       updateData.temperatura_ambiente = data.temperaturaAmbiente;
-    if (data.humedadRelativa !== undefined)
-      updateData.humedad_relativa = data.humedadRelativa;
-    if (data.fechaMedicion !== undefined)
-      updateData.fecha_medicion = data.fechaMedicion;
+    if (data.humedadRelativa !== undefined) updateData.humedad_relativa = data.humedadRelativa;
+    if (data.fechaMedicion !== undefined) updateData.fecha_medicion = data.fechaMedicion;
     if (data.instrumentoMedicion !== undefined)
       updateData.instrumento_medicion = data.instrumentoMedicion;
-    if (data.excluidoPdf !== undefined)
-      updateData.excluido_pdf = data.excluidoPdf;
+    if (data.excluidoPdf !== undefined) updateData.excluido_pdf = data.excluidoPdf;
 
     return await this.prisma.mediciones_servicio.update({
       where: { id_medicion: id },

@@ -268,6 +268,9 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
     <!-- 6. REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO WMS -->
     ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, datos.tipoServicio)}
 
+    <!-- 6B. PENDIENTES TÉCNICOS Y HALLAZGOS -->
+    ${generarPendientesUniversal(datos.pendientes)}
+
     <!-- 7. GALERÍA FOTOGRÁFICA DE EVIDENCIAS -->
     ${
       esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
@@ -382,24 +385,69 @@ function generarChecklistUniversal(actividades: any[]): string {
                   resp?.etiqueta ||
                   (Array.isArray(resp?.seleccionados) && resp.seleccionados.length > 0
                     ? resp.seleccionados.join(', ')
-                    : resp?.valor != null && String(resp.valor).trim() !== ''
+                    : resp?.valor != null &&
+                        String(resp.valor).trim() !== '' &&
+                        !/^(LECTURA_CONTADOR|LECTURA_CONTADOR_ACTIVO)$/i.test(
+                          String(act.rolSemantico || ''),
+                        ) &&
+                        !String(act.tipoControlInput || '')
+                          .toUpperCase()
+                          .includes('CONTADOR')
                       ? String(resp.valor)
                       : '');
 
-                const obsLimpia = (act.observaciones || '').trim();
-                const obsDisplay =
-                  obsLimpia && obsLimpia !== '--' && obsLimpia !== '-' ? obsLimpia : '';
+                const obsRaw = (act.observaciones || '').trim();
+                const obsLimpia = obsRaw && obsRaw !== '--' && obsRaw !== '-' ? obsRaw : '';
+
+                // Formateo profesional de LECTURA_CONTADOR_ACTIVO (ej. "Lectura registrada: 15.250 ciclos")
+                const esContadorAct =
+                  act.rolSemantico === 'LECTURA_CONTADOR_ACTIVO' ||
+                  act.rolSemantico === 'LECTURA_CONTADOR' ||
+                  String(act.tipoControlInput || '')
+                    .toUpperCase()
+                    .includes('CONTADOR') ||
+                  /^(CICLOS|HORAS|KM|ODOMETRO|CONTADOR|UPM)\s*:/i.test(obsLimpia);
+
+                let obsDisplay = obsLimpia;
+                if (esContadorAct) {
+                  const matchPref = obsLimpia.match(
+                    /^(CICLOS|HORAS|KM|ODOMETRO|CONTADOR|UPM)\s*:\s*([0-9.,]+)/i,
+                  );
+                  const numRaw =
+                    resp?.valor != null && Number.isFinite(Number(resp.valor))
+                      ? Number(resp.valor)
+                      : matchPref
+                        ? Number(String(matchPref[2]).replace(',', '.'))
+                        : NaN;
+                  if (Number.isFinite(numRaw)) {
+                    const prefUpper = (matchPref?.[1] || String(resp?.unidad || '')).toUpperCase();
+                    const sufijo = prefUpper.includes('CICLO')
+                      ? 'ciclos'
+                      : prefUpper.includes('KM') || prefUpper.includes('ODO')
+                        ? 'km'
+                        : prefUpper.includes('UPM')
+                          ? 'und'
+                          : prefUpper.includes('HORA') || prefUpper === 'HRS'
+                            ? 'hrs'
+                            : '';
+                    obsDisplay = `Lectura registrada: ${numRaw.toLocaleString('es-CO')}${sufijo ? ` ${sufijo}` : ''}`;
+                  }
+                } else if (etiquetaCustom && etiquetaCustom.toUpperCase() !== estTexto) {
+                  const yaTieneEtiqueta = obsLimpia
+                    .toLowerCase()
+                    .includes(etiquetaCustom.toLowerCase());
+                  if (!obsLimpia) {
+                    obsDisplay = `Respuesta: ${etiquetaCustom}`;
+                  } else if (!yaTieneEtiqueta) {
+                    obsDisplay = `<strong>Respuesta:</strong> ${etiquetaCustom}<br/><span style="color:#64748B;">${obsLimpia}</span>`;
+                  }
+                }
 
                 return `
               <tr style="border-bottom: 1px solid #F1F5F9; page-break-inside: avoid !important; break-inside: avoid !important;">
                 <td style="padding: 6px 10px; color: #1E293B; line-height: 1.35; font-weight: 500;">${act.descripcion}</td>
                 <td style="padding: 6px 8px; text-align: center; vertical-align: middle;">
                   <span class="${badgeClass}">${estTexto}</span>
-                  ${
-                    etiquetaCustom && etiquetaCustom.toUpperCase() !== estTexto
-                      ? `<div style="margin-top: 2px; font-size: 7.5px; font-weight: 700; color: #334155;">${etiquetaCustom}</div>`
-                      : ''
-                  }
                 </td>
                 <td style="padding: 6px 10px; color: #475569; font-size: 8.5px; line-height: 1.3;">${obsDisplay}</td>
               </tr>
@@ -533,8 +581,14 @@ function generarMedicionesUniversal(
     ) {
       itemsCards.push({ label: 'Corriente / Amperaje', value: `${modulo.corriente} A` });
     }
+    const yaTieneVelocidadNoRpm = mediciones.some((m) => {
+      const p = String(m.parametro || '').toLowerCase();
+      const u = String(m.unidad || '').toLowerCase();
+      return (p.includes('velocidad') || p.includes('cabina')) && u !== '' && !u.includes('rpm');
+    });
     if (
       modulo.rpm != null &&
+      !yaTieneVelocidadNoRpm &&
       !itemsCards.some(
         (i) => i.label.toLowerCase().includes('velocidad') || i.label.toLowerCase().includes('rpm'),
       )
@@ -804,6 +858,61 @@ function generarFirmasUniversal(datos: DatosOrdenPDF): string {
         <div class="firma-label">Firma y Aprobación del Cliente</div>
       </div>
     </div>
+  </div>
+  `;
+}
+
+function generarPendientesUniversal(pendientes?: DatosOrdenPDF['pendientes']): string {
+  if (!pendientes || pendientes.length === 0) {
+    return '';
+  }
+
+  const badgePrioridad = (prio?: string) => {
+    const p = String(prio || 'MEDIA').toUpperCase();
+    if (p === 'CRITICA' || p === 'ALTA' || p === 'URGENTE') {
+      return `<span style="background:#FEE2E2;color:#B91C1C;border:1px solid #FCA5A5;padding:2px 6px;border-radius:4px;font-size:7.5px;font-weight:700;">${p}</span>`;
+    }
+    if (p === 'BAJA') {
+      return `<span style="background:#F1F5F9;color:#475569;border:1px solid #CBD5E1;padding:2px 6px;border-radius:4px;font-size:7.5px;font-weight:700;">${p}</span>`;
+    }
+    return `<span style="background:#FEF3C7;color:#B45309;border:1px solid #FCD34D;padding:2px 6px;border-radius:4px;font-size:7.5px;font-weight:700;">${p}</span>`;
+  };
+
+  const badgeEstado = (est?: string) => {
+    const e = String(est || 'PENDIENTE').toUpperCase();
+    const esResuelto = e === 'RESUELTO' || e === 'CERRADO';
+    return `<span style="background:${esResuelto ? '#DCFCE7' : '#EFF6FF'};color:${esResuelto ? '#15803D' : '#1E40AF'};border:1px solid ${esResuelto ? '#86EFAC' : '#BFDBFE'};padding:2px 6px;border-radius:4px;font-size:7.5px;font-weight:700;">${e}</span>`;
+  };
+
+  return `
+  <div class="section" style="margin-top: 12px; page-break-inside: avoid !important;">
+    <div class="section-title" style="background: linear-gradient(90deg, #7C2D12 0%, #B45309 100%);">📌 PENDIENTES TÉCNICOS Y HALLAZGOS (${pendientes.length})</div>
+    <table style="width: 100%; border-collapse: collapse; font-size: 8.5px; background: #FFFBEB; border: 1px solid #FDE68A;">
+      <thead>
+        <tr style="background: #FEF3C7; color: #78350F;">
+          <th style="padding: 6px 8px; text-align: left; font-size: 8px;">HALLAZGO / RECOMENDACIÓN</th>
+          <th style="padding: 6px 8px; text-align: center; width: 85px; font-size: 8px;">PRIORIDAD</th>
+          <th style="padding: 6px 8px; text-align: center; width: 85px; font-size: 8px;">ESTADO</th>
+          <th style="padding: 6px 8px; text-align: left; width: 32%; font-size: 8px;">NOTAS / REPUESTO ASOCIADO</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${pendientes
+          .map(
+            (p) => `
+          <tr style="border-top: 1px solid #FDE68A;">
+            <td style="padding: 6px 8px; color: #1E293B; font-weight: 600;">
+              ${p.equipoNombre ? `<div style="font-size:7.5px;color:#92400E;font-weight:700;">${p.equipoNombre}</div>` : ''}
+              ${p.descripcion}
+            </td>
+            <td style="padding: 6px 8px; text-align: center;">${badgePrioridad(p.prioridad)}</td>
+            <td style="padding: 6px 8px; text-align: center;">${badgeEstado(p.estado)}</td>
+            <td style="padding: 6px 8px; color: #475569;">${p.observaciones || '-'}</td>
+          </tr>`,
+          )
+          .join('')}
+      </tbody>
+    </table>
   </div>
   `;
 }

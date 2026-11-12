@@ -19,6 +19,7 @@ import { useState, useEffect } from 'react';
 import type { EstadoActividad } from '../api/ordenes.service';
 import { useUpdateActividad } from '../hooks/use-ordenes';
 import { GaleriaActividadFotos } from './galeria-actividad-fotos';
+import { getMetricaUsoMeta } from '@/features/catalogos-eam';
 import {
   getModoRespuestaBadgeLabel,
   getPresetOptions,
@@ -59,6 +60,10 @@ interface Actividad {
 interface ActividadCardAdvancedProps {
   actividad: Actividad;
   idOrdenServicio: number;
+  unidadUso?: string | null;
+  etiquetaContador?: string | null;
+  requiereHorometro?: boolean | null;
+  horasActualesEquipo?: number | null;
   onUpdate?: () => void;
 }
 
@@ -79,10 +84,10 @@ const ESTADOS_CONFIG = [
   },
   {
     value: 'C',
-    label: 'Crítico',
+    label: 'Corregido',
     short: 'C',
-    color: 'bg-orange-500 hover:bg-orange-600 text-white',
-    border: 'border-orange-500',
+    color: 'bg-blue-500 hover:bg-blue-600 text-white',
+    border: 'border-blue-500',
   },
   {
     value: 'R',
@@ -111,7 +116,7 @@ function getEstadoBgColor(estado?: string | null) {
     case 'M':
       return 'bg-red-50 border-red-200';
     case 'C':
-      return 'bg-orange-50 border-orange-200';
+      return 'bg-blue-50 border-blue-200';
     case 'R':
       return 'bg-yellow-50 border-yellow-200';
     default:
@@ -137,12 +142,18 @@ const PREFIJOS_MOVIL_ESTRUCTURADOS = [
   'BATERIA: ',
   'ELECTROLITOS: ',
   'HORAS: ',
+  'CICLOS: ',
+  'KM: ',
+  'UPM: ',
+  'CONTADOR: ',
   'TEMP: ',
   'RESPUESTA: ',
   'SISTEMAS: ',
   'ESTADO_INICIAL: ',
   'ESTADO_FINAL: ',
 ];
+
+const REGEX_CONTADOR_OBS = /^(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*(.+)$/i;
 
 function observacionTienePrefijoEstructurado(observacion: string): boolean {
   const upper = (observacion || '').toUpperCase();
@@ -166,9 +177,15 @@ function descripcionEsInputEstructurado(descripcion: string): boolean {
   if (desc.includes('NIVEL DE ACEITE') || desc.includes('NIVEL ACEITE')) return true;
   if (
     desc.includes('HOROMETRO') ||
+    desc.includes('HORÓMETRO') ||
     desc.includes('HORÁMETRO') ||
     desc.includes('HORAS DE TRABAJO') ||
-    desc.includes('LECTURA DE HORAS')
+    desc.includes('LECTURA DE HORAS') ||
+    desc.includes('CONTADOR') ||
+    desc.includes('CICLOS') ||
+    desc.includes('ODOMETRO') ||
+    desc.includes('ODÓMETRO') ||
+    desc.includes('KILOMETRAJE')
   )
     return true;
   if (desc.includes('ELECTROLITOS')) return true;
@@ -304,12 +321,22 @@ function separarPrefijo(texto: string): PrefijoResultado {
 export function ActividadCardAdvanced({
   actividad,
   idOrdenServicio,
+  unidadUso,
+  etiquetaContador,
+  requiereHorometro,
+  horasActualesEquipo,
   onUpdate,
 }: ActividadCardAdvancedProps) {
   const updateActividad = useUpdateActividad();
   const [isExpanded, setIsExpanded] = useState(false);
   const [observaciones, setObservaciones] = useState(actividad.observaciones || '');
   const [showObservaciones, setShowObservaciones] = useState(false);
+
+  const metricaUso = getMetricaUsoMeta({
+    unidadUso,
+    etiquetaContador,
+    requiereHorometro,
+  });
 
   const descripcion =
     actividad.catalogo_actividades?.descripcion_actividad ||
@@ -334,8 +361,12 @@ export function ActividadCardAdvanced({
     actividad.respuesta_json && typeof actividad.respuesta_json === 'object'
       ? actividad.respuesta_json
       : null;
+  const valorDesdeObservacion = (() => {
+    const match = (actividad.observaciones || '').trim().match(REGEX_CONTADOR_OBS);
+    return match ? match[1].trim() : '';
+  })();
   const valorContadorInicial =
-    respuestaActualObj?.valor != null ? String(respuestaActualObj.valor) : '';
+    respuestaActualObj?.valor != null ? String(respuestaActualObj.valor) : valorDesdeObservacion;
   const [contadorInputDraft, setContadorInputDraft] = useState<{
     base: string;
     value: string;
@@ -420,22 +451,41 @@ export function ActividadCardAdvanced({
     if (updateActividad.isPending) return;
     const trimmed = contadorInput.trim();
     if (!trimmed) return;
+    const valNum = Number(trimmed.replace(',', '.'));
+    if (
+      Number.isFinite(valNum) &&
+      valNum > 0 &&
+      horasActualesEquipo != null &&
+      horasActualesEquipo > 0 &&
+      valNum < horasActualesEquipo
+    ) {
+      const ok = window.confirm(
+        `Atención: la lectura ingresada (${valNum} ${metricaUso.sufijoCorto}) es menor al acumulado actual del equipo (${horasActualesEquipo} ${metricaUso.sufijoCorto}).\n\nEl sistema protegerá el acumulado histórico contra retrocesos. ¿Deseas guardar igualmente esta lectura en la orden?`,
+      );
+      if (!ok) return;
+    }
+    const prefijoObs = `${metricaUso.prefijoObservacion}: ${trimmed}`;
+    const etiquetaDisplay = metricaUso.sufijoCorto
+      ? `${trimmed} ${metricaUso.sufijoCorto}`
+      : trimmed;
     try {
       await updateActividad.mutateAsync({
         idActividad: actividad.id_actividad_ejecutada,
         data: {
           estado: (estadoActual || 'B') as EstadoActividad,
           ejecutada: true,
-          observaciones: `HORAS: ${trimmed}`,
+          observaciones: prefijoObs,
           respuestaJson: {
             ...(respuestaActualObj || {}),
             valor: trimmed,
-            etiqueta: trimmed,
-            semaforo: 'B',
+            etiqueta: etiquetaDisplay,
+            unidad: metricaUso.sufijoCorto,
+            unidadUso: metricaUso.unidadUso,
+            semaforo: estadoActual || 'B',
           },
         },
       });
-      setObservaciones(`HORAS: ${trimmed}`);
+      setObservaciones(prefijoObs);
       onUpdate?.();
     } catch (error) {
       console.error('Error al guardar lectura de contador:', error);
@@ -603,21 +653,36 @@ export function ActividadCardAdvanced({
             </div>
           )}
 
-          {/* Entrada Numérica de Contador / Horómetro / Ciclos */}
+          {/* Entrada Numérica de Contador (Dinámica según Arquetipo de Equipo) */}
           {(tipoControlInput === 'LECTURA_CONTADOR' ||
             rolSemantico === 'LECTURA_CONTADOR_ACTIVO') && (
             <div className="bg-white/90 p-2.5 rounded-lg border border-indigo-200 space-y-1.5">
-              <label className="block text-[10px] font-bold text-indigo-800 uppercase tracking-wider">
-                Lectura de Contador / Horómetro / Ciclos
-              </label>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="block text-[10px] font-bold text-indigo-800 uppercase tracking-wider">
+                  {metricaUso.icono} {metricaUso.labelEjecucionOrden}
+                </label>
+                {horasActualesEquipo != null && horasActualesEquipo > 0 && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                    Acumulado actual: {horasActualesEquipo.toLocaleString('es-CO')}{' '}
+                    {metricaUso.sufijoCorto}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={contadorInput}
-                  onChange={(e) => setContadorInput(e.target.value)}
-                  placeholder={configInput.placeholder || 'Ej: 1250'}
-                  className="flex-1 px-3 py-1.5 text-sm font-mono font-bold border border-indigo-300 rounded-lg bg-white"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={contadorInput}
+                    onChange={(e) => setContadorInput(e.target.value)}
+                    placeholder={configInput.placeholder || metricaUso.placeholderInputInicial}
+                    className="w-full px-3 py-1.5 pr-16 text-sm font-mono font-bold border border-indigo-300 rounded-lg bg-white"
+                  />
+                  {metricaUso.sufijoCorto && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-indigo-500 pointer-events-none">
+                      {metricaUso.sufijoCorto}
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={handleGuardarContador}
@@ -627,6 +692,25 @@ export function ActividadCardAdvanced({
                   Guardar Lectura
                 </button>
               </div>
+              {(() => {
+                const n = Number(contadorInput.trim().replace(',', '.'));
+                if (
+                  Number.isFinite(n) &&
+                  n > 0 &&
+                  horasActualesEquipo != null &&
+                  horasActualesEquipo > 0 &&
+                  n < horasActualesEquipo
+                ) {
+                  return (
+                    <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1">
+                      ⚠️ Lectura menor al acumulado ({horasActualesEquipo.toLocaleString('es-CO')}{' '}
+                      {metricaUso.sufijoCorto}). El equipo conservará su histórico contra
+                      retrocesos.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
             </div>
           )}
 
@@ -830,9 +914,9 @@ export function ResumenEstados({ actividades }: { actividades: Actividad[] }) {
           <p className="text-lg font-black text-red-600">{contadores.M}</p>
           <p className="text-[9px] font-bold text-red-700 uppercase">Malo</p>
         </div>
-        <div className="text-center p-2 bg-orange-50 rounded-lg border border-orange-100">
-          <p className="text-lg font-black text-orange-600">{contadores.C}</p>
-          <p className="text-[9px] font-bold text-orange-700 uppercase">Crítico</p>
+        <div className="text-center p-2 bg-blue-50 rounded-lg border border-blue-100">
+          <p className="text-lg font-black text-blue-600">{contadores.C}</p>
+          <p className="text-[9px] font-bold text-blue-700 uppercase">Corregido</p>
         </div>
         <div className="text-center p-2 bg-yellow-50 rounded-lg border border-yellow-100">
           <p className="text-lg font-black text-yellow-600">{contadores.R}</p>

@@ -81,6 +81,9 @@ export interface EquipoListItem {
     nombre_tipo: string;
     codigo_tipo: string;
     es_generador?: boolean;
+    unidad_uso?: string | null;
+    etiqueta_contador?: string | null;
+    requiere_horometro?: boolean | null;
   } | null;
   estado_equipo: EstadoEquipo;
   criticidad: Criticidad;
@@ -111,6 +114,9 @@ export interface EquipoDetalle extends EquipoListItem {
     id_tipo_equipo: number;
     nombre_tipo: string;
     codigo_tipo: string;
+    unidad_uso?: string | null;
+    etiqueta_contador?: string | null;
+    requiere_horometro?: boolean | null;
   };
   config_parametros?: ConfigParametros;
   fecha_modificacion?: string;
@@ -263,6 +269,41 @@ export interface DatosBomba {
   radiador_panal_cm?: number;
 }
 
+export interface ParametroOverrideEquipo {
+  id_parametro_medicion?: number;
+  codigo_parametro?: string;
+  nombre_parametro?: string;
+  nombre_sistema?: string;
+  unidad_medida?: string;
+  min_normal?: number;
+  max_normal?: number;
+  min_critico?: number;
+  max_critico?: number;
+  valor_ideal?: number;
+  es_adicional_equipo?: boolean;
+}
+
+export interface ParametroCatalogoArquetipo {
+  id_parametro_medicion: number;
+  codigo_parametro: string;
+  nombre_parametro: string;
+  unidad_medida: string;
+  unidad_codigo?: string | null;
+  id_magnitud?: number | null;
+  tipo_magnitud?: string | null;
+  nombre_magnitud?: string | null;
+  nombre_sistema?: string | null;
+  valor_minimo_normal?: number | null;
+  valor_maximo_normal?: number | null;
+  valor_minimo_critico?: number | null;
+  valor_maximo_critico?: number | null;
+  valor_ideal?: number | null;
+  es_critico_seguridad: boolean;
+  es_obligatorio: boolean;
+  decimales_precision: number;
+  tipo_dato: string;
+}
+
 export interface ConfigParametros {
   unidades?: {
     temperatura?: string;
@@ -284,6 +325,8 @@ export interface ConfigParametros {
       valor_ideal?: number;
     }
   >;
+  por_parametro?: Record<string, ParametroOverrideEquipo>;
+  parametros_adicionales?: ParametroOverrideEquipo[];
   planes_preventivos?: Array<{
     id_plan?: number;
     id_tipo_servicio: number;

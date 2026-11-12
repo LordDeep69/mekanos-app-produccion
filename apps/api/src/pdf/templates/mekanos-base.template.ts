@@ -36,8 +36,8 @@ export const getLogoBase64 = (): string => {
     // Los assets se copian a dist/pdf/assets/
     const possiblePaths = [
       // ✅ Rutas correctas para nest build con webpack (assets copiados a dist/pdf/assets/)
-      path.join(process.cwd(), 'dist/pdf/assets/logo-mekanos.png'),           // desde api cwd
-      path.join(process.cwd(), 'apps/api/dist/pdf/assets/logo-mekanos.png'),  // desde monorepo root
+      path.join(process.cwd(), 'dist/pdf/assets/logo-mekanos.png'), // desde api cwd
+      path.join(process.cwd(), 'apps/api/dist/pdf/assets/logo-mekanos.png'), // desde monorepo root
       // Fallback a rutas antiguas por compatibilidad
       path.join(__dirname, 'assets/logo-mekanos.png'),
       path.join(__dirname, '../assets/logo-mekanos.png'),
@@ -203,6 +203,14 @@ export interface DatosOrdenPDF {
   repuestosDetallados?: RepuestoUtilizadoPDF[];
   equipoDetalle?: DatosEquipoDetalladoPDF;
   placaUniversal?: any;
+  /** Hallazgos / pendientes técnicos registrados en la orden */
+  pendientes?: Array<{
+    descripcion: string;
+    prioridad?: string;
+    estado?: string;
+    observaciones?: string;
+    equipoNombre?: string;
+  }>;
 
   // Firmas
   firmaTecnico?: string;
@@ -249,13 +257,13 @@ export interface DatosOrdenPDF {
   // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Unidades personalizadas por equipo
   // Si no se proporciona, usa unidades por defecto (°C, PSI, V, Hz, etc.)
   configUnidades?: {
-    temperatura?: string;  // °C, °F, K
-    presion?: string;      // PSI, bar, kPa, atm
-    voltaje?: string;      // V
-    frecuencia?: string;   // Hz
-    corriente?: string;    // A
-    velocidad?: string;    // RPM
-    vibracion?: string;    // mm/s
+    temperatura?: string; // °C, °F, K
+    presion?: string; // PSI, bar, kPa, atm
+    voltaje?: string; // V
+    frecuencia?: string; // Hz
+    corriente?: string; // A
+    velocidad?: string; // RPM
+    vibracion?: string; // mm/s
   };
 }
 
@@ -311,23 +319,23 @@ export interface ActividadPDF {
   sistema: string;
   descripcion: string;
   resultado:
-  | 'B'
-  | 'R'
-  | 'M'
-  | 'I'
-  | 'C'
-  | 'LI'
-  | 'A'
-  | 'L'
-  | 'NA'
-  | 'LA'
-  | 'S'
-  | 'NT'
-  | 'BA'
-  | 'F'
-  | 'RN'
-  | 'NF'
-  | string;
+    | 'B'
+    | 'R'
+    | 'M'
+    | 'I'
+    | 'C'
+    | 'LI'
+    | 'A'
+    | 'L'
+    | 'NA'
+    | 'LA'
+    | 'S'
+    | 'NT'
+    | 'BA'
+    | 'F'
+    | 'RN'
+    | 'NF'
+    | string;
   estado?: string;
   observaciones?: string;
   tipoActividad?: string;
@@ -1495,20 +1503,18 @@ export const generarChecklistMultiEquipo = (
   const esExtremo = numEquipos >= 7;
   const colNum = esExtremo ? 18 : 22;
   const colSistema = esExtremo ? 50 : 65;
-  const colEquipo = esExtremo ? 32 : (esMuchos ? 38 : 50);
-  const colObs = esExtremo ? 70 : (esMuchos ? 85 : 100);
-  const fontSize = esExtremo ? '7px' : (esMuchos ? '8px' : '9px');
+  const colEquipo = esExtremo ? 32 : esMuchos ? 38 : 50;
+  const colObs = esExtremo ? 70 : esMuchos ? 85 : 100;
+  const fontSize = esExtremo ? '7px' : esMuchos ? '8px' : '9px';
   const headerFontSize = esExtremo ? '6px' : '7px';
-  const labelMaxLen = esExtremo ? 6 : (esMuchos ? 8 : 12);
+  const labelMaxLen = esExtremo ? 6 : esMuchos ? 8 : 12;
 
   // Headers de equipos con label truncado
   const equipoHeaders = equipos
-    .map(
-      (eq) => {
-        const label = (eq.nombreSistema || eq.nombreEquipo || '').substring(0, labelMaxLen);
-        return `<th class="equipo-col" style="width:${colEquipo}px;">EQ${eq.ordenSecuencia}<br/><span style="font-weight:normal;font-size:${headerFontSize};">${label}</span></th>`;
-      },
-    )
+    .map((eq) => {
+      const label = (eq.nombreSistema || eq.nombreEquipo || '').substring(0, labelMaxLen);
+      return `<th class="equipo-col" style="width:${colEquipo}px;">EQ${eq.ordenSecuencia}<br/><span style="font-weight:normal;font-size:${headerFontSize};">${label}</span></th>`;
+    })
     .join('');
 
   // Filas de actividades
@@ -1545,9 +1551,10 @@ export const generarChecklistMultiEquipo = (
         }
       });
 
-      const observacionesHtml = observacionesArr.length > 0
-        ? `<div class="obs-multiequipo">${observacionesArr.join('')}</div>`
-        : '';
+      const observacionesHtml =
+        observacionesArr.length > 0
+          ? `<div class="obs-multiequipo">${observacionesArr.join('')}</div>`
+          : '';
 
       return `
       <tr>
@@ -1619,19 +1626,17 @@ export const generarMedicionesMultiEquipo = (
   // ✅ FIX 14-FEB-2026: Sizing adaptativo
   const esExtremo = numEquipos >= 7;
   const esMuchos = numEquipos >= 5;
-  const colEquipo = esExtremo ? 32 : (esMuchos ? 40 : 55);
-  const fontSize = esExtremo ? '7px' : (esMuchos ? '8px' : '9px');
+  const colEquipo = esExtremo ? 32 : esMuchos ? 40 : 55;
+  const fontSize = esExtremo ? '7px' : esMuchos ? '8px' : '9px';
   const headerFontSize = esExtremo ? '6px' : '7px';
-  const labelMaxLen = esExtremo ? 6 : (esMuchos ? 8 : 12);
+  const labelMaxLen = esExtremo ? 6 : esMuchos ? 8 : 12;
 
   // Headers de equipos
   const equipoHeaders = equipos
-    .map(
-      (eq) => {
-        const label = (eq.nombreSistema || eq.nombreEquipo || '').substring(0, labelMaxLen);
-        return `<th class="equipo-col" style="width:${colEquipo}px;">EQ${eq.ordenSecuencia}<br/><span style="font-weight:normal;font-size:${headerFontSize};">${label}</span></th>`;
-      },
-    )
+    .map((eq) => {
+      const label = (eq.nombreSistema || eq.nombreEquipo || '').substring(0, labelMaxLen);
+      return `<th class="equipo-col" style="width:${colEquipo}px;">EQ${eq.ordenSecuencia}<br/><span style="font-weight:normal;font-size:${headerFontSize};">${label}</span></th>`;
+    })
     .join('');
 
   // Filas de mediciones
@@ -1661,8 +1666,8 @@ export const generarMedicionesMultiEquipo = (
           (g) => g.equipo.idOrdenEquipo === eq.idOrdenEquipo,
         );
         return (
-          grupoEquipo?.mediciones.find((m) => `${m.parametro}|||${m.unidad || ''}` === medicionKey)?.nivelAlerta ||
-          'OK'
+          grupoEquipo?.mediciones.find((m) => `${m.parametro}|||${m.unidad || ''}` === medicionKey)
+            ?.nivelAlerta || 'OK'
         );
       });
       const estadoGeneral = alertas.includes('CRITICO')
@@ -1750,7 +1755,7 @@ export const generarLeyendaEquipos = (
     const equiposHtml = equiposOrdenados
       .map((eq) => {
         const nombre = eq.nombreSistema || eq.nombreEquipo || eq.codigoEquipo || 'Sin nombre';
-        const ci = ((eq.ordenSecuencia - 1) % 5);
+        const ci = (eq.ordenSecuencia - 1) % 5;
         return `
           <div style="
             background: ${bgColors[ci]};
@@ -1794,7 +1799,7 @@ export const generarLeyendaEquipos = (
   const equiposHtml = equiposOrdenados
     .map((eq) => {
       const nombre = eq.nombreSistema || eq.nombreEquipo || eq.codigoEquipo || 'Sin nombre';
-      const ci = ((eq.ordenSecuencia - 1) % 5);
+      const ci = (eq.ordenSecuencia - 1) % 5;
       return `
         <span class="equipo-leyenda-item" style="
           background: ${bgColors[ci]};
@@ -1834,15 +1839,15 @@ export const generarLeyendaEquipos = (
 
 /**
  * ✅ FIX 30-ENE-2026: Optimizar URLs de Cloudinary para reducir tamaño del PDF
- * 
+ *
  * Cloudinary permite transformaciones en la URL para comprimir imágenes:
  * - q_auto:low = Calidad automática baja (reduce ~70% del tamaño)
  * - w_600 = Ancho máximo 600px (suficiente para PDF)
  * - f_auto = Formato automático (WebP si es soportado)
- * 
+ *
  * URL original: https://res.cloudinary.com/xxx/image/upload/v123/folder/image.jpg
  * URL optimizada: https://res.cloudinary.com/xxx/image/upload/q_auto:low,w_600,f_jpg/v123/folder/image.jpg
- * 
+ *
  * Esto reduce imágenes de 2-5MB a 50-150KB cada una
  */
 export const optimizarUrlCloudinary = (url: string): string => {
@@ -1873,10 +1878,12 @@ export const optimizarUrlCloudinary = (url: string): string => {
 /**
  * Optimizar array de evidencias
  */
-export const optimizarEvidencias = (evidencias: (string | EvidenciaPDF)[]): (string | EvidenciaPDF)[] => {
+export const optimizarEvidencias = (
+  evidencias: (string | EvidenciaPDF)[],
+): (string | EvidenciaPDF)[] => {
   if (!evidencias || evidencias.length === 0) return evidencias;
 
-  return evidencias.map(ev => {
+  return evidencias.map((ev) => {
     if (typeof ev === 'string') {
       return optimizarUrlCloudinary(ev);
     }
@@ -1895,7 +1902,7 @@ export const generarDatosClienteConFichaTecnica = (
   datos: DatosOrdenPDF,
   opciones?: {
     extraHtml?: string;
-  }
+  },
 ): string => {
   const eq = datos.equipoDetalle;
   const placa = (datos as any).placaUniversal;
@@ -1907,44 +1914,55 @@ export const generarDatosClienteConFichaTecnica = (
   const codigoEquipo = eq?.codigoEquipo || '';
   const nombreEquipo = eq?.nombreEquipo || '';
   const tipoEquipo = eq?.tipoEquipoNombre || eq?.tipoEquipo || datos.tipoEquipo || 'EQUIPO';
-  const marca = placa?.marca && placa.marca !== 'N/A' ? placa.marca : (eq?.marca || datos.marcaEquipo || 'N/A');
-  const serie = placa?.serie && placa.serie !== 'N/A' ? placa.serie : (eq?.serie || datos.serieEquipo || 'N/A');
+  const marca =
+    placa?.marca && placa.marca !== 'N/A' ? placa.marca : eq?.marca || datos.marcaEquipo || 'N/A';
+  const serie =
+    placa?.serie && placa.serie !== 'N/A' ? placa.serie : eq?.serie || datos.serieEquipo || 'N/A';
   const modelo = placa?.modelo || eq?.modelo || '';
-  
+
   // Placa técnica de ingeniería
-  const potencia = placa?.capacidadPrincipal?.texto || (eq?.potenciaKva
-    ? `${eq.potenciaKva} kVA${eq.potenciaKw ? ` / ${eq.potenciaKw} kW` : ''}`
-    : (eq?.potenciaHp ? `${eq.potenciaHp} HP` : (eq?.potenciaKw ? `${eq.potenciaKw} kW` : '')));
+  const potencia =
+    placa?.capacidadPrincipal?.texto ||
+    (eq?.potenciaKva
+      ? `${eq.potenciaKva} kVA${eq.potenciaKw ? ` / ${eq.potenciaKw} kW` : ''}`
+      : eq?.potenciaHp
+        ? `${eq.potenciaHp} HP`
+        : eq?.potenciaKw
+          ? `${eq.potenciaKw} kW`
+          : '');
   let tension = eq?.voltaje
     ? `${eq.voltaje}${eq.frecuencia ? ` · ${eq.frecuencia}` : ''}${eq.fases ? ` · ${eq.fases}` : ''}`
-    : (eq?.frecuencia ? `${eq.frecuencia}` : '');
+    : eq?.frecuencia
+      ? `${eq.frecuencia}`
+      : '';
   if (!tension && placa?.kpis) {
-    const kpiTension = placa.kpis.find((k: any) =>
-      k.etiqueta?.toLowerCase().includes('voltaje') ||
-      k.etiqueta?.toLowerCase().includes('tensión') ||
-      k.etiqueta?.toLowerCase().includes('tension')
+    const kpiTension = placa.kpis.find(
+      (k: any) =>
+        k.etiqueta?.toLowerCase().includes('voltaje') ||
+        k.etiqueta?.toLowerCase().includes('tensión') ||
+        k.etiqueta?.toLowerCase().includes('tension'),
     );
     if (kpiTension) tension = kpiTension.valorTexto;
   }
   let rpm = eq?.rpm ? `${eq.rpm}` : '';
   if (!rpm && placa?.kpis) {
-    const kpiRpm = placa.kpis.find((k: any) =>
-      k.etiqueta?.toLowerCase().includes('rpm') ||
-      k.etiqueta?.toLowerCase().includes('velocidad')
+    const kpiRpm = placa.kpis.find(
+      (k: any) =>
+        k.etiqueta?.toLowerCase().includes('rpm') ||
+        k.etiqueta?.toLowerCase().includes('velocidad'),
     );
     if (kpiRpm) rpm = kpiRpm.valorTexto;
   }
   // Metrología del contador de uso (Horómetro / Ciclos / Odómetro / Calendario)
   const unidadUso = eq?.unidadUso || placa?.unidadUso || 'HORAS';
   const etiquetaRaw = eq?.etiquetaContador || placa?.etiquetaContador;
-  const requiereContador = (eq?.requiereHorometro ?? placa?.requiereHorometro ?? true) && unidadUso !== 'CAL';
+  const requiereContador =
+    (eq?.requiereHorometro ?? placa?.requiereHorometro ?? true) && unidadUso !== 'CAL';
 
   let sufijoUso = 'h';
   let labelInterv = '⏱️ Horómetro Intervención';
   let labelAcum = '📊 Horómetro Acumulado (Hoja de Vida)';
-  let badgeControl = etiquetaRaw
-    ? `Control por ${etiquetaRaw}`
-    : 'Control por Horómetro';
+  let badgeControl = etiquetaRaw ? `Control por ${etiquetaRaw}` : 'Control por Horómetro';
 
   if (unidadUso === 'CICLOS') {
     sufijoUso = 'ciclos';
@@ -1960,25 +1978,35 @@ export const generarDatosClienteConFichaTecnica = (
     sufijoUso = 'und';
     labelInterv = `📦 ${etiquetaRaw || 'Producción'} Intervención`;
     labelAcum = `📊 ${etiquetaRaw || 'Producción'} Acumulada`;
-    badgeControl = etiquetaRaw ? `Control por ${etiquetaRaw}` : 'Control por Unidades de Producción';
+    badgeControl = etiquetaRaw
+      ? `Control por ${etiquetaRaw}`
+      : 'Control por Unidades de Producción';
   } else if (unidadUso === 'CAL') {
     badgeControl = 'Mantenimiento por Calendario';
   }
 
-  const horometroInterv = eq?.horometroIntervencion != null
-    ? `${eq.horometroIntervencion} ${sufijoUso}`.trim()
-    : (datos.datosModulo?.horasTrabajo != null ? `${datos.datosModulo.horasTrabajo} ${sufijoUso}`.trim() : '');
-  const horometroAcum = eq?.horometroAcumulado != null ? `${eq.horometroAcumulado} ${sufijoUso}`.trim() : '';
+  const horometroInterv =
+    eq?.horometroIntervencion != null
+      ? `${eq.horometroIntervencion} ${sufijoUso}`.trim()
+      : datos.datosModulo?.horasTrabajo != null
+        ? `${datos.datosModulo.horasTrabajo} ${sufijoUso}`.trim()
+        : '';
+  const horometroAcum =
+    eq?.horometroAcumulado != null ? `${eq.horometroAcumulado} ${sufijoUso}`.trim() : '';
 
   return `
   <div class="section ficha-tecnica-box" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 12px;">
     <div class="section-title">DATOS DEL CLIENTE Y FICHA TÉCNICA DEL ACTIVO</div>
-    ${(datos.numeroVisitaCaso && datos.numeroVisitaCaso > 1) || datos.numeroOrdenPadre ? `
+    ${
+      (datos.numeroVisitaCaso && datos.numeroVisitaCaso > 1) || datos.numeroOrdenPadre
+        ? `
     <div style="margin: 4px 0 6px 0; padding: 5px 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #1d4ed8; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; font-size: 8.5px; color: #1e3a8a; font-weight: 700;">
       <span>🔗 SECUENCIA DE SERVICIO: Visita #${datos.numeroVisitaCaso || 2} (${datos.tipoVisita || 'CONTINUACION'})</span>
       ${datos.numeroOrdenPadre ? `<span style="background: #dbeafe; color: #1e40af; padding: 1.5px 6px; border-radius: 3px; font-family: monospace;">VINCULADA A ${datos.numeroOrdenPadre}</span>` : ''}
     </div>
-    ` : ''}
+    `
+        : ''
+    }
     
     <!-- Fila Cliente & Ubicación -->
     <div class="info-grid">
@@ -2031,15 +2059,21 @@ export const generarDatosClienteConFichaTecnica = (
           <span style="font-size: 8px; font-weight: 700; color: #3290A6; text-transform: uppercase;">
             ${tipoEquipo}
           </span>
-          ${requiereContador ? `
+          ${
+            requiereContador
+              ? `
           <span style="font-size: 7.5px; font-weight: 700; color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 3px; padding: 1px 5px;">
             ${badgeControl}
           </span>
-          ` : unidadUso === 'CAL' ? `
+          `
+              : unidadUso === 'CAL'
+                ? `
           <span style="font-size: 7.5px; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px; padding: 1px 5px;">
             Por Calendario
           </span>
-          ` : ''}
+          `
+                : ''
+          }
         </div>
       </div>
 
@@ -2053,15 +2087,27 @@ export const generarDatosClienteConFichaTecnica = (
           <span style="color: #0f172a; font-family: monospace; font-weight: 600;">${serie}</span>
         </div>
         <div style="display: flex; flex-direction: column;">
-          <span style="font-size: 7.5px; color: #64748b; font-weight: 600; text-transform: uppercase;">Potencia / Capacidad</span>
-          <span style="color: #0f172a; font-weight: 600;">${potencia || '-'}</span>
+          <span style="font-size: 7.5px; color: #64748b; font-weight: 600; text-transform: uppercase;">${placa?.capacidadPrincipal?.etiqueta || 'Potencia / Capacidad'}</span>
+          <span style="color: #0f172a; font-weight: 600;">${(potencia && potencia !== '-' ? potencia : '') || placa?.capacidadPrincipal?.texto || '-'}</span>
         </div>
         <div style="display: flex; flex-direction: column;">
           <span style="font-size: 7.5px; color: #64748b; font-weight: 600; text-transform: uppercase;">Tensión / Velocidad</span>
-          <span style="color: #0f172a; font-weight: 600;">${tension || (rpm ? `${rpm}` : '-')}</span>
+          <span style="color: #0f172a; font-weight: 600;">${(() => {
+            const t = tension && tension !== '-' ? String(tension).trim() : '';
+            const r = rpm && rpm !== '-' ? String(rpm).trim() : '';
+            const velKpi = (placa?.kpis || []).find(
+              (k: any) =>
+                k?.codigo === 'velocidad' || String(k?.codigo || '').includes('velocidad'),
+            );
+            const vTexto = r || velKpi?.valorTexto || '';
+            if (t && vTexto && !t.includes(vTexto)) return `${t} · ${vTexto}`;
+            return t || vTexto || '-';
+          })()}</span>
         </div>
         
-        ${requiereContador && (horometroInterv || horometroAcum) ? `
+        ${
+          requiereContador && (horometroInterv || horometroAcum)
+            ? `
         <div style="display: flex; flex-direction: column; grid-column: span 2; background: #f8fafc; padding: 3px 6px; border-radius: 3px; border: 1px solid #e2e8f0; margin-top: 2px;">
           <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">${labelInterv}</span>
           <span style="color: #0f172a; font-weight: 700; font-size: 9.5px;">${horometroInterv || horometroAcum}</span>
@@ -2070,17 +2116,34 @@ export const generarDatosClienteConFichaTecnica = (
           <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">${labelAcum}</span>
           <span style="color: #0f172a; font-weight: 700; font-size: 9.5px;">${horometroAcum || horometroInterv || '-'}</span>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
 
-        ${placa?.kpis && placa.kpis.length > 0 ? `
+        ${(() => {
+          const tieneCajasContador = Boolean(
+            requiereContador && (horometroInterv || horometroAcum),
+          );
+          const kpisVisibles = (placa?.kpis || []).filter((kpi: any) => {
+            if (kpi?.codigo === 'horas_actuales') {
+              return !tieneCajasContador && unidadUso === 'HORAS';
+            }
+            return true;
+          });
+          if (kpisVisibles.length === 0) return '';
+          return `
         <div style="grid-column: span 4; display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap;">
-          ${placa.kpis.map((kpi: any) => `
+          ${kpisVisibles
+            .map(
+              (kpi: any) => `
             <span style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; border-radius: 3px; padding: 2px 6px; font-size: 8px; font-weight: 600;">
               ${kpi.etiqueta || kpi.nombre || kpi.codigo || kpi.clave}: <strong>${kpi.valorTexto || kpi.valor || kpi.valor_texto || ''}</strong>
             </span>
-          `).join('')}
-        </div>
-        ` : ''}
+          `,
+            )
+            .join('')}
+        </div>`;
+        })()}
       </div>
     </div>
 
@@ -2120,12 +2183,16 @@ export const generarSeccionRepuestosSegregados = (
 
   // Fallback si solo existen cadenas legacy
   if (!tieneDetallados && tieneLegacy) {
-    const rows = (repuestosWms || []).map((r, idx) => `
+    const rows = (repuestosWms || [])
+      .map(
+        (r, idx) => `
       <tr>
         <td style="text-align: center; width: 6%;">${idx + 1}</td>
         <td>${r}</td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
     return `
       <div class="section repuestos-seccion" style="page-break-inside: auto; break-inside: auto;">
@@ -2147,9 +2214,9 @@ export const generarSeccionRepuestosSegregados = (
 
   // Segregación estructurada en las 3 modalidades canónicas
   const items = repuestosDetallados || [];
-  const itemsBodega = items.filter(r => r.origen === 'BODEGA');
-  const itemsCliente = items.filter(r => r.origen === 'CLIENTE');
-  const itemsCompraDirecta = items.filter(r => r.origen === 'COMPRA_DIRECTA');
+  const itemsBodega = items.filter((r) => r.origen === 'BODEGA');
+  const itemsCliente = items.filter((r) => r.origen === 'CLIENTE');
+  const itemsCompraDirecta = items.filter((r) => r.origen === 'COMPRA_DIRECTA');
 
   let html = `
     <div class="section repuestos-seccion" style="page-break-inside: auto; break-inside: auto;">
@@ -2158,7 +2225,9 @@ export const generarSeccionRepuestosSegregados = (
 
   // TABLA A: BODEGA MEKANOS (GARANTÍA WMS)
   if (itemsBodega.length > 0) {
-    const rowsBodega = itemsBodega.map((item, idx) => `
+    const rowsBodega = itemsBodega
+      .map(
+        (item, idx) => `
       <tr>
         <td style="text-align: center; width: 5%;">${idx + 1}</td>
         <td style="width: 18%;">
@@ -2175,7 +2244,9 @@ export const generarSeccionRepuestosSegregados = (
           ${item.ubicacionBodega ? `<div style="font-size: 7.5px; color: #64748b;">${item.ubicacionBodega}</div>` : ''}
         </td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
     html += `
       <div class="repuestos-bloque" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 10px;">
@@ -2206,7 +2277,9 @@ export const generarSeccionRepuestosSegregados = (
 
   // TABLA B: SUMINISTRO CLIENTE (EXCLUSIÓN DE RESPONSABILIDAD)
   if (itemsCliente.length > 0) {
-    const rowsCliente = itemsCliente.map((item, idx) => `
+    const rowsCliente = itemsCliente
+      .map(
+        (item, idx) => `
       <tr>
         <td style="text-align: center; width: 5%;">${idx + 1}</td>
         <td style="width: 50%;">
@@ -2221,7 +2294,9 @@ export const generarSeccionRepuestosSegregados = (
           </span>
         </td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
     html += `
       <div class="repuestos-bloque" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 10px;">
@@ -2251,7 +2326,9 @@ export const generarSeccionRepuestosSegregados = (
 
   // TABLA C: COMPRA DIRECTA EN CAMPO
   if (itemsCompraDirecta.length > 0) {
-    const rowsCompra = itemsCompraDirecta.map((item, idx) => `
+    const rowsCompra = itemsCompraDirecta
+      .map(
+        (item, idx) => `
       <tr>
         <td style="text-align: center; width: 5%;">${idx + 1}</td>
         <td style="width: 50%;">
@@ -2266,7 +2343,9 @@ export const generarSeccionRepuestosSegregados = (
           </span>
         </td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
     html += `
       <div class="repuestos-bloque" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 10px;">

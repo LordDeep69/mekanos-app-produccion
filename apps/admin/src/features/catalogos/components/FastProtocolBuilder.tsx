@@ -2,11 +2,13 @@
 
 import {
   EamSelect,
+  type EamSelectOption,
   useArquetiposEam,
   useBancoMagnitudesEam,
   useUnidadesEam,
 } from '@/features/catalogos-eam';
 import {
+  ModoRespuestaBadges,
   ModoRespuestaSelector,
   getModoRespuestaBadgeLabel,
   type ConfigInputDeclarativo,
@@ -50,6 +52,7 @@ import {
   Plus,
   Power,
   Search,
+  Settings2,
   Sparkles,
   Trash2,
   Wrench,
@@ -66,22 +69,66 @@ interface FastProtocolBuilderProps {
 
 const TIPOS_CUALITATIVOS = TIPOS_ACTIVIDAD.filter((t) => t.value !== 'MEDICION');
 
-const UNIDADES_FRECUENTES = [
-  { value: 'mm', label: 'mm — Milímetros (Longitud / Nivelación)', badge: 'LONGITUD' },
-  { value: 'm/s', label: 'm/s — Metros por segundo (Velocidad Lineal)', badge: 'VELOCIDAD' },
-  { value: 's', label: 's — Segundos (Tiempo de Apertura / Respuesta)', badge: 'TIEMPO' },
-  { value: 'V', label: 'V — Voltios AC/DC (Tensión Eléctrica)', badge: 'ELÉCTRICO' },
-  { value: 'A', label: 'A — Amperios (Corriente Eléctrica)', badge: 'ELÉCTRICO' },
-  { value: '°C', label: '°C — Grados Celsius (Temperatura)', badge: 'TÉRMICO' },
-  { value: 'PSI', label: 'PSI — Libras por pulgada cuadrada (Presión)', badge: 'PRESIÓN' },
-  { value: 'bar', label: 'bar — Bares (Presión)', badge: 'PRESIÓN' },
-  { value: 'RPM', label: 'RPM — Revoluciones por minuto', badge: 'MECÁNICO' },
-  { value: 'Hz', label: 'Hz — Hercios (Frecuencia)', badge: 'FRECUENCIA' },
-  { value: 'mm/s', label: 'mm/s — Severidad de Vibración RMS', badge: 'VIBRACIÓN' },
-  { value: 'dB', label: 'dB — Decibelios (Nivel de Ruido)', badge: 'ACÚSTICO' },
-  { value: 'kg', label: 'kg — Kilogramos (Masa / Carga)', badge: 'MASA' },
-  { value: '%', label: '% — Porcentaje', badge: ' ESCALA' },
+const UNIDADES_FRECUENTES: {
+  value: string;
+  label: string;
+  description?: string;
+  badge: string;
+}[] = [
+  { value: 'mm', label: 'Milímetros', description: 'Longitud / Nivelación', badge: 'LONGITUD' },
+  {
+    value: 'm/s',
+    label: 'Metros por segundo',
+    description: 'Velocidad Lineal',
+    badge: 'VELOCIDAD',
+  },
+  { value: 's', label: 'Segundos', description: 'Tiempo de Apertura / Respuesta', badge: 'TIEMPO' },
+  { value: 'V', label: 'Voltios AC/DC', description: 'Tensión Eléctrica', badge: 'ELÉCTRICO' },
+  { value: 'A', label: 'Amperios', description: 'Corriente Eléctrica', badge: 'ELÉCTRICO' },
+  { value: '°C', label: 'Grados Celsius', description: 'Temperatura', badge: 'TÉRMICO' },
+  {
+    value: 'PSI',
+    label: 'Libras / pulg² (PSI)',
+    description: 'Presión Hidráulica / Aire',
+    badge: 'PRESIÓN',
+  },
+  { value: 'bar', label: 'Bares', description: 'Presión Operativa', badge: 'PRESIÓN' },
+  {
+    value: 'RPM',
+    label: 'Revoluciones por minuto',
+    description: 'Velocidad Angular',
+    badge: 'MECÁNICO',
+  },
+  { value: 'Hz', label: 'Hercios', description: 'Frecuencia', badge: 'FRECUENCIA' },
+  {
+    value: 'mm/s',
+    label: 'Velocidad RMS',
+    description: 'Severidad de Vibración',
+    badge: 'VIBRACIÓN',
+  },
+  { value: 'dB', label: 'Decibelios', description: 'Nivel de Ruido', badge: 'ACÚSTICO' },
+  { value: 'kg', label: 'Kilogramos', description: 'Masa / Carga Nominal', badge: 'MASA' },
+  { value: '%', label: 'Porcentaje', description: 'Relación / Capacidad', badge: 'ESCALA' },
 ];
+
+function buildUomSelectOption(
+  simbolo: string,
+  nombre: string,
+  badge?: string | null,
+  description?: string | null,
+): EamSelectOption {
+  return {
+    value: simbolo,
+    label: nombre,
+    description: description || undefined,
+    badge: badge?.trim() || 'UOM',
+    icon: (
+      <span className="inline-flex items-center justify-center min-w-[44px] h-6 px-1.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200/80 font-mono text-[11px] font-black tracking-tight">
+        {simbolo}
+      </span>
+    ),
+  };
+}
 
 function inferirCategoriaParametro(
   unidad: string,
@@ -226,21 +273,27 @@ export function FastProtocolBuilder({
   const [togglingServiceStatus, setTogglingServiceStatus] = useState(false);
 
   // Opciones unificadas de Unidades de Medida (60 Magnitudes / 263 Unidades + Frecuentes)
-  const opcionesUnidadesUom = useMemo(() => {
-    const map = new Map<string, { value: string; label: string; badge?: string }>();
+  const opcionesUnidadesUom = useMemo<EamSelectOption[]>(() => {
+    const map = new Map<string, EamSelectOption>();
     for (const f of UNIDADES_FRECUENTES) {
-      map.set(f.value.toUpperCase(), f);
+      map.set(
+        f.value.toUpperCase(),
+        buildUomSelectOption(f.value, f.label, f.badge, f.description),
+      );
     }
     for (const u of unidadesDb) {
       const sym = (u.simbolo || u.codigo || '').trim();
       if (!sym) continue;
       const key = sym.toUpperCase();
       if (!map.has(key)) {
-        map.set(key, {
-          value: sym,
-          label: `${sym} — ${u.nombre}`,
-          badge: u.magnitud?.nombre_magnitud || u.tipo_magnitud || 'UOM',
-        });
+        map.set(
+          key,
+          buildUomSelectOption(
+            sym,
+            u.nombre || sym,
+            u.magnitud?.nombre_magnitud || u.tipo_magnitud || 'UOM',
+          ),
+        );
       }
     }
     for (const mag of bancoMagnitudes) {
@@ -249,11 +302,7 @@ export function FastProtocolBuilder({
         if (!sym) continue;
         const key = sym.toUpperCase();
         if (!map.has(key)) {
-          map.set(key, {
-            value: sym,
-            label: `${sym} — ${u.nombre ?? sym}`,
-            badge: mag.nombre_magnitud,
-          });
+          map.set(key, buildUomSelectOption(sym, u.nombre ?? sym, mag.nombre_magnitud));
         }
       }
     }
@@ -436,7 +485,13 @@ export function FastProtocolBuilder({
       });
 
       setQuickTaskText((prev) => ({ ...prev, [sectionKey]: '' }));
+      setQuickControlType((prev) => ({ ...prev, [sectionKey]: 'ESCALA_ESTADO' }));
+      setQuickControlConfig((prev) => ({ ...prev, [sectionKey]: null }));
       setQuickRolSemantico((prev) => ({ ...prev, [sectionKey]: '' }));
+      if (isCustomNature) {
+        setQuickTaskType((prev) => ({ ...prev, [sectionKey]: 'INSPECCION' }));
+        setQuickCustomNature((prev) => ({ ...prev, [sectionKey]: '' }));
+      }
       await refreshAll();
       toast.success('Tarea agregada al protocolo');
 
@@ -1002,7 +1057,7 @@ export function FastProtocolBuilder({
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/15 transition-all cursor-pointer"
               >
                 <Plus className="h-4 w-4 text-emerald-300" />
-                <span>+ Nueva Sección / Subsistema</span>
+                <span>Nueva Sección / Subsistema</span>
               </button>
 
               <button
@@ -1160,10 +1215,10 @@ export function FastProtocolBuilder({
                       return (
                         <div
                           key={act.id_actividad_catalogo}
-                          className="px-5 py-2.5 flex items-center justify-between gap-3 hover:bg-blue-50/30 transition-colors"
+                          className="px-5 py-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 hover:bg-blue-50/30 transition-colors"
                         >
                           {isEditing ? (
-                            <div className="flex-1 space-y-2.5 bg-blue-50/40 p-3 rounded-xl border border-blue-200">
+                            <div className="w-full flex-1 space-y-2.5 bg-blue-50/40 p-3 rounded-xl border border-blue-200">
                               <div className="flex flex-wrap items-center gap-2">
                                 <input
                                   type="text"
@@ -1258,7 +1313,7 @@ export function FastProtocolBuilder({
                             </div>
                           ) : (
                             <>
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1 basis-[260px]">
                                 {/* Botones rápidos ↑ / ↓ */}
                                 <div className="flex items-center gap-0.5 shrink-0">
                                   <button
@@ -1285,7 +1340,7 @@ export function FastProtocolBuilder({
                                   </button>
                                 </div>
 
-                                <span className="text-[11px] font-mono font-bold text-slate-400 w-6">
+                                <span className="text-[11px] font-mono font-bold text-slate-400 w-6 shrink-0">
                                   #{idx + 1}
                                 </span>
 
@@ -1300,18 +1355,18 @@ export function FastProtocolBuilder({
 
                                 <span
                                   onClick={() => startEditTask(act)}
-                                  className="text-xs font-semibold text-slate-800 hover:text-blue-600 cursor-pointer truncate"
-                                  title="Clic para editar tarea inline"
+                                  className="text-xs font-semibold text-slate-800 hover:text-blue-600 cursor-pointer leading-snug line-clamp-2"
+                                  title={`${act.descripcion_actividad} — Clic para editar tarea inline`}
                                 >
                                   {act.descripcion_actividad}
                                 </span>
                               </div>
 
-                              <div className="flex items-center gap-1.5 shrink-0">
+                              <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0 max-w-full">
                                 {act.rol_semantico && (
                                   <span
                                     title={`Rol semántico: ${act.rol_semantico}`}
-                                    className="hidden md:inline-flex px-2 py-0.5 rounded text-[10px] font-mono font-bold text-amber-800 bg-amber-50 border border-amber-200"
+                                    className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold text-amber-800 bg-amber-50 border border-amber-200 whitespace-nowrap"
                                   >
                                     {act.rol_semantico === 'LECTURA_CONTADOR_ACTIVO'
                                       ? '🔢 CONTADOR'
@@ -1321,36 +1376,39 @@ export function FastProtocolBuilder({
                                 <button
                                   type="button"
                                   onClick={() => openRowControlModal(act)}
-                                  title="Clic para configurar botones personalizados, semáforo y modo de respuesta"
-                                  className={cn(
-                                    'hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] font-mono border max-w-[200px] truncate cursor-pointer transition-colors hover:ring-2 hover:ring-indigo-200',
-                                    act.tipo_control_input &&
-                                      act.tipo_control_input !== 'ESCALA_ESTADO'
-                                      ? 'font-bold text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100'
-                                      : 'text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100',
-                                  )}
-                                >
-                                  {getModoRespuestaBadgeLabel(
+                                  title={`Modo de respuesta: ${getModoRespuestaBadgeLabel(
                                     act.tipo_control_input,
                                     act.config_input_json,
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => startEditTask(act)}
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                                  title="Editar tarea"
+                                  )} — Clic para configurar botones personalizados, semáforo y modo de respuesta`}
+                                  className="inline-flex flex-wrap items-center justify-end gap-1 p-1 rounded-xl hover:bg-indigo-50/70 hover:ring-2 hover:ring-indigo-200 cursor-pointer transition-all max-w-full"
                                 >
-                                  <Edit3 className="h-3.5 w-3.5" />
+                                  <ModoRespuestaBadges
+                                    tipoControlInput={act.tipo_control_input}
+                                    configInputJson={act.config_input_json}
+                                    align="end"
+                                    showTextFreeChip
+                                    showSemaforoCode
+                                  />
+                                  <Settings2 className="h-3 w-3 text-slate-400 shrink-0 ml-0.5" />
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteTask(act)}
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                                  title="Quitar tarea del protocolo"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditTask(act)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                    title="Editar tarea"
+                                  >
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteTask(act)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                    title="Quitar tarea del protocolo"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
                               </div>
                             </>
                           )}
@@ -1454,7 +1512,7 @@ export function FastProtocolBuilder({
                         ) : (
                           <Plus className="h-3.5 w-3.5" />
                         )}
-                        <span>+ Agregar (Enter)</span>
+                        <span>Agregar (Enter)</span>
                       </button>
                     </div>
                   </div>
@@ -1664,17 +1722,20 @@ export function FastProtocolBuilder({
           )}
 
           {/* BARRA DE CREACIÓN RÁPIDA INLINE DE MEDICIÓN (ZONA B) */}
-          <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200/90 space-y-2">
+          <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200/90 space-y-3">
             <div className="text-[11px] font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+              <Sparkles className="h-3.5 w-3.5 text-purple-600 shrink-0" />
               <span>
                 Agregar Parámetro Operativo / Medición Cuantitativa Rápida (Sincroniza con UoM y
                 Rango Normal)
               </span>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-center">
-              <div className="lg:col-span-4">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+              <div className="md:col-span-7">
+                <label className="block text-[10px] font-bold text-purple-800 uppercase tracking-wider mb-1">
+                  Nombre del Parámetro *
+                </label>
                 <input
                   ref={medNombreInputRef}
                   type="text"
@@ -1686,16 +1747,19 @@ export function FastProtocolBuilder({
                       handleQuickAddMedicion();
                     }
                   }}
-                  placeholder="Ej: Precisión de Nivelación en Parada"
-                  className="w-full px-3.5 py-2 text-xs font-semibold bg-white border border-purple-300 rounded-xl focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-100"
+                  placeholder="Ej: Precisión de Nivelación en Parada (E2E)"
+                  className="w-full h-10 px-3.5 text-xs font-semibold bg-white border border-purple-300 rounded-xl focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-100"
                 />
               </div>
 
-              <div className="lg:col-span-2">
+              <div className="md:col-span-5">
+                <label className="block text-[10px] font-bold text-purple-800 uppercase tracking-wider mb-1">
+                  Subsistema / Parte EAM
+                </label>
                 <select
                   value={medSistemaId}
                   onChange={(e) => setMedSistemaId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-semibold bg-white border border-purple-300 rounded-xl text-slate-700 focus:outline-none focus:border-purple-600"
+                  className="w-full h-10 px-3 text-xs font-semibold bg-white border border-purple-300 rounded-xl text-slate-700 focus:outline-none focus:border-purple-600"
                 >
                   {sistemasSelectOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -1704,19 +1768,30 @@ export function FastProtocolBuilder({
                   ))}
                 </select>
               </div>
+            </div>
 
-              <div className="lg:col-span-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="md:col-span-6">
+                <label className="block text-[10px] font-bold text-purple-800 uppercase tracking-wider mb-1">
+                  Unidad de Medida (UoM)
+                </label>
                 <EamSelect
                   value={medUnidad}
                   onChange={(val) => setMedUnidad(val || 'mm')}
                   options={opcionesUnidadesUom}
                   placeholder="Unidad UoM (mm, m/s, s...)"
+                  searchPlaceholder="Buscar unidad, símbolo o magnitud..."
                   searchable
+                  usePortal
                   dropUp
+                  minDropdownWidth={400}
                 />
               </div>
 
-              <div className="lg:col-span-1">
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold text-purple-800 uppercase tracking-wider mb-1">
+                  Mín Normal
+                </label>
                 <input
                   type="number"
                   step="any"
@@ -1728,13 +1803,16 @@ export function FastProtocolBuilder({
                       handleQuickAddMedicion();
                     }
                   }}
-                  placeholder="Mín"
+                  placeholder="0"
                   title="Valor Mínimo Normal"
-                  className="w-full px-2.5 py-2 text-xs font-mono font-bold text-center bg-white border border-purple-300 rounded-xl focus:outline-none focus:border-purple-600"
+                  className="w-full h-10 px-2.5 text-xs font-mono font-bold text-center bg-white border border-purple-300 rounded-xl focus:outline-none focus:border-purple-600"
                 />
               </div>
 
-              <div className="lg:col-span-1">
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold text-purple-800 uppercase tracking-wider mb-1">
+                  Máx Normal
+                </label>
                 <input
                   type="number"
                   step="any"
@@ -1746,25 +1824,25 @@ export function FastProtocolBuilder({
                       handleQuickAddMedicion();
                     }
                   }}
-                  placeholder="Máx"
+                  placeholder="6"
                   title="Valor Máximo Normal"
-                  className="w-full px-2.5 py-2 text-xs font-mono font-bold text-center bg-white border border-purple-300 rounded-xl focus:outline-none focus:border-purple-600"
+                  className="w-full h-10 px-2.5 text-xs font-mono font-bold text-center bg-white border border-purple-300 rounded-xl focus:outline-none focus:border-purple-600"
                 />
               </div>
 
-              <div className="lg:col-span-1">
+              <div className="md:col-span-2">
                 <button
                   type="button"
                   disabled={!medNombre.trim() || savingMedicion}
                   onClick={handleQuickAddMedicion}
-                  className="w-full px-3 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 transition-all inline-flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                  className="w-full h-10 px-3.5 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 transition-all inline-flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer whitespace-nowrap"
                 >
                   {savingMedicion ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <Plus className="h-3.5 w-3.5" />
                   )}
-                  <span>Enter</span>
+                  <span>Agregar (Enter)</span>
                 </button>
               </div>
             </div>
@@ -2043,158 +2121,423 @@ export function FastProtocolBuilder({
       {/* ═══════════════════════════════════════════════════════════════════════
           MODAL 3: VISTA PREVIA PROTOCOLO PDF (SIMULADOR 1:1 REPORTE UNIVERSAL)
       ═══════════════════════════════════════════════════════════════════════ */}
-      {isPdfPreviewOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <FileText className="h-5 w-5 text-emerald-400" />
-                <div>
-                  <h3 className="text-base font-black">
-                    Simulación Visual 1:1 — Reporte Técnico PDF Universal EAM
-                  </h3>
-                  <p className="text-xs text-slate-300">
-                    Así se renderizarán la Tabla de Checklist Cualitativo y las Tarjetas de
-                    Telemetría UoM al generar el PDF de la orden.
-                  </p>
+      {isPdfPreviewOpen &&
+        (() => {
+          const seccionesConTareas = seccionesSubsistema.filter(
+            (s) => s.tareasCualitativas.length > 0,
+          );
+          const todasCualitativas = seccionesConTareas.flatMap((s) => s.tareasCualitativas);
+          const rolesSemanticosDetectados = Array.from(
+            new Set(
+              todasCualitativas
+                .map((t) => t.rol_semantico?.trim())
+                .filter((r): r is string => Boolean(r)),
+            ),
+          );
+          const obligatoriasCount =
+            todasCualitativas.filter((t) => t.es_obligatoria).length +
+            medicionesZonaB.filter((m) => m.es_obligatoria).length;
+          const tipoEquipoDisplay = detalle.tipo_equipo?.nombre || 'Activo Industrial Universal';
+          const codigoEquipoDisplay = detalle.tipo_equipo?.codigo || detalle.aplica_a?.[0] || 'EAM';
+
+          return (
+            <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+              <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+                {/* Barra superior del simulador */}
+                <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center shrink-0">
+                      <FileText className="h-5 w-5 text-emerald-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm sm:text-base font-black truncate">
+                          Simulación Visual 1:1 — Reporte Técnico PDF Universal EAM
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/20 text-sky-200 border border-sky-400/30">
+                          A4 Puppeteer Mirror
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 truncate">
+                        Vista fiel de la hoja corporativa MEKANOS S.A.S. · Subsistemas Zona A +
+                        Telemetría UoM Zona B
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPdfPreviewOpen(false)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer shrink-0"
+                    title="Cerrar simulación"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsPdfPreviewOpen(false)}
-                className="p-1 text-slate-400 hover:text-white"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-100">
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 space-y-6">
-                {/* Encabezado simulado PDF */}
-                <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-blue-700">
-                      MEKANOS S.A.S · REPORTE TÉCNICO OFICIAL EAM
-                    </div>
-                    <h4 className="text-lg font-black text-slate-900 mt-0.5">
-                      {detalle.nombre_tipo} ({detalle.codigo_tipo})
-                    </h4>
-                  </div>
-                  <div className="text-right text-xs text-slate-600">
-                    <div className="font-bold text-slate-900">
-                      {detalle.tipo_equipo?.nombre || 'Activo Universal'}
-                    </div>
-                    <div>
-                      {totalInspecciones} inspecciones · {medicionesZonaB.length} mediciones UoM
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bloque 1 PDF: Checklist de Inspección por Subsistemas */}
-                <div className="space-y-3">
-                  <div className="text-xs font-black uppercase tracking-wider text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-blue-600">
-                    1. LISTA DE CHEQUEO E INSPECCIÓN TÉCNICA POR SUBSISTEMA
-                  </div>
-
-                  {seccionesSubsistema
-                    .filter((s) => s.tareasCualitativas.length > 0)
-                    .map((sec) => (
-                      <div
-                        key={sec.key}
-                        className="border border-slate-200 rounded-lg overflow-hidden"
-                      >
-                        <div className="bg-slate-800 text-white px-3 py-1.5 text-xs font-bold flex justify-between">
-                          <span>{sec.nombre_sistema.toUpperCase()}</span>
-                          <span className="font-mono text-[10px] text-slate-300">
-                            B = Bueno | R = Regular | M = Malo | C = Corregido | NA
+                {/* Lienzo A4 */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-7 bg-slate-200/80">
+                  <div className="max-w-[820px] mx-auto bg-white rounded-xl shadow-[0_22px_55px_-15px_rgba(15,23,42,0.3)] border border-slate-300/90 overflow-hidden">
+                    {/* 1. BANNER CORPORATIVO MEKANOS S.A.S */}
+                    <div className="bg-gradient-to-r from-[#1A365D] via-[#244673] to-[#2B548A] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b-4 border-[#0284C7]">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-11 h-11 rounded-lg bg-white text-[#1A365D] flex flex-col items-center justify-center shadow-sm shrink-0">
+                          <span className="text-sm font-black tracking-tighter leading-none">
+                            MK
+                          </span>
+                          <span className="text-[7px] font-extrabold tracking-widest mt-0.5 text-sky-700">
+                            S.A.S
                           </span>
                         </div>
-                        <table className="w-full text-xs">
-                          <tbody className="divide-y divide-slate-200">
-                            {sec.tareasCualitativas.map((t, i) => (
-                              <tr key={t.id_actividad_catalogo}>
-                                <td className="px-3 py-1.5 font-mono text-slate-400 w-8">
-                                  {i + 1}
-                                </td>
-                                <td className="px-3 py-1.5 font-medium text-slate-800">
-                                  <div>{t.descripcion_actividad}</div>
-                                  {(t.naturaleza_personalizada || t.rol_semantico) && (
-                                    <div className="text-[10px] text-slate-400 mt-0.5">
-                                      {t.naturaleza_personalizada
-                                        ? `${t.naturaleza_personalizada} `
-                                        : ''}
-                                      {t.rol_semantico ? `· ${t.rol_semantico}` : ''}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-3 py-1.5 w-44 text-center font-mono text-[10px] text-indigo-800 bg-indigo-50/70 font-bold">
-                                  [{' '}
-                                  {getModoRespuestaBadgeLabel(
-                                    t.tipo_control_input,
-                                    t.config_input_json,
-                                  )}{' '}
-                                  ]
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <div>
+                          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-sky-200">
+                            MEKANOS S.A.S · GESTIÓN DE ACTIVOS INDUSTRIALES EAM
+                          </div>
+                          <h4 className="text-base sm:text-lg font-black tracking-tight leading-tight mt-0.5">
+                            INFORME TÉCNICO DE MANTENIMIENTO
+                          </h4>
+                          <p className="text-[11px] font-semibold text-sky-100 mt-0.5">
+                            {tipoEquipoDisplay.toUpperCase()} · {detalle.nombre_tipo.toUpperCase()}
+                          </p>
+                        </div>
                       </div>
-                    ))}
-                </div>
 
-                {/* Bloque 2 PDF: Tarjetas de Telemetría / Parámetros Operativos */}
-                <div className="space-y-3">
-                  <div className="text-xs font-black uppercase tracking-wider text-slate-800 bg-purple-50 px-3 py-2 rounded-lg border-l-4 border-purple-600">
-                    2. REGISTRO DE PARÁMETROS OPERATIVOS Y TELEMETRÍA (UoM)
-                  </div>
+                      <div className="bg-white/10 border border-white/25 rounded-lg px-3.5 py-2 text-right backdrop-blur-xs">
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-sky-200">
+                          Orden de Servicio (Simulada)
+                        </div>
+                        <div className="text-sm font-black font-mono tracking-wide">
+                          OT-EAM-{detalle.codigo_tipo}
+                        </div>
+                        <div className="text-[9px] font-semibold text-emerald-200 mt-0.5">
+                          ● PLANTILLA {detalle.categoria}
+                        </div>
+                      </div>
+                    </div>
 
-                  {medicionesZonaB.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic px-2">
-                      Sin mediciones numéricas configuradas.
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {medicionesZonaB.map((m) => (
-                        <div
-                          key={m.id_actividad_catalogo}
-                          className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-1"
-                        >
-                          <div className="text-[10px] font-bold text-slate-500 uppercase truncate">
-                            {m.nombre_sistema}
+                    <div className="p-5 sm:p-6 space-y-5">
+                      {/* 2. FRANJA METADATA + KPIs DEL PROTOCOLO */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                            Arquetipo / Activo
                           </div>
-                          <div className="text-xs font-bold text-slate-900">
-                            {m.descripcion_actividad}
+                          <div className="text-xs font-extrabold text-slate-900 mt-0.5 truncate">
+                            {tipoEquipoDisplay}
                           </div>
-                          <div className="flex items-baseline justify-between pt-1">
-                            <span className="text-base font-black font-mono text-indigo-700">
-                              — {m.parametro_medicion?.unidad || ''}
-                            </span>
-                            <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                              Normal: [{m.parametro_medicion?.rango_min ?? '—'} -{' '}
-                              {m.parametro_medicion?.rango_max ?? '—'}]
-                            </span>
+                          <div className="text-[10px] font-mono font-bold text-sky-700 mt-0.5">
+                            Código: {codigoEquipoDisplay}
                           </div>
                         </div>
-                      ))}
+
+                        <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                            Subsistemas Activos
+                          </div>
+                          <div className="text-base font-black text-slate-900 mt-0.5">
+                            {seccionesConTareas.length}
+                          </div>
+                          <div className="text-[10px] text-slate-500">Con tareas cualitativas</div>
+                        </div>
+
+                        <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                            Actividades Checklist
+                          </div>
+                          <div className="text-base font-black text-slate-900 mt-0.5">
+                            {totalInspecciones}
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            {obligatoriasCount} obligatoria(s)
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                            Telemetría UoM (Zona B)
+                          </div>
+                          <div className="text-base font-black text-sky-700 mt-0.5">
+                            {medicionesZonaB.length}
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            {detalle.duracion_estimada_horas
+                              ? `Est. ${detalle.duracion_estimada_horas}h`
+                              : 'Tarjetas + Tabla SI'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 2B. HIGHLIGHT ROLES SEMÁNTICOS ESPECIALES */}
+                      {rolesSemanticosDetectados.length > 0 && (
+                        <div className="rounded-lg border border-indigo-200 bg-indigo-50/70 px-3.5 py-2.5 flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900">
+                            ⚡ Enlace Semántico Automático PDF / Hoja de Vida:
+                          </span>
+                          {rolesSemanticosDetectados.map((rol) => (
+                            <span
+                              key={rol}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-white text-indigo-800 border border-indigo-200"
+                            >
+                              {rol}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 3. BLOQUE 1 PDF: CHECKLIST POR SUBSISTEMAS */}
+                      <div className="space-y-3">
+                        <div className="bg-[#244673] text-white px-3.5 py-2 rounded-md text-[11px] font-black uppercase tracking-wider flex flex-wrap items-center justify-between gap-2">
+                          <span>
+                            📋 PROTOCOLO DE INSPECCIÓN Y ACTIVIDADES PREVENTIVAS (
+                            {totalInspecciones} TAREAS)
+                          </span>
+                          <span className="font-mono text-[9.5px] font-semibold text-sky-200">
+                            B=Bueno · R=Regular · M=Malo · C=Corregido · NA
+                          </span>
+                        </div>
+
+                        {seccionesConTareas.length === 0 ? (
+                          <div className="p-4 rounded-lg border border-dashed border-slate-300 text-center text-xs text-slate-500">
+                            Aún no hay actividades de inspección en Zona A para renderizar tablas
+                            por subsistema.
+                          </div>
+                        ) : (
+                          seccionesConTareas.map((sec) => (
+                            <div key={sec.key} className="space-y-1.5">
+                              <div className="bg-[#F1F5F9] text-[#1E3A8A] px-3 py-1.5 rounded border-l-4 border-[#1D4ED8] flex items-center justify-between">
+                                <span className="text-[11px] font-extrabold tracking-wide">
+                                  ⚙️ SUBSISTEMA: {sec.nombre_sistema.toUpperCase()}
+                                </span>
+                                <span className="text-[10px] font-bold bg-[#E2E8F0] text-slate-700 px-2 py-0.5 rounded-full">
+                                  {sec.tareasCualitativas.length} tarea(s)
+                                </span>
+                              </div>
+
+                              <div className="border border-slate-200 rounded-md overflow-hidden">
+                                <table className="w-full text-xs border-collapse">
+                                  <thead>
+                                    <tr className="bg-[#244673] text-white text-[10px] uppercase tracking-wider">
+                                      <th className="px-2.5 py-1.5 text-left font-bold w-9">#</th>
+                                      <th className="px-3 py-1.5 text-left font-bold">
+                                        Actividad / Tarea
+                                      </th>
+                                      <th className="px-3 py-1.5 text-center font-bold w-[220px]">
+                                        Estado / Control
+                                      </th>
+                                      <th className="px-3 py-1.5 text-left font-bold w-[170px]">
+                                        Observaciones Técnicas
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-200 bg-white">
+                                    {sec.tareasCualitativas.map((t, i) => (
+                                      <tr
+                                        key={t.id_actividad_catalogo}
+                                        className="even:bg-slate-50/50"
+                                      >
+                                        <td className="px-2.5 py-2 font-mono text-[11px] font-bold text-slate-400 align-top">
+                                          {i + 1}
+                                        </td>
+                                        <td className="px-3 py-2 align-top">
+                                          <div className="font-semibold text-slate-800 leading-snug">
+                                            {t.descripcion_actividad}
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                                            {t.es_obligatoria && (
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                                Obligatoria
+                                              </span>
+                                            )}
+                                            {t.precauciones && (
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                                LOTO / Seguridad
+                                              </span>
+                                            )}
+                                            {t.naturaleza_personalizada && (
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                                {t.naturaleza_personalizada}
+                                              </span>
+                                            )}
+                                            {t.rol_semantico && (
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                {t.rol_semantico}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-2 align-middle text-center bg-slate-50/50">
+                                          <ModoRespuestaBadges
+                                            tipoControlInput={t.tipo_control_input}
+                                            configInputJson={t.config_input_json}
+                                            align="center"
+                                            showSemaforoCode
+                                          />
+                                        </td>
+                                        <td className="px-3 py-2 text-[10px] text-slate-400 italic align-middle">
+                                          {t.instrucciones
+                                            ? t.instrucciones
+                                            : 'Sin observaciones en campo'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* 4. BLOQUE 2 PDF: TARJETAS + TABLA DE TELEMETRÍA UoM */}
+                      <div className="space-y-3">
+                        <div className="bg-[#244673] text-white px-3.5 py-2 rounded-md text-[11px] font-black uppercase tracking-wider flex items-center justify-between gap-2">
+                          <span>
+                            📊 REGISTRO DE PARÁMETROS OPERATIVOS (TELEMETRÍA Y VARIABLES UoM)
+                          </span>
+                          <span className="font-mono text-[9.5px] font-semibold text-sky-200">
+                            {medicionesZonaB.length} variable(s) SI
+                          </span>
+                        </div>
+
+                        {medicionesZonaB.length === 0 ? (
+                          <div className="p-4 rounded-lg border border-dashed border-slate-300 text-center text-xs text-slate-500">
+                            Sin mediciones numéricas configuradas en Zona B.
+                          </div>
+                        ) : (
+                          <>
+                            {/* Tarjetas con borde superior azul #0284C7 igual a tipo-universal-eam.template.ts */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                              {medicionesZonaB.map((m) => (
+                                <div
+                                  key={m.id_actividad_catalogo}
+                                  className="bg-[#F8FAFC] border border-slate-200 border-t-[3px] border-t-[#0284C7] rounded-md px-3 py-2.5 text-center space-y-1"
+                                >
+                                  <div className="text-[9px] font-bold uppercase tracking-wide text-slate-500 truncate">
+                                    {m.nombre_sistema}
+                                  </div>
+                                  <div className="text-[11px] font-extrabold text-slate-900 leading-tight min-h-[28px] flex items-center justify-center">
+                                    {m.descripcion_actividad}
+                                  </div>
+                                  <div className="text-sm font-black font-mono text-slate-900">
+                                    — {m.parametro_medicion?.unidad || 'UoM'}
+                                  </div>
+                                  <div className="text-[10px] font-extrabold text-[#15803D]">
+                                    ● CONFORME · [{m.parametro_medicion?.rango_min ?? '—'} —{' '}
+                                    {m.parametro_medicion?.rango_max ?? '—'}]
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Tabla oficial de telemetría igual a tipo-universal-eam.template.ts */}
+                            <div className="border border-slate-200 rounded-md overflow-hidden">
+                              <table className="w-full text-[11px] border-collapse">
+                                <thead>
+                                  <tr className="bg-[#F1F5F9] border-b border-slate-300 text-[10px] font-bold uppercase text-slate-700">
+                                    <th className="px-3 py-1.5 text-left">Parámetro / Variable</th>
+                                    <th className="px-3 py-1.5 text-center">Valor Medido</th>
+                                    <th className="px-3 py-1.5 text-center">Rango de Referencia</th>
+                                    <th className="px-3 py-1.5 text-center">Evaluación</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 bg-white">
+                                  {medicionesZonaB.map((m) => {
+                                    const unit = m.parametro_medicion?.unidad || '';
+                                    const rMin = m.parametro_medicion?.rango_min;
+                                    const rMax = m.parametro_medicion?.rango_max;
+                                    const rangoTexto =
+                                      rMin != null && rMax != null
+                                        ? `${rMin} - ${rMax} ${unit}`
+                                        : rMin != null
+                                          ? `≥ ${rMin} ${unit}`
+                                          : rMax != null
+                                            ? `≤ ${rMax} ${unit}`
+                                            : 'Estándar Fabricante';
+                                    return (
+                                      <tr key={`tbl-${m.id_actividad_catalogo}`}>
+                                        <td className="px-3 py-1.5 font-semibold text-slate-800">
+                                          {m.descripcion_actividad}
+                                        </td>
+                                        <td className="px-3 py-1.5 text-center font-mono font-extrabold text-slate-900">
+                                          — {unit}
+                                        </td>
+                                        <td className="px-3 py-1.5 text-center text-slate-500">
+                                          {rangoTexto}
+                                        </td>
+                                        <td className="px-3 py-1.5 text-center">
+                                          <span className="inline-block px-2 py-0.5 rounded text-[9px] font-extrabold bg-[#DCFCE7] text-[#166534] border border-[#86EFAC]">
+                                            NORMAL
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* 5. BLOQUE DE CIERRE: OBSERVACIONES, FIRMAS Y FOOTER CORPORATIVO */}
+                      <div className="pt-2 border-t border-slate-200 space-y-4">
+                        <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-600 mb-1">
+                            Observaciones Generales y Cierre Técnico
+                          </div>
+                          <p className="text-[11px] text-slate-600 italic">
+                            {detalle.plantilla_observacion ||
+                              'Servicio ejecutado a satisfacción siguiendo el protocolo oficial MEKANOS S.A.S.'}
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6 pt-2">
+                          <div className="text-center pt-5 border-t border-slate-300">
+                            <div className="text-[11px] font-bold text-slate-800">
+                              Técnico de Servicio Asignado
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              MEKANOS S.A.S · Departamento Técnico
+                            </div>
+                          </div>
+                          <div className="text-center pt-5 border-t border-slate-300">
+                            <div className="text-[11px] font-bold text-slate-800">
+                              Recibido a Satisfacción
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              Firma y Aprobación del Cliente
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-200 pt-2.5 text-center text-[10px] text-slate-500 leading-relaxed">
+                          <strong className="text-slate-700">MEKANOS S.A.S</strong> · NIT:
+                          900.542.123-1 · CRA 49C # 31-35 DIAG. AL SENA, CARTAGENA DE INDIAS
+                          <br />
+                          Línea PBX: (605) 635-9384 · WhatsApp Soporte 24/7: 315-708-3350 ·
+                          info@mekanos.com.co
+                        </div>
+                      </div>
                     </div>
-                  )}
+                  </div>
+                </div>
+
+                <div className="px-5 py-3 bg-white border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">
+                    Previsualización estructurada conforme a{' '}
+                    <code className="font-mono text-slate-700">tipo-universal-eam.template.ts</code>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsPdfPreviewOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 cursor-pointer"
+                  >
+                    Cerrar Vista Previa
+                  </button>
                 </div>
               </div>
             </div>
-
-            <div className="px-6 py-3 bg-white border-t border-slate-200 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsPdfPreviewOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800"
-              >
-                Cerrar Vista Previa
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          );
+        })()}
 
       {/* Modal directo al hacer clic en el pill de modo de respuesta de una fila */}
       {rowModalAct && (

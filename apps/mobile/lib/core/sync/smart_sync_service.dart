@@ -912,6 +912,30 @@ class SmartSyncService {
       final idEquipo = item['idEquipo'] as int?;
       if (idOrdenEquipo == null || idEquipo == null) continue;
 
+      final oeConfigParam = item['configParametros'];
+      if (oeConfigParam != null &&
+          oeConfigParam is Map &&
+          oeConfigParam.isNotEmpty) {
+        final existingEq = await _db.getEquipoById(idEquipo);
+        await _db.upsertEquipo(
+          EquiposCompanion(
+            id: Value(idEquipo),
+            codigo: Value(
+              (item['codigoEquipo'] as String?) ?? existingEq?.codigo ?? '',
+            ),
+            nombre: Value(
+              (item['nombreEquipo'] as String?) ?? existingEq?.nombre ?? '',
+            ),
+            ubicacion: Value(
+              (item['ubicacionEquipo'] as String?) ?? existingEq?.ubicacion,
+            ),
+            idCliente: Value(existingEq?.idCliente),
+            configParametros: Value(jsonEncode(oeConfigParam)),
+            lastSyncedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+
       await _db.upsertOrdenEquipo(
         OrdenesEquiposCompanion(
           idOrdenEquipo: Value(idOrdenEquipo),

@@ -67,11 +67,15 @@ export interface EquipoOrden {
   nombre_equipo?: string;
   nombre?: string;
   id_tipo_equipo?: number;
+  horas_actuales?: number | string | null;
   tipos_equipo?: {
     id_tipo_equipo: number;
     nombre_tipo?: string;
     codigo_tipo?: string;
     es_generador?: boolean;
+    unidad_uso?: string | null;
+    etiqueta_contador?: string | null;
+    requiere_horometro?: boolean | null;
   } | null;
 }
 

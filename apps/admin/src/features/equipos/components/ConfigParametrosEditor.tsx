@@ -1,655 +1,887 @@
-/**
- * EDITOR DE CONFIGURACIÓN DE PARÁMETROS - MEKANOS S.A.S
- *
- * Permite personalizar unidades de medida y rangos por equipo.
- * Sistema de resolución en cascada: equipo → plantilla → catálogo global.
- *
- * @version 1.0 - 06-ENE-2026
- */
-
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import React, { useMemo, useState } from 'react';
+import { EamSelect, type EamSelectOption } from '@/features/catalogos-eam';
+import { useUnidadesEam } from '@/features/catalogos-eam/hooks/use-catalogos-eam';
+import type { UnidadMedidaEam } from '@/features/catalogos-eam/api/catalogos-eam.service';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Gauge, RefreshCw, Settings2, Thermometer, Zap } from 'lucide-react';
-import { useState } from 'react';
-import type { TipoEquipo } from '../types';
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Cpu,
+  Layers,
+  Loader2,
+  Plus,
+  RotateCcw,
+  Sliders,
+  Trash2,
+  Zap,
+} from 'lucide-react';
+import { useParametrosTelemetriaTipoEquipo } from '../lib/equipos.service';
+import type {
+  ConfigParametros,
+  ParametroCatalogoArquetipo,
+  ParametroOverrideEquipo,
+  TipoEquipo,
+} from '../types';
 
-// Tipos para la configuración de parámetros
-interface UnidadesConfig {
-  temperatura?: string;
-  presion?: string;
-  voltaje?: string;
-  frecuencia?: string;
-  corriente?: string;
-  velocidad?: string;
-  vibracion?: string;
-  potencia?: string;
-}
-
-interface RangoParametro {
-  min_normal?: number;
-  max_normal?: number;
-  min_critico?: number;
-  max_critico?: number;
-  valor_ideal?: number;
-}
-
-interface RangosConfig {
-  [parametro: string]: RangoParametro;
-}
-
-export interface ConfigParametros {
-  unidades?: UnidadesConfig;
-  rangos?: RangosConfig;
-}
-
-// Opciones de unidades por tipo de magnitud
-const OPCIONES_UNIDADES = {
-  temperatura: [
-    { value: '°C', label: '°C (Celsius)' },
-    { value: '°F', label: '°F (Fahrenheit)' },
-    { value: 'K', label: 'K (Kelvin)' },
-  ],
-  presion: [
-    { value: 'PSI', label: 'PSI' },
-    { value: 'bar', label: 'bar' },
-    { value: 'kPa', label: 'kPa' },
-    { value: 'atm', label: 'atm' },
-  ],
-  voltaje: [
-    { value: 'V', label: 'V (Voltios)' },
-    { value: 'kV', label: 'kV (Kilovoltios)' },
-  ],
-  frecuencia: [
-    { value: 'Hz', label: 'Hz (Hertz)' },
-    { value: 'kHz', label: 'kHz (Kilohertz)' },
-  ],
-  corriente: [
-    { value: 'A', label: 'A (Amperios)' },
-    { value: 'mA', label: 'mA (Miliamperios)' },
-  ],
-  velocidad: [
-    { value: 'RPM', label: 'RPM' },
-    { value: 'rad/s', label: 'rad/s' },
-  ],
-  vibracion: [
-    { value: 'mm/s', label: 'mm/s' },
-    { value: 'in/s', label: 'in/s' },
-    { value: 'g', label: 'g (aceleración)' },
-  ],
-  potencia: [
-    { value: 'kW', label: 'kW (Kilovatios)' },
-    { value: 'HP', label: 'HP (Caballos de fuerza)' },
-    { value: 'W', label: 'W (Vatios)' },
-  ],
-};
-
-// Valores por defecto (catálogo global)
-const UNIDADES_DEFAULT: UnidadesConfig = {
-  temperatura: '°C',
-  presion: 'PSI',
-  voltaje: 'V',
-  frecuencia: 'Hz',
-  corriente: 'A',
-  velocidad: 'RPM',
-  vibracion: 'mm/s',
-  potencia: 'kW',
-};
-
-// Parámetros específicos para generadores
-const PARAMETROS_GENERADOR = [
-  { key: 'frecuencia_generador', label: 'Frecuencia del Generador', magnitud: 'frecuencia' },
-  { key: 'voltaje_generador', label: 'Voltaje del Generador', magnitud: 'voltaje' },
-  {
-    key: 'temperatura_refrigerante',
-    label: 'Temperatura de Refrigerante',
-    magnitud: 'temperatura',
-  },
-  { key: 'presion_aceite', label: 'Presión de Aceite', magnitud: 'presion' },
-  { key: 'velocidad_motor', label: 'Velocidad de Motor', magnitud: 'velocidad' },
-  { key: 'corriente_generador', label: 'Corriente del Generador', magnitud: 'corriente' },
-  { key: 'carga_bateria', label: 'Carga de Batería', magnitud: 'voltaje' },
-];
-
-// Parámetros específicos para bombas
-const PARAMETROS_BOMBA = [
-  { key: 'presion_descarga', label: 'Presión de Descarga', magnitud: 'presion' },
-  { key: 'presion_succion', label: 'Presión de Succión', magnitud: 'presion' },
-  { key: 'voltaje_motor', label: 'Voltaje del Motor', magnitud: 'voltaje' },
-  { key: 'corriente_motor', label: 'Corriente del Motor', magnitud: 'corriente' },
-  { key: 'vibracion', label: 'Vibración', magnitud: 'vibracion' },
-  { key: 'temperatura_motor', label: 'Temperatura del Motor', magnitud: 'temperatura' },
-];
-
-// Parámetros específicos para compresores.
-// Las claves coinciden con parametros_medicion.codigo_parametro (id_tipo_equipo = 20)
-// para que la configuración resuelva correctamente en cascada.
-const PARAMETROS_COMPRESOR = [
-  { key: 'COMP_PRES_ENCENDIDO', label: 'Presión Encendido Presostato', magnitud: 'presion' },
-  { key: 'COMP_PRES_APAGADO', label: 'Presión Apagado Presostato', magnitud: 'presion' },
-  { key: 'COMP_TENSION', label: 'Tensión de Operación', magnitud: 'voltaje' },
-  { key: 'COMP_AMPERAJE', label: 'Amperaje de Operación', magnitud: 'corriente' },
-  { key: 'COMP_VIBRACION', label: 'Ruido de Rodamiento y Vibración', magnitud: 'vibracion' },
-];
-
-// ✅ VALORES POR DEFECTO PARA RANGOS (según unidad seleccionada)
-const RANGOS_DEFAULT_GENERADOR: Record<string, Record<string, RangoParametro>> = {
-  frecuencia_generador: {
-    Hz: { min_normal: 59, max_normal: 61, min_critico: 57, max_critico: 63 },
-  },
-  voltaje_generador: {
-    V: { min_normal: 210, max_normal: 230, min_critico: 200, max_critico: 240 },
-    kV: { min_normal: 0.21, max_normal: 0.23, min_critico: 0.2, max_critico: 0.24 },
-  },
-  temperatura_refrigerante: {
-    '°C': { min_normal: 80, max_normal: 95, min_critico: 70, max_critico: 105 },
-    '°F': { min_normal: 176, max_normal: 203, min_critico: 158, max_critico: 221 },
-    K: { min_normal: 353, max_normal: 368, min_critico: 343, max_critico: 378 },
-  },
-  presion_aceite: {
-    PSI: { min_normal: 40, max_normal: 60, min_critico: 30, max_critico: 70 },
-    bar: { min_normal: 2.8, max_normal: 4.1, min_critico: 2.1, max_critico: 4.8 },
-    kPa: { min_normal: 276, max_normal: 414, min_critico: 207, max_critico: 483 },
-  },
-  velocidad_motor: {
-    RPM: { min_normal: 1750, max_normal: 1850, min_critico: 1700, max_critico: 1900 },
-  },
-  corriente_generador: {
-    A: { min_normal: 0, max_normal: 100, min_critico: 0, max_critico: 120 },
-  },
-  carga_bateria: {
-    V: { min_normal: 12.5, max_normal: 14.5, min_critico: 11.5, max_critico: 15.0 },
-    VDC: { min_normal: 12.5, max_normal: 14.5, min_critico: 11.5, max_critico: 15.0 },
-  },
-};
-
-const RANGOS_DEFAULT_BOMBA: Record<string, Record<string, RangoParametro>> = {
-  presion_descarga: {
-    PSI: { min_normal: 60, max_normal: 100, min_critico: 50, max_critico: 120 },
-    bar: { min_normal: 4.1, max_normal: 6.9, min_critico: 3.4, max_critico: 8.3 },
-  },
-  presion_succion: {
-    PSI: { min_normal: 5, max_normal: 15, min_critico: 2, max_critico: 20 },
-    bar: { min_normal: 0.3, max_normal: 1.0, min_critico: 0.1, max_critico: 1.4 },
-  },
-  voltaje_motor: {
-    V: { min_normal: 210, max_normal: 230, min_critico: 200, max_critico: 240 },
-  },
-  corriente_motor: {
-    A: { min_normal: 0, max_normal: 50, min_critico: 0, max_critico: 60 },
-  },
-  vibracion: {
-    'mm/s': { min_normal: 0, max_normal: 4.5, min_critico: 0, max_critico: 7.1 },
-    'in/s': { min_normal: 0, max_normal: 0.18, min_critico: 0, max_critico: 0.28 },
-  },
-  temperatura_motor: {
-    '°C': { min_normal: 40, max_normal: 80, min_critico: 30, max_critico: 100 },
-    '°F': { min_normal: 104, max_normal: 176, min_critico: 86, max_critico: 212 },
-  },
-};
-
-// Rangos por defecto para compresores (fuente: parametros_medicion del tipo COMPRESOR DE AIRE)
-const RANGOS_DEFAULT_COMPRESOR: Record<string, Record<string, RangoParametro>> = {
-  COMP_PRES_ENCENDIDO: {
-    PSI: { min_normal: 80, max_normal: 100, min_critico: 60, max_critico: 120, valor_ideal: 90 },
-  },
-  COMP_PRES_APAGADO: {
-    PSI: { min_normal: 120, max_normal: 150, min_critico: 100, max_critico: 175, valor_ideal: 135 },
-  },
-  COMP_TENSION: {
-    V: { min_normal: 210, max_normal: 230, min_critico: 190, max_critico: 250, valor_ideal: 220 },
-  },
-  COMP_AMPERAJE: {
-    A: { min_normal: 5, max_normal: 15, min_critico: 0, max_critico: 20, valor_ideal: 10 },
-  },
-  COMP_VIBRACION: {
-    'mm/s': { min_normal: 0, max_normal: 4.5, min_critico: 0, max_critico: 7.1, valor_ideal: 2.5 },
-  },
-};
+export type { ConfigParametros };
 
 interface ConfigParametrosEditorProps {
-  tipoEquipo: TipoEquipo;
+  tipoEquipo?: TipoEquipo;
+  idTipoEquipo?: number | null;
+  codigoTipo?: string | null;
   value?: ConfigParametros;
   onChange: (config: ConfigParametros) => void;
   disabled?: boolean;
 }
 
+function toNumOrUndefined(raw: string): number | undefined {
+  if (raw.trim() === '') return undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function inferirMagnitudLegacy(
+  codigo?: string | null,
+  unidad?: string | null,
+): keyof NonNullable<ConfigParametros['unidades']> | null {
+  const c = (codigo || '').toUpperCase();
+  const u = (unidad || '').toLowerCase();
+  if (c.includes('TEMP') || u.includes('°c') || u.includes('°f')) return 'temperatura';
+  if (c.includes('PRES') || u === 'psi' || u === 'bar' || u === 'kpa') return 'presion';
+  if (c.includes('VOLT') || c.includes('TENSION') || u === 'v' || u === 'vac' || u === 'vdc')
+    return 'voltaje';
+  if (c.includes('FREC') || u === 'hz') return 'frecuencia';
+  if (c.includes('CORR') || c.includes('AMP') || u === 'a') return 'corriente';
+  if (c.includes('RPM') || c.includes('VEL') || u === 'rpm') return 'velocidad';
+  if (c.includes('VIB') || u === 'mm/s') return 'vibracion';
+  if (c.includes('POT') || u === 'kw' || u === 'hp') return 'potencia';
+  return null;
+}
+
+function formatRangeSummary(min?: number | null, max?: number | null, unidad?: string): string {
+  const hasMin = min !== null && min !== undefined;
+  const hasMax = max !== null && max !== undefined;
+  const u = unidad ? ` ${unidad}` : '';
+  if (hasMin && hasMax) return `[${min} — ${max}]${u}`;
+  if (hasMin) return `[≥ ${min}]${u}`;
+  if (hasMax) return `[≤ ${max}]${u}`;
+  return 'Sin rango definido en catálogo';
+}
+
+function buildUnidadOptions(
+  param: ParametroCatalogoArquetipo | null,
+  todasUnidades: UnidadMedidaEam[],
+  currentUnit?: string,
+): EamSelectOption[] {
+  const compatibles: EamSelectOption[] = [];
+  const resto: EamSelectOption[] = [];
+  const seen = new Set<string>();
+
+  const pushOpt = (target: EamSelectOption[], u: UnidadMedidaEam, badge: string | null) => {
+    const val = u.codigo || u.simbolo;
+    const key = val.toLowerCase();
+    if (!val || seen.has(key)) return;
+    seen.add(key);
+    target.push({
+      value: val,
+      label: `${u.simbolo} — ${u.nombre}`,
+      badge,
+      description: u.magnitud?.nombre_magnitud || u.tipo_magnitud,
+    });
+  };
+
+  for (const u of todasUnidades) {
+    if (!u.activo) continue;
+    const matchesMagId =
+      param?.id_magnitud != null && u.id_magnitud != null && u.id_magnitud === param.id_magnitud;
+    const matchesTipoMag =
+      param?.tipo_magnitud &&
+      u.tipo_magnitud &&
+      u.tipo_magnitud.toUpperCase() === param.tipo_magnitud.toUpperCase();
+
+    if (matchesMagId || matchesTipoMag) {
+      pushOpt(
+        compatibles,
+        u,
+        param?.nombre_magnitud ? `Compatible · ${param.nombre_magnitud}` : `Compatible`,
+      );
+    } else {
+      pushOpt(resto, u, u.tipo_magnitud || null);
+    }
+  }
+
+  const extras: EamSelectOption[] = [];
+  const checkLiteral = (literal?: string | null, tag?: string) => {
+    const clean = (literal || '').trim();
+    if (!clean) return;
+    if (seen.has(clean.toLowerCase())) return;
+    seen.add(clean.toLowerCase());
+    extras.push({
+      value: clean,
+      label: clean,
+      badge: tag || 'Catálogo',
+      description: 'Unidad configurada',
+    });
+  };
+
+  checkLiteral(param?.unidad_medida, 'Estándar');
+  checkLiteral(currentUnit, 'Actual');
+
+  return [...extras, ...compatibles, ...resto];
+}
+
+const EMPTY_CONFIG_PARAMETROS: ConfigParametros = {};
+
+function resolveOverrideForParam(
+  p: ParametroCatalogoArquetipo,
+  config: ConfigParametros,
+): ParametroOverrideEquipo {
+  const porParametro = config.por_parametro || {};
+  const idKey = String(p.id_parametro_medicion);
+  const byPorParam =
+    porParametro[idKey] ||
+    porParametro[p.codigo_parametro] ||
+    porParametro[p.codigo_parametro.toUpperCase()];
+
+  const legacyRange =
+    config.rangos?.[p.codigo_parametro] || config.rangos?.[p.codigo_parametro.toUpperCase()];
+
+  const legacyMag = inferirMagnitudLegacy(p.codigo_parametro, p.unidad_medida);
+  const legacyUnit = legacyMag ? config.unidades?.[legacyMag] : undefined;
+
+  return {
+    id_parametro_medicion: p.id_parametro_medicion,
+    codigo_parametro: p.codigo_parametro,
+    nombre_parametro: p.nombre_parametro,
+    nombre_sistema: p.nombre_sistema || undefined,
+    unidad_medida: byPorParam?.unidad_medida || legacyUnit || undefined,
+    min_normal: byPorParam?.min_normal ?? legacyRange?.min_normal,
+    max_normal: byPorParam?.max_normal ?? legacyRange?.max_normal,
+    min_critico: byPorParam?.min_critico ?? legacyRange?.min_critico,
+    max_critico: byPorParam?.max_critico ?? legacyRange?.max_critico,
+    valor_ideal: byPorParam?.valor_ideal ?? legacyRange?.valor_ideal,
+  };
+}
+
+function isParamCustomized(p: ParametroCatalogoArquetipo, ov: ParametroOverrideEquipo): boolean {
+  const unitChanged =
+    Boolean(ov.unidad_medida && ov.unidad_medida.trim() !== '') &&
+    ov.unidad_medida!.trim() !== (p.unidad_medida || '').trim();
+  const minNChanged =
+    ov.min_normal !== undefined && ov.min_normal !== (p.valor_minimo_normal ?? undefined);
+  const maxNChanged =
+    ov.max_normal !== undefined && ov.max_normal !== (p.valor_maximo_normal ?? undefined);
+  const minCChanged =
+    ov.min_critico !== undefined && ov.min_critico !== (p.valor_minimo_critico ?? undefined);
+  const maxCChanged =
+    ov.max_critico !== undefined && ov.max_critico !== (p.valor_maximo_critico ?? undefined);
+  return unitChanged || minNChanged || maxNChanged || minCChanged || maxCChanged;
+}
+
 export function ConfigParametrosEditor({
   tipoEquipo,
+  idTipoEquipo,
+  codigoTipo,
   value,
   onChange,
   disabled = false,
 }: ConfigParametrosEditorProps) {
-  const [personalizacionManual, setPersonalizacionManual] = useState<boolean | null>(null);
-  const tieneConfigProp = Boolean(
-    value &&
-      ((value.unidades && Object.keys(value.unidades).length > 0) ||
-        (value.rangos && Object.keys(value.rangos).length > 0)),
-  );
-  const habilitarPersonalizacion = personalizacionManual ?? tieneConfigProp;
-  const unidades: UnidadesConfig = value?.unidades || {};
-  const rangos: RangosConfig = value?.rangos || {};
+  const { data: parametrosCatalogo = [], isLoading: isLoadingParams } =
+    useParametrosTelemetriaTipoEquipo(idTipoEquipo);
+  const { data: unidadesEam = [] } = useUnidadesEam();
 
-  // Determinar parámetros según tipo de equipo
-  const parametros =
-    tipoEquipo === 'GENERADOR'
-      ? PARAMETROS_GENERADOR
-      : tipoEquipo === 'COMPRESOR'
-        ? PARAMETROS_COMPRESOR
-        : PARAMETROS_BOMBA;
+  const [showAddCustom, setShowAddCustom] = useState(false);
+  const [newNombre, setNewNombre] = useState('');
+  const [newSistema, setNewSistema] = useState('');
+  const [newUnidad, setNewUnidad] = useState('');
+  const [newMinNormal, setNewMinNormal] = useState('');
+  const [newMaxNormal, setNewMaxNormal] = useState('');
+  const [newMinCritico, setNewMinCritico] = useState('');
+  const [newMaxCritico, setNewMaxCritico] = useState('');
 
-  // Actualizar config cuando cambian unidades o rangos
-  const actualizarConfig = (newUnidades: UnidadesConfig, newRangos: RangosConfig) => {
-    if (!habilitarPersonalizacion) {
-      onChange({});
-      return;
-    }
+  const configActual: ConfigParametros = value || EMPTY_CONFIG_PARAMETROS;
+  const adicionales = Array.isArray(configActual.parametros_adicionales)
+    ? configActual.parametros_adicionales
+    : [];
 
-    const config: ConfigParametros = {};
-    if (Object.keys(newUnidades).length > 0) {
-      config.unidades = newUnidades;
+  const getOverrideForParam = (p: ParametroCatalogoArquetipo): ParametroOverrideEquipo =>
+    resolveOverrideForParam(p, configActual);
+
+  const emitConfig = (next: ConfigParametros) => {
+    const cleaned: ConfigParametros = { ...next };
+    if (cleaned.por_parametro && Object.keys(cleaned.por_parametro).length === 0) {
+      delete cleaned.por_parametro;
     }
-    if (Object.keys(newRangos).length > 0) {
-      config.rangos = newRangos;
+    if (cleaned.rangos && Object.keys(cleaned.rangos).length === 0) {
+      delete cleaned.rangos;
     }
-    onChange(config);
+    if (cleaned.unidades && Object.keys(cleaned.unidades).length === 0) {
+      delete cleaned.unidades;
+    }
+    if (cleaned.parametros_adicionales && cleaned.parametros_adicionales.length === 0) {
+      delete cleaned.parametros_adicionales;
+    }
+    onChange(cleaned);
   };
 
-  const handleUnidadChange = (magnitud: keyof UnidadesConfig, valor: string) => {
-    const newUnidades = { ...unidades, [magnitud]: valor };
-    actualizarConfig(newUnidades, rangos);
-  };
-
-  const handleRangoChange = (
-    parametro: string,
-    campo: keyof RangoParametro,
-    valor: number | undefined,
+  const updateParamOverride = (
+    p: ParametroCatalogoArquetipo,
+    patch: Partial<ParametroOverrideEquipo>,
   ) => {
-    const newRangos = {
-      ...rangos,
-      [parametro]: {
-        ...rangos[parametro],
-        [campo]: valor,
-      },
+    const current = getOverrideForParam(p);
+    const merged: ParametroOverrideEquipo = {
+      ...current,
+      ...patch,
+      id_parametro_medicion: p.id_parametro_medicion,
+      codigo_parametro: p.codigo_parametro,
+      nombre_parametro: p.nombre_parametro,
+      nombre_sistema: p.nombre_sistema || undefined,
     };
-    actualizarConfig(unidades, newRangos);
-  };
 
-  const handleTogglePersonalizacion = (checked: boolean) => {
-    setPersonalizacionManual(checked);
-    if (!checked) {
-      onChange({});
+    // Normalizar campos que regresan exactamente al catálogo
+    if (merged.unidad_medida && merged.unidad_medida.trim() === (p.unidad_medida || '').trim()) {
+      delete merged.unidad_medida;
     }
-  };
+    if (merged.min_normal === (p.valor_minimo_normal ?? undefined)) {
+      delete merged.min_normal;
+    }
+    if (merged.max_normal === (p.valor_maximo_normal ?? undefined)) {
+      delete merged.max_normal;
+    }
+    if (merged.min_critico === (p.valor_minimo_critico ?? undefined)) {
+      delete merged.min_critico;
+    }
+    if (merged.max_critico === (p.valor_maximo_critico ?? undefined)) {
+      delete merged.max_critico;
+    }
 
-  const resetearADefecto = () => {
-    onChange({});
-  };
+    const idKey = String(p.id_parametro_medicion);
+    const nextPorParam = { ...(configActual.por_parametro || {}) };
+    const nextRangos = { ...(configActual.rangos || {}) };
 
-  // ✅ Cargar valores por defecto según unidades seleccionadas
-  const cargarValoresPorDefecto = () => {
-    const rangosDefault =
-      tipoEquipo === 'GENERADOR'
-        ? RANGOS_DEFAULT_GENERADOR
-        : tipoEquipo === 'COMPRESOR'
-          ? RANGOS_DEFAULT_COMPRESOR
-          : RANGOS_DEFAULT_BOMBA;
-    const nuevosRangos: RangosConfig = {};
-
-    parametros.forEach((param) => {
-      const rangosParam = rangosDefault[param.key];
-      if (rangosParam) {
-        // Obtener unidad seleccionada o default
-        const unidadActual =
-          unidades[param.magnitud as keyof UnidadesConfig] ||
-          UNIDADES_DEFAULT[param.magnitud as keyof UnidadesConfig];
-
-        // Buscar rangos para esa unidad, o usar el primero disponible
-        const rangoParaUnidad = rangosParam[unidadActual || ''] || Object.values(rangosParam)[0];
-
-        if (rangoParaUnidad) {
-          nuevosRangos[param.key] = { ...rangoParaUnidad };
-        }
+    if (!isParamCustomized(p, merged)) {
+      delete nextPorParam[idKey];
+      delete nextPorParam[p.codigo_parametro];
+      delete nextRangos[p.codigo_parametro];
+    } else {
+      nextPorParam[idKey] = merged;
+      const rangoMirror = {
+        ...(merged.min_normal !== undefined ? { min_normal: merged.min_normal } : {}),
+        ...(merged.max_normal !== undefined ? { max_normal: merged.max_normal } : {}),
+        ...(merged.min_critico !== undefined ? { min_critico: merged.min_critico } : {}),
+        ...(merged.max_critico !== undefined ? { max_critico: merged.max_critico } : {}),
+      };
+      if (Object.keys(rangoMirror).length > 0) {
+        nextRangos[p.codigo_parametro] = rangoMirror;
+      } else {
+        delete nextRangos[p.codigo_parametro];
       }
+    }
+
+    emitConfig({
+      ...configActual,
+      por_parametro: nextPorParam,
+      rangos: nextRangos,
+    });
+  };
+
+  const resetParamOverride = (p: ParametroCatalogoArquetipo) => {
+    const idKey = String(p.id_parametro_medicion);
+    const nextPorParam = { ...(configActual.por_parametro || {}) };
+    const nextRangos = { ...(configActual.rangos || {}) };
+    delete nextPorParam[idKey];
+    delete nextPorParam[p.codigo_parametro];
+    delete nextPorParam[p.codigo_parametro.toUpperCase()];
+    delete nextRangos[p.codigo_parametro];
+    delete nextRangos[p.codigo_parametro.toUpperCase()];
+    emitConfig({
+      ...configActual,
+      por_parametro: nextPorParam,
+      rangos: nextRangos,
+    });
+  };
+
+  const resetAll = () => {
+    const next: ConfigParametros = { ...configActual };
+    delete next.por_parametro;
+    delete next.rangos;
+    delete next.unidades;
+    delete next.parametros_adicionales;
+    emitConfig(next);
+  };
+
+  const customizedCount = useMemo(() => {
+    return parametrosCatalogo.filter((p) =>
+      isParamCustomized(p, resolveOverrideForParam(p, configActual)),
+    ).length;
+  }, [parametrosCatalogo, configActual]);
+
+  const allUomOptions = useMemo(
+    () => buildUnidadOptions(null, unidadesEam, newUnidad),
+    [unidadesEam, newUnidad],
+  );
+
+  const handleAddCustom = () => {
+    const nombre = newNombre.trim();
+    const unidad = newUnidad.trim();
+    if (!nombre || !unidad) return;
+
+    const slug = nombre
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 28);
+    const codigo = `EQ_CUSTOM_${slug}_${Date.now().toString(36).toUpperCase().slice(-4)}`;
+
+    const nuevo: ParametroOverrideEquipo = {
+      codigo_parametro: codigo,
+      nombre_parametro: nombre,
+      nombre_sistema: newSistema.trim() || undefined,
+      unidad_medida: unidad,
+      min_normal: toNumOrUndefined(newMinNormal),
+      max_normal: toNumOrUndefined(newMaxNormal),
+      min_critico: toNumOrUndefined(newMinCritico),
+      max_critico: toNumOrUndefined(newMaxCritico),
+      es_adicional_equipo: true,
+    };
+
+    const nextPorParam = { ...(configActual.por_parametro || {}), [codigo]: nuevo };
+    const nextAdicionales = [...adicionales, nuevo];
+
+    emitConfig({
+      ...configActual,
+      por_parametro: nextPorParam,
+      parametros_adicionales: nextAdicionales,
     });
 
-    actualizarConfig(unidades, nuevosRangos);
+    setNewNombre('');
+    setNewSistema('');
+    setNewUnidad('');
+    setNewMinNormal('');
+    setNewMaxNormal('');
+    setNewMinCritico('');
+    setNewMaxCritico('');
+    setShowAddCustom(false);
   };
 
+  const handleRemoveAdicional = (idx: number) => {
+    const target = adicionales[idx];
+    const nextAdicionales = adicionales.filter((_, i) => i !== idx);
+    const nextPorParam = { ...(configActual.por_parametro || {}) };
+    if (target?.codigo_parametro) {
+      delete nextPorParam[target.codigo_parametro];
+    }
+    emitConfig({
+      ...configActual,
+      por_parametro: nextPorParam,
+      parametros_adicionales: nextAdicionales,
+    });
+  };
+
+  const archetypeLabel = codigoTipo || tipoEquipo || 'EAM';
+
   return (
-    <Card className="border-blue-200 bg-blue-50/30">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Settings2 className="h-5 w-5 text-blue-600" />
-            <CardTitle className="text-lg">Configuración de Parámetros</CardTitle>
+    <div className="space-y-4">
+      {/* Cabecera Ejecutiva */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50/40 px-4 py-3">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600/10 text-blue-700 border border-blue-200">
+            <Sliders className="h-4 w-4" />
           </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="habilitar-config" className="text-sm text-muted-foreground">
-              Personalizar
-            </Label>
-            <Switch
-              id="habilitar-config"
-              checked={habilitarPersonalizacion}
-              onCheckedChange={handleTogglePersonalizacion}
-              disabled={disabled}
-            />
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="text-sm font-bold text-slate-900">
+                Configuración de Parámetros y Rangos de Telemetría
+              </h4>
+              <span className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-2 py-0.5 font-mono text-[10px] font-bold text-white">
+                {archetypeLabel}
+              </span>
+              {customizedCount + adicionales.length > 0 ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
+                  <Zap className="h-3 w-3" />
+                  {customizedCount + adicionales.length} personalizado
+                  {customizedCount + adicionales.length === 1 ? '' : 's'} para este equipo
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Usando estándar del catálogo
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Sobrescribe únicamente los parámetros que operan con umbrales o unidades distintas al
+              catálogo estándar del Tipo de Equipo. Lo que dejes vacío heredará automáticamente el
+              rango estándar.
+            </p>
           </div>
         </div>
-        <CardDescription>
-          {habilitarPersonalizacion
-            ? 'Configure unidades y rangos específicos para este equipo'
-            : 'Usando configuración del catálogo global'}
-        </CardDescription>
-      </CardHeader>
 
-      {habilitarPersonalizacion && (
-        <CardContent>
-          <Tabs defaultValue="unidades" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="unidades" className="gap-2">
-                <Gauge className="h-4 w-4" />
-                Unidades
-              </TabsTrigger>
-              <TabsTrigger value="rangos" className="gap-2">
-                <Thermometer className="h-4 w-4" />
-                Rangos
-              </TabsTrigger>
-            </TabsList>
+        {(customizedCount > 0 || adicionales.length > 0) && !disabled && (
+          <button
+            type="button"
+            onClick={resetAll}
+            className="inline-flex items-center gap-1.5 self-start sm:self-center shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <RotateCcw className="h-3.5 w-3.5 text-slate-500" />
+            Restaurar todo al estándar
+          </button>
+        )}
+      </div>
 
-            <TabsContent value="unidades" className="space-y-4 pt-4">
-              <p className="text-sm text-muted-foreground mb-4">
-                Seleccione las unidades de medida para cada parámetro. Dejar vacío para usar el
-                valor por defecto.
-              </p>
+      {/* Estado de carga */}
+      {isLoadingParams && (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 py-8 text-xs font-semibold text-slate-600">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+          Cargando parámetros de telemetría reales para {archetypeLabel}...
+        </div>
+      )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Temperatura */}
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Thermometer className="h-4 w-4 text-red-500" />
-                    Temperatura
-                  </Label>
-                  <Select
-                    value={unidades.temperatura || ''}
-                    onValueChange={(v) => handleUnidadChange('temperatura', v)}
-                    disabled={disabled}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`Por defecto: ${UNIDADES_DEFAULT.temperatura}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPCIONES_UNIDADES.temperatura.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+      {/* Parámetros reales del Tipo de Equipo */}
+      {!isLoadingParams && parametrosCatalogo.length > 0 && (
+        <div className="space-y-3">
+          {parametrosCatalogo.map((param) => {
+            const ov = getOverrideForParam(param);
+            const customized = isParamCustomized(param, ov);
+            const unidadOptions = buildUnidadOptions(param, unidadesEam, ov.unidad_medida);
+            const unitValue = ov.unidad_medida || param.unidad_medida || '';
+
+            const effMinN = ov.min_normal ?? param.valor_minimo_normal ?? undefined;
+            const effMaxN = ov.max_normal ?? param.valor_maximo_normal ?? undefined;
+            const effMinC = ov.min_critico ?? param.valor_minimo_critico ?? undefined;
+            const effMaxC = ov.max_critico ?? param.valor_maximo_critico ?? undefined;
+
+            const hasInvalidRange =
+              (effMinN !== undefined && effMaxN !== undefined && effMinN > effMaxN) ||
+              (effMinC !== undefined && effMaxC !== undefined && effMinC > effMaxC) ||
+              (effMinC !== undefined && effMinN !== undefined && effMinC > effMinN) ||
+              (effMaxC !== undefined && effMaxN !== undefined && effMaxC < effMaxN);
+
+            return (
+              <div
+                key={param.id_parametro_medicion}
+                className={`rounded-xl border p-4 transition-all ${
+                  customized
+                    ? 'border-amber-300 bg-amber-50/35 shadow-2xs'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                {/* Fila título y metadata */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Activity className="h-4 w-4 text-sky-600 shrink-0" />
+                      <span className="text-sm font-bold text-slate-900">
+                        {param.nombre_parametro}
+                      </span>
+                      <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-600">
+                        {param.codigo_parametro}
+                      </code>
+                      {param.nombre_sistema && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                          <Layers className="h-3 w-3" />
+                          {param.nombre_sistema}
+                        </span>
+                      )}
+                      {param.es_critico_seguridad && (
+                        <span className="inline-flex items-center rounded-md bg-rose-50 border border-rose-200 px-2 py-0.5 text-[10px] font-bold text-rose-700 uppercase">
+                          Seguridad
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+                        Estándar catálogo:{' '}
+                        <strong className="font-mono text-slate-900">
+                          {formatRangeSummary(
+                            param.valor_minimo_normal,
+                            param.valor_maximo_normal,
+                            param.unidad_medida,
+                          )}
+                        </strong>
+                      </span>
+                      {(param.valor_minimo_critico !== null &&
+                        param.valor_minimo_critico !== undefined) ||
+                      (param.valor_maximo_critico !== null &&
+                        param.valor_maximo_critico !== undefined) ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-rose-50/70 px-2 py-0.5 text-rose-700 font-medium">
+                          Crítico catálogo: [{param.valor_minimo_critico ?? '—'} |{' '}
+                          {param.valor_maximo_critico ?? '—'}] {param.unidad_medida}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {customized ? (
+                      <>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 px-2.5 py-1 text-[11px] font-bold text-amber-900">
+                          <Zap className="h-3 w-3 text-amber-600" />
+                          Personalizado para este equipo
+                        </span>
+                        {!disabled && (
+                          <button
+                            type="button"
+                            onClick={() => resetParamOverride(param)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Volver a los valores estándar del catálogo"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Restaurar estándar
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                        Hereda estándar
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Presión */}
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Gauge className="h-4 w-4 text-blue-500" />
-                    Presión
-                  </Label>
-                  <Select
-                    value={unidades.presion || ''}
-                    onValueChange={(v) => handleUnidadChange('presion', v)}
-                    disabled={disabled}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`Por defecto: ${UNIDADES_DEFAULT.presion}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPCIONES_UNIDADES.presion.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Voltaje */}
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-yellow-500" />
-                    Voltaje
-                  </Label>
-                  <Select
-                    value={unidades.voltaje || ''}
-                    onValueChange={(v) => handleUnidadChange('voltaje', v)}
-                    disabled={disabled}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`Por defecto: ${UNIDADES_DEFAULT.voltaje}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPCIONES_UNIDADES.voltaje.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Frecuencia */}
-                <div className="space-y-2">
-                  <Label>Frecuencia</Label>
-                  <Select
-                    value={unidades.frecuencia || ''}
-                    onValueChange={(v) => handleUnidadChange('frecuencia', v)}
-                    disabled={disabled}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`Por defecto: ${UNIDADES_DEFAULT.frecuencia}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPCIONES_UNIDADES.frecuencia.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Corriente */}
-                <div className="space-y-2">
-                  <Label>Corriente</Label>
-                  <Select
-                    value={unidades.corriente || ''}
-                    onValueChange={(v) => handleUnidadChange('corriente', v)}
-                    disabled={disabled}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`Por defecto: ${UNIDADES_DEFAULT.corriente}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPCIONES_UNIDADES.corriente.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Velocidad */}
-                <div className="space-y-2">
-                  <Label>Velocidad (RPM)</Label>
-                  <Select
-                    value={unidades.velocidad || ''}
-                    onValueChange={(v) => handleUnidadChange('velocidad', v)}
-                    disabled={disabled}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`Por defecto: ${UNIDADES_DEFAULT.velocidad}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPCIONES_UNIDADES.velocidad.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Vibración (solo para bombas) */}
-                {tipoEquipo === 'BOMBA' && (
-                  <div className="space-y-2">
-                    <Label>Vibración</Label>
-                    <Select
-                      value={unidades.vibracion || ''}
-                      onValueChange={(v) => handleUnidadChange('vibracion', v)}
+                {/* Controles unificados: Unidad + 4 umbrales */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 pt-3">
+                  <div className="lg:col-span-4 min-w-0">
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1">
+                      Unidad Efectiva
+                    </label>
+                    <EamSelect
+                      value={unitValue}
+                      onChange={(nextUnit) =>
+                        updateParamOverride(param, {
+                          unidad_medida: nextUnit || param.unidad_medida,
+                        })
+                      }
+                      options={unidadOptions}
+                      size="sm"
                       disabled={disabled}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={`Por defecto: ${UNIDADES_DEFAULT.vibracion}`} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {OPCIONES_UNIDADES.vibracion.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      usePortal={true}
+                      minDropdownWidth={300}
+                      searchPlaceholder="Buscar unidad o símbolo..."
+                    />
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <label className="block text-[11px] font-bold text-emerald-700 uppercase tracking-wide mb-1">
+                      Mín. Normal
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      disabled={disabled}
+                      value={ov.min_normal ?? ''}
+                      onChange={(e) =>
+                        updateParamOverride(param, {
+                          min_normal: toNumOrUndefined(e.target.value),
+                        })
+                      }
+                      placeholder={
+                        param.valor_minimo_normal !== null &&
+                        param.valor_minimo_normal !== undefined
+                          ? String(param.valor_minimo_normal)
+                          : 'Opcional'
+                      }
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-100"
+                    />
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <label className="block text-[11px] font-bold text-emerald-700 uppercase tracking-wide mb-1">
+                      Máx. Normal
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      disabled={disabled}
+                      value={ov.max_normal ?? ''}
+                      onChange={(e) =>
+                        updateParamOverride(param, {
+                          max_normal: toNumOrUndefined(e.target.value),
+                        })
+                      }
+                      placeholder={
+                        param.valor_maximo_normal !== null &&
+                        param.valor_maximo_normal !== undefined
+                          ? String(param.valor_maximo_normal)
+                          : 'Opcional'
+                      }
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-100"
+                    />
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <label className="block text-[11px] font-bold text-rose-700 uppercase tracking-wide mb-1">
+                      Mín. Crítico
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      disabled={disabled}
+                      value={ov.min_critico ?? ''}
+                      onChange={(e) =>
+                        updateParamOverride(param, {
+                          min_critico: toNumOrUndefined(e.target.value),
+                        })
+                      }
+                      placeholder={
+                        param.valor_minimo_critico !== null &&
+                        param.valor_minimo_critico !== undefined
+                          ? String(param.valor_minimo_critico)
+                          : 'Opcional'
+                      }
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/20 disabled:bg-slate-100"
+                    />
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <label className="block text-[11px] font-bold text-rose-700 uppercase tracking-wide mb-1">
+                      Máx. Crítico
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      disabled={disabled}
+                      value={ov.max_critico ?? ''}
+                      onChange={(e) =>
+                        updateParamOverride(param, {
+                          max_critico: toNumOrUndefined(e.target.value),
+                        })
+                      }
+                      placeholder={
+                        param.valor_maximo_critico !== null &&
+                        param.valor_maximo_critico !== undefined
+                          ? String(param.valor_maximo_critico)
+                          : 'Opcional'
+                      }
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/20 disabled:bg-slate-100"
+                    />
+                  </div>
+                </div>
+
+                {hasInvalidRange && (
+                  <div className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-rose-50 border border-rose-200 px-3 py-1.5 text-[11px] font-semibold text-rose-700">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Revisa la coherencia matemática: Crítico Mín ≤ Normal Mín ≤ Normal Máx ≤ Crítico
+                    Máx.
                   </div>
                 )}
               </div>
-            </TabsContent>
-
-            <TabsContent value="rangos" className="space-y-4 pt-4">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-muted-foreground">
-                  Configure rangos personalizados para alertas.
-                </p>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={cargarValoresPorDefecto}
-                  disabled={disabled}
-                  className="gap-2 bg-green-100 hover:bg-green-200 text-green-700"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Cargar Valores Recomendados
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {parametros.map((param) => (
-                  <Card key={param.key} className="p-4">
-                    <Label className="font-medium mb-3 block">{param.label}</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Mín. Normal</Label>
-                        <Input
-                          type="number"
-                          placeholder="—"
-                          value={rangos[param.key]?.min_normal ?? ''}
-                          onChange={(e) =>
-                            handleRangoChange(
-                              param.key,
-                              'min_normal',
-                              e.target.value ? parseFloat(e.target.value) : undefined,
-                            )
-                          }
-                          disabled={disabled}
-                          className="h-8"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Máx. Normal</Label>
-                        <Input
-                          type="number"
-                          placeholder="—"
-                          value={rangos[param.key]?.max_normal ?? ''}
-                          onChange={(e) =>
-                            handleRangoChange(
-                              param.key,
-                              'max_normal',
-                              e.target.value ? parseFloat(e.target.value) : undefined,
-                            )
-                          }
-                          disabled={disabled}
-                          className="h-8"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Mín. Crítico</Label>
-                        <Input
-                          type="number"
-                          placeholder="—"
-                          value={rangos[param.key]?.min_critico ?? ''}
-                          onChange={(e) =>
-                            handleRangoChange(
-                              param.key,
-                              'min_critico',
-                              e.target.value ? parseFloat(e.target.value) : undefined,
-                            )
-                          }
-                          disabled={disabled}
-                          className="h-8"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Máx. Crítico</Label>
-                        <Input
-                          type="number"
-                          placeholder="—"
-                          value={rangos[param.key]?.max_critico ?? ''}
-                          onChange={(e) =>
-                            handleRangoChange(
-                              param.key,
-                              'max_critico',
-                              e.target.value ? parseFloat(e.target.value) : undefined,
-                            )
-                          }
-                          disabled={disabled}
-                          className="h-8"
-                        />
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-          </Tabs>
-
-          <div className="flex justify-end mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={resetearADefecto}
-              disabled={disabled}
-              className="gap-2"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Restaurar Valores por Defecto
-            </Button>
-          </div>
-        </CardContent>
+            );
+          })}
+        </div>
       )}
-    </Card>
+
+      {/* Estado vacío si el arquetipo todavía no tiene parámetros en sus protocolos */}
+      {!isLoadingParams && parametrosCatalogo.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-5 text-center space-y-1.5">
+          <Cpu className="h-6 w-6 text-slate-400 mx-auto" />
+          <p className="text-xs font-bold text-slate-800">
+            Este Tipo de Equipo ({archetypeLabel}) aún no tiene puntos de medición vinculados en sus
+            protocolos de servicio.
+          </p>
+          <p className="text-[11px] text-slate-500 max-w-xl mx-auto">
+            Puedes registrar sus parámetros maestros en{' '}
+            <strong>Hub EAM → Protocolos y Actividades</strong> o agregar un parámetro específico
+            para este activo usando el botón inferior.
+          </p>
+        </div>
+      )}
+
+      {/* Parámetros adicionales específicos de este activo */}
+      {adicionales.length > 0 && (
+        <div className="space-y-2 pt-1">
+          <h5 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5 text-amber-600" />
+            Parámetros Adicionales Exclusivos de este Activo ({adicionales.length})
+          </h5>
+          <div className="space-y-2">
+            {adicionales.map((ad, idx) => (
+              <div
+                key={ad.codigo_parametro || `${ad.nombre_parametro}-${idx}`}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/40 px-4 py-3"
+              >
+                <div className="space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">
+                      {ad.nombre_parametro || ad.codigo_parametro}
+                    </span>
+                    {ad.nombre_sistema && (
+                      <span className="rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                        {ad.nombre_sistema}
+                      </span>
+                    )}
+                    <span className="rounded bg-slate-900 px-2 py-0.5 font-mono text-[10px] font-bold text-white">
+                      {ad.unidad_medida}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-mono text-slate-600">
+                    Normal: {formatRangeSummary(ad.min_normal, ad.max_normal, ad.unidad_medida)}
+                    {(ad.min_critico !== undefined || ad.max_critico !== undefined) &&
+                      ` • Crítico: [${ad.min_critico ?? '—'} | ${ad.max_critico ?? '—'}] ${ad.unidad_medida || ''}`}
+                  </p>
+                </div>
+
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAdicional(idx)}
+                    className="inline-flex items-center gap-1 self-start sm:self-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-50 cursor-pointer"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Eliminar
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Botón / Constructor inline para parámetro específico del equipo */}
+      {!disabled && (
+        <div className="pt-1">
+          {!showAddCustom ? (
+            <button
+              type="button"
+              onClick={() => setShowAddCustom(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 px-4 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              Agregar parámetro específico para este equipo
+            </button>
+          ) : (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-bold uppercase tracking-wider text-blue-950">
+                  Nuevo Instrumento / Parámetro Específico de este Activo
+                </h5>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustom(false)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Nombre del Parámetro *
+                  </label>
+                  <input
+                    type="text"
+                    value={newNombre}
+                    onChange={(e) => setNewNombre(e.target.value)}
+                    placeholder="Ej: Temperatura Variador Frecuencia Cabina"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Subsistema (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newSistema}
+                    onChange={(e) => setNewSistema(e.target.value)}
+                    placeholder="Ej: Control y Maniobra"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
+                <div className="lg:col-span-4 min-w-0">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Unidad de Medida *
+                  </label>
+                  <EamSelect
+                    value={newUnidad}
+                    onChange={setNewUnidad}
+                    options={allUomOptions}
+                    placeholder="Seleccionar unidad..."
+                    size="sm"
+                    usePortal={true}
+                    minDropdownWidth={300}
+                    searchPlaceholder="Buscar unidad, símbolo o magnitud..."
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <label className="block text-[11px] font-bold text-emerald-700 mb-1">
+                    Mín. Normal
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newMinNormal}
+                    onChange={(e) => setNewMinNormal(e.target.value)}
+                    placeholder="Ej: 10"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-slate-900"
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <label className="block text-[11px] font-bold text-emerald-700 mb-1">
+                    Máx. Normal
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newMaxNormal}
+                    onChange={(e) => setNewMaxNormal(e.target.value)}
+                    placeholder="Ej: 55"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-slate-900"
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <label className="block text-[11px] font-bold text-rose-700 mb-1">
+                    Mín. Crítico
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newMinCritico}
+                    onChange={(e) => setNewMinCritico(e.target.value)}
+                    placeholder="Opcional"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-slate-900"
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <label className="block text-[11px] font-bold text-rose-700 mb-1">
+                    Máx. Crítico
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newMaxCritico}
+                    onChange={(e) => setNewMaxCritico(e.target.value)}
+                    placeholder="Ej: 70"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={!newNombre.trim() || !newUnidad.trim()}
+                  onClick={handleAddCustom}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Guardar parámetro en equipo
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

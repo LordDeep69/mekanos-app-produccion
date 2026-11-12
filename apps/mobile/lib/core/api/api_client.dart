@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/environment.dart';
+import '../config/local_api_discovery.dart';
 import '../storage/secure_storage.dart';
 
 /// Resultado del intento de refresh en el interceptor
@@ -94,10 +95,12 @@ class ApiClient {
           return handler.next(response);
         },
         onError: (error, handler) async {
-          // ✅ AUTO-FAILOVER INTELIGENTE:
-          // Si el túnel de producción está caído (Cloudflare 1033 / 502 / timeout) o el host actual falla,
-          // conmuta automáticamente al servidor local (puerto 3001 y fallback a 3000)
-          if (_isConnectivityOrServerDown(error)) {
+          // ✅ AUTO-REDESCUBRIMIENTO LOCAL IP-AGNÓSTICO:
+          // Solo en modo Local (activado explícitamente desde QA): si la IP del PC
+          // cambió por DHCP, re-escanea la red para encontrar el mismo backend local.
+          // En Producción nunca conmuta silenciosamente a redes locales.
+          if (Environment.activeMode == ApiEnvironmentMode.local &&
+              _isConnectivityOrServerDown(error)) {
             final failoverResponse = await _attemptFailover(error);
             if (failoverResponse != null) {
               return handler.resolve(failoverResponse);
@@ -262,40 +265,50 @@ class ApiClient {
     return false;
   }
 
-  /// Ejecuta el failover hacia el siguiente host candidato y reintenta la petición
+  /// Re-descubre el servidor local Mekanos si cambió de IP y reintenta la petición una vez.
   Future<Response<dynamic>?> _attemptFailover(DioException error) async {
-    final currentBase = error.requestOptions.baseUrl;
-    String? nextTarget;
-
-    if (currentBase == Environment.productionApiUrl) {
-      // Túnel de producción caído -> Conmutar a servidor local NestJS (puerto 3000)
-      nextTarget = Environment.localApiUrl;
-      debugPrint(
-        '⚠️ [API-FAILOVER] Túnel de producción inaccesible. Conmutando a servidor local: $nextTarget',
-      );
+    if (Environment.activeMode != ApiEnvironmentMode.local) {
+      return null;
     }
-
-    if (nextTarget == null || nextTarget == currentBase) {
+    if (error.requestOptions.extra['_retriedLocalDiscovery'] == true) {
       return null;
     }
 
-    // Actualizar configuración activa y Dio
-    Environment.setActiveApiUrl(nextTarget);
-    dio.options.baseUrl = nextTarget;
+    final currentBase = error.requestOptions.baseUrl;
+    debugPrint(
+      '⚠️ [API-LOCAL] Error de red contra $currentBase. Re-descubriendo servidor local...',
+    );
+
+    final discovered = await LocalApiDiscovery.rediscoverBestLocal(
+      previousHostname: Environment.currentState.serverHostname,
+    );
+    if (discovered == null) {
+      debugPrint('❌ [API-LOCAL] No se encontró ningún servidor Mekanos local activo.');
+      return null;
+    }
+
+    Environment.setLocalApiUrl(
+      discovered.baseUrl,
+      hostname: discovered.hostname,
+      serverEnvironment: discovered.environment,
+      commit: discovered.commit,
+      originLabel: discovered.originLabel,
+    );
+    dio.options.baseUrl = discovered.baseUrl;
 
     try {
       final retryOptions = error.requestOptions;
-      retryOptions.baseUrl = nextTarget;
+      retryOptions.baseUrl = discovered.baseUrl;
+      retryOptions.extra['_retriedLocalDiscovery'] = true;
 
-      debugPrint('🔁 [API-FAILOVER] Reintentando petición en: ${retryOptions.uri}');
+      debugPrint('🔁 [API-LOCAL] Reintentando petición en: ${retryOptions.uri}');
       final response = await dio.fetch(retryOptions);
-      debugPrint('✅ [API-FAILOVER] Conexión exitosa a: $nextTarget (${response.statusCode})');
+      debugPrint(
+        '✅ [API-LOCAL] Conexión reestablecida con ${discovered.baseUrl} (${response.statusCode})',
+      );
       return response;
     } catch (retryError) {
-      debugPrint('❌ [API-FAILOVER] Error al contactar $nextTarget: $retryError');
-      if (retryError is DioException && _isConnectivityOrServerDown(retryError)) {
-        return await _attemptFailover(retryError);
-      }
+      debugPrint('❌ [API-LOCAL] Falló reintento contra ${discovered.baseUrl}: $retryError');
       return null;
     }
   }

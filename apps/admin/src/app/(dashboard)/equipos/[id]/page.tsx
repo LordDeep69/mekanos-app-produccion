@@ -13,6 +13,7 @@
 
 'use client';
 
+import { getMetricaUsoMeta, type MetricaUsoEquipoMeta } from '@/features/catalogos-eam';
 import {
   EquipoPendientesTab,
   EquipoRepuestosTab,
@@ -21,7 +22,11 @@ import {
   useCambiarEstadoEquipo,
   useEquipo,
   useFichaLogisticaEquipo,
+  useParametrosTelemetriaTipoEquipo,
   useRegistrarLecturaHorometro,
+  type ConfigParametros,
+  type ParametroCatalogoArquetipo,
+  type ParametroOverrideEquipo,
 } from '@/features/equipos';
 import { cn, formatDateSafe } from '@/lib/utils';
 import {
@@ -43,6 +48,7 @@ import {
   Fuel,
   Gauge,
   History,
+  Layers,
   Loader2,
   MapPin,
   PackageCheck,
@@ -50,7 +56,7 @@ import {
   Plus,
   RefreshCw,
   Settings,
-  Timer,
+  Sliders,
   Snowflake,
   Wind,
   Wrench,
@@ -359,19 +365,21 @@ function ModalCambiarEstado({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODAL: REGISTRAR LECTURA HORÓMETRO
+// MODAL: REGISTRAR LECTURA DE CONTADOR OPERATIVO (DINÁMICO EAM)
 // ═══════════════════════════════════════════════════════════════════════════════
 function ModalRegistrarLectura({
   isOpen,
   onClose,
   equipoId,
   horasActuales,
+  metrica,
   onSuccess,
 }: {
   isOpen: boolean;
   onClose: () => void;
   equipoId: number;
   horasActuales: number;
+  metrica: MetricaUsoEquipoMeta;
   onSuccess: () => void;
 }) {
   const [horas, setHoras] = useState('');
@@ -409,7 +417,10 @@ function ModalRegistrarLectura({
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px]" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-200">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-slate-900">Registrar Lectura de Horómetro</h3>
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span aria-hidden="true">{metrica.icono}</span>
+            <span>{metrica.tituloModalLectura}</span>
+          </h3>
           <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg">
             <X className="h-4 w-4 text-slate-500" />
           </button>
@@ -418,12 +429,12 @@ function ModalRegistrarLectura({
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
             <span className="text-xs font-medium text-blue-700">Lectura actual acumulada:</span>
             <span className="font-mono font-bold text-sm text-blue-900">
-              {horasActuales.toLocaleString()} hrs
+              {horasActuales.toLocaleString()} {metrica.sufijoCorto}
             </span>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Nueva Lectura (hrs)
+              Nueva Lectura ({metrica.sufijoCorto})
             </label>
             <input
               type="number"
@@ -435,12 +446,13 @@ function ModalRegistrarLectura({
                 'w-full px-3 py-2 text-sm font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
                 horas && !esValido ? 'border-rose-300 bg-rose-50' : 'border-slate-300',
               )}
-              placeholder={`Mínimo ${horasActuales} hrs`}
+              placeholder={`Mínimo ${horasActuales} ${metrica.sufijoCorto}`}
               required
             />
             {horas && !esValido && (
               <p className="text-xs text-rose-600 mt-1">
-                La nueva lectura no puede ser inferior a las horas actuales ({horasActuales} hrs)
+                La nueva lectura no puede ser inferior a la lectura actual ({horasActuales}{' '}
+                {metrica.sufijoCorto})
               </p>
             )}
           </div>
@@ -453,7 +465,7 @@ function ModalRegistrarLectura({
               onChange={(e) => setObservaciones(e.target.value)}
               rows={2}
               className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Ej: Lectura tomada durante visita técnica preventiva..."
+              placeholder={`Ej: Lectura de ${metrica.etiquetaContador.toLowerCase()} tomada durante visita técnica preventiva...`}
             />
           </div>
           <div className="flex gap-2.5 pt-2">
@@ -498,6 +510,148 @@ function ModalRegistrarLectura({
 // VISTA PRINCIPAL DEL EXPEDIENTE 360° (/equipos/[id])
 // ═══════════════════════════════════════════════════════════════════════════════
 
+interface TelemetriaResumenRow {
+  key: string;
+  nombre: string;
+  codigo: string;
+  sistema?: string | null;
+  unidad: string;
+  unidadCatalogo: string;
+  minNormal?: number | null;
+  maxNormal?: number | null;
+  minCritico?: number | null;
+  maxCritico?: number | null;
+  catMinNormal?: number | null;
+  catMaxNormal?: number | null;
+  esPersonalizado: boolean;
+  esAdicional: boolean;
+}
+
+const toTelemetriaNum = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const parsed = Number(v);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatRangoLinea = (
+  min: number | null | undefined,
+  max: number | null | undefined,
+  unidad?: string,
+): string => {
+  const hasMin = min !== null && min !== undefined && Number.isFinite(min);
+  const hasMax = max !== null && max !== undefined && Number.isFinite(max);
+  const sufijo = unidad ? ` ${unidad}` : '';
+  if (hasMin && hasMax) return `[${min} — ${max}]${sufijo}`;
+  if (hasMin) return `≥ ${min}${sufijo}`;
+  if (hasMax) return `≤ ${max}${sufijo}`;
+  return 'Sin definir';
+};
+
+function buildTelemetriaResumenEquipo(
+  config: ConfigParametros | undefined,
+  catalogo: ParametroCatalogoArquetipo[],
+): TelemetriaResumenRow[] {
+  const rows: TelemetriaResumenRow[] = [];
+  const porParam = config?.por_parametro || {};
+  const adicionales = config?.parametros_adicionales || [];
+  const rangosLegacy = config?.rangos || {};
+  const matchedKeys = new Set<string>();
+
+  for (const cat of catalogo) {
+    const idKey = String(cat.id_parametro_medicion);
+    const codeKey = cat.codigo_parametro;
+    const override: ParametroOverrideEquipo | undefined =
+      porParam[idKey] || (codeKey ? porParam[codeKey] : undefined);
+    const legacyRange = codeKey ? rangosLegacy[codeKey] : undefined;
+
+    if (override) {
+      matchedKeys.add(idKey);
+      if (codeKey) matchedKeys.add(codeKey);
+    }
+
+    const minNormal = toTelemetriaNum(
+      override?.min_normal ?? legacyRange?.min_normal ?? cat.valor_minimo_normal,
+    );
+    const maxNormal = toTelemetriaNum(
+      override?.max_normal ?? legacyRange?.max_normal ?? cat.valor_maximo_normal,
+    );
+    const minCritico = toTelemetriaNum(
+      override?.min_critico ?? legacyRange?.min_critico ?? cat.valor_minimo_critico,
+    );
+    const maxCritico = toTelemetriaNum(
+      override?.max_critico ?? legacyRange?.max_critico ?? cat.valor_maximo_critico,
+    );
+    const unidad = (override?.unidad_medida || cat.unidad_medida || '').trim();
+    const esPersonalizado = Boolean(
+      (override &&
+        (override.unidad_medida !== undefined ||
+          override.min_normal !== undefined ||
+          override.max_normal !== undefined ||
+          override.min_critico !== undefined ||
+          override.max_critico !== undefined ||
+          override.valor_ideal !== undefined)) ||
+        legacyRange,
+    );
+
+    rows.push({
+      key: `cat-${cat.id_parametro_medicion}`,
+      nombre: cat.nombre_parametro,
+      codigo: cat.codigo_parametro,
+      sistema: cat.nombre_sistema,
+      unidad,
+      unidadCatalogo: cat.unidad_medida,
+      minNormal,
+      maxNormal,
+      minCritico,
+      maxCritico,
+      catMinNormal: toTelemetriaNum(cat.valor_minimo_normal),
+      catMaxNormal: toTelemetriaNum(cat.valor_maximo_normal),
+      esPersonalizado,
+      esAdicional: false,
+    });
+  }
+
+  for (let i = 0; i < adicionales.length; i += 1) {
+    const add = adicionales[i];
+    const code = (add.codigo_parametro || `CUSTOM_${i + 1}`).trim();
+    rows.push({
+      key: `add-${code}-${i}`,
+      nombre: add.nombre_parametro || code,
+      codigo: code,
+      sistema: add.nombre_sistema || 'Específico del Equipo',
+      unidad: (add.unidad_medida || '').trim(),
+      unidadCatalogo: (add.unidad_medida || '').trim(),
+      minNormal: toTelemetriaNum(add.min_normal),
+      maxNormal: toTelemetriaNum(add.max_normal),
+      minCritico: toTelemetriaNum(add.min_critico),
+      maxCritico: toTelemetriaNum(add.max_critico),
+      esPersonalizado: true,
+      esAdicional: true,
+    });
+  }
+
+  // Fallback para entradas en por_parametro cuyo catálogo ya no figure o venga sin endpoint
+  for (const [k, ov] of Object.entries(porParam)) {
+    if (matchedKeys.has(k) || !ov) continue;
+    rows.push({
+      key: `ov-${k}`,
+      nombre: ov.nombre_parametro || ov.codigo_parametro || `Parámetro ${k}`,
+      codigo: ov.codigo_parametro || k,
+      sistema: ov.nombre_sistema || 'Override Guardado',
+      unidad: (ov.unidad_medida || '').trim(),
+      unidadCatalogo: (ov.unidad_medida || '').trim(),
+      minNormal: toTelemetriaNum(ov.min_normal),
+      maxNormal: toTelemetriaNum(ov.max_normal),
+      minCritico: toTelemetriaNum(ov.min_critico),
+      maxCritico: toTelemetriaNum(ov.max_critico),
+      esPersonalizado: true,
+      esAdicional: Boolean(ov.es_adicional_equipo),
+    });
+  }
+
+  return rows;
+}
+
 type ActiveTab = 'ficha' | 'repuestos' | 'ordenes' | 'pendientes';
 
 export default function EquipoDetallePage() {
@@ -518,6 +672,19 @@ export default function EquipoDetallePage() {
   } = useFichaLogisticaEquipo(id);
 
   const equipo = data?.data;
+  const idTipoEquipoTelemetria =
+    equipo?.tipos_equipo?.id_tipo_equipo ?? equipo?.tipo_equipo?.id_tipo_equipo ?? null;
+  const { data: parametrosCatalogo = [], isLoading: isLoadingTelemetria } =
+    useParametrosTelemetriaTipoEquipo(idTipoEquipoTelemetria);
+
+  const telemetriaRows = useMemo(
+    () => buildTelemetriaResumenEquipo(equipo?.config_parametros, parametrosCatalogo),
+    [equipo?.config_parametros, parametrosCatalogo],
+  );
+  const telemetriaPersonalizadosCount = useMemo(
+    () => telemetriaRows.filter((r) => r.esPersonalizado).length,
+    [telemetriaRows],
+  );
   const specsRoot = equipo?.especificaciones as
     | {
         modulos?: Record<string, Record<string, string | number | boolean | null | undefined>>;
@@ -612,6 +779,13 @@ export default function EquipoDetallePage() {
     (motor && (esCombustibleDieselOGas || tieneAceiteReal) && combustible !== 'ELECTRICO');
 
   // Cálculos de KPIs en vivo (Filosofía de Referenciación Zero-Stress)
+  const metrica = getMetricaUsoMeta({
+    unidadUso: equipo.tipos_equipo?.unidad_uso ?? equipo.tipo_equipo?.unidad_uso,
+    etiquetaContador:
+      equipo.tipos_equipo?.etiqueta_contador ?? equipo.tipo_equipo?.etiqueta_contador,
+    requiereHorometro:
+      equipo.tipos_equipo?.requiere_horometro ?? equipo.tipo_equipo?.requiere_horometro,
+  });
   const horasActualesNum = Number(equipo.horas_actuales || 0);
   const totalOrdenes = fichaLogistica?.resumen?.total_ordenes ?? 0;
   const totalBom = fichaLogistica?.resumen?.total_bom ?? 0;
@@ -722,8 +896,8 @@ export default function EquipoDetallePage() {
             onClick={() => setModalLecturaOpen(true)}
             className="inline-flex items-center gap-1.5 h-8 px-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
           >
-            <Timer className="h-3.5 w-3.5 text-emerald-600" />
-            <span>+ Horómetro</span>
+            <span aria-hidden="true">{metrica.icono}</span>
+            <span>{metrica.botonActualizar}</span>
           </button>
 
           <Link
@@ -749,29 +923,39 @@ export default function EquipoDetallePage() {
       {/* 2. TARJETAS KPI EJECUTIVAS DEL ACTIVO                                  */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* KPI 1: Horómetro */}
+        {/* KPI 1: Contador Dinámico EAM */}
         <div
           onClick={() => setModalLecturaOpen(true)}
           className="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-300 transition-all shadow-2xs cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Horómetro Acumulado
+              {metrica.tituloKpi360}
             </span>
             <div className="p-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-lg">
-              <Timer className="h-4 w-4" />
+              <span aria-hidden="true" className="text-sm leading-none">
+                {metrica.icono}
+              </span>
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black font-mono text-slate-900">
-              {horasActualesNum.toLocaleString()}
-            </span>
-            <span className="text-xs font-bold text-blue-700">hrs</span>
+            {metrica.soloCalendario && horasActualesNum === 0 ? (
+              <span className="text-base font-extrabold text-emerald-700">Solo Calendario</span>
+            ) : (
+              <>
+                <span className="text-2xl font-black font-mono text-slate-900">
+                  {horasActualesNum.toLocaleString()}
+                </span>
+                <span className="text-xs font-bold text-blue-700">{metrica.sufijoCorto}</span>
+              </>
+            )}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
             {equipo.fecha_ultima_lectura_horas
               ? `Últ. lectura: ${formatDateSafe(equipo.fecha_ultima_lectura_horas, { day: '2-digit', month: 'short', year: 'numeric' })}`
-              : 'Click para registrar lectura'}
+              : metrica.soloCalendario
+                ? 'Frecuencia por días calendario'
+                : 'Click para registrar lectura'}
           </p>
         </div>
 
@@ -1186,6 +1370,140 @@ export default function EquipoDetallePage() {
           {/* Especificaciones Técnicas Polimórficas EAM 360° (JSONB + Satélites + Esquema Hub) */}
           <FichaTecnicaPolimorficaEam equipo={equipo} onUpdated={() => refetch()} />
 
+          {/* Telemetría y Rangos Operativos Personalizados del Activo */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs">
+            <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60 rounded-t-xl">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Sliders className="h-4 w-4 text-violet-600 shrink-0" />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700">
+                      Telemetría y Rangos Operativos del Activo
+                    </h3>
+                    {telemetriaPersonalizadosCount > 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-violet-100 text-violet-800 border border-violet-200">
+                        <Zap className="h-3 w-3" />
+                        {telemetriaPersonalizadosCount} personalizado
+                        {telemetriaPersonalizadosCount === 1 ? '' : 's'}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <CheckCircle className="h-3 w-3" />
+                        Estándar del catálogo
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Variables de medición heredadas del arquetipo ({rawTipoEquipo || 'EAM'}) y
+                    umbrales específicos de este equipo
+                  </p>
+                </div>
+              </div>
+              <Link
+                href={`/equipos/${id}/editar`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors shrink-0"
+              >
+                <Sliders className="h-3.5 w-3.5" />
+                Configurar / Editar rangos
+              </Link>
+            </div>
+
+            <div className="p-4">
+              {isLoadingTelemetria ? (
+                <div className="flex items-center gap-2 py-4 text-xs text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin text-violet-600" />
+                  <span>Cargando parámetros de telemetría del arquetipo...</span>
+                </div>
+              ) : telemetriaRows.length === 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 py-3 px-4 rounded-lg bg-slate-50 border border-dashed border-slate-200 text-xs text-slate-500">
+                  <span>
+                    Este tipo de equipo no registra variables de telemetría en catálogo ni
+                    parámetros personalizados.
+                  </span>
+                  <Link
+                    href={`/equipos/${id}/editar`}
+                    className="font-semibold text-violet-700 hover:underline"
+                  >
+                    Agregar parámetro en edición →
+                  </Link>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {telemetriaRows.map((row) => (
+                    <div
+                      key={row.key}
+                      className={cn(
+                        'rounded-lg border p-3 transition-colors',
+                        row.esPersonalizado
+                          ? 'bg-violet-50/40 border-violet-200'
+                          : 'bg-slate-50/60 border-slate-200',
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900">{row.nombre}</span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                              {row.codigo}
+                            </span>
+                          </div>
+                          {row.sistema && (
+                            <div className="inline-flex items-center gap-1 text-[11px] text-slate-500 mt-1">
+                              <Layers className="h-3 w-3 text-slate-400" />
+                              <span>{row.sistema}</span>
+                            </div>
+                          )}
+                        </div>
+                        {row.esAdicional ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200 shrink-0">
+                            <Zap className="h-2.5 w-2.5" />
+                            Específico equipo
+                          </span>
+                        ) : row.esPersonalizado ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-800 border border-violet-200 shrink-0">
+                            <Zap className="h-2.5 w-2.5" />
+                            Personalizado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 shrink-0">
+                            Estándar
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-2.5 pt-2 border-t border-slate-200/70 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div>
+                          <span className="text-slate-500">Rango normal: </span>
+                          <span className="font-bold text-slate-900">
+                            {formatRangoLinea(row.minNormal, row.maxNormal, row.unidad)}
+                          </span>
+                        </div>
+                        {(row.minCritico !== null || row.maxCritico !== null) && (
+                          <div className="text-[11px] text-rose-700 font-semibold">
+                            Crítico: {formatRangoLinea(row.minCritico, row.maxCritico, row.unidad)}
+                          </div>
+                        )}
+                      </div>
+
+                      {row.esPersonalizado && !row.esAdicional && (
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Estándar catálogo:{' '}
+                          <span className="font-medium text-slate-700">
+                            {formatRangoLinea(
+                              row.catMinNormal,
+                              row.catMaxNormal,
+                              row.unidadCatalogo,
+                            )}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Observaciones y Configuración Especial */}
           {(equipo.observaciones_generales ||
             equipo.configuracion_especial ||
@@ -1226,9 +1544,9 @@ export default function EquipoDetallePage() {
             </InfoCard>
           )}
 
-          {/* Historial de Horómetro y Estados */}
+          {/* Historial de Contador y Estados */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <InfoCard title="Últimas Lecturas de Horómetro" icon={Clock}>
+            <InfoCard title={metrica.tituloHistorialLecturas} icon={Clock}>
               {equipo.lecturas_horometro && equipo.lecturas_horometro.length > 0 ? (
                 <div className="space-y-1.5">
                   {equipo.lecturas_horometro.map((lectura, idx: number) => (
@@ -1244,14 +1562,15 @@ export default function EquipoDetallePage() {
                         })}
                       </span>
                       <span className="font-mono text-xs font-bold text-slate-900">
-                        {Number(lectura.horas_lectura).toLocaleString()} hrs
+                        {Number(lectura.horas_lectura).toLocaleString()} {metrica.sufijoCorto}
                       </span>
                     </div>
                   ))}
                 </div>
               ) : (
                 <p className="text-xs text-slate-400 italic py-2">
-                  No se han registrado lecturas de horómetro adicionales.
+                  No se han registrado lecturas de {metrica.etiquetaContador.toLowerCase()}{' '}
+                  adicionales.
                 </p>
               )}
             </InfoCard>
@@ -1301,6 +1620,7 @@ export default function EquipoDetallePage() {
           ficha={fichaLogistica}
           isLoading={isLoadingLogistica}
           isError={isErrorLogistica}
+          metricaUso={metrica}
           onRetry={() => refetchLogistica()}
         />
       )}
@@ -1435,6 +1755,7 @@ export default function EquipoDetallePage() {
         onClose={() => setModalLecturaOpen(false)}
         equipoId={id}
         horasActuales={horasActualesNum}
+        metrica={metrica}
         onSuccess={() => refetch()}
       />
     </div>

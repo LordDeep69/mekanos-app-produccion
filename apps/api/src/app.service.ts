@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import * as os from 'os';
 import { GIT_COMMIT } from './common/git-commit';
 import { PrismaService } from './database/prisma.service';
+
+const SERVER_HOSTNAME = os.hostname();
 
 @Injectable()
 export class AppService {
@@ -16,6 +19,10 @@ export class AppService {
    */
   async getHealth(): Promise<{
     status: string;
+    service: string;
+    app: string;
+    hostname: string;
+    version: string;
     commit?: string;
     timestamp: string;
     database: string;
@@ -27,6 +34,10 @@ export class AppService {
 
       return {
         status: 'ok',
+        service: 'Mekanos API',
+        app: 'mekanos-api',
+        hostname: SERVER_HOSTNAME,
+        version: '0.1.0',
         commit: GIT_COMMIT,
         timestamp: new Date().toISOString(),
         database: 'connected',
@@ -35,6 +46,10 @@ export class AppService {
     } catch (error) {
       return {
         status: 'error',
+        service: 'Mekanos API',
+        app: 'mekanos-api',
+        hostname: SERVER_HOSTNAME,
+        version: '0.1.0',
         timestamp: new Date().toISOString(),
         database: 'disconnected',
         environment: process.env.NODE_ENV || 'development',

@@ -906,16 +906,43 @@ function TabEjecucion({ orden }: { orden: Orden }) {
     }
   };
 
+  // Helper para resolver la unidad metrológica del equipo asociado a una actividad
+  const resolveMetricaActividad = (idOrdenEquipo?: number | null) => {
+    const oe = idOrdenEquipo
+      ? orden.ordenes_equipos?.find((item) => item.id_orden_equipo === idOrdenEquipo)
+      : orden.ordenes_equipos?.[0];
+    const tipoEquipo =
+      oe?.equipo?.tipos_equipo ?? oe?.equipos?.tipos_equipo ?? orden.equipos?.tipos_equipo;
+    return {
+      unidadUso: tipoEquipo?.unidad_uso,
+      etiquetaContador: tipoEquipo?.etiqueta_contador,
+      requiereHorometro: tipoEquipo?.requiere_horometro,
+    };
+  };
+
   // Helper para renderizar el contenido de checklist de un grupo de actividades
   const renderChecklistContent = (acts: ActividadEjecutadaOrden[]) => (
     <div className="space-y-2">
-      {acts.map((act) => (
-        <ActividadCardAdvanced
-          key={act.id_actividad_ejecutada}
-          actividad={act}
-          idOrdenServicio={orden.id_orden_servicio}
-        />
-      ))}
+      {acts.map((act) => {
+        const metricaProps = resolveMetricaActividad(act.id_orden_equipo);
+        return (
+          <ActividadCardAdvanced
+            key={act.id_actividad_ejecutada}
+            actividad={act}
+            idOrdenServicio={orden.id_orden_servicio}
+            unidadUso={metricaProps.unidadUso}
+            etiquetaContador={metricaProps.etiquetaContador}
+            requiereHorometro={metricaProps.requiereHorometro}
+            horasActualesEquipo={(() => {
+              const oeMatch = (orden.ordenes_equipos || []).find(
+                (oe) => oe.id_orden_equipo === act.id_orden_equipo,
+              );
+              const raw = oeMatch?.equipos?.horas_actuales ?? orden.equipos?.horas_actuales;
+              return raw != null ? Number(raw) : null;
+            })()}
+          />
+        );
+      })}
     </div>
   );
 
@@ -1300,6 +1327,9 @@ function TabEjecucion({ orden }: { orden: Orden }) {
           )}
         </div>
       </div>
+
+      {/* 📌 Sección transversal de Pendientes Técnicos y Hallazgos R/M directamente en Ejecución */}
+      <PendientesSection orden={orden} />
     </div>
   );
 }

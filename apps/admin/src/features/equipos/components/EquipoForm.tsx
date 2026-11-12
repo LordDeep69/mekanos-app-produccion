@@ -13,6 +13,7 @@
 
 import {
   getCriterioIntervaloHumano,
+  getMetricaUsoMeta,
   getRolBomHumano,
   useArquetipoEsquemaEam,
   useArquetiposEam,
@@ -38,7 +39,6 @@ import {
   PackageCheck,
   Settings,
   Sparkles,
-  Timer,
   Wind,
   Zap,
 } from 'lucide-react';
@@ -58,8 +58,9 @@ import type {
   EstadoEquipo,
   EstadoPintura,
   TipoContrato,
+  ConfigParametros,
 } from '../types';
-import { ConfigParametros, ConfigParametrosEditor } from './ConfigParametrosEditor';
+import { ConfigParametrosEditor } from './ConfigParametrosEditor';
 import { DynamicModularSpecsEditor } from './DynamicModularSpecsEditor';
 import { EamSelect } from '@/components/ui/eam-select';
 
@@ -339,6 +340,19 @@ export function EquipoForm({
   const selectedModeloOem = useMemo(
     () => modelosOem?.find((m) => m.id_modelo_equipo === selectedModeloOemId) || null,
     [modelosOem, selectedModeloOemId],
+  );
+
+  // Metrología dinámica del arquetipo seleccionado (Horómetro / Ciclos / Odómetro / UPM / Calendario)
+  const metricaUso = useMemo(
+    () =>
+      getMetricaUsoMeta({
+        unidadUso: esquemaArquetipo?.arquetipo?.unidad_uso ?? selectedArquetipo?.unidad_uso,
+        etiquetaContador:
+          esquemaArquetipo?.arquetipo?.etiqueta_contador ?? selectedArquetipo?.etiqueta_contador,
+        requiereHorometro:
+          esquemaArquetipo?.arquetipo?.requiere_horometro ?? selectedArquetipo?.requiere_horometro,
+      }),
+    [esquemaArquetipo, selectedArquetipo],
   );
 
   const form = useForm<EquipoFormData>({
@@ -1339,21 +1353,30 @@ export function EquipoForm({
                 />
               </div>
 
-              {/* Contador / Horómetro adaptado al Arquetipo */}
+              {/* Contador Operativo adaptado dinámicamente a la metrología del Arquetipo */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <Timer className="h-3.5 w-3.5 text-blue-600" />
-                  {selectedArquetipo?.requiere_horometro !== false
-                    ? 'Horas Actuales (Horómetro)'
-                    : 'Lectura de Uso / Horas Acumuladas'}
+                  <span aria-hidden="true">{metricaUso.icono}</span>
+                  <span>
+                    {metricaUso.soloCalendario
+                      ? 'Régimen de Control de Uso'
+                      : metricaUso.labelInputInicial}
+                  </span>
                 </label>
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="Ej: 1250"
-                  {...register('datosEquipo.horas_actuales', { valueAsNumber: true })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold bg-white focus:ring-2 focus:ring-blue-500"
-                />
+                {metricaUso.soloCalendario ? (
+                  <div className="w-full px-3.5 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-900 text-xs font-semibold flex items-center gap-2">
+                    <span aria-hidden="true">📅</span>
+                    <span>Control exclusivo por Calendario (Sin contador físico)</span>
+                  </div>
+                ) : (
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder={metricaUso.placeholderInputInicial}
+                    {...register('datosEquipo.horas_actuales', { valueAsNumber: true })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold bg-white focus:ring-2 focus:ring-blue-500"
+                  />
+                )}
               </div>
 
               {/* Ubicación Física Detallada */}
@@ -1578,12 +1601,12 @@ export function EquipoForm({
                         </span>
                       </label>
                       <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white text-emerald-800 border border-emerald-200">
-                        {getCriterioIntervaloHumano(plan.criterio_intervalo)}
+                        {getCriterioIntervaloHumano(plan.criterio_intervalo, metricaUso)}
                       </span>
                     </div>
 
                     {plan.activo && (
-                      <div className="grid grid-cols-3 gap-2.5 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-600 mb-1">
                             Cada (Días)
@@ -1605,19 +1628,25 @@ export function EquipoForm({
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-600 mb-1">
-                            Cada (Horas)
+                            {metricaUso.labelCadaUso}
                           </label>
                           <input
                             type="number"
-                            placeholder="Ej: 250"
-                            value={plan.frecuencia_uso}
+                            disabled={metricaUso.soloCalendario}
+                            placeholder={metricaUso.soloCalendario ? 'No aplica' : 'Ej: 250'}
+                            value={metricaUso.soloCalendario ? '' : plan.frecuencia_uso}
                             onChange={(e) => {
                               const val = e.target.value === '' ? '' : Number(e.target.value);
                               updatePlanesHeredados((prev) =>
                                 prev.map((p, i) => (i === idx ? { ...p, frecuencia_uso: val } : p)),
                               );
                             }}
-                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold"
+                            className={cn(
+                              'w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono font-bold',
+                              metricaUso.soloCalendario
+                                ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-white border-slate-300',
+                            )}
                           />
                         </div>
                         <div>
@@ -1626,7 +1655,9 @@ export function EquipoForm({
                           </label>
                           <EamSelect
                             size="sm"
-                            value={plan.criterio_intervalo}
+                            usePortal
+                            minDropdownWidth={300}
+                            value={metricaUso.soloCalendario ? 'DIAS' : plan.criterio_intervalo}
                             onChange={(val) => {
                               const crit = val as PlanPreventivoHeredadoState['criterio_intervalo'];
                               updatePlanesHeredados((prev) =>
@@ -1635,11 +1666,24 @@ export function EquipoForm({
                                 ),
                               );
                             }}
-                            options={[
-                              { value: 'LO_QUE_OCURRA_PRIMERO', label: 'Lo que ocurra 1°' },
-                              { value: 'DIAS', label: 'Solo por Días' },
-                              { value: 'HORAS', label: 'Solo por Horas' },
-                            ]}
+                            options={
+                              metricaUso.soloCalendario
+                                ? [{ value: 'DIAS', label: 'Solo por Calendario (Días)' }]
+                                : [
+                                    {
+                                      value: 'LO_QUE_OCURRA_PRIMERO',
+                                      label: getCriterioIntervaloHumano(
+                                        'LO_QUE_OCURRA_PRIMERO',
+                                        metricaUso,
+                                      ),
+                                    },
+                                    { value: 'DIAS', label: 'Solo por Calendario (Días)' },
+                                    {
+                                      value: 'HORAS',
+                                      label: `Solo por Uso (${metricaUso.sustantivoUso})`,
+                                    },
+                                  ]
+                            }
                             placeholder="Regla..."
                           />
                         </div>
@@ -1746,6 +1790,8 @@ export function EquipoForm({
                   <ConfigParametrosEditor
                     value={configParametros}
                     onChange={setConfigParametros}
+                    idTipoEquipo={selectedArquetipo?.id_tipo_equipo || null}
+                    codigoTipo={selectedArquetipo?.codigo_tipo || tipoSeleccionado}
                     tipoEquipo={
                       (selectedArquetipo?.codigo_tipo || tipoSeleccionado) as
                         | 'GENERADOR'

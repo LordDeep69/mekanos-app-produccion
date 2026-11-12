@@ -8,6 +8,7 @@
 
 'use client';
 
+import { getMetricaUsoMeta, type MetricaUsoEquipoMeta } from '@/features/catalogos-eam';
 import {
   useComponentesStock,
   type ComponenteStock,
@@ -186,10 +187,12 @@ function StockBadge({ item }: { item: BomItem }) {
 function ModalVincularBom({
   idEquipo,
   yaVinculados,
+  metrica,
   onClose,
 }: {
   idEquipo: number;
   yaVinculados: Set<number>;
+  metrica: MetricaUsoEquipoMeta;
   onClose: () => void;
 }) {
   const [busqueda, setBusqueda] = useState('');
@@ -244,7 +247,9 @@ function ModalVincularBom({
     }
     const frec = frecuencia.trim() === '' ? null : parseInt(frecuencia, 10);
     if (frec !== null && !(frec > 0)) {
-      setError('La frecuencia debe ser un número de horas mayor a 0');
+      setError(
+        `La frecuencia debe ser un número de ${metrica.sustantivoUso.toLowerCase()} mayor a 0`,
+      );
       return;
     }
     try {
@@ -462,7 +467,7 @@ function ModalVincularBom({
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Frecuencia de cambio (horas){' '}
+                  Frecuencia de cambio ({metrica.sustantivoUso.toLowerCase()}){' '}
                   <span className="text-slate-400 normal-case font-medium">— opc.</span>
                 </label>
                 <input
@@ -525,10 +530,12 @@ function ModalVincularBom({
 function ModalEditarBom({
   idEquipo,
   item,
+  metrica,
   onClose,
 }: {
   idEquipo: number;
   item: BomItem;
+  metrica: MetricaUsoEquipoMeta;
   onClose: () => void;
 }) {
   const [categoria, setCategoria] = useState(item.categoria_aplicacion || 'REPUESTO_GENERAL');
@@ -551,7 +558,9 @@ function ModalEditarBom({
     }
     const frec = frecuencia.trim() === '' ? null : parseInt(frecuencia, 10);
     if (frec !== null && !(frec > 0)) {
-      setError('La frecuencia debe ser un número de horas mayor a 0');
+      setError(
+        `La frecuencia debe ser un número de ${metrica.sustantivoUso.toLowerCase()} mayor a 0`,
+      );
       return;
     }
 
@@ -669,7 +678,7 @@ function ModalEditarBom({
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Frecuencia de cambio (horas){' '}
+                  Frecuencia de cambio ({metrica.sustantivoUso.toLowerCase()}){' '}
                   <span className="text-slate-400 normal-case font-medium">— opc.</span>
                 </label>
                 <input
@@ -734,14 +743,17 @@ export function EquipoRepuestosTab({
   ficha,
   isLoading,
   isError,
+  metricaUso,
   onRetry,
 }: {
   idEquipo: number;
   ficha?: FichaLogisticaEquipo;
   isLoading: boolean;
   isError: boolean;
+  metricaUso?: MetricaUsoEquipoMeta;
   onRetry: () => void;
 }) {
+  const metrica = metricaUso ?? getMetricaUsoMeta();
   const [showVincular, setShowVincular] = useState(false);
   const [aEditar, setAEditar] = useState<BomItem | null>(null);
   const [aDesvincular, setADesvincular] = useState<BomItem | null>(null);
@@ -916,7 +928,8 @@ export function EquipoRepuestosTab({
                         </div>
                         {b.frecuencia_cambio_horas && (
                           <p className="text-[10px] text-slate-400 mt-1 whitespace-nowrap">
-                            Cada {b.frecuencia_cambio_horas.toLocaleString('es-CO')} hrs
+                            Cada {b.frecuencia_cambio_horas.toLocaleString('es-CO')}{' '}
+                            {metrica.sufijoCorto}
                           </p>
                         )}
                       </td>
@@ -1128,12 +1141,18 @@ export function EquipoRepuestosTab({
         <ModalVincularBom
           idEquipo={idEquipo}
           yaVinculados={yaVinculados}
+          metrica={metrica}
           onClose={() => setShowVincular(false)}
         />
       )}
 
       {aEditar && (
-        <ModalEditarBom idEquipo={idEquipo} item={aEditar} onClose={() => setAEditar(null)} />
+        <ModalEditarBom
+          idEquipo={idEquipo}
+          item={aEditar}
+          metrica={metrica}
+          onClose={() => setAEditar(null)}
+        />
       )}
 
       {aDesvincular && (

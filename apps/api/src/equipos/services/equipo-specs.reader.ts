@@ -1,14 +1,14 @@
 /**
  * MEKANOS S.A.S - Motor Universal de Activos EAM
- * 
+ *
  * EquipoSpecsReader: Puerta de Lectura Unificada Zero-Trust
- * 
+ *
  * Desacopla a los consumidores (PDF, cierre de órdenes, listados, móvil)
  * de las tablas satélite rígidas (equipos_generador, equipos_bomba, equipos_motor)
  * y de las futuras especificaciones JSONB dinámicas.
  */
 
-export type CategoriaCanonicaEquipo = 
+export type CategoriaCanonicaEquipo =
   | 'GENERADOR'
   | 'BOMBA'
   | 'MOTOR'
@@ -85,24 +85,39 @@ export class EquipoSpecsReader {
       equipo.codigo_tipo ||
       equipo.tipo_equipo ||
       ''
-    ).toUpperCase().trim();
+    )
+      .toUpperCase()
+      .trim();
 
-    const nombreTipo = (
-      equipo.tipos_equipo?.nombre_tipo ||
-      equipo.nombre_tipo ||
-      ''
-    ).toUpperCase().trim();
+    const nombreTipo = (equipo.tipos_equipo?.nombre_tipo || equipo.nombre_tipo || '')
+      .toUpperCase()
+      .trim();
 
     // 1. Mapeo por código exacto o prefijo
-    if (codigoTipo === 'GEN' || codigoTipo === 'GENERADOR' || nombreTipo.includes('GENERADOR') || nombreTipo.includes('PLANTA')) {
+    if (
+      codigoTipo === 'GEN' ||
+      codigoTipo === 'GENERADOR' ||
+      nombreTipo.includes('GENERADOR') ||
+      nombreTipo.includes('PLANTA')
+    ) {
       // Excepción detectada en auditoría: 14 equipos tipados como GENERADOR que son bombas
-      if (equipo.equipos_bomba && !equipo.equipos_generador && (equipo.codigo_equipo?.startsWith('EQ-BOMBA-') || equipo.codigo_equipo?.startsWith('BOMBA-'))) {
+      if (
+        equipo.equipos_bomba &&
+        !equipo.equipos_generador &&
+        (equipo.codigo_equipo?.startsWith('EQ-BOMBA-') ||
+          equipo.codigo_equipo?.startsWith('BOMBA-'))
+      ) {
         return 'BOMBA';
       }
       return 'GENERADOR';
     }
 
-    if (codigoTipo === 'BOM' || codigoTipo === 'BOMBA' || nombreTipo.includes('BOMBA') || nombreTipo.includes('HIDRÁULICA')) {
+    if (
+      codigoTipo === 'BOM' ||
+      codigoTipo === 'BOMBA' ||
+      nombreTipo.includes('BOMBA') ||
+      nombreTipo.includes('HIDRÁULICA')
+    ) {
       return 'BOMBA';
     }
 
@@ -114,11 +129,20 @@ export class EquipoSpecsReader {
       return 'MOTOR';
     }
 
-    if (codigoTipo.includes('HVAC') || codigoTipo.includes('CLIMA') || nombreTipo.includes('ACONDICIONADO') || nombreTipo.includes('CHILLER')) {
+    if (
+      codigoTipo.includes('HVAC') ||
+      codigoTipo.includes('CLIMA') ||
+      nombreTipo.includes('ACONDICIONADO') ||
+      nombreTipo.includes('CHILLER')
+    ) {
       return 'HVAC';
     }
 
-    if (codigoTipo.includes('ELEV') || nombreTipo.includes('ELEVADOR') || nombreTipo.includes('ASCENSOR')) {
+    if (
+      codigoTipo.includes('ELEV') ||
+      nombreTipo.includes('ELEVADOR') ||
+      nombreTipo.includes('ASCENSOR')
+    ) {
       return 'ELEVADOR';
     }
 
@@ -201,7 +225,9 @@ export class EquipoSpecsReader {
       'N/A'
     ).trim();
 
-    return serie.toUpperCase() === 'N/A' || serie === '' ? (equipo.numero_serie_equipo || 'N/A') : serie;
+    return serie.toUpperCase() === 'N/A' || serie === ''
+      ? equipo.numero_serie_equipo || 'N/A'
+      : serie;
   }
 
   /**
@@ -213,18 +239,52 @@ export class EquipoSpecsReader {
     const catCanonica = this.getCategoriaCanonica(equipo);
 
     // 1. JSONB dinámico si está presente
-    const specCap = this.buscarEnEspecificaciones(equipo, [
+    const capKeys = [
       'capacidad_de_enfriamiento',
       'capacidad_enfriamiento',
       'capacidad_refrigeracion',
       'potencia_principal',
+      'capacidad_de_carga_nominal',
       'capacidad_principal',
       'capacidad',
-    ]);
+    ];
+    let specCap: string | undefined;
+    let specCapKey: string | undefined;
+    for (const ck of capKeys) {
+      const found = this.buscarEnEspecificaciones(equipo, [ck]);
+      if (found) {
+        specCap = found;
+        specCapKey = ck;
+        break;
+      }
+    }
     if (specCap) {
       const match = String(specCap).match(/^([\d.]+)\s*(.*)$/);
       if (match) {
-        const uom = match[2] || (catCanonica === 'HVAC' ? 'TR' : '');
+        let uom = match[2]?.trim() || '';
+        if (!uom && specCapKey) {
+          const unidadesSpec = equipo?.especificaciones?.unidades;
+          const rawUnit =
+            (unidadesSpec && typeof unidadesSpec === 'object'
+              ? unidadesSpec[specCapKey]
+              : undefined) ||
+            (Array.isArray(equipo?.equipos_atributos_filtro)
+              ? equipo.equipos_atributos_filtro.find((f: any) => f?.codigo_atributo === specCapKey)
+                  ?.unidad_base_codigo
+              : undefined);
+          if (rawUnit) {
+            const lowerU = String(rawUnit).trim().toLowerCase();
+            uom =
+              lowerU === 'kg'
+                ? 'kg'
+                : lowerU === 'ms' || lowerU === 'm/s'
+                  ? 'm/s'
+                  : lowerU === 'und'
+                    ? ''
+                    : String(rawUnit).trim();
+          }
+        }
+        if (!uom && catCanonica === 'HVAC') uom = 'TR';
         return {
           valor: Number(match[1]),
           unidad: uom,
@@ -278,8 +338,12 @@ export class EquipoSpecsReader {
     if (!equipo) return null;
 
     const mot = equipo.equipos_motor;
-    const litrosAceite = mot?.capacidad_aceite_litros ? Number(mot.capacidad_aceite_litros) : undefined;
-    const litrosRefrig = mot?.capacidad_refrigerante_litros ? Number(mot.capacidad_refrigerante_litros) : undefined;
+    const litrosAceite = mot?.capacidad_aceite_litros
+      ? Number(mot.capacidad_aceite_litros)
+      : undefined;
+    const litrosRefrig = mot?.capacidad_refrigerante_litros
+      ? Number(mot.capacidad_refrigerante_litros)
+      : undefined;
 
     if (!litrosAceite && !litrosRefrig) return null;
 
@@ -314,7 +378,11 @@ export class EquipoSpecsReader {
     }
 
     // KPI HVAC: Gas Refrigerante
-    const gasRef = this.buscarEnEspecificaciones(equipo, ['gas_refrigerante', 'refrigerante', 'tipo_gas']);
+    const gasRef = this.buscarEnEspecificaciones(equipo, [
+      'gas_refrigerante',
+      'refrigerante',
+      'tipo_gas',
+    ]);
     if (gasRef) {
       kpis.push({
         codigo: 'gas_refrigerante',
@@ -349,18 +417,175 @@ export class EquipoSpecsReader {
       }
     }
 
-    // KPI 4: Horómetro de uso
-    const horas = Number(equipo.horas_actuales || 0);
-    if (horas > 0) {
+    // Inyectar KPIs dinámicos reales desde metadatos EAM (tipo_equipo_modulos + especificaciones + filtros)
+    const attrsMetaMap = new Map<
+      string,
+      {
+        nombre: string;
+        unidadSimbolo?: string;
+        esKpi?: boolean;
+        visiblePdf?: boolean;
+        rolSemantico?: string | null;
+        opciones?: Array<{ valor: string; etiqueta?: string; label?: string }>;
+      }
+    >();
+
+    const tModulos = Array.isArray(equipo?.tipos_equipo?.tipo_equipo_modulos)
+      ? equipo.tipos_equipo.tipo_equipo_modulos
+      : [];
+    for (const tem of tModulos) {
+      const mAttrs = Array.isArray(tem?.modulo?.modulo_atributos)
+        ? tem.modulo.modulo_atributos
+        : [];
+      for (const ma of mAttrs) {
+        const attr = ma?.atributo;
+        if (!attr?.codigo_atributo) continue;
+        attrsMetaMap.set(attr.codigo_atributo, {
+          nombre: attr.nombre_atributo || attr.codigo_atributo,
+          unidadSimbolo: attr.unidad_defecto?.simbolo || attr.unidad_defecto_codigo || undefined,
+          esKpi: Boolean(ma?.es_kpi),
+          visiblePdf: ma?.visible_en_pdf !== false,
+          rolSemantico: attr.rol_semantico || null,
+          opciones: Array.isArray(attr.opciones_json) ? attr.opciones_json : [],
+        });
+      }
+    }
+
+    const filtroMap = new Map<string, string>();
+    const filtros = Array.isArray(equipo?.equipos_atributos_filtro)
+      ? equipo.equipos_atributos_filtro
+      : [];
+    for (const f of filtros) {
+      if (f?.codigo_atributo && f?.unidad_base_codigo) {
+        filtroMap.set(f.codigo_atributo, String(f.unidad_base_codigo));
+      }
+    }
+
+    const flatSpecs: Record<string, any> = {};
+    const modsSpec = equipo?.especificaciones?.modulos;
+    if (modsSpec && typeof modsSpec === 'object') {
+      for (const modVal of Object.values(modsSpec)) {
+        if (modVal && typeof modVal === 'object' && !Array.isArray(modVal)) {
+          Object.assign(flatSpecs, modVal);
+        }
+      }
+    }
+    const unidadesSpec = equipo?.especificaciones?.unidades;
+    const unidadesMap =
+      unidadesSpec && typeof unidadesSpec === 'object'
+        ? (unidadesSpec as Record<string, string>)
+        : {};
+
+    const formatRawUnit = (rawUnit?: string, key?: string): string => {
+      const u = String(rawUnit || '').trim();
+      if (!u) {
+        if (key && key.includes('_vac')) return 'VAC';
+        return '';
+      }
+      const lower = u.toLowerCase();
+      if (lower === 'kg') return 'kg';
+      if (lower === 'ms' || lower === 'm/s') return 'm/s';
+      if (lower === 'und' || lower === 'unid') return '';
+      if (lower === 'vac') return 'VAC';
+      return u;
+    };
+
+    const formatOptionOrValue = (
+      val: any,
+      opciones?: Array<{ valor: string; etiqueta?: string; label?: string }>,
+    ): string => {
+      const rawStr = String(val).trim();
+      if (opciones && opciones.length > 0) {
+        const match = opciones.find((o) => String(o.valor).toUpperCase() === rawStr.toUpperCase());
+        if (match?.etiqueta || match?.label) {
+          return String(match.etiqueta || match.label);
+        }
+      }
+      // Limpiar slugs tipo GEARLESS_(SIN_ENGRANAJES) -> Gearless (Sin Engranajes)
+      if (/^[A-Z0-9_()]+$/.test(rawStr) && rawStr.includes('_')) {
+        return rawStr
+          .replace(/_/g, ' ')
+          .toLowerCase()
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+      }
+      return rawStr;
+    };
+
+    const yaExiste = new Set(kpis.map((k) => k.codigo));
+    const orderedKeys = [
+      ...Array.from(attrsMetaMap.keys()),
+      ...Object.keys(flatSpecs).filter((k) => !attrsMetaMap.has(k)),
+    ];
+
+    for (const key of orderedKeys) {
+      if (key === 'marca' || key === 'modelo') continue;
+      if (yaExiste.has(key)) continue;
+      const val = flatSpecs[key];
+      if (val === null || val === undefined || String(val).trim() === '') continue;
+
+      const meta = attrsMetaMap.get(key);
+      if (meta && meta.visiblePdf === false && !meta.esKpi) continue;
+
+      const unidadRaw = unidadesMap[key] || meta?.unidadSimbolo || filtroMap.get(key);
+      const unidadDisplay = formatRawUnit(unidadRaw, key);
+      const valorFormatted = formatOptionOrValue(val, meta?.opciones);
+      const yaIncluyeUnidad =
+        unidadDisplay !== '' &&
+        (valorFormatted.toUpperCase().endsWith(` ${unidadDisplay.toUpperCase()}`) ||
+          valorFormatted.toUpperCase() === unidadDisplay.toUpperCase());
+      const valorTexto =
+        unidadDisplay && !yaIncluyeUnidad ? `${valorFormatted} ${unidadDisplay}` : valorFormatted;
+      const etiqueta =
+        meta?.nombre || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+      // Si no tenemos potencia todavía y el rol semántico o key indica capacidad principal, sincronizar también
+      if (
+        !cap &&
+        (meta?.rolSemantico === 'POTENCIA_CAPACIDAD_PRINCIPAL' ||
+          key.includes('capacidad_de_carga'))
+      ) {
+        yaExiste.add('potencia');
+      }
+
+      yaExiste.add(key);
+      kpis.push({
+        codigo: key,
+        etiqueta,
+        valorTexto,
+        icono: meta?.esKpi ? 'Gauge' : 'Info',
+      });
+    }
+
+    // KPI 4: Contador principal de uso (Horómetro / Odómetro / Ciclos / UPM) según unidad_uso
+    const contadorActual = Number(equipo.horas_actuales || 0);
+    const unidadUso = String(equipo.tipos_equipo?.unidad_uso || 'HORAS').toUpperCase();
+    if (
+      contadorActual > 0 &&
+      unidadUso !== 'CAL' &&
+      equipo.tipos_equipo?.requiere_horometro !== false
+    ) {
+      const etiquetaContador = equipo.tipos_equipo?.etiqueta_contador?.trim();
+      let etiquetaKpi = etiquetaContador || 'Horómetro';
+      let sufijoKpi = 'hrs';
+      if (unidadUso === 'CICLOS') {
+        etiquetaKpi = etiquetaContador || 'Ciclos de Viaje';
+        sufijoKpi = 'ciclos';
+      } else if (unidadUso === 'KM_ODO') {
+        etiquetaKpi = etiquetaContador || 'Odómetro';
+        sufijoKpi = 'km';
+      } else if (unidadUso === 'UPM') {
+        etiquetaKpi = etiquetaContador || 'Producción';
+        sufijoKpi = 'und';
+      }
       kpis.push({
         codigo: 'horas_actuales',
-        etiqueta: 'Horómetro',
-        valorTexto: `${horas.toLocaleString()} hrs`,
+        etiqueta: etiquetaKpi,
+        valorTexto: `${contadorActual.toLocaleString('es-CO')} ${sufijoKpi}`,
         icono: 'Timer',
       });
     }
 
-    return kpis.slice(0, 4);
+    return kpis.slice(0, 8);
   }
 
   /**
@@ -388,15 +613,24 @@ export class EquipoSpecsReader {
     const bloques: BloquePlaca[] = [];
 
     // 1. Módulos dinámicos desde JSONB si existen
-    const specs = equipo.especificaciones || equipo.especificaciones_tecnicas || equipo.metadata?.especificaciones;
+    const specs =
+      equipo.especificaciones ||
+      equipo.especificaciones_tecnicas ||
+      equipo.metadata?.especificaciones;
     if (specs && typeof specs === 'object' && Object.keys(specs).length > 0) {
-      const mapaModulos = specs.modulos && typeof specs.modulos === 'object' ? specs.modulos : specs;
+      const mapaModulos =
+        specs.modulos && typeof specs.modulos === 'object' ? specs.modulos : specs;
       for (const [modKey, modVal] of Object.entries(mapaModulos)) {
         if (modKey.startsWith('_') || modKey === 'origen_atributos') continue;
         if (modVal && typeof modVal === 'object' && !Array.isArray(modVal)) {
           const atributos: AtributoPlaca[] = [];
           for (const [attrKey, attrVal] of Object.entries(modVal as Record<string, any>)) {
-            if (attrVal !== undefined && attrVal !== null && typeof attrVal !== 'object' && String(attrVal).trim() !== '') {
+            if (
+              attrVal !== undefined &&
+              attrVal !== null &&
+              typeof attrVal !== 'object' &&
+              String(attrVal).trim() !== ''
+            ) {
               let valorStr = String(attrVal);
               if (attrKey.includes('capacidad') && !valorStr.match(/[a-zA-Z]/)) {
                 if (categoriaCanonica === 'HVAC') valorStr = `${valorStr} TR`;
@@ -426,16 +660,42 @@ export class EquipoSpecsReader {
 
       if (gen) {
         const atributosGen: AtributoPlaca[] = [];
-        if (gen.marca_generador) atributosGen.push({ etiqueta: 'Marca Alternador', valor: gen.marca_generador, rolSemantico: 'marca' });
-        if (gen.modelo_generador) atributosGen.push({ etiqueta: 'Modelo Alternador', valor: gen.modelo_generador, rolSemantico: 'modelo' });
-        if (gen.numero_serie_generador) atributosGen.push({ etiqueta: 'Serie Alternador', valor: gen.numero_serie_generador, rolSemantico: 'serie' });
-        if (gen.potencia_kva) atributosGen.push({ etiqueta: 'Potencia Aparente', valor: `${gen.potencia_kva} kVA`, rolSemantico: 'potencia_principal' });
-        if (gen.potencia_kw) atributosGen.push({ etiqueta: 'Potencia Activa', valor: `${gen.potencia_kw} kW` });
-        if (gen.voltaje_generador) atributosGen.push({ etiqueta: 'Voltaje Generador', valor: `${gen.voltaje_generador} V` });
-        if (gen.frecuencia_hz) atributosGen.push({ etiqueta: 'Frecuencia', valor: `${gen.frecuencia_hz} Hz` });
-        if (gen.numero_fases) atributosGen.push({ etiqueta: 'Fases', valor: String(gen.numero_fases) });
-        if (gen.factor_potencia) atributosGen.push({ etiqueta: 'Factor de Potencia', valor: String(gen.factor_potencia) });
-        if (gen.tipo_alternador) atributosGen.push({ etiqueta: 'Tipo de Alternador', valor: gen.tipo_alternador });
+        if (gen.marca_generador)
+          atributosGen.push({
+            etiqueta: 'Marca Alternador',
+            valor: gen.marca_generador,
+            rolSemantico: 'marca',
+          });
+        if (gen.modelo_generador)
+          atributosGen.push({
+            etiqueta: 'Modelo Alternador',
+            valor: gen.modelo_generador,
+            rolSemantico: 'modelo',
+          });
+        if (gen.numero_serie_generador)
+          atributosGen.push({
+            etiqueta: 'Serie Alternador',
+            valor: gen.numero_serie_generador,
+            rolSemantico: 'serie',
+          });
+        if (gen.potencia_kva)
+          atributosGen.push({
+            etiqueta: 'Potencia Aparente',
+            valor: `${gen.potencia_kva} kVA`,
+            rolSemantico: 'potencia_principal',
+          });
+        if (gen.potencia_kw)
+          atributosGen.push({ etiqueta: 'Potencia Activa', valor: `${gen.potencia_kw} kW` });
+        if (gen.voltaje_generador)
+          atributosGen.push({ etiqueta: 'Voltaje Generador', valor: `${gen.voltaje_generador} V` });
+        if (gen.frecuencia_hz)
+          atributosGen.push({ etiqueta: 'Frecuencia', valor: `${gen.frecuencia_hz} Hz` });
+        if (gen.numero_fases)
+          atributosGen.push({ etiqueta: 'Fases', valor: String(gen.numero_fases) });
+        if (gen.factor_potencia)
+          atributosGen.push({ etiqueta: 'Factor de Potencia', valor: String(gen.factor_potencia) });
+        if (gen.tipo_alternador)
+          atributosGen.push({ etiqueta: 'Tipo de Alternador', valor: gen.tipo_alternador });
 
         if (atributosGen.length > 0) {
           bloques.push({ nombreModulo: 'ALTERNADOR / GENERADOR', atributos: atributosGen });
@@ -444,39 +704,98 @@ export class EquipoSpecsReader {
 
       if (mot) {
         const atributosMot: AtributoPlaca[] = [];
-        if (mot.marca_motor) atributosMot.push({ etiqueta: 'Marca Motor', valor: mot.marca_motor, rolSemantico: 'marca_motor' });
-        if (mot.modelo_motor) atributosMot.push({ etiqueta: 'Modelo Motor', valor: mot.modelo_motor, rolSemantico: 'modelo_motor' });
-        if (mot.numero_serie_motor) atributosMot.push({ etiqueta: 'Serie Motor', valor: mot.numero_serie_motor, rolSemantico: 'serie_motor' });
-        if (mot.potencia_hp) atributosMot.push({ etiqueta: 'Potencia Motor', valor: `${mot.potencia_hp} HP` });
-        if (mot.potencia_kw) atributosMot.push({ etiqueta: 'Potencia Eléctrica', valor: `${mot.potencia_kw} kW` });
-        if (mot.velocidad_nominal_rpm) atributosMot.push({ etiqueta: 'Velocidad', valor: `${mot.velocidad_nominal_rpm} RPM` });
-        if (mot.numero_cilindros) atributosMot.push({ etiqueta: 'Cilindros', valor: String(mot.numero_cilindros) });
+        if (mot.marca_motor)
+          atributosMot.push({
+            etiqueta: 'Marca Motor',
+            valor: mot.marca_motor,
+            rolSemantico: 'marca_motor',
+          });
+        if (mot.modelo_motor)
+          atributosMot.push({
+            etiqueta: 'Modelo Motor',
+            valor: mot.modelo_motor,
+            rolSemantico: 'modelo_motor',
+          });
+        if (mot.numero_serie_motor)
+          atributosMot.push({
+            etiqueta: 'Serie Motor',
+            valor: mot.numero_serie_motor,
+            rolSemantico: 'serie_motor',
+          });
+        if (mot.potencia_hp)
+          atributosMot.push({ etiqueta: 'Potencia Motor', valor: `${mot.potencia_hp} HP` });
+        if (mot.potencia_kw)
+          atributosMot.push({ etiqueta: 'Potencia Eléctrica', valor: `${mot.potencia_kw} kW` });
+        if (mot.velocidad_nominal_rpm)
+          atributosMot.push({ etiqueta: 'Velocidad', valor: `${mot.velocidad_nominal_rpm} RPM` });
+        if (mot.numero_cilindros)
+          atributosMot.push({ etiqueta: 'Cilindros', valor: String(mot.numero_cilindros) });
         if (mot.aspiracion) atributosMot.push({ etiqueta: 'Aspiración', valor: mot.aspiracion });
         if (mot.capacidad_aceite_litros) {
           const gals = (Number(mot.capacidad_aceite_litros) * 0.264172).toFixed(1);
-          atributosMot.push({ etiqueta: 'Capacidad de Aceite', valor: `${mot.capacidad_aceite_litros} L (~${gals} Gal)` });
+          atributosMot.push({
+            etiqueta: 'Capacidad de Aceite',
+            valor: `${mot.capacidad_aceite_litros} L (~${gals} Gal)`,
+          });
         }
-        if (mot.tipo_aceite) atributosMot.push({ etiqueta: 'Tipo de Aceite', valor: mot.tipo_aceite });
-        if (mot.capacidad_refrigerante_litros) atributosMot.push({ etiqueta: 'Capacidad Refrigerante', valor: `${mot.capacidad_refrigerante_litros} L` });
-        if (mot.tipo_refrigerante) atributosMot.push({ etiqueta: 'Tipo Refrigerante', valor: mot.tipo_refrigerante });
+        if (mot.tipo_aceite)
+          atributosMot.push({ etiqueta: 'Tipo de Aceite', valor: mot.tipo_aceite });
+        if (mot.capacidad_refrigerante_litros)
+          atributosMot.push({
+            etiqueta: 'Capacidad Refrigerante',
+            valor: `${mot.capacidad_refrigerante_litros} L`,
+          });
+        if (mot.tipo_refrigerante)
+          atributosMot.push({ etiqueta: 'Tipo Refrigerante', valor: mot.tipo_refrigerante });
 
         if (atributosMot.length > 0) {
-          bloques.push({ nombreModulo: 'MOTOR COMBUSTIÓN / ACCIONAMIENTO', atributos: atributosMot });
+          bloques.push({
+            nombreModulo: 'MOTOR COMBUSTIÓN / ACCIONAMIENTO',
+            atributos: atributosMot,
+          });
         }
       }
 
       if (bom) {
         const atributosBom: AtributoPlaca[] = [];
-        if (bom.marca_bomba) atributosBom.push({ etiqueta: 'Marca Bomba', valor: bom.marca_bomba, rolSemantico: 'marca' });
-        if (bom.modelo_bomba) atributosBom.push({ etiqueta: 'Modelo Bomba', valor: bom.modelo_bomba, rolSemantico: 'modelo' });
-        if (bom.numero_serie_bomba) atributosBom.push({ etiqueta: 'Serie Bomba', valor: bom.numero_serie_bomba, rolSemantico: 'serie' });
-        if (bom.caudal_maximo_m3h) atributosBom.push({ etiqueta: 'Caudal Máximo', valor: `${bom.caudal_maximo_m3h} m³/h`, rolSemantico: 'potencia_principal' });
-        if (bom.presion_maxima_psi) atributosBom.push({ etiqueta: 'Presión Máxima', valor: `${bom.presion_maxima_psi} PSI` });
+        if (bom.marca_bomba)
+          atributosBom.push({
+            etiqueta: 'Marca Bomba',
+            valor: bom.marca_bomba,
+            rolSemantico: 'marca',
+          });
+        if (bom.modelo_bomba)
+          atributosBom.push({
+            etiqueta: 'Modelo Bomba',
+            valor: bom.modelo_bomba,
+            rolSemantico: 'modelo',
+          });
+        if (bom.numero_serie_bomba)
+          atributosBom.push({
+            etiqueta: 'Serie Bomba',
+            valor: bom.numero_serie_bomba,
+            rolSemantico: 'serie',
+          });
+        if (bom.caudal_maximo_m3h)
+          atributosBom.push({
+            etiqueta: 'Caudal Máximo',
+            valor: `${bom.caudal_maximo_m3h} m³/h`,
+            rolSemantico: 'potencia_principal',
+          });
+        if (bom.presion_maxima_psi)
+          atributosBom.push({ etiqueta: 'Presión Máxima', valor: `${bom.presion_maxima_psi} PSI` });
         if (bom.tipo_bomba) atributosBom.push({ etiqueta: 'Tipo de Bomba', valor: bom.tipo_bomba });
         if (bom.diametro_succion_pulg || bom.diametro_descarga_pulg) {
-          atributosBom.push({ etiqueta: 'Succión / Descarga', valor: `${bom.diametro_succion_pulg || '-'}" / ${bom.diametro_descarga_pulg || '-'}"` });
+          atributosBom.push({
+            etiqueta: 'Succión / Descarga',
+            valor: `${bom.diametro_succion_pulg || '-'}" / ${bom.diametro_descarga_pulg || '-'}"`,
+          });
         }
-        if (bom.potencia_hidraulica_kw) atributosBom.push({ etiqueta: 'Potencia Hidráulica', valor: `${bom.potencia_hidraulica_kw} kW` });
+        if (bom.potencia_hidraulica_kw)
+          atributosBom.push({
+            etiqueta: 'Potencia Hidráulica',
+            valor: `${bom.potencia_hidraulica_kw} kW`,
+          });
 
         if (atributosBom.length > 0) {
           bloques.push({ nombreModulo: 'BOMBA HIDRÁULICA', atributos: atributosBom });
@@ -502,8 +821,10 @@ export class EquipoSpecsReader {
     }
 
     const unidadUso = equipo.tipos_equipo?.unidad_uso || equipo.unidad_uso || undefined;
-    const etiquetaContador = equipo.tipos_equipo?.etiqueta_contador || equipo.etiqueta_contador || undefined;
-    const requiereHorometro = equipo.tipos_equipo?.requiere_horometro ?? equipo.requiere_horometro ?? undefined;
+    const etiquetaContador =
+      equipo.tipos_equipo?.etiqueta_contador || equipo.etiqueta_contador || undefined;
+    const requiereHorometro =
+      equipo.tipos_equipo?.requiere_horometro ?? equipo.requiere_horometro ?? undefined;
 
     return {
       categoriaCanonica,
@@ -538,14 +859,22 @@ export class EquipoSpecsReader {
    * Helper privado para buscar atributos dentro de un contenedor JSONB de especificaciones
    */
   private static buscarEnEspecificaciones(equipo: any, claves: string[]): string | undefined {
-    const specs = equipo.especificaciones || equipo.especificaciones_tecnicas || equipo.metadata?.especificaciones;
+    const specs =
+      equipo.especificaciones ||
+      equipo.especificaciones_tecnicas ||
+      equipo.metadata?.especificaciones;
     if (!specs || typeof specs !== 'object') return undefined;
 
     const mapaModulos = specs.modulos && typeof specs.modulos === 'object' ? specs.modulos : specs;
 
     // Búsqueda directa en primer nivel
     for (const c of claves) {
-      if (specs[c] !== undefined && specs[c] !== null && typeof specs[c] !== 'object' && String(specs[c]).trim() !== '') {
+      if (
+        specs[c] !== undefined &&
+        specs[c] !== null &&
+        typeof specs[c] !== 'object' &&
+        String(specs[c]).trim() !== ''
+      ) {
         return String(specs[c]).trim();
       }
     }
@@ -556,7 +885,12 @@ export class EquipoSpecsReader {
       const mod = mapaModulos[modKey];
       if (mod && typeof mod === 'object' && !Array.isArray(mod)) {
         for (const c of claves) {
-          if (mod[c] !== undefined && mod[c] !== null && typeof mod[c] !== 'object' && String(mod[c]).trim() !== '') {
+          if (
+            mod[c] !== undefined &&
+            mod[c] !== null &&
+            typeof mod[c] !== 'object' &&
+            String(mod[c]).trim() !== ''
+          ) {
             return String(mod[c]).trim();
           }
         }

@@ -6,7 +6,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/environment.dart';
+import '../../../core/storage/secure_storage.dart';
 import '../data/auth_provider.dart';
+import 'server_selector_sheet.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -188,17 +191,82 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Info de conexión
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Conectando a: API Backend',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                  // Pie sutil de conexión (Producción permanente; 5 toques + 6º sostenido ≥5s para selector QA)
+                  SecretEnvironmentGesture(
+                    onUnlocked: () =>
+                        showQaPasswordAndServerSelector(context, ref),
+                    child: ValueListenableBuilder<EnvironmentState>(
+                      valueListenable: Environment.stateListenable,
+                      builder: (context, envState, _) {
+                        if (envState.isProduction) {
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Conectando a: Servidor Mekanos (Producción)',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          );
+                        }
+
+                        final modeLabel =
+                            envState.mode == ApiEnvironmentMode.local
+                                ? 'Modo Local'
+                                : 'URL Directa';
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber.shade300),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                '$modeLabel activo (solo esta sesión)'
+                                '${envState.serverHostname != null ? ' • ${envState.serverHostname}' : ''}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.amber.shade900,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                envState.baseUrl,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.amber.shade800,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  Environment.useProduction();
+                                  await ref
+                                      .read(secureStorageProvider)
+                                      .clearAll();
+                                  ref
+                                      .read(authStateProvider.notifier)
+                                      .clearError();
+                                },
+                                child: const Text(
+                                  'Volver a Producción',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],

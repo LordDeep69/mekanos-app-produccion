@@ -14,6 +14,7 @@
 'use client';
 
 import {
+  getMetricaUsoMeta,
   getModuloBadgeInfo,
   getTipoControlHumano,
   parseOpcionesSeguras,
@@ -67,7 +68,6 @@ import {
   SlidersHorizontal,
   Sparkles,
   Tag,
-  Timer,
   Trash2,
   Wind,
   Wrench,
@@ -767,6 +767,11 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
   }, [motor, specsModulos]);
 
   const horasNum = Number(equipo.horas_actuales || 0);
+  const metricaUso = getMetricaUsoMeta({
+    unidadUso: equipo.tipos_equipo?.unidad_uso,
+    etiquetaContador: equipo.tipos_equipo?.etiqueta_contador,
+    requiereHorometro: equipo.tipos_equipo?.requiere_horometro,
+  });
 
   return (
     <>
@@ -931,9 +936,14 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
                 </span>
               )}
               {horasNum > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50/70 text-blue-700 border border-blue-200/70 rounded text-[11px] font-mono font-semibold">
-                  <Timer className="h-3 w-3 text-blue-600" />
-                  {horasNum.toLocaleString()} hrs
+                <span
+                  title={metricaUso.etiquetaContador}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50/70 text-blue-700 border border-blue-200/70 rounded text-[11px] font-mono font-semibold"
+                >
+                  <span aria-hidden="true" className="text-[10px]">
+                    {metricaUso.icono}
+                  </span>
+                  {horasNum.toLocaleString()} {metricaUso.sufijoCorto}
                 </span>
               )}
             </div>
@@ -990,7 +1000,7 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
                       <ul className="list-disc list-inside space-y-1">
                         <li>El equipo principal y su BOM asociado</li>
                         <li>Especificaciones de motor, generador, bomba o compresor</li>
-                        <li>Historial de estados y lecturas de horómetro</li>
+                        <li>Historial de estados y lecturas de contador / uso</li>
                       </ul>
                     </div>
                   </div>

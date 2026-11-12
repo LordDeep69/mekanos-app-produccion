@@ -77,6 +77,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   List<OrdenesEquipo> _equipos = [];
   Map<int, ActividadesCatalogoData> _catalogoPorId = {};
   List<String> _sistemasDinamicosEquipo = [];
+  _MetricaUsoMobile _metricaUso = _MetricaUsoMobile.desdeConfig(null);
+  int _resumenTabTick = 0;
 
   // ✅ FIX 17-DIC-2025: Flag para saber si es orden de un solo equipo (necesita tab Resumen)
   bool get _esOrdenSimple => widget.idOrdenEquipo == null;
@@ -93,6 +95,11 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   void _onTabChanged() {
+    if (!_tabController.indexIsChanging && _tabController.index == 2) {
+      if (mounted) {
+        setState(() => _resumenTabTick++);
+      }
+    }
     if (!_tabController.indexIsChanging && _orden?.idBackend != null) {
       final tabName = _tabController.index == 0
           ? 'Checklist ($_completadas/$_total)'
@@ -205,6 +212,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         if (orden.idBackend != null) {
           _equipos = await db.getEquiposByOrdenServicio(orden.idBackend!);
         }
+        final int idEquipoMetrica = _idEquipoActual ?? orden.idEquipo;
+        final eqMetrica = await db.getEquipoById(idEquipoMetrica);
+        _metricaUso = _MetricaUsoMobile.desdeConfig(eqMetrica?.configParametros);
         final tipoServicio = await db.getTipoServicioById(orden.idTipoServicio);
         final codigoTipo = tipoServicio?.codigo ?? '';
         final nombreTipo = (tipoServicio?.nombre ?? '').toUpperCase();
@@ -1292,7 +1302,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       ('B', 'Bueno', Colors.green),
       ('R', 'Regular', Colors.amber.shade700),
       ('M', 'Malo', Colors.red),
-      ('C', 'Cambiado', Colors.blue),
+      ('C', 'Cambio', Colors.blue),
       ('NA', 'N/A', Colors.grey),
     ];
 
@@ -1325,13 +1335,18 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                           color: isSelected ? Colors.white : color,
                         ),
                       ),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isSelected
-                              ? Colors.white70
-                              : Colors.grey.shade600,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isSelected
+                                ? Colors.white70
+                                : Colors.grey.shade600,
+                          ),
                         ),
                       ),
                     ],
@@ -1433,12 +1448,17 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       return 'NIVEL_ACEITE';
     }
 
-    // 4. Horas de trabajo / Horómetro
+    // 4. Contador principal de uso (Horas / Horómetro / Ciclos / Odómetro / UPM)
     if (desc.contains('HOROMETRO') ||
         desc.contains('HORÓMETRO') ||
         desc.contains('HORAS DE TRABAJO') ||
         desc.contains('HORAS TRABAJO') ||
-        desc.contains('LECTURA DE HORAS')) {
+        desc.contains('LECTURA DE HORAS') ||
+        desc.contains('CONTADOR') ||
+        desc.contains('CICLOS') ||
+        desc.contains('ODOMETRO') ||
+        desc.contains('ODÓMETRO') ||
+        desc.contains('KILOMETRAJE')) {
       return 'HOROMETRO';
     }
 
@@ -1659,17 +1679,23 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
               elevation: isSelected ? 2 : 0,
               child: InkWell(
                 borderRadius: BorderRadius.circular(10),
-                onTap: () => _marcarActividadDeclarativa(
-                  actividad,
-                  simbologia: semaforo,
-                  respuestaJsonObj: {
-                    ...respActual,
-                    'valor': valor,
-                    'etiqueta': etiqueta,
-                    'semaforo': semaforo,
-                  },
-                  observacionFallback: respActual['detalle']?.toString(),
-                ),
+                onTap: () {
+                  final detalle = respActual['detalle']?.toString().trim() ?? '';
+                  final obsFallback = detalle.isNotEmpty
+                      ? 'Respuesta: $etiqueta · $detalle'
+                      : 'Respuesta: $etiqueta';
+                  _marcarActividadDeclarativa(
+                    actividad,
+                    simbologia: semaforo,
+                    respuestaJsonObj: {
+                      ...respActual,
+                      'valor': valor,
+                      'etiqueta': etiqueta,
+                      'semaforo': semaforo,
+                    },
+                    observacionFallback: obsFallback,
+                  );
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
@@ -2112,13 +2138,41 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     );
   }
 
-  /// Widget input para horómetro (valor numérico)
+  static final RegExp _regexPrefijoContador = RegExp(
+    r'^(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*(.+)$',
+    caseSensitive: false,
+  );
+
+  /// Extrae el valor del contador desde respuestaJson o prefijos estructurados
+  String _extraerValorContador(ActividadesEjecutada actividad) {
+    final respRaw = actividad.respuestaJson;
+    if (respRaw != null && respRaw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(respRaw);
+        if (decoded is Map && decoded['valor'] != null) {
+          final valStr = decoded['valor'].toString().trim();
+          if (valStr.isNotEmpty) return valStr;
+        }
+      } catch (_) {}
+    }
+
+    final obs = (actividad.observacion ?? '').trim();
+    if (obs.isEmpty) return '';
+    final match = _regexPrefijoContador.firstMatch(obs);
+    if (match != null) {
+      return (match.group(1) ?? '').trim();
+    }
+    return '';
+  }
+
+  /// Widget input para lectura del contador de uso (Horómetro / Ciclos / Odómetro / UPM)
   Widget _buildHorometroInput(ActividadesEjecutada actividad) {
-    final observacion = actividad.observacion ?? '';
-    // Extraer valor numérico de "HORAS: 12345.5"
-    final valorActual = observacion.startsWith('HORAS: ')
-        ? observacion.substring(7)
-        : '';
+    final valorActual = _extraerValorContador(actividad);
+    final textoMostrado = valorActual.isNotEmpty
+        ? (_metricaUso.sufijo.isNotEmpty
+            ? '$valorActual ${_metricaUso.sufijo}'
+            : valorActual)
+        : _metricaUso.textoRegistrar;
 
     return Row(
       children: [
@@ -2139,16 +2193,14 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             child: Row(
               children: [
                 Icon(
-                  Icons.timer,
+                  _metricaUso.icono,
                   color: valorActual.isNotEmpty ? Colors.blue : Colors.grey,
                   size: 20,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    valorActual.isNotEmpty
-                        ? '$valorActual hrs'
-                        : 'Registrar horas',
+                    textoMostrado,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: valorActual.isNotEmpty
@@ -2174,82 +2226,201 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     );
   }
 
-  /// Muestra diálogo para ingresar horas del horómetro
+  /// Muestra diálogo para ingresar lectura del contador de uso del activo
   Future<void> _mostrarDialogoHorometro(ActividadesEjecutada actividad) async {
-    final controller = TextEditingController();
-    final observacion = actividad.observacion ?? '';
-    if (observacion.startsWith('HORAS: ')) {
-      controller.text = observacion.substring(7);
+    final controller = TextEditingController(
+      text: _extraerValorContador(actividad),
+    );
+
+    final cat = _catalogoPorId[actividad.idActividadCatalogo];
+    String hintText = _metricaUso.hint;
+    if (cat?.configInputJson != null && cat!.configInputJson!.trim().isNotEmpty) {
+      try {
+        final cfg = jsonDecode(cat.configInputJson!);
+        if (cfg is Map && cfg['placeholder'] != null) {
+          final customPlaceholder = cfg['placeholder'].toString().trim();
+          if (customPlaceholder.isNotEmpty) {
+            hintText = customPlaceholder;
+          }
+        }
+      } catch (_) {}
     }
+
+    final lecturaAnterior = _metricaUso.lecturaActual;
+    String? errorInline;
 
     final resultado = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.timer, color: Colors.blue),
-            SizedBox(width: 8),
-            Text('Lectura Horómetro'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Horas de trabajo',
-                hintText: 'Ej: 12345.5',
-                suffixText: 'hrs',
-                border: OutlineInputBorder(),
-              ),
-              autofocus: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final parsedActual = double.tryParse(
+            controller.text.trim().replaceAll(',', '.'),
+          );
+          final esMenorAlAcumulado =
+              parsedActual != null &&
+              parsedActual > 0 &&
+              lecturaAnterior != null &&
+              lecturaAnterior > 0 &&
+              parsedActual < lecturaAnterior;
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(_metricaUso.icono, color: Colors.blue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _metricaUso.tituloDialogo,
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
-                  const SizedBox(width: 6),
-                  Expanded(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (lecturaAnterior != null && lecturaAnterior > 0) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Colors.blueGrey.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.blueGrey.shade200),
+                    ),
                     child: Text(
-                      'Si el panel está quemado, apagado o ilegible, ingresa 0. La orden guardará tu observación y el equipo conservará su histórico acumulado.',
+                      'Acumulado actual del equipo: ${lecturaAnterior == lecturaAnterior.roundToDouble() ? lecturaAnterior.toInt() : lecturaAnterior}${_metricaUso.sufijo.isNotEmpty ? ' ${_metricaUso.sufijo}' : ''}',
                       style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.blue.shade900,
-                        height: 1.25,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade800,
                       ),
                     ),
                   ),
                 ],
-              ),
+                TextField(
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setDialogState(() => errorInline = null),
+                  decoration: InputDecoration(
+                    labelText: _metricaUso.labelInput,
+                    hintText: hintText,
+                    errorText: errorInline,
+                    suffixText: _metricaUso.sufijo.isNotEmpty ? _metricaUso.sufijo : null,
+                    border: const OutlineInputBorder(),
+                  ),
+                  autofocus: true,
+                ),
+                if (esMenorAlAcumulado) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.amber.shade400),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded, size: 17, color: Colors.amber.shade900),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Atención: la lectura ingresada es menor al acumulado (${lecturaAnterior == lecturaAnterior.roundToDouble() ? lecturaAnterior.toInt() : lecturaAnterior} ${_metricaUso.sufijo}). Verifica si faltó un dígito antes de confirmar.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.amber.shade900,
+                              height: 1.25,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Si el panel está quemado, apagado o ilegible, ingresa 0. La orden guardará tu observación y el equipo conservará su histórico acumulado.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.blue.shade900,
+                            height: 1.25,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Guardar'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final rawText = controller.text.trim();
+                  final valNum = double.tryParse(rawText.replaceAll(',', '.'));
+                  if (rawText.isEmpty || valNum == null || valNum < 0) {
+                    setDialogState(() => errorInline = 'Ingresa un valor numérico válido');
+                    return;
+                  }
+                  if (valNum > 0 &&
+                      lecturaAnterior != null &&
+                      lecturaAnterior > 0 &&
+                      valNum < lecturaAnterior) {
+                    final confirmar = await showDialog<bool>(
+                      context: ctx,
+                      builder: (c2) => AlertDialog(
+                        title: const Text('Lectura menor al acumulado'),
+                        content: Text(
+                          'El equipo registra actualmente ${lecturaAnterior == lecturaAnterior.roundToDouble() ? lecturaAnterior.toInt() : lecturaAnterior} ${_metricaUso.sufijo} en Hoja de Vida y estás ingresando $rawText ${_metricaUso.sufijo}.\n\nEl sistema protegerá el acumulado histórico contra retrocesos. ¿Deseas guardar igualmente esta lectura en la orden?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(c2, false),
+                            child: const Text('Corregir'),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800),
+                            onPressed: () => Navigator.pop(c2, true),
+                            child: const Text('Sí, guardar igual'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmar != true) return;
+                  }
+                  if (ctx.mounted) Navigator.pop(ctx, rawText);
+                },
+                child: const Text('Guardar'),
+              ),
+            ],
+          );
+        },
       ),
     );
 
-    if (resultado != null && resultado.isNotEmpty) {
-      await _marcarHorometro(actividad.idLocal, resultado);
+    if (resultado != null && resultado.trim().isNotEmpty) {
+      await _marcarHorometro(actividad, resultado.trim());
     }
   }
 
@@ -2320,9 +2491,26 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     await _marcarActividadEspecial(idActividadLocal, 'ACEITE: $nivel', simb);
   }
 
-  /// Marca lectura de horómetro
-  Future<void> _marcarHorometro(int idActividadLocal, String horas) async {
-    await _marcarActividadEspecial(idActividadLocal, 'HORAS: $horas', 'B');
+  /// Marca lectura del contador de uso principal del activo
+  Future<void> _marcarHorometro(
+    ActividadesEjecutada actividad,
+    String valor,
+  ) async {
+    final valorLimpio = valor.trim();
+    if (valorLimpio.isEmpty) return;
+
+    await _marcarActividadDeclarativa(
+      actividad,
+      simbologia: 'B',
+      respuestaJsonObj: {
+        'valor': num.tryParse(valorLimpio.replaceAll(',', '.')) ?? valorLimpio,
+        'etiqueta': _metricaUso.etiqueta,
+        'unidad': _metricaUso.sufijo,
+        'unidadUso': _metricaUso.unidadUso,
+        'semaforo': 'B',
+      },
+      observacionFallback: '${_metricaUso.prefijo}: $valorLimpio',
+    );
   }
 
   /// Método genérico para marcar actividades especiales
@@ -4019,6 +4207,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             idEquipo: _idEquipoActual ?? _orden?.idEquipo,
             idOrdenEquipo: widget.idOrdenEquipo,
             equipos: _equipos.isNotEmpty ? _equipos : null,
+            refreshTick: _resumenTabTick,
           ),
           const SizedBox(height: 16),
 
@@ -5828,6 +6017,134 @@ class _DrumTimePickerState extends State<_DrumTimePicker> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Metadatos dinámicos de metrología de uso en Mobile según _metrologia del arquetipo.
+class _MetricaUsoMobile {
+  final String unidadUso;
+  final String prefijo;
+  final String sufijo;
+  final String etiqueta;
+  final String tituloDialogo;
+  final String labelInput;
+  final String textoRegistrar;
+  final String hint;
+  final IconData icono;
+  final double? lecturaActual;
+
+  const _MetricaUsoMobile({
+    required this.unidadUso,
+    required this.prefijo,
+    required this.sufijo,
+    required this.etiqueta,
+    required this.tituloDialogo,
+    required this.labelInput,
+    required this.textoRegistrar,
+    required this.hint,
+    required this.icono,
+    this.lecturaActual,
+  });
+
+  factory _MetricaUsoMobile.desdeConfig(String? configParametrosJson) {
+    String rawUnidad = 'HORAS';
+    String etiquetaCfg = '';
+    bool requiereHorometro = true;
+    double? lecturaActual;
+
+    if (configParametrosJson != null && configParametrosJson.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(configParametrosJson);
+        if (decoded is Map && decoded['_metrologia'] is Map) {
+          final metro = Map<String, dynamic>.from(decoded['_metrologia'] as Map);
+          rawUnidad = (metro['unidadUso']?.toString() ?? 'HORAS').toUpperCase().trim();
+          etiquetaCfg = (metro['etiquetaContador']?.toString() ?? '').trim();
+          requiereHorometro = metro['requiereHorometro'] != false;
+          final rawLectura = metro['lecturaActual'];
+          if (rawLectura != null) {
+            lecturaActual = double.tryParse(rawLectura.toString());
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (rawUnidad == 'CICLOS' || etiquetaCfg.toUpperCase().contains('CICLO')) {
+      final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Ciclos de Operación';
+      return _MetricaUsoMobile(
+        unidadUso: 'CICLOS',
+        prefijo: 'CICLOS',
+        sufijo: 'ciclos',
+        etiqueta: etq,
+        tituloDialogo: 'Lectura de $etq',
+        labelInput: etq,
+        textoRegistrar: 'Registrar ${etq.toLowerCase()}',
+        hint: 'Ej: 15000',
+        icono: Icons.repeat,
+        lecturaActual: lecturaActual,
+      );
+    }
+
+    if (rawUnidad == 'KM_ODO' || rawUnidad == 'KM') {
+      final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Kilometraje (Odómetro)';
+      return _MetricaUsoMobile(
+        unidadUso: 'KM_ODO',
+        prefijo: 'KM',
+        sufijo: 'km',
+        etiqueta: etq,
+        tituloDialogo: 'Lectura de $etq',
+        labelInput: etq,
+        textoRegistrar: 'Registrar ${etq.toLowerCase()}',
+        hint: 'Ej: 45200',
+        icono: Icons.speed,
+        lecturaActual: lecturaActual,
+      );
+    }
+
+    if (rawUnidad == 'UPM') {
+      final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Unidades Producidas';
+      return _MetricaUsoMobile(
+        unidadUso: 'UPM',
+        prefijo: 'UPM',
+        sufijo: 'uds',
+        etiqueta: etq,
+        tituloDialogo: 'Lectura de $etq',
+        labelInput: etq,
+        textoRegistrar: 'Registrar ${etq.toLowerCase()}',
+        hint: 'Ej: 1200',
+        icono: Icons.numbers,
+        lecturaActual: lecturaActual,
+      );
+    }
+
+    if (rawUnidad == 'CAL' || !requiereHorometro) {
+      final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Contador';
+      return _MetricaUsoMobile(
+        unidadUso: rawUnidad == 'CAL' ? 'CAL' : rawUnidad,
+        prefijo: 'CONTADOR',
+        sufijo: '',
+        etiqueta: etq,
+        tituloDialogo: 'Lectura de $etq',
+        labelInput: etq,
+        textoRegistrar: 'Registrar ${etq.toLowerCase()}',
+        hint: 'Ej: 100',
+        icono: Icons.numbers,
+        lecturaActual: lecturaActual,
+      );
+    }
+
+    final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Horómetro';
+    return _MetricaUsoMobile(
+      unidadUso: 'HORAS',
+      prefijo: 'HORAS',
+      sufijo: 'hrs',
+      etiqueta: etq,
+      tituloDialogo: 'Lectura $etq',
+      labelInput: 'Horas de trabajo',
+      textoRegistrar: 'Registrar horas',
+      hint: 'Ej: 12345.5',
+      icono: Icons.timer,
+      lecturaActual: lecturaActual,
     );
   }
 }

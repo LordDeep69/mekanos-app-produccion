@@ -488,3 +488,19 @@ export function useFacetasEquipos(tipo?: string) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export function useParametrosTelemetriaTipoEquipo(idTipoEquipo?: number | null) {
+  return useQuery({
+    queryKey: ['parametros-telemetria-tipo-equipo', idTipoEquipo || 0],
+    queryFn: async () => {
+      if (!idTipoEquipo) return [];
+      const response = await apiClient.get<{
+        success: boolean;
+        data: import('../types').ParametroCatalogoArquetipo[];
+      }>(`/parametros-medicion/tipo-equipo/${idTipoEquipo}/telemetria`);
+      return response.data?.data ?? [];
+    },
+    enabled: Boolean(idTipoEquipo && idTipoEquipo > 0),
+    staleTime: 2 * 60 * 1000,
+  });
+}

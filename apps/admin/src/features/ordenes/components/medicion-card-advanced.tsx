@@ -19,6 +19,7 @@ import {
   Loader2,
   MessageSquare,
   X,
+  Zap,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUpdateMedicion } from '../hooks/use-ordenes';
@@ -53,6 +54,23 @@ interface Medicion {
     valorMaximoCritico?: number | null;
     valor_minimo_critico?: number | null;
     valor_maximo_critico?: number | null;
+    es_personalizado_equipo?: boolean;
+    rango_catalogo?: {
+      unidad_medida?: string | null;
+      valor_minimo_normal?: number | null;
+      valor_maximo_normal?: number | null;
+      valor_minimo_critico?: number | null;
+      valor_maximo_critico?: number | null;
+      valor_ideal?: number | null;
+    } | null;
+    rango_catalogo_referencia?: {
+      unidad_medida?: string | null;
+      valor_minimo_normal?: number | null;
+      valor_maximo_normal?: number | null;
+      valor_minimo_critico?: number | null;
+      valor_maximo_critico?: number | null;
+      valor_ideal?: number | null;
+    } | null;
   };
 }
 
@@ -245,9 +263,17 @@ export function MedicionCardAdvanced({
 
           {/* Contenido */}
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider truncate">
-              {nombreParametro}
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider truncate">
+                {nombreParametro}
+              </p>
+              {parametro?.es_personalizado_equipo && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-violet-100 text-violet-800 border border-violet-200 shrink-0">
+                  <Zap className="h-2.5 w-2.5" />
+                  Rango personalizado equipo
+                </span>
+              )}
+            </div>
             <div className="flex items-baseline gap-2 mt-0.5">
               <p className={cn('text-2xl font-black', colors.text)}>
                 {medicion.valor_numerico ?? medicion.valor_texto ?? '-'}
@@ -293,9 +319,22 @@ export function MedicionCardAdvanced({
         <div className="px-3 pb-3 space-y-3 border-t border-gray-200/50 pt-3">
           {/* Rango Visual */}
           <div>
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-              Rango de Operación
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                Rango de Operación
+              </p>
+              {(() => {
+                const refCatalogo =
+                  parametro?.rango_catalogo ?? parametro?.rango_catalogo_referencia;
+                if (!parametro?.es_personalizado_equipo || !refCatalogo) return null;
+                return (
+                  <span className="text-[10px] text-violet-700 font-medium">
+                    Estándar catálogo: {refCatalogo.valor_minimo_normal ?? '—'} —{' '}
+                    {refCatalogo.valor_maximo_normal ?? '—'} {refCatalogo.unidad_medida || ''}
+                  </span>
+                );
+              })()}
+            </div>
             <RangoVisual
               valorActual={medicion.valor_numerico}
               minNormal={parametro?.valorMinimoNormal ?? parametro?.valor_minimo_normal}

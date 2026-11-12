@@ -1,19 +1,20 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { ConfigParametrosService } from '../config-parametros/config-parametros.service';
 import { CreateParametrosMedicionDto } from './dto/create-parametros-medicion.dto';
 import { UpdateParametrosMedicionDto } from './dto/update-parametros-medicion.dto';
 
@@ -40,6 +41,7 @@ export class ParametrosMedicionController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
+    private readonly configParametrosService: ConfigParametrosService,
   ) {}
 
   /**
@@ -48,10 +50,7 @@ export class ParametrosMedicionController {
    * Body: CreateParametrosMedicionDto (17 campos - creadoPor viene del JWT)
    */
   @Post()
-  async create(
-    @Body() createDto: CreateParametrosMedicionDto,
-    @CurrentUser('id') userId: number,
-  ) {
+  async create(@Body() createDto: CreateParametrosMedicionDto, @CurrentUser('id') userId: number) {
     const command = new CrearParametrosMedicionCommand(
       createDto.codigoParametro,
       createDto.nombreParametro,
@@ -97,13 +96,9 @@ export class ParametrosMedicionController {
       esCriticoSeguridadStr === 'true'
         ? true
         : esCriticoSeguridadStr === 'false'
-        ? false
-        : undefined,
-      esObligatorioStr === 'true'
-        ? true
-        : esObligatorioStr === 'false'
-        ? false
-        : undefined,
+          ? false
+          : undefined,
+      esObligatorioStr === 'true' ? true : esObligatorioStr === 'false' ? false : undefined,
       pageStr ? parseInt(pageStr, 10) : 1,
       limitStr ? parseInt(limitStr, 10) : 200,
     );
@@ -129,6 +124,20 @@ export class ParametrosMedicionController {
   async obtenerPorTipoEquipo(@Param('id', ParseIntPipe) tipoEquipoId: number) {
     const query = new ObtenerParametrosPorTipoEquipoQuery(tipoEquipoId);
     return this.queryBus.execute(query);
+  }
+
+  /**
+   * GET /api/parametros-medicion/tipo-equipo/:id/telemetria
+   * Catálogo universal EAM de parámetros por Tipo de Equipo (directos + Zona B + subsistema + magnitud)
+   */
+  @Get('tipo-equipo/:id/telemetria')
+  async obtenerTelemetriaPorTipoEquipo(@Param('id', ParseIntPipe) tipoEquipoId: number) {
+    const data =
+      await this.configParametrosService.obtenerParametrosCatalogoPorTipoEquipo(tipoEquipoId);
+    return {
+      success: true,
+      data,
+    };
   }
 
   /**

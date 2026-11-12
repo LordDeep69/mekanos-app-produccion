@@ -53,6 +53,11 @@ import { UpdateOrdenDto } from './dto/update-orden.dto';
 
 // Services
 import { Decimal } from '@prisma/client/runtime/library';
+import {
+  evaluarValorContraRangos,
+  extraerConfigEquipoDeOrden,
+  resolverParametroConConfig,
+} from '../config-parametros/parametros-override.helper';
 import { DespacharComponenteOrdenDto, InventarioService } from '../inventario/inventario.service';
 import { extractR2KeyFromUrl } from '../pdf/pdf-naming.helper';
 import { R2StorageService } from '../storage/r2-storage.service';
@@ -507,20 +512,75 @@ export class OrdenesController {
     };
   }
 
+  private enrichParametroMedicionConEquipo(
+    parametro: any,
+    orden: any,
+    idOrdenEquipo?: number | null,
+  ) {
+    if (!parametro) return parametro;
+    const { configEquipo, configPlantilla } = extraerConfigEquipoDeOrden(orden, idOrdenEquipo);
+    const resolved = resolverParametroConConfig(parametro, configEquipo, configPlantilla);
+    return {
+      ...parametro,
+      unidad_medida: resolved.unidadMedida || parametro.unidad_medida,
+      valor_minimo_normal:
+        resolved.minNormal !== undefined ? resolved.minNormal : parametro.valor_minimo_normal,
+      valor_maximo_normal:
+        resolved.maxNormal !== undefined ? resolved.maxNormal : parametro.valor_maximo_normal,
+      valor_minimo_critico:
+        resolved.minCritico !== undefined ? resolved.minCritico : parametro.valor_minimo_critico,
+      valor_maximo_critico:
+        resolved.maxCritico !== undefined ? resolved.maxCritico : parametro.valor_maximo_critico,
+      valor_ideal: resolved.valorIdeal !== undefined ? resolved.valorIdeal : parametro.valor_ideal,
+      es_personalizado_equipo: resolved.esPersonalizado,
+      origen_config: resolved.origen,
+      rango_catalogo: {
+        unidad_medida: resolved.unidadCatalogo,
+        valor_minimo_normal: resolved.minNormalCatalogo ?? null,
+        valor_maximo_normal: resolved.maxNormalCatalogo ?? null,
+        valor_minimo_critico: resolved.minCriticoCatalogo ?? null,
+        valor_maximo_critico: resolved.maxCriticoCatalogo ?? null,
+      },
+    };
+  }
+
   @Get(':id/mediciones')
   @UseGuards(JwtAuthGuard)
   async getMediciones(@Param('id', ParseIntPipe) id: number) {
-    const mediciones = await this.prisma.mediciones_servicio.findMany({
-      where: { id_orden_servicio: id },
-      include: {
-        parametros_medicion: true,
-      },
-      orderBy: { fecha_medicion: 'desc' },
-    });
+    const [orden, mediciones] = await Promise.all([
+      this.prisma.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: id },
+        select: {
+          equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+          ordenes_equipos: {
+            select: {
+              id_orden_equipo: true,
+              equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.mediciones_servicio.findMany({
+        where: { id_orden_servicio: id },
+        include: {
+          parametros_medicion: true,
+        },
+        orderBy: { fecha_medicion: 'desc' },
+      }),
+    ]);
+
+    const data = mediciones.map((m) => ({
+      ...m,
+      parametros_medicion: this.enrichParametroMedicionConEquipo(
+        m.parametros_medicion,
+        orden,
+        m.id_orden_equipo,
+      ),
+    }));
 
     return {
       success: true,
-      data: mediciones,
+      data,
     };
   }
 
@@ -545,12 +605,21 @@ export class OrdenesController {
         id_orden_servicio: true,
         id_tipo_servicio: true,
         equipos: {
-          select: { id_tipo_equipo: true },
+          select: {
+            id_tipo_equipo: true,
+            config_parametros: true,
+            plantillas_parametros: true,
+          },
         },
         ordenes_equipos: {
           select: {
+            id_orden_equipo: true,
             equipos: {
-              select: { id_tipo_equipo: true },
+              select: {
+                id_tipo_equipo: true,
+                config_parametros: true,
+                plantillas_parametros: true,
+              },
             },
           },
         },
@@ -669,10 +738,20 @@ export class OrdenesController {
       mapaParametros.set(p.id_parametro_medicion, p);
     }
 
-    // 9. Filtrar los que NO han sido medidos
+    // 9. Filtrar los que NO han sido medidos y enriquecer con overrides del equipo
     const parametrosSinMedir = Array.from(mapaParametros.values())
       .filter((p) => !idsMedidos.has(p.id_parametro_medicion))
-      .sort((a, b) => (a.nombre_parametro || '').localeCompare(b.nombre_parametro || ''));
+      .sort((a, b) => (a.nombre_parametro || '').localeCompare(b.nombre_parametro || ''))
+      .map((p) => this.enrichParametroMedicionConEquipo(p, orden, null));
+
+    const medicionesEnriquecidas = mediciones.map((m) => ({
+      ...m,
+      parametros_medicion: this.enrichParametroMedicionConEquipo(
+        m.parametros_medicion,
+        orden,
+        m.id_orden_equipo,
+      ),
+    }));
 
     console.log(
       `[MEDICIONES-COMPLETAS] RESULTADO: total_disponibles=${mapaParametros.size}, medidos=${idsMedidos.size}, sin_medir=${parametrosSinMedir.length}`,
@@ -685,7 +764,7 @@ export class OrdenesController {
 
     return {
       success: true,
-      data: mediciones,
+      data: medicionesEnriquecidas,
       parametros_sin_medir: parametrosSinMedir,
       _debug: {
         total_parametros_disponibles: mapaParametros.size,
@@ -718,9 +797,20 @@ export class OrdenesController {
       id_orden_equipo?: number;
     },
   ) {
-    // Validar que la orden existe
+    // Validar que la orden existe (incluyendo config_parametros de equipo/multi-equipo)
     const orden = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: id },
+      select: {
+        id_orden_servicio: true,
+        id_equipo: true,
+        equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+        ordenes_equipos: {
+          select: {
+            id_orden_equipo: true,
+            equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+          },
+        },
+      },
     });
     if (!orden) {
       return { success: false, message: 'Orden no encontrada' };
@@ -734,43 +824,27 @@ export class OrdenesController {
       return { success: false, message: 'Parámetro de medición no encontrado' };
     }
 
-    // Evaluar si está fuera de rango
+    const { configEquipo, configPlantilla } = extraerConfigEquipoDeOrden(
+      orden,
+      body.id_orden_equipo ?? null,
+    );
+    const resolved = resolverParametroConConfig(parametro, configEquipo, configPlantilla);
+
+    // Evaluar si está fuera de rango contra umbrales efectivos del equipo
     let fueraDeRango = false;
     let nivelAlerta: any = 'OK';
     let mensajeAlerta: string | null = null;
 
     if (body.valor_numerico != null) {
-      const val = body.valor_numerico;
-      const minNormal = parametro.valor_minimo_normal
-        ? Number(parametro.valor_minimo_normal)
-        : null;
-      const maxNormal = parametro.valor_maximo_normal
-        ? Number(parametro.valor_maximo_normal)
-        : null;
-      const minCritico = parametro.valor_minimo_critico
-        ? Number(parametro.valor_minimo_critico)
-        : null;
-      const maxCritico = parametro.valor_maximo_critico
-        ? Number(parametro.valor_maximo_critico)
-        : null;
-
-      if (minCritico != null && val < minCritico) {
-        fueraDeRango = true;
-        nivelAlerta = 'CRITICO';
-        mensajeAlerta = `Valor ${val} por debajo del mínimo crítico (${minCritico})`;
-      } else if (maxCritico != null && val > maxCritico) {
-        fueraDeRango = true;
-        nivelAlerta = 'CRITICO';
-        mensajeAlerta = `Valor ${val} por encima del máximo crítico (${maxCritico})`;
-      } else if (minNormal != null && val < minNormal) {
-        fueraDeRango = true;
-        nivelAlerta = 'ADVERTENCIA';
-        mensajeAlerta = `Valor ${val} por debajo del mínimo normal (${minNormal})`;
-      } else if (maxNormal != null && val > maxNormal) {
-        fueraDeRango = true;
-        nivelAlerta = 'ADVERTENCIA';
-        mensajeAlerta = `Valor ${val} por encima del máximo normal (${maxNormal})`;
-      }
+      const ev = evaluarValorContraRangos(
+        Number(body.valor_numerico),
+        resolved,
+        resolved.unidadMedida,
+        'OK',
+      );
+      fueraDeRango = ev.fueraDeRango;
+      nivelAlerta = ev.nivelAlerta;
+      mensajeAlerta = ev.mensajeAlerta;
     }
 
     const nuevaMedicion = await this.prisma.mediciones_servicio.create({
@@ -780,7 +854,7 @@ export class OrdenesController {
         id_orden_equipo: body.id_orden_equipo || null,
         valor_numerico: body.valor_numerico,
         valor_texto: body.valor_texto,
-        unidad_medida: parametro.unidad_medida,
+        unidad_medida: resolved.unidadMedida || parametro.unidad_medida,
         fuera_de_rango: fueraDeRango,
         nivel_alerta: nivelAlerta,
         mensaje_alerta: mensajeAlerta,

@@ -12,7 +12,12 @@
 
 'use client';
 
-import { getRolBomHumano, useModelosOemEam } from '@/features/catalogos-eam';
+import {
+  getCriterioIntervaloHumano,
+  getMetricaUsoMeta,
+  getRolBomHumano,
+  useModelosOemEam,
+} from '@/features/catalogos-eam';
 import {
   ConfigParametros,
   ConfigParametrosEditor,
@@ -80,12 +85,6 @@ const TIPOS_CONTRATO: { value: TipoContrato; label: string }[] = [
   { value: 'PREVENTIVO', label: 'Preventivo' },
   { value: 'INTEGRAL', label: 'Integral' },
   { value: 'POR_LLAMADA', label: 'Por Llamada' },
-];
-
-const CRITERIOS_INTERVALO: { value: CriterioIntervalo; label: string }[] = [
-  { value: 'DIAS', label: 'Solo por Calendario (Días)' },
-  { value: 'HORAS', label: 'Solo por Uso (Horas)' },
-  { value: 'LO_QUE_OCURRA_PRIMERO', label: 'Lo que ocurra primero (Días u Horas)' },
 ];
 
 const inputCls =
@@ -304,6 +303,30 @@ function EditarEquipoForm({
   );
 
   const idTipoEquipo = equipo.id_tipo_equipo || equipo.tipo_equipo?.id_tipo_equipo || null;
+  const metricaUso = useMemo(
+    () =>
+      getMetricaUsoMeta({
+        unidadUso: equipo.tipos_equipo?.unidad_uso ?? equipo.tipo_equipo?.unidad_uso,
+        etiquetaContador:
+          equipo.tipos_equipo?.etiqueta_contador ?? equipo.tipo_equipo?.etiqueta_contador,
+        requiereHorometro:
+          equipo.tipos_equipo?.requiere_horometro ?? equipo.tipo_equipo?.requiere_horometro,
+      }),
+    [equipo.tipo_equipo, equipo.tipos_equipo],
+  );
+  const criteriosIntervalo = useMemo<{ value: CriterioIntervalo; label: string }[]>(() => {
+    if (metricaUso.soloCalendario) {
+      return [{ value: 'DIAS', label: 'Solo por Calendario (Días)' }];
+    }
+    return [
+      { value: 'DIAS', label: 'Solo por Calendario (Días)' },
+      { value: 'HORAS', label: getCriterioIntervaloHumano('HORAS', metricaUso) },
+      {
+        value: 'LO_QUE_OCURRA_PRIMERO',
+        label: getCriterioIntervaloHumano('LO_QUE_OCURRA_PRIMERO', metricaUso),
+      },
+    ];
+  }, [metricaUso]);
   const { data: modelosOem } = useModelosOemEam(idTipoEquipo || undefined);
 
   const selectedModeloOem = useMemo(
@@ -442,7 +465,7 @@ function EditarEquipoForm({
       criterio_intervalo_override: (base.criterio_intervalo_override as CriterioIntervalo) || null,
       observaciones_generales: base.observaciones_generales || undefined,
       configuracion_especial: base.configuracion_especial || undefined,
-      config_parametros: Object.keys(configParametros).length > 0 ? configParametros : undefined,
+      config_parametros: configParametros,
     };
     try {
       await actualizarBase.mutateAsync({ id, payload });
@@ -631,7 +654,7 @@ function EditarEquipoForm({
               className={inputCls}
             />
           </Field>
-          <Field label="Intervalo Preventivo Tipo A (Horas)">
+          <Field label={`Intervalo Preventivo Tipo A (${metricaUso.sustantivoUso})`}>
             <input
               type="number"
               step="0.1"
@@ -647,7 +670,7 @@ function EditarEquipoForm({
               className={selectCls}
             >
               <option value="">— Heredar regla del Tipo de Equipo —</option>
-              {CRITERIOS_INTERVALO.map((c) => (
+              {criteriosIntervalo.map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
                 </option>
@@ -662,7 +685,7 @@ function EditarEquipoForm({
               className={inputCls}
             />
           </Field>
-          <Field label="Intervalo Preventivo Tipo B (Horas)">
+          <Field label={`Intervalo Preventivo Tipo B (${metricaUso.sustantivoUso})`}>
             <input
               type="number"
               step="0.1"
@@ -890,6 +913,10 @@ function EditarEquipoForm({
         onToggle={() => toggle('parametros')}
       >
         <ConfigParametrosEditor
+          idTipoEquipo={idTipoEquipo}
+          codigoTipo={
+            equipo.tipos_equipo?.codigo_tipo ?? equipo.tipo_equipo?.codigo_tipo ?? tipoEquipo
+          }
           tipoEquipo={tipoEquipo as TipoEquipo}
           value={configParametros}
           onChange={(c) => {

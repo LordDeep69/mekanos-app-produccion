@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { ConfigParametrosModule } from '../config-parametros/config-parametros.module';
 import { PrismaModule } from '../database/prisma.module';
 import { MedicionesController } from './mediciones.controller';
 
@@ -24,11 +25,7 @@ import { GetMedicionesByOrdenHandler } from './application/queries/get-medicione
  * CQRS pattern + Prisma + Mapper + 3 Commands + 3 Queries
  */
 
-const CommandHandlers = [
-  CreateMedicionHandler,
-  UpdateMedicionHandler,
-  DeleteMedicionHandler,
-];
+const CommandHandlers = [CreateMedicionHandler, UpdateMedicionHandler, DeleteMedicionHandler];
 
 const QueryHandlers = [
   GetAllMedicionesHandler,
@@ -37,7 +34,7 @@ const QueryHandlers = [
 ];
 
 @Module({
-  imports: [CqrsModule, PrismaModule],
+  imports: [CqrsModule, PrismaModule, ConfigParametrosModule],
   controllers: [MedicionesController],
   providers: [
     {

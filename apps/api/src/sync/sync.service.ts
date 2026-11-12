@@ -18,6 +18,11 @@ import {
   SyncPendienteCatalogoDto,
 } from './dto/sync-response.dto';
 import { SyncBatchUploadDto, SyncMedicionDto, SyncOrdenDto } from './dto/sync-upload-orden.dto';
+import {
+  evaluarValorContraRangos,
+  extraerConfigEquipoDeOrden,
+  resolverParametroConConfig,
+} from '../config-parametros/parametros-override.helper';
 import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
 
 /**
@@ -344,6 +349,44 @@ export class SyncService {
     dto: SyncMedicionDto,
     tecnicoId: number,
   ): Promise<any> {
+    // Obtener parámetro y contexto de equipo de la orden para resolver overrides
+    const [parametro, ordenContext] = await Promise.all([
+      tx.parametros_medicion.findUnique({
+        where: { id_parametro_medicion: dto.idParametroMedicion },
+      }),
+      tx.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: idOrdenServicio },
+        select: {
+          equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+          ordenes_equipos: {
+            select: {
+              id_orden_equipo: true,
+              equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const { configEquipo, configPlantilla } = extraerConfigEquipoDeOrden(ordenContext, null);
+    const resolved = resolverParametroConConfig(parametro, configEquipo, configPlantilla);
+
+    let nivelAlerta = 'OK';
+    let fueraDeRango = false;
+    let mensajeAlerta: string | null = null;
+
+    if (dto.valorNumerico !== undefined && parametro?.tipo_dato === 'NUMERICO') {
+      const ev = evaluarValorContraRangos(
+        Number(dto.valorNumerico),
+        resolved,
+        resolved.unidadMedida,
+        'OK',
+      );
+      nivelAlerta = ev.nivelAlerta;
+      fueraDeRango = ev.fueraDeRango;
+      mensajeAlerta = ev.mensajeAlerta;
+    }
+
     // Si ya existe en servidor, actualizar
     if (dto.serverId) {
       const updated = await tx.mediciones_servicio.update({
@@ -351,6 +394,14 @@ export class SyncService {
         data: {
           valor_numerico: dto.valorNumerico,
           valor_texto: dto.valorTexto,
+          ...(dto.valorNumerico !== undefined
+            ? {
+                unidad_medida: resolved.unidadMedida || undefined,
+                fuera_de_rango: fueraDeRango,
+                nivel_alerta: nivelAlerta as any,
+                mensaje_alerta: mensajeAlerta,
+              }
+            : {}),
           observaciones: dto.observaciones,
           temperatura_ambiente: dto.temperaturaAmbiente,
           humedad_relativa: dto.humedadRelativa,
@@ -361,47 +412,6 @@ export class SyncService {
       return updated;
     }
 
-    // Obtener parámetro para calcular nivel de alerta
-    const parametro = await tx.parametros_medicion.findUnique({
-      where: { id_parametro_medicion: dto.idParametroMedicion },
-    });
-
-    // Calcular nivel de alerta
-    let nivelAlerta = 'OK';
-    let mensajeAlerta: string | null = null;
-
-    if (dto.valorNumerico !== undefined && parametro?.tipo_dato === 'NUMERICO') {
-      const valor = Number(dto.valorNumerico);
-
-      if (
-        parametro.valor_minimo_critico !== null &&
-        valor < Number(parametro.valor_minimo_critico)
-      ) {
-        nivelAlerta = 'CRITICO';
-        mensajeAlerta = `Valor ${valor} por debajo del mínimo crítico ${parametro.valor_minimo_critico}`;
-      } else if (
-        parametro.valor_maximo_critico !== null &&
-        valor > Number(parametro.valor_maximo_critico)
-      ) {
-        nivelAlerta = 'CRITICO';
-        mensajeAlerta = `Valor ${valor} por encima del máximo crítico ${parametro.valor_maximo_critico}`;
-      } else if (
-        parametro.valor_minimo_normal !== null &&
-        valor < Number(parametro.valor_minimo_normal)
-      ) {
-        nivelAlerta = 'ADVERTENCIA';
-        mensajeAlerta = `Valor ${valor} por debajo del mínimo normal ${parametro.valor_minimo_normal}`;
-      } else if (
-        parametro.valor_maximo_normal !== null &&
-        valor > Number(parametro.valor_maximo_normal)
-      ) {
-        nivelAlerta = 'ADVERTENCIA';
-        mensajeAlerta = `Valor ${valor} por encima del máximo normal ${parametro.valor_maximo_normal}`;
-      } else {
-        mensajeAlerta = `Valor ${valor} dentro de rango normal`;
-      }
-    }
-
     // Crear medición
     const nuevaMedicion = await tx.mediciones_servicio.create({
       data: {
@@ -409,6 +419,8 @@ export class SyncService {
         id_parametro_medicion: dto.idParametroMedicion,
         valor_numerico: dto.valorNumerico,
         valor_texto: dto.valorTexto,
+        unidad_medida: resolved.unidadMedida || parametro?.unidad_medida || undefined,
+        fuera_de_rango: fueraDeRango,
         nivel_alerta: nivelAlerta as any,
         mensaje_alerta: mensajeAlerta,
         observaciones: dto.observaciones,
@@ -948,14 +960,20 @@ export class SyncService {
       }
     }
 
-    // ✅ FIX: Desglose de mediciones por estado (NORMAL, ADVERTENCIA, CRITICO)
+    // ✅ FIX: Desglose de mediciones por estado (NORMAL, ADVERTENCIA, CRITICO) con overrides por equipo
+    const ordenesByIdMap = new Map<number, any>(ordenes.map((o) => [o.id_orden_servicio, o]));
     const medicionesPorEstado = await this.prisma.mediciones_servicio.findMany({
       where: { id_orden_servicio: { in: ordenesIds } },
       select: {
         id_orden_servicio: true,
+        id_orden_equipo: true,
         valor_numerico: true,
         parametros_medicion: {
           select: {
+            id_parametro_medicion: true,
+            codigo_parametro: true,
+            nombre_parametro: true,
+            unidad_medida: true,
             valor_minimo_normal: true,
             valor_maximo_normal: true,
             valor_minimo_critico: true,
@@ -974,28 +992,18 @@ export class SyncService {
       const ordenId = m.id_orden_servicio;
       const valor = m.valor_numerico?.toNumber() || 0;
       const param = m.parametros_medicion;
+      const ordenRef = ordenesByIdMap.get(ordenId);
+      const { configEquipo, configPlantilla } = extraerConfigEquipoDeOrden(
+        ordenRef,
+        m.id_orden_equipo,
+      );
+      const resolved = resolverParametroConConfig(param, configEquipo, configPlantilla);
 
       let estado = 'NORMAL';
       if (param) {
-        const minNormal = param.valor_minimo_normal?.toNumber();
-        const maxNormal = param.valor_maximo_normal?.toNumber();
-        const minCritico = param.valor_minimo_critico?.toNumber();
-        const maxCritico = param.valor_maximo_critico?.toNumber();
-
-        // Verificar si está fuera de rango crítico
-        if (
-          (minCritico !== undefined && valor < minCritico) ||
-          (maxCritico !== undefined && valor > maxCritico)
-        ) {
-          estado = 'CRITICO';
-        }
-        // Verificar si está fuera de rango normal (advertencia)
-        else if (
-          (minNormal !== undefined && valor < minNormal) ||
-          (maxNormal !== undefined && valor > maxNormal)
-        ) {
-          estado = 'ADVERTENCIA';
-        }
+        const ev = evaluarValorContraRangos(valor, resolved, resolved.unidadMedida, 'OK');
+        estado =
+          ev.nivelAlerta === 'OK' || ev.nivelAlerta === 'INFORMATIVO' ? 'NORMAL' : ev.nivelAlerta;
       }
 
       switch (estado) {
@@ -1046,8 +1054,8 @@ export class SyncService {
       codigoEquipo: o.equipos?.codigo_equipo || '',
       nombreEquipo: o.equipos?.nombre_equipo || '',
       ubicacionEquipo: o.equipos?.ubicacion_texto,
-      // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Config personalizada del equipo
-      configParametros: o.equipos?.config_parametros || undefined,
+      // ✅ FLEXIBILIZACIÓN PARÁMETROS + METROLOGÍA EAM
+      configParametros: this.buildConfigParametrosConMetrologia(o.equipos),
       idTipoServicio: o.id_tipo_servicio!,
       codigoTipoServicio: o.tipos_servicio?.codigo_tipo || '',
       nombreTipoServicio: o.tipos_servicio?.nombre_tipo || '',
@@ -1132,8 +1140,8 @@ export class SyncService {
             codigoEquipo: oe.equipos?.codigo_equipo || '',
             nombreEquipo: oe.equipos?.nombre_equipo || '',
             ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
-            // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026)
-            configParametros: oe.equipos?.config_parametros || undefined,
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS + METROLOGÍA EAM
+            configParametros: this.buildConfigParametrosConMetrologia(oe.equipos),
           })) || [];
         // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos tienen el mismo valor
         if (mapped.length > 1) {
@@ -1549,6 +1557,37 @@ export class SyncService {
   }
 
   /**
+   * Fusiona la configuración de parámetros del modelo/equipo con los metadatos
+   * metrológicos del arquetipo (`_metrologia`) para consumo offline en Mobile.
+   */
+  private buildConfigParametrosConMetrologia(eq: any): Record<string, unknown> | undefined {
+    if (!eq) return undefined;
+    const pModelo =
+      (eq.modelos_equipo?.plantilla_parametros_config as Record<string, unknown>) || {};
+    const pEquipo = (eq.config_parametros as Record<string, unknown>) || {};
+    const tipo = eq.tipos_equipo;
+    const lecturaActualNum =
+      eq.horas_actuales != null && Number.isFinite(Number(eq.horas_actuales))
+        ? Number(eq.horas_actuales)
+        : undefined;
+    const metrologia =
+      tipo || lecturaActualNum !== undefined
+        ? {
+            unidadUso: tipo?.unidad_uso || 'HORAS',
+            etiquetaContador: tipo?.etiqueta_contador || undefined,
+            requiereHorometro: tipo?.requiere_horometro ?? true,
+            ...(lecturaActualNum !== undefined ? { lecturaActual: lecturaActualNum } : {}),
+          }
+        : undefined;
+    const merged: Record<string, unknown> = {
+      ...pModelo,
+      ...pEquipo,
+      ...(metrologia ? { _metrologia: metrologia } : {}),
+    };
+    return Object.keys(merged).length > 0 ? merged : undefined;
+  }
+
+  /**
    * Obtiene una orden completa por ID para sincronización individual.
    * Usado cuando el móvil detecta que necesita actualizar una orden específica.
    */
@@ -1668,21 +1707,14 @@ export class SyncService {
       const param = m.parametros_medicion;
       let estado = 'NORMAL';
       if (param) {
-        const minCrit = param.valor_minimo_critico?.toNumber();
-        const maxCrit = param.valor_maximo_critico?.toNumber();
-        const minNorm = param.valor_minimo_normal?.toNumber();
-        const maxNorm = param.valor_maximo_normal?.toNumber();
-        if (
-          (minCrit !== undefined && valor < minCrit) ||
-          (maxCrit !== undefined && valor > maxCrit)
-        ) {
-          estado = 'CRITICO';
-        } else if (
-          (minNorm !== undefined && valor < minNorm) ||
-          (maxNorm !== undefined && valor > maxNorm)
-        ) {
-          estado = 'ADVERTENCIA';
-        }
+        const { configEquipo, configPlantilla } = extraerConfigEquipoDeOrden(
+          orden,
+          m.id_orden_equipo,
+        );
+        const resolved = resolverParametroConConfig(param, configEquipo, configPlantilla);
+        const ev = evaluarValorContraRangos(valor, resolved, resolved.unidadMedida, 'OK');
+        estado =
+          ev.nivelAlerta === 'OK' || ev.nivelAlerta === 'INFORMATIVO' ? 'NORMAL' : ev.nivelAlerta;
       }
       if (estado === 'NORMAL') medicionesNormales++;
       else if (estado === 'ADVERTENCIA') medicionesAdvertencia++;
@@ -1767,13 +1799,7 @@ export class SyncService {
       serieEquipo: orden.equipos ? EquipoSpecsReader.getSerie(orden.equipos) : undefined,
       tipoEquipo: orden.equipos ? EquipoSpecsReader.getCategoriaCanonica(orden.equipos) : undefined,
       ubicacionEquipo: orden.equipos?.ubicacion_texto ?? undefined,
-      configParametros: (() => {
-        const pModelo =
-          (orden.equipos?.modelos_equipo?.plantilla_parametros_config as object) || {};
-        const pEquipo = (orden.equipos?.config_parametros as object) || {};
-        const merged = { ...pModelo, ...pEquipo };
-        return Object.keys(merged).length > 0 ? merged : undefined;
-      })(),
+      configParametros: this.buildConfigParametrosConMetrologia(orden.equipos),
       idTipoServicio: orden.id_tipo_servicio ?? undefined,
       codigoTipoServicio: orden.tipos_servicio?.codigo_tipo ?? undefined,
       nombreTipoServicio: orden.tipos_servicio?.nombre_tipo ?? undefined,
@@ -1828,13 +1854,7 @@ export class SyncService {
             serieEquipo: oe.equipos ? EquipoSpecsReader.getSerie(oe.equipos) : undefined,
             tipoEquipo: oe.equipos ? EquipoSpecsReader.getCategoriaCanonica(oe.equipos) : undefined,
             ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
-            configParametros: (() => {
-              const pModelo =
-                (oe.equipos?.modelos_equipo?.plantilla_parametros_config as object) || {};
-              const pEquipo = (oe.equipos?.config_parametros as object) || {};
-              const merged = { ...pModelo, ...pEquipo };
-              return Object.keys(merged).length > 0 ? merged : undefined;
-            })(),
+            configParametros: this.buildConfigParametrosConMetrologia(oe.equipos),
           })) || [];
         // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos iguales
         if (mapped.length > 1) {

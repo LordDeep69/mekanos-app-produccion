@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/environment.dart';
 import '../../../core/database/database_service.dart';
 import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/sync_lifecycle_manager.dart';
@@ -232,6 +233,47 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Indicador visible únicamente cuando se está en modo Local / Directo
+              ValueListenableBuilder<EnvironmentState>(
+                valueListenable: Environment.stateListenable,
+                builder: (context, envState, _) {
+                  if (envState.isProduction) return const SizedBox.shrink();
+                  return Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.shade400),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.developer_mode,
+                          size: 18,
+                          color: Colors.amber.shade900,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'MODO PRUEBAS (${envState.originLabel ?? 'LOCAL'}): ${envState.baseUrl}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.amber.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
               // Saludo personalizado
               _buildGreetingCard(user, theme),
               const SizedBox(height: 16),

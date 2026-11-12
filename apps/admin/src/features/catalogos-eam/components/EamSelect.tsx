@@ -43,6 +43,8 @@ export interface EamSelectProps {
   align?: 'left' | 'right';
   /** Abre el menú hacia arriba (modo inline) */
   dropUp?: boolean;
+  /** Placeholder del input interno de búsqueda cuando searchable está activo */
+  searchPlaceholder?: string;
 }
 
 /**
@@ -89,11 +91,12 @@ export function EamSelect({
   allowClear = false,
   icon,
   title,
-  minDropdownWidth = 320,
+  minDropdownWidth = 340,
   dropdownWidth,
   usePortal = false,
   align = 'left',
   dropUp = false,
+  searchPlaceholder = 'Buscar opción...',
 }: EamSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -109,6 +112,7 @@ export function EamSelect({
     bottom?: number;
     left: number;
     width: number;
+    maxHeight: number;
     openUpward: boolean;
   } | null>(null);
 
@@ -142,37 +146,44 @@ export function EamSelect({
   }, [options, searchTerm]);
 
   // Calcular coordenadas de forma atómica y síncrona
-  const calculatePosition = useCallback(() => {
-    if (!triggerRef.current) return null;
-    const rect = triggerRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const popoverWidth = dropdownWidth
-      ? typeof dropdownWidth === 'number'
-        ? dropdownWidth
-        : parseInt(String(dropdownWidth), 10) || 320
-      : Math.max(rect.width, minDropdownWidth);
+  const calculatePosition = useCallback(
+    (explicitOptionCount?: number) => {
+      if (!triggerRef.current) return null;
+      const rect = triggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const popoverWidth = dropdownWidth
+        ? typeof dropdownWidth === 'number'
+          ? dropdownWidth
+          : parseInt(String(dropdownWidth), 10) || 340
+        : Math.max(rect.width, minDropdownWidth);
 
-    const estimatedHeight = Math.min(
-      320,
-      filteredOptions.length * 40 + (shouldShowSearch ? 50 : 20),
-    );
-    // Solo abrir hacia arriba si abajo no cabe y arriba sí cabe holgadamente
-    const openUpward = spaceBelow < estimatedHeight && rect.top >= estimatedHeight + 10;
+      const optionCount = explicitOptionCount ?? filteredOptions.length;
+      const estimatedHeight = Math.min(340, optionCount * 44 + (shouldShowSearch ? 52 : 16));
+      const openUpward = dropUp
+        ? spaceAbove >= Math.min(260, estimatedHeight) + 12 || spaceAbove > spaceBelow
+        : spaceBelow < estimatedHeight && spaceAbove >= estimatedHeight + 10;
 
-    // Alinear al borde derecho del trigger si está en la mitad derecha o desbordaría a la derecha
-    const shouldAlignRight =
-      rect.left + popoverWidth > window.innerWidth - 16 || rect.right > window.innerWidth * 0.55;
-    let targetLeft = shouldAlignRight ? rect.right - popoverWidth : rect.left;
-    targetLeft = Math.max(12, Math.min(targetLeft, window.innerWidth - popoverWidth - 12));
+      const availableSpace = openUpward ? spaceAbove - 16 : spaceBelow - 16;
+      const maxHeight = Math.max(180, Math.min(360, availableSpace));
 
-    return {
-      top: openUpward ? undefined : rect.bottom + 4,
-      bottom: openUpward ? window.innerHeight - rect.top + 4 : undefined,
-      left: targetLeft,
-      width: popoverWidth,
-      openUpward,
-    };
-  }, [dropdownWidth, minDropdownWidth, filteredOptions.length, shouldShowSearch]);
+      const preferRight =
+        align === 'right' ||
+        (rect.left + popoverWidth > window.innerWidth - 16 && rect.right - popoverWidth >= 12);
+      let targetLeft = preferRight ? rect.right - popoverWidth : rect.left;
+      targetLeft = Math.max(12, Math.min(targetLeft, window.innerWidth - popoverWidth - 12));
+
+      return {
+        top: openUpward ? undefined : rect.bottom + 6,
+        bottom: openUpward ? window.innerHeight - rect.top + 6 : undefined,
+        left: targetLeft,
+        width: popoverWidth,
+        maxHeight,
+        openUpward,
+      };
+    },
+    [align, dropUp, dropdownWidth, minDropdownWidth, filteredOptions.length, shouldShowSearch],
+  );
 
   const handleToggle = () => {
     if (disabled) return;
@@ -180,7 +191,7 @@ export function EamSelect({
       setSearchTerm('');
       setHighlightedIndex(-1);
       if (usePortal) {
-        const nextCoords = calculatePosition();
+        const nextCoords = calculatePosition(options.length);
         if (nextCoords) setCoords(nextCoords);
       }
       setIsOpen(true);
@@ -210,13 +221,23 @@ export function EamSelect({
   };
 
   useEffect(() => {
-    if (!isOpen) return;
-
-    if (shouldShowSearch) {
+    if (isOpen && shouldShowSearch) {
       setTimeout(() => {
         searchInputRef.current?.focus();
-      }, 50);
+      }, 40);
     }
+  }, [isOpen, shouldShowSearch]);
+
+  useEffect(() => {
+    if (!isOpen || highlightedIndex < 0) return;
+    const item = popoverRef.current?.querySelector(
+      `[data-eam-idx="${highlightedIndex}"]`,
+    ) as HTMLElement | null;
+    item?.scrollIntoView({ block: 'nearest' });
+  }, [isOpen, highlightedIndex]);
+
+  useEffect(() => {
+    if (!isOpen) return;
 
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -299,7 +320,7 @@ export function EamSelect({
       window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleResize);
     };
-  }, [isOpen, usePortal, calculatePosition, filteredOptions, highlightedIndex, shouldShowSearch]);
+  }, [isOpen, usePortal, calculatePosition, filteredOptions, highlightedIndex]);
 
   // Clases por variante y tamaño
   const isDark = variant === 'dark';
@@ -314,8 +335,8 @@ export function EamSelect({
       {/* Buscador integrado si hay muchas opciones */}
       {shouldShowSearch && (
         <div
-          className={`p-2 border-b flex items-center gap-2 ${
-            isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-100 bg-slate-50/70'
+          className={`px-3 py-2.5 border-b flex items-center gap-2 shrink-0 ${
+            isDark ? 'border-slate-800 bg-slate-950/70' : 'border-slate-100 bg-slate-50/90'
           }`}
         >
           <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -323,17 +344,33 @@ export function EamSelect({
             ref={searchInputRef}
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar opción..."
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setHighlightedIndex(0);
+            }}
+            placeholder={searchPlaceholder}
             className={`w-full bg-transparent text-xs font-semibold focus:outline-none placeholder:text-slate-400 ${
               isDark ? 'text-white' : 'text-slate-800'
             }`}
           />
+          {options.length >= 6 && (
+            <span
+              className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0 ${
+                isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-200/70 text-slate-500'
+              }`}
+            >
+              {filteredOptions.length}
+            </span>
+          )}
           {searchTerm && (
             <button
               type="button"
-              onClick={() => setSearchTerm('')}
-              className="p-0.5 rounded text-slate-400 hover:text-slate-600"
+              onClick={() => {
+                setSearchTerm('');
+                setHighlightedIndex(-1);
+                searchInputRef.current?.focus();
+              }}
+              className="p-0.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer"
             >
               <X className="h-3 w-3" />
             </button>
@@ -342,10 +379,10 @@ export function EamSelect({
       )}
 
       {/* Lista de Opciones */}
-      <div className="max-h-64 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
+      <div className="flex-1 min-h-0 max-h-64 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
         {filteredOptions.length === 0 ? (
-          <div className="py-4 px-3 text-center text-xs text-slate-400 font-medium">
-            No se encontraron opciones
+          <div className="py-6 px-3 text-center text-xs text-slate-400 font-medium">
+            No se encontraron opciones para «{searchTerm}»
           </div>
         ) : (
           filteredOptions.map((op, idx) => {
@@ -357,31 +394,32 @@ export function EamSelect({
             return (
               <button
                 key={op.key || `opt-${idx}`}
+                data-eam-idx={idx}
                 type="button"
                 onClick={() => handleSelect(op.value)}
                 onMouseEnter={() => setHighlightedIndex(idx)}
-                className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold transition-all duration-100 flex items-center justify-between gap-3 cursor-pointer ${
+                className={`w-full px-2.5 py-2 rounded-xl text-left text-xs font-semibold border transition-all duration-100 flex items-center justify-between gap-2.5 cursor-pointer ${
                   isSelected
                     ? isDark
-                      ? 'bg-blue-600/30 text-blue-300 font-bold border border-blue-500/40 shadow-xs'
-                      : 'bg-blue-50/90 text-blue-800 font-bold border border-blue-200/80 shadow-xs'
+                      ? 'bg-blue-600/30 text-blue-200 font-bold border-blue-500/40 shadow-xs'
+                      : 'bg-blue-50/90 text-blue-900 font-bold border-blue-200/80 shadow-2xs'
                     : isHighlighted
                       ? isDark
-                        ? 'bg-slate-800 text-white'
-                        : 'bg-slate-100/90 text-slate-900'
+                        ? 'bg-slate-800 text-white border-transparent'
+                        : 'bg-slate-100/90 text-slate-900 border-transparent'
                       : isDark
-                        ? 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                        : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
+                        ? 'text-slate-300 border-transparent hover:bg-slate-800 hover:text-white'
+                        : 'text-slate-700 border-transparent hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  {op.icon && <span className="shrink-0 text-slate-500">{op.icon}</span>}
+                  {op.icon && <span className="shrink-0">{op.icon}</span>}
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-bold leading-snug whitespace-normal break-words">
                       {op.label}
                     </div>
                     {op.description && (
-                      <div className="text-[10px] text-slate-400 font-normal leading-tight mt-0.5 whitespace-normal break-words">
+                      <div className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5 whitespace-normal break-words">
                         {op.description}
                       </div>
                     )}
@@ -391,8 +429,10 @@ export function EamSelect({
                 <div className="flex items-center gap-1.5 shrink-0">
                   {op.badge && (
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+                      className={`px-1.5 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wide border ${
+                        isDark
+                          ? 'bg-slate-800 border-slate-700 text-slate-300'
+                          : 'bg-slate-100/90 border-slate-200/80 text-slate-600'
                       }`}
                     >
                       {op.badge}
@@ -423,11 +463,14 @@ export function EamSelect({
         disabled={disabled}
         onClick={handleToggle}
         className={`w-full flex items-center justify-between gap-2 rounded-xl border font-semibold shadow-2xs transition-all duration-150 focus:outline-none focus:ring-2 cursor-pointer ${
-          isCompact ? 'h-8 px-2.5 text-xs' : 'h-10 px-3.5 text-xs'
+          isCompact ? 'h-8 px-2.5 text-xs' : 'h-10 px-3 text-xs'
         } ${triggerClasses} ${isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''} ${className}`}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
           {icon && <span className="shrink-0">{icon}</span>}
+          {!icon && selectedOption && 'icon' in selectedOption && selectedOption.icon && (
+            <span className="shrink-0">{selectedOption.icon}</span>
+          )}
           {selectedOption ? (
             <span className="truncate font-bold">{selectedOption.label}</span>
           ) : (
@@ -439,10 +482,17 @@ export function EamSelect({
 
         <div className="flex items-center gap-1 shrink-0">
           {allowClear && value && !disabled && (
-            <button
-              type="button"
+            <span
+              role="button"
+              tabIndex={0}
               onClick={handleClear}
-              className={`p-0.5 rounded-full hover:bg-slate-200/80 transition-colors ${
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleClear(e as unknown as React.MouseEvent);
+                }
+              }}
+              className={`p-0.5 rounded-full hover:bg-slate-200/80 transition-colors cursor-pointer ${
                 isDark
                   ? 'text-slate-400 hover:text-white hover:bg-slate-700'
                   : 'text-slate-400 hover:text-slate-700'
@@ -450,7 +500,7 @@ export function EamSelect({
               title="Limpiar selección"
             >
               <X className="h-3 w-3" />
-            </button>
+            </span>
           )}
           <ChevronDown
             className={`h-4 w-4 transition-transform duration-200 ${
@@ -465,20 +515,24 @@ export function EamSelect({
         <div
           ref={popoverRef}
           style={{
-            minWidth: minDropdownWidth || 320,
+            minWidth: minDropdownWidth || 340,
             width: dropdownWidth || undefined,
             maxWidth: 'calc(100vw - 24px)',
           }}
-          className={`absolute ${
-            dropUp
-              ? 'bottom-full mb-1.5 z-50 max-h-60 overflow-y-auto shadow-xl'
-              : 'z-50 mt-1.5 top-full overflow-hidden'
-          } rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 ${
-            align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'
+          className={`absolute flex flex-col overflow-hidden ${
+            dropUp ? 'bottom-full mb-1.5 z-50' : 'z-50 mt-1.5 top-full'
+          } rounded-2xl border ring-1 ring-slate-900/5 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.22)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 ${
+            align === 'right'
+              ? dropUp
+                ? 'right-0 origin-bottom-right'
+                : 'right-0 origin-top-right'
+              : dropUp
+                ? 'left-0 origin-bottom-left'
+                : 'left-0 origin-top-left'
           } ${
             isDark
-              ? 'bg-slate-900/95 border-slate-700 text-white divide-slate-800'
-              : 'bg-white/95 border-slate-200/90 text-slate-900 divide-slate-100'
+              ? 'bg-slate-900/98 border-slate-700 text-white divide-slate-800'
+              : 'bg-white/98 border-slate-200/90 text-slate-900 divide-slate-100'
           }`}
         >
           {renderDropdownContent()}
@@ -499,16 +553,16 @@ export function EamSelect({
               bottom: coords.bottom,
               left: coords.left,
               width: coords.width,
+              maxHeight: coords.maxHeight,
               maxWidth: 'calc(100vw - 24px)',
               zIndex: 99999,
-              transformOrigin: coords.openUpward ? 'bottom right' : 'top right',
             }}
-            className={`rounded-2xl border shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
+            className={`flex flex-col rounded-2xl border ring-1 ring-slate-900/5 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.24)] backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
               coords.openUpward ? 'origin-bottom' : 'origin-top'
             } ${
               isDark
-                ? 'bg-slate-900/95 border-slate-700 text-white divide-slate-800'
-                : 'bg-white/95 border-slate-200/90 text-slate-900 divide-slate-100'
+                ? 'bg-slate-900/98 border-slate-700 text-white divide-slate-800'
+                : 'bg-white/98 border-slate-200/90 text-slate-900 divide-slate-100'
             }`}
           >
             {renderDropdownContent()}

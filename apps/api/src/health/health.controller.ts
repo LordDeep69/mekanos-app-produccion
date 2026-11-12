@@ -1,12 +1,16 @@
 import { Controller, Get } from '@nestjs/common';
+import * as os from 'os';
 import { GIT_COMMIT } from '../common/git-commit';
 import { PrismaService } from '../database/prisma.service';
 
+const SERVER_HOSTNAME = os.hostname();
+const SERVER_ENVIRONMENT = process.env.NODE_ENV || 'development';
+
 /**
  * HealthController - Controlador de Health Check
- * 
+ *
  * Endpoints para monitoreo del estado de la aplicación.
- * 
+ *
  * @controller health
  */
 @Controller('health')
@@ -15,11 +19,11 @@ export class HealthController {
 
   /**
    * Health Check Básico
-   * 
+   *
    * Valida que el servidor esté respondiendo.
-   * 
+   *
    * @returns {Object} Status de la aplicación
-   * 
+   *
    * @example
    * GET /api/health
    * Response: { status: 'ok', timestamp: '2025-11-13T...' }
@@ -31,18 +35,21 @@ export class HealthController {
       commit: GIT_COMMIT,
       timestamp: new Date().toISOString(),
       service: 'Mekanos API',
+      app: 'mekanos-api',
+      environment: SERVER_ENVIRONMENT,
+      hostname: SERVER_HOSTNAME,
       version: '0.1.0',
     };
   }
 
   /**
    * Health Check Detallado con Base de Datos
-   * 
+   *
    * Valida que el servidor esté respondiendo Y que la base de datos
    * esté conectada correctamente.
-   * 
+   *
    * @returns {Object} Status detallado incluyendo DB
-   * 
+   *
    * @example
    * GET /api/health/detailed
    * Response: {

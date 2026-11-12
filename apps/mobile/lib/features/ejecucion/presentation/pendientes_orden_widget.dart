@@ -17,6 +17,7 @@ class PendientesOrdenWidget extends ConsumerStatefulWidget {
   final List<OrdenesEquipo>? equipos;
   final VoidCallback? onPendientesChanged;
   final Function(String resumenTexto)? onResumenActualizado;
+  final int refreshTick;
 
   const PendientesOrdenWidget({
     super.key,
@@ -28,6 +29,7 @@ class PendientesOrdenWidget extends ConsumerStatefulWidget {
     this.equipos,
     this.onPendientesChanged,
     this.onResumenActualizado,
+    this.refreshTick = 0,
   });
 
   @override
@@ -39,6 +41,7 @@ class _PendientesOrdenWidgetState
     extends ConsumerState<PendientesOrdenWidget> {
   List<OrdenesPendiente> _pendientes = [];
   List<PendientesCatalogoData> _catalogo = [];
+  List<ActividadesEjecutada> _hallazgosSugeridos = [];
   bool _isLoading = true;
 
   @override
@@ -48,17 +51,72 @@ class _PendientesOrdenWidgetState
     _refrescarCatalogoRemoto();
   }
 
+  @override
+  void didUpdateWidget(covariant PendientesOrdenWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshTick != widget.refreshTick) {
+      _cargarDatos();
+    }
+  }
+
+  Future<void> _convertirHallazgoAPendiente(
+    ActividadesEjecutada act,
+    String prioridad,
+  ) async {
+    final db = ref.read(databaseProvider);
+    final obs = (act.observacion ?? '').trim();
+    final nuevo = OrdenesPendientesCompanion(
+      idOrden: Value(widget.idOrdenLocal),
+      idOrdenBackend: Value(widget.idOrdenBackend),
+      idCliente: Value(widget.idCliente),
+      idEquipo: Value(widget.idEquipo),
+      idOrdenEquipo: Value(act.idOrdenEquipo ?? widget.idOrdenEquipo),
+      descripcion: Value(act.descripcion.trim()),
+      origen: const Value('CHECKLIST'),
+      prioridad: Value(prioridad),
+      estado: const Value('PENDIENTE'),
+      observaciones: Value(obs.isNotEmpty ? obs : 'Hallazgo (${act.simbologia ?? 'R'}) en checklist'),
+      fechaCreacion: Value(DateTime.now()),
+      isDirty: const Value(true),
+    );
+    await db.insertOrdenPendiente(nuevo);
+    await _cargarDatos();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ Convertido a pendiente: ${act.descripcion}'),
+          backgroundColor: Colors.amber.shade900,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   Future<void> _cargarDatos() async {
     setState(() => _isLoading = true);
     try {
       final db = ref.read(databaseProvider);
       final pends = await db.getPendientesByOrden(widget.idOrdenLocal);
       final cats = await db.getPendientesCatalogo();
+      final todasActs = await db.getActividadesByOrden(widget.idOrdenLocal);
+      final pendsNorm = pends
+          .map((p) => p.descripcion.trim().toLowerCase())
+          .toSet();
+      final sugeridos = todasActs.where((act) {
+        if (widget.idOrdenEquipo != null && act.idOrdenEquipo != widget.idOrdenEquipo) {
+          return false;
+        }
+        final est = (act.simbologia ?? '').trim().toUpperCase();
+        if (est != 'R' && est != 'M') return false;
+        final desc = act.descripcion.trim().toLowerCase();
+        return desc.isNotEmpty && !pendsNorm.contains(desc);
+      }).toList();
 
       if (mounted) {
         setState(() {
           _pendientes = pends;
           _catalogo = cats;
+          _hallazgosSugeridos = sugeridos;
           _isLoading = false;
         });
         _notificarResumen();
@@ -331,6 +389,98 @@ class _PendientesOrdenWidgetState
             ),
           ),
           const SizedBox(height: 12),
+
+          // Sugerencias automáticas desde ítems R / M del checklist
+          if (_hallazgosSugeridos.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade800),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Hallazgos R/M detectados (${_hallazgosSugeridos.length}) — convertir en 1 toque:',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ..._hallazgosSugeridos.map((act) {
+                    final est = (act.simbologia ?? '').trim().toUpperCase();
+                    final esCritico = est == 'M';
+                    final prioridadSugerida = esCritico ? 'ALTA' : 'NORMAL';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: esCritico ? Colors.red.shade200 : Colors.amber.shade300,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: esCritico ? Colors.red.shade100 : Colors.amber.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              est,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: esCritico ? Colors.red.shade900 : Colors.amber.shade900,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              act.descripcion,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          TextButton.icon(
+                            onPressed: () => _convertirHallazgoAPendiente(act, prioridadSugerida),
+                            icon: const Icon(Icons.add_circle_outline, size: 15),
+                            label: const Text('Pendiente', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.amber.shade900,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
 
           // Lista de Pendientes Registrados
           if (_pendientes.isEmpty)

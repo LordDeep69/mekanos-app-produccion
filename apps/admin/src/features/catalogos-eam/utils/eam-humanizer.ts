@@ -32,10 +32,16 @@ export function parseOpcionesSeguras(raw: unknown): OpcionHumana[] {
         const parsed = JSON.parse(trimmed);
         if (Array.isArray(parsed)) arr = parsed;
       } catch {
-        arr = trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+        arr = trimmed
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
     } else {
-      arr = trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+      arr = trimmed
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
   }
 
@@ -200,15 +206,178 @@ export function getRolSemanticoHumano(rol?: string | null): string {
   return MAPA_ROLES_SEMANTICOS[rol.toUpperCase()] || 'Dato Técnico General';
 }
 
+export interface MetricaUsoEquipoInput {
+  unidadUso?: string | null;
+  etiquetaContador?: string | null;
+  requiereHorometro?: boolean | null;
+}
+
+export interface MetricaUsoEquipoMeta {
+  unidadUso: string;
+  etiquetaContador: string;
+  sustantivoUso: string;
+  sufijoCorto: string;
+  icono: string;
+  soloCalendario: boolean;
+  labelInputInicial: string;
+  placeholderInputInicial: string;
+  labelCadaUso: string;
+  tituloKpi360: string;
+  botonActualizar: string;
+  tituloModalLectura: string;
+  tituloHistorialLecturas: string;
+  labelEjecucionOrden: string;
+  prefijoObservacion: string;
+}
+
+/**
+ * Resuelve la metrología operativa de un activo o arquetipo sin hardcoding de Horómetro/Horas.
+ * Fuente única de verdad para Wizard de Equipos, /equipos, Expediente 360°, Hub EAM y Órdenes.
+ */
+export function getMetricaUsoMeta(input?: MetricaUsoEquipoInput | null): MetricaUsoEquipoMeta {
+  const rawUnit = (input?.unidadUso || '').toUpperCase().trim();
+  const rawEtiqueta = (input?.etiquetaContador || '').trim();
+  const etiqLower = rawEtiqueta.toLowerCase();
+
+  if (rawUnit === 'CAL' || input?.requiereHorometro === false) {
+    return {
+      unidadUso: rawUnit || 'CAL',
+      etiquetaContador: rawEtiqueta || 'Control por Calendario',
+      sustantivoUso: 'Días',
+      sufijoCorto: 'días',
+      icono: '📅',
+      soloCalendario: true,
+      labelInputInicial: 'Control exclusivo por Calendario (Sin contador físico)',
+      placeholderInputInicial: 'No aplica',
+      labelCadaUso: 'Uso (No aplica - Solo Días)',
+      tituloKpi360: 'Control por Calendario',
+      botonActualizar: 'Registrar Lectura Opcional',
+      tituloModalLectura: 'Registrar Lectura Opcional',
+      tituloHistorialLecturas: 'Historial de Lecturas',
+      labelEjecucionOrden: 'Lectura de Contador (Opcional)',
+      prefijoObservacion: 'CONTADOR',
+    };
+  }
+
+  if (rawUnit === 'CICLOS' || etiqLower.includes('ciclo')) {
+    const etiqueta = rawEtiqueta || 'Ciclos de Viaje';
+    return {
+      unidadUso: 'CICLOS',
+      etiquetaContador: etiqueta,
+      sustantivoUso: 'Ciclos',
+      sufijoCorto: 'ciclos',
+      icono: '🔄',
+      soloCalendario: false,
+      labelInputInicial: `${etiqueta} Actuales (Ciclos)`,
+      placeholderInputInicial: 'Ej: 15000',
+      labelCadaUso: 'Cada (Ciclos)',
+      tituloKpi360: `${etiqueta} Acumulados`,
+      botonActualizar: `Actualizar ${etiqueta}`,
+      tituloModalLectura: `Registrar Lectura de ${etiqueta}`,
+      tituloHistorialLecturas: `Últimas Lecturas de ${etiqueta}`,
+      labelEjecucionOrden: `Lectura de ${etiqueta} (ciclos)`,
+      prefijoObservacion: 'CICLOS',
+    };
+  }
+
+  if (
+    rawUnit === 'KM_ODO' ||
+    rawUnit === 'KM' ||
+    etiqLower.includes('odómetro') ||
+    etiqLower.includes('odometro') ||
+    etiqLower.includes('kilometr')
+  ) {
+    const etiqueta = rawEtiqueta || 'Kilometraje (Odómetro)';
+    return {
+      unidadUso: rawUnit || 'KM_ODO',
+      etiquetaContador: etiqueta,
+      sustantivoUso: 'Kilómetros',
+      sufijoCorto: 'km',
+      icono: '🚗',
+      soloCalendario: false,
+      labelInputInicial: 'Kilometraje Actual (Odómetro - km)',
+      placeholderInputInicial: 'Ej: 45000',
+      labelCadaUso: 'Cada (Kilómetros)',
+      tituloKpi360: 'Kilometraje Acumulado',
+      botonActualizar: 'Actualizar Kilometraje',
+      tituloModalLectura: 'Registrar Lectura de Kilometraje',
+      tituloHistorialLecturas: 'Últimas Lecturas de Kilometraje',
+      labelEjecucionOrden: `Lectura de ${etiqueta} (km)`,
+      prefijoObservacion: 'KM',
+    };
+  }
+
+  if (
+    rawUnit === 'UPM' ||
+    rawUnit === 'UNIDADES' ||
+    etiqLower.includes('upm') ||
+    etiqLower.includes('unidades')
+  ) {
+    const etiqueta = rawEtiqueta || 'Unidades Producidas (UPM)';
+    return {
+      unidadUso: rawUnit || 'UPM',
+      etiquetaContador: etiqueta,
+      sustantivoUso: 'Unidades',
+      sufijoCorto: 'uds',
+      icono: '📦',
+      soloCalendario: false,
+      labelInputInicial: `${etiqueta} Actual (Unidades)`,
+      placeholderInputInicial: 'Ej: 25000',
+      labelCadaUso: 'Cada (Unidades)',
+      tituloKpi360: `${etiqueta} Acumuladas`,
+      botonActualizar: `Actualizar ${etiqueta}`,
+      tituloModalLectura: `Registrar Lectura de ${etiqueta}`,
+      tituloHistorialLecturas: `Últimas Lecturas de ${etiqueta}`,
+      labelEjecucionOrden: `Lectura de ${etiqueta} (uds)`,
+      prefijoObservacion: 'UPM',
+    };
+  }
+
+  const etiqueta = rawEtiqueta || 'Horómetro';
+  return {
+    unidadUso: rawUnit || 'HORAS',
+    etiquetaContador: etiqueta,
+    sustantivoUso: 'Horas',
+    sufijoCorto: 'hrs',
+    icono: '⏱️',
+    soloCalendario: false,
+    labelInputInicial:
+      etiqueta === 'Horómetro' ? 'Horas Actuales (Horómetro)' : `${etiqueta} Actual (hrs)`,
+    placeholderInputInicial: 'Ej: 1250',
+    labelCadaUso: 'Cada (Horas)',
+    tituloKpi360: `${etiqueta} Acumulado`,
+    botonActualizar: `Actualizar ${etiqueta}`,
+    tituloModalLectura: `Registrar Lectura de ${etiqueta}`,
+    tituloHistorialLecturas: `Últimas Lecturas de ${etiqueta}`,
+    labelEjecucionOrden: `Lectura de ${etiqueta} (hrs)`,
+    prefijoObservacion: 'HORAS',
+  };
+}
+
 /**
  * Traducción humana de Criterios de Intervalo de Planes Preventivos
  */
-export function getCriterioIntervaloHumano(criterio?: string | null): string {
+export function getCriterioIntervaloHumano(
+  criterio?: string | null,
+  metrica?: MetricaUsoEquipoInput | null,
+): string {
   const c = (criterio || '').toUpperCase().trim();
-  if (c === 'LO_QUE_OCURRA_PRIMERO') return 'Lo que ocurra primero (Días u Horas)';
+  const meta = getMetricaUsoMeta(metrica);
+  const conj = /^[ho]/i.test(meta.sustantivoUso) ? 'u' : 'o';
+
+  if (c === 'LO_QUE_OCURRA_PRIMERO') {
+    return meta.soloCalendario
+      ? 'Solo por Calendario (Días)'
+      : `Lo que ocurra primero (Días ${conj} ${meta.sustantivoUso})`;
+  }
   if (c === 'DIAS' || c === 'CALENDARIO') return 'Solo por Calendario (Días)';
-  if (c === 'HORAS' || c === 'USO') return 'Solo por Uso (Horas de Horómetro)';
-  return criterio || 'Lo que ocurra primero (Días u Horas)';
+  if (c === 'HORAS' || c === 'USO') return `Solo por Uso (${meta.sustantivoUso})`;
+  return (
+    criterio ||
+    (meta.soloCalendario
+      ? 'Solo por Calendario (Días)'
+      : `Lo que ocurra primero (Días ${conj} ${meta.sustantivoUso})`)
+  );
 }
 
 /**
@@ -245,7 +414,10 @@ export function getRolBomHumano(rolBom?: string | null): string {
 /**
  * Nombres cortos y colores de Partes / Subsistemas para badges en tablas
  */
-export function getModuloBadgeInfo(codigoModulo?: string | null, nombreModulo?: string | null): {
+export function getModuloBadgeInfo(
+  codigoModulo?: string | null,
+  nombreModulo?: string | null,
+): {
   shortName: string;
   fullName: string;
   badgeClass: string;
@@ -279,7 +451,12 @@ export function getModuloBadgeInfo(codigoModulo?: string | null, nombreModulo?: 
       badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
     };
   }
-  if (code.includes('refrigera') || code.includes('chiller') || code.includes('clima') || code.includes('hvac')) {
+  if (
+    code.includes('refrigera') ||
+    code.includes('chiller') ||
+    code.includes('clima') ||
+    code.includes('hvac')
+  ) {
     return {
       shortName: 'Circuito Refrigeración',
       fullName: nombreModulo || 'Circuito de Refrigeración',

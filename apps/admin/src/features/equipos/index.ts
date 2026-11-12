@@ -13,19 +13,20 @@ export { HojaVidaEquipo } from './components/hoja-vida-equipo';
 
 // Servicios y hooks
 export {
-    equiposService,
-    useActualizarDatosEspecificos,
-    useActualizarEquipo,
-    useCambiarEstadoEquipo,
-    useClientesParaSelect,
-    useCrearEquipo,
-    useEliminarEquipoCompletamente,
-    useEquipo,
-    useEquipos,
-    useFacetasEquipos,
-    useRegistrarLecturaHorometro,
-    useTrazabilidadEquipo,
-    type TrazabilidadEquipoResponse,
+  equiposService,
+  useActualizarDatosEspecificos,
+  useActualizarEquipo,
+  useCambiarEstadoEquipo,
+  useClientesParaSelect,
+  useCrearEquipo,
+  useEliminarEquipoCompletamente,
+  useEquipo,
+  useEquipos,
+  useFacetasEquipos,
+  useParametrosTelemetriaTipoEquipo,
+  useRegistrarLecturaHorometro,
+  useTrazabilidadEquipo,
+  type TrazabilidadEquipoResponse,
 } from './lib/equipos.service';
 
 // Tipos

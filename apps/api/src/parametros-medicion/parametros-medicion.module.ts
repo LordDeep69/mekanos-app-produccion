@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { ConfigParametrosModule } from '../config-parametros/config-parametros.module';
 import { PrismaModule } from '../database/prisma.module';
 import { PrismaParametrosMedicionRepository } from './infrastructure/prisma-parametros-medicion.repository';
 import { ParametrosMedicionController } from './parametros-medicion.controller';
@@ -31,13 +32,9 @@ const QueryHandlers = [
 ];
 
 @Module({
-  imports: [CqrsModule, PrismaModule],
+  imports: [CqrsModule, PrismaModule, ConfigParametrosModule],
   controllers: [ParametrosMedicionController],
-  providers: [
-    PrismaParametrosMedicionRepository,
-    ...CommandHandlers,
-    ...QueryHandlers,
-  ],
+  providers: [PrismaParametrosMedicionRepository, ...CommandHandlers, ...QueryHandlers],
   exports: [PrismaParametrosMedicionRepository],
 })
 export class ParametrosMedicionModule {}

@@ -36,6 +36,11 @@ import {
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { ConfigParametrosService } from '../../config-parametros/config-parametros.service';
+import {
+  evaluarValorContraRangos,
+  extraerConfigEquipoDeOrden,
+  resolverParametroConConfig,
+} from '../../config-parametros/parametros-override.helper';
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService, OrdenEmailData } from '../../email/email.service';
 import { EquipoSpecsReader } from '../../equipos/services/equipo-specs.reader';
@@ -1189,11 +1194,35 @@ export class FinalizacionOrdenService {
         },
         equipos: {
           include: {
-            tipos_equipo: true,
+            tipos_equipo: {
+              include: {
+                tipo_equipo_modulos: {
+                  include: {
+                    modulo: {
+                      include: {
+                        modulo_atributos: {
+                          include: {
+                            atributo: {
+                              include: { unidad_defecto: true },
+                            },
+                          },
+                          orderBy: [{ grupo_visual: 'asc' }, { orden_visual: 'asc' }],
+                        },
+                      },
+                    },
+                  },
+                  orderBy: { orden_visual: 'asc' },
+                },
+              },
+            },
+            equipos_atributos_filtro: true,
             equipos_generador: true,
             equipos_motor: true,
             equipos_bomba: true,
           },
+        },
+        ordenes_pendientes: {
+          orderBy: { id_orden_pendiente: 'asc' },
         },
         sedes_cliente: true,
         orden_padre: { select: { numero_orden: true } },
@@ -1628,7 +1657,8 @@ export class FinalizacionOrdenService {
     }
 
     // Si es bomba → BOMBA_A (legacy)
-    if (tipoEquipoNombre.includes('bomba')) {
+    const codigoTipoEquipo = (equipo?.tipos_equipo?.codigo_tipo || '').toUpperCase();
+    if (tipoEquipoNombre.includes('bomba') || codigoTipoEquipo === 'BOM') {
       this.logger.log(`📋 Tipo informe seleccionado: BOMBA_A`);
       return 'BOMBA_A';
     }
@@ -1638,13 +1668,12 @@ export class FinalizacionOrdenService {
       tipoEquipoNombre.includes('generador') ||
       tipoEquipoNombre.includes('electrogeno') ||
       tipoEquipoNombre.includes('planta') ||
-      tipoEquipoNombre.includes('gen')
+      codigoTipoEquipo === 'GEN'
     ) {
       if (
         tipoServicioCodigo.includes('TIPO_B') ||
         tipoServicioCodigo.includes('_B') ||
-        tipoServicioNombre.includes('TIPO B') ||
-        tipoServicioNombre.includes('B')
+        tipoServicioNombre.includes('TIPO B')
       ) {
         this.logger.log(`📋 Tipo informe seleccionado: GENERADOR_B`);
         return 'GENERADOR_B';
@@ -1849,6 +1878,58 @@ export class FinalizacionOrdenService {
       }
     }
 
+    const parametrosCatalogo = await this.prisma.parametros_medicion.findMany({
+      where: { activo: true },
+    });
+    const normNombreParam = (v: unknown) =>
+      String(v || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+    const paramById = new Map<number, any>(
+      parametrosCatalogo.map((p) => [p.id_parametro_medicion, p]),
+    );
+    const paramByNombreLower = new Map<string, any>(
+      parametrosCatalogo.map((p) => [normNombreParam(p.nombre_parametro), p]),
+    );
+    const mapMedicionParaPdf = (m: any, idOrdenEquipo?: number | null) => {
+      const param =
+        (m?.idParametroMedicion != null
+          ? paramById.get(Number(m.idParametroMedicion))
+          : undefined) ||
+        (m?.parametro ? paramByNombreLower.get(normNombreParam(m.parametro)) : undefined);
+      const { configEquipo, configPlantilla } = extraerConfigEquipoDeOrden(orden, idOrdenEquipo);
+      const resolved = resolverParametroConConfig(param, configEquipo, configPlantilla);
+      const valorNum = Number(m.valor) || 0;
+      const unidad = resolved.esPersonalizado
+        ? resolved.unidadMedida
+        : (m.unidad && String(m.unidad).trim()) || resolved.unidadMedida || '';
+      const ev = param ? evaluarValorContraRangos(valorNum, resolved, unidad, 'OK') : null;
+      const alertaFinal =
+        ev &&
+        (resolved.esPersonalizado ||
+          ev.nivelAlerta === 'CRITICO' ||
+          ev.nivelAlerta === 'ADVERTENCIA')
+          ? ev.nivelAlerta
+          : m.nivelAlerta || 'OK';
+      const estado =
+        alertaFinal === 'CRITICO' || alertaFinal === 'CRITICAL'
+          ? 'CRITICO'
+          : alertaFinal === 'ADVERTENCIA' || alertaFinal === 'WARNING'
+            ? 'ALERTA'
+            : 'NORMAL';
+      return {
+        parametro: m.parametro,
+        valor: m.valor,
+        unidad,
+        nivelAlerta: alertaFinal,
+        rangoMin: resolved.minNormal,
+        rangoMax: resolved.maxNormal,
+        estado,
+      };
+    };
+
     if (dto.esMultiEquipo && dto.medicionesPorEquipo) {
       medicionesPorEquipo = dto.medicionesPorEquipo.map((eq, index) => ({
         equipo: {
@@ -1858,12 +1939,7 @@ export class FinalizacionOrdenService {
           nombreEquipo: eq.nombreEquipo,
           estado: 'COMPLETADO',
         },
-        mediciones: eq.mediciones.map((m) => ({
-          parametro: m.parametro,
-          valor: m.valor,
-          unidad: m.unidad,
-          nivelAlerta: m.nivelAlerta || 'OK',
-        })),
+        mediciones: eq.mediciones.map((m) => mapMedicionParaPdf(m, eq.idOrdenEquipo)),
       }));
 
       for (const eq of medicionesPorEquipo) {
@@ -1904,12 +1980,7 @@ export class FinalizacionOrdenService {
         },
         mediciones: Array.from(medicionesUnicas.entries()).map(([parametro, meds]) => {
           const medEquipo = meds[equipoIndex] || meds[0];
-          return {
-            parametro: parametro,
-            valor: medEquipo.valor,
-            unidad: medEquipo.unidad,
-            nivelAlerta: medEquipo.nivelAlerta || 'OK',
-          };
+          return mapMedicionParaPdf({ ...medEquipo, parametro }, oe.id_orden_equipo);
         }),
       }));
 
@@ -2110,6 +2181,38 @@ export class FinalizacionOrdenService {
       }
     }
 
+    const contadorDesdeActividad = (() => {
+      const todasActs = [
+        ...(dto.actividades || []),
+        ...(dto.actividadesPorEquipo || []).flatMap((g) => g.actividades || []),
+      ];
+      for (const act of todasActs) {
+        const meta =
+          act.idActividadCatalogo != null
+            ? catMetaMap.get(Number(act.idActividadCatalogo))
+            : undefined;
+        const esContador =
+          meta?.rol_semantico === 'LECTURA_CONTADOR_ACTIVO' ||
+          meta?.tipo_control_input === 'LECTURA_CONTADOR';
+        if (esContador) {
+          const val = this.extraerHorasDeActividad(act);
+          if (val != null && val > 0) return val;
+        }
+      }
+      for (const act of todasActs) {
+        const val = this.extraerHorasDeObservacion(act.observaciones);
+        if (val != null && val > 0) return val;
+      }
+      return undefined;
+    })();
+
+    const contadorIntervencion =
+      dto.datosModulo?.horasTrabajo ??
+      datosModuloMapeado.horasTrabajo ??
+      orden.horometro_final ??
+      orden.horometro_inicial ??
+      contadorDesdeActividad;
+
     const datosPDF = {
       cliente:
         cliente?.persona?.nombre_comercial ||
@@ -2204,29 +2307,40 @@ export class FinalizacionOrdenService {
               ? `${orden.equipos.equipos_bomba.altura_presion_trabajo_m} m`
               : undefined,
             horometroIntervencion:
-              dto.datosModulo?.horasTrabajo ??
-              orden.horometro_final ??
-              orden.horometro_inicial ??
-              undefined,
+              contadorIntervencion != null ? Number(contadorIntervencion) : undefined,
             horometroAcumulado: orden.equipos.horas_actuales
               ? Number(orden.equipos.horas_actuales)
               : undefined,
+            unidadUso: orden.equipos.tipos_equipo?.unidad_uso || undefined,
+            etiquetaContador: orden.equipos.tipos_equipo?.etiqueta_contador || undefined,
+            requiereHorometro: orden.equipos.tipos_equipo?.requiere_horometro ?? undefined,
           }
         : undefined,
       placaUniversal: orden.equipos
         ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
         : undefined,
+      pendientes:
+        (orden as any).ordenes_pendientes && (orden as any).ordenes_pendientes.length > 0
+          ? (orden as any).ordenes_pendientes.map((p: any) => ({
+              descripcion: p.descripcion,
+              prioridad: p.prioridad,
+              estado: p.estado,
+              observaciones: p.observaciones || p.notas_resolucion || undefined,
+            }))
+          : Array.isArray(dto.pendientes)
+            ? dto.pendientes.map((p: any) => ({
+                descripcion: p.descripcion,
+                prioridad: p.prioridad,
+                estado: 'PENDIENTE',
+                observaciones: p.observaciones || undefined,
+              }))
+            : undefined,
       // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades personalizadas para PDF
       configUnidades,
       // Actividades flat (para backward compatibility)
       actividades: dto.actividades.map((a) => enrichActForPdf(a)),
       // Mediciones flat (para backward compatibility)
-      mediciones: (dto.mediciones || []).map((m) => ({
-        parametro: m.parametro,
-        valor: m.valor,
-        unidad: m.unidad,
-        nivelAlerta: m.nivelAlerta || 'OK',
-      })),
+      mediciones: (dto.mediciones || []).map((m) => mapMedicionParaPdf(m, m.idOrdenEquipo ?? null)),
       // ✅ MULTI-EQUIPOS: Estructura agrupada por equipo
       esMultiEquipo: esMultiEquipo,
       actividadesPorEquipo,
@@ -2831,7 +2945,13 @@ export class FinalizacionOrdenService {
         ejecutada: true,
         fecha_ejecucion: ahora,
         ejecutada_por: usuarioId,
-        observaciones: act.observaciones || null,
+        observaciones:
+          act.observaciones ||
+          (respuestaJson?.etiqueta
+            ? respuestaJson?.detalle
+              ? `Respuesta: ${respuestaJson.etiqueta} · ${respuestaJson.detalle}`
+              : `Respuesta: ${respuestaJson.etiqueta}`
+            : null),
         ...(respuestaJson !== undefined ? { respuesta_json: respuestaJson } : {}),
       };
     });
@@ -2869,27 +2989,36 @@ export class FinalizacionOrdenService {
       return 0; // No insertar duplicados
     }
 
-    // PASO 1: Precargar TODOS los parámetros en UNA sola query
-    const parametrosCompletos = await this.prisma.parametros_medicion.findMany({
-      select: { id_parametro_medicion: true, nombre_parametro: true, unidad_medida: true },
-    });
+    // PASO 1: Precargar TODOS los parámetros y contexto de equipo de la orden
+    const [parametrosCompletos, ordenContext] = await Promise.all([
+      this.prisma.parametros_medicion.findMany(),
+      this.prisma.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: idOrden },
+        select: {
+          equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+          ordenes_equipos: {
+            select: {
+              id_orden_equipo: true,
+              equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+            },
+          },
+        },
+      }),
+    ]);
 
     // Crear mapas para búsqueda O(1) - exacta y parcial
-    const parametroMapExacto = new Map<string, { id: number; unidad: string }>();
-    const parametroMapParcial = new Map<string, { id: number; unidad: string }>();
+    const parametroMapExacto = new Map<string, any>();
+    const parametroMapParcial = new Map<string, any>();
 
     for (const p of parametrosCompletos) {
       const nombreLower = p.nombre_parametro.toLowerCase();
-      parametroMapExacto.set(nombreLower, { id: p.id_parametro_medicion, unidad: p.unidad_medida });
+      parametroMapExacto.set(nombreLower, p);
       // También indexar primeros 20 chars para matching parcial
       const nombreCorto = nombreLower.substring(0, 20);
-      parametroMapParcial.set(nombreCorto, {
-        id: p.id_parametro_medicion,
-        unidad: p.unidad_medida,
-      });
+      parametroMapParcial.set(nombreCorto, p);
     }
 
-    // PASO 2: Preparar datos para batch insert
+    // PASO 2: Preparar datos para batch insert con evaluación contra overrides del equipo
     const ahora = new Date();
     const datosParaInsertar: Array<{
       id_orden_servicio: number;
@@ -2897,6 +3026,9 @@ export class FinalizacionOrdenService {
       id_parametro_medicion: number;
       valor_numerico: number;
       unidad_medida: string;
+      fuera_de_rango: boolean;
+      nivel_alerta: any;
+      mensaje_alerta: string;
       fecha_medicion: Date;
       medido_por: number;
     }> = [];
@@ -2913,12 +3045,25 @@ export class FinalizacionOrdenService {
         continue;
       }
 
+      const { configEquipo, configPlantilla } = extraerConfigEquipoDeOrden(
+        ordenContext,
+        med.idOrdenEquipo ?? null,
+      );
+      const resolved = resolverParametroConConfig(parametro, configEquipo, configPlantilla);
+      const unidadFinal = resolved.esPersonalizado
+        ? resolved.unidadMedida
+        : med.unidad || resolved.unidadMedida || parametro.unidad_medida;
+      const ev = evaluarValorContraRangos(Number(med.valor), resolved, unidadFinal, 'OK');
+
       datosParaInsertar.push({
         id_orden_servicio: idOrden,
         id_orden_equipo: med.idOrdenEquipo || null, // Multi-equipos: opcional
-        id_parametro_medicion: parametro.id,
+        id_parametro_medicion: parametro.id_parametro_medicion,
         valor_numerico: med.valor,
-        unidad_medida: med.unidad || parametro.unidad,
+        unidad_medida: unidadFinal,
+        fuera_de_rango: ev.fueraDeRango,
+        nivel_alerta: ev.nivelAlerta,
+        mensaje_alerta: ev.mensajeAlerta,
         fecha_medicion: ahora,
         medido_por: usuarioId,
       });
@@ -2940,7 +3085,8 @@ export class FinalizacionOrdenService {
    * ROBUSTEZ: Valida que la lectura no sea inferior a la anterior
    */
   /**
-   * Evalúa si un parámetro corresponde a lectura de horómetro
+   * Evalúa si un parámetro corresponde a lectura de contador de uso
+   * (horómetro, ciclos, odómetro/kilometraje o UPM).
    */
   private esParametroHorometro(param?: string): boolean {
     if (!param) return false;
@@ -2952,6 +3098,10 @@ export class FinalizacionOrdenService {
       p.includes('horometro') ||
       p.includes('horo') ||
       p.includes('gen_horometro') ||
+      p.includes('ciclo') ||
+      p.includes('odometr') ||
+      p.includes('kilometr') ||
+      p.includes('contador') ||
       (p.includes('hora') &&
         (p.includes('trabaj') ||
           p.includes('operac') ||
@@ -2962,8 +3112,82 @@ export class FinalizacionOrdenService {
     );
   }
 
+  private resolverMetricaUsoBackend(
+    tipoEquipo?: {
+      unidad_uso?: string | null;
+      etiqueta_contador?: string | null;
+      requiere_horometro?: boolean | null;
+    } | null,
+  ): {
+    unidadUso: string;
+    label: string;
+    sufijo: string;
+    maxDiario: number;
+    minMargen: number;
+    sinPrevioMax: number;
+  } {
+    const rawUnit = (tipoEquipo?.unidad_uso || 'HORAS').toUpperCase().trim();
+    const rawEtiqueta = tipoEquipo?.etiqueta_contador?.trim() || '';
+    const etiqLower = rawEtiqueta.toLowerCase();
+
+    if (tipoEquipo?.requiere_horometro === false || rawUnit === 'CAL') {
+      return {
+        unidadUso: 'CAL',
+        label: rawEtiqueta || 'Contador de Calendario',
+        sufijo: '',
+        maxDiario: 100000,
+        minMargen: 100000,
+        sinPrevioMax: 50000000,
+      };
+    }
+    if (rawUnit === 'CICLOS' || etiqLower.includes('ciclo')) {
+      return {
+        unidadUso: 'CICLOS',
+        label: rawEtiqueta || 'Ciclos de Viaje',
+        sufijo: 'ciclos',
+        maxDiario: 10000,
+        minMargen: 25000,
+        sinPrevioMax: 10000000,
+      };
+    }
+    if (
+      rawUnit === 'KM_ODO' ||
+      rawUnit === 'KM' ||
+      etiqLower.includes('odómetro') ||
+      etiqLower.includes('odometro') ||
+      etiqLower.includes('kilometr')
+    ) {
+      return {
+        unidadUso: 'KM_ODO',
+        label: rawEtiqueta || 'Kilometraje (Odómetro)',
+        sufijo: 'km',
+        maxDiario: 2500,
+        minMargen: 5000,
+        sinPrevioMax: 2000000,
+      };
+    }
+    if (rawUnit === 'UPM' || rawUnit === 'UNIDADES' || etiqLower.includes('upm')) {
+      return {
+        unidadUso: 'UPM',
+        label: rawEtiqueta || 'Unidades Producidas',
+        sufijo: 'uds',
+        maxDiario: 100000,
+        minMargen: 100000,
+        sinPrevioMax: 50000000,
+      };
+    }
+    return {
+      unidadUso: 'HORAS',
+      label: rawEtiqueta || 'Horómetro',
+      sufijo: 'h',
+      maxDiario: 24,
+      minMargen: 250,
+      sinPrevioMax: 5000,
+    };
+  }
+
   /**
-   * Extrae valor numérico de horas desde observaciones de checklist (ej: "HORAS: 276")
+   * Extrae valor numérico de uso desde observaciones de checklist (ej: "HORAS: 276", "CICLOS: 15120")
    */
   private extraerHorasDeActividad(act: ActividadInput): number | null {
     if (act.respuestaJson != null) {
@@ -2987,7 +3211,7 @@ export class FinalizacionOrdenService {
 
   private extraerHorasDeObservacion(obs?: string): number | null {
     if (!obs) return null;
-    const match = obs.match(/(?:HORAS|HOROMETRO|HORÓMETRO)\s*:\s*([\d.]+)/i);
+    const match = obs.match(/(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*([\d.]+)/i);
     if (match && match[1]) {
       const val = parseFloat(match[1]);
       return isNaN(val) ? null : val;
@@ -3002,11 +3226,22 @@ export class FinalizacionOrdenService {
     usuarioId: number,
   ): Promise<void> {
     try {
-      // 1. Obtener el equipo y su última lectura histórica
+      // 1. Obtener el equipo (con su arquetipo metrológico) y su última lectura histórica
       const [equipo, ultimaLectura] = await Promise.all([
         this.prisma.equipos.findUnique({
           where: { id_equipo: idEquipo },
-          select: { id_equipo: true, horas_actuales: true, codigo_equipo: true },
+          select: {
+            id_equipo: true,
+            horas_actuales: true,
+            codigo_equipo: true,
+            tipos_equipo: {
+              select: {
+                unidad_uso: true,
+                etiqueta_contador: true,
+                requiere_horometro: true,
+              },
+            },
+          },
         }),
         this.prisma.lecturas_horometro.findFirst({
           where: { id_equipo: idEquipo },
@@ -3014,14 +3249,17 @@ export class FinalizacionOrdenService {
         }),
       ]);
 
+      const metrica = this.resolverMetricaUsoBackend(equipo?.tipos_equipo);
+      const sufStr = metrica.sufijo ? ` ${metrica.sufijo}` : '';
+
       const horasActuales = equipo?.horas_actuales ? Number(equipo.horas_actuales) : 0;
       const ultimaHoras = ultimaLectura ? Number(ultimaLectura.horas_lectura) : 0;
       const referenciaHoras = Math.max(horasActuales, ultimaHoras);
 
-      // 2. Validación Zero Trust: Evitar horómetro en reversa si ya existían horas mayores registradas
+      // 2. Validación Zero Trust: Evitar contador en reversa si ya existía lectura mayor registrada
       if (referenciaHoras > 0 && horas < referenciaHoras) {
         this.logger.warn(
-          `⚠️ Intento de registrar horómetro menor al actual (${horas} < ${referenciaHoras}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se mantendrán las horas mayores en la hoja de vida.`,
+          `⚠️ Intento de registrar lectura de ${metrica.label} menor al actual (${horas}${sufStr} < ${referenciaHoras}${sufStr}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se mantendrá el acumulado mayor en la hoja de vida.`,
         );
         // Registrar en bitácora para auditoría de campo, pero SIN modificar equipos.horas_actuales
         await this.prisma.lecturas_horometro.create({
@@ -3034,7 +3272,7 @@ export class FinalizacionOrdenService {
             horas_transcurridas: 0,
             dias_transcurridos: null,
             registrado_por: usuarioId,
-            observaciones: `Lectura de campo (${horas}h) menor al acumulado (${referenciaHoras}h). Registrado como referencia de campo sin alterar horas acumuladas del equipo.`,
+            observaciones: `Lectura de campo (${horas}${sufStr}) menor al acumulado (${referenciaHoras}${sufStr}). Registrado como referencia de campo sin alterar ${metrica.label} del equipo.`,
           },
         });
         return;
@@ -3050,16 +3288,17 @@ export class FinalizacionOrdenService {
           )
         : null;
 
-      // 2.1 Validación de Plausibilidad Física (Anti-Outliers de digitación)
-      // Un equipo no puede operar más de 24 horas por día.
-      // Si pasaron D días, el máximo incremento físico posible es (D + 3) * 24 horas (mínimo 250h de margen)
+      // 2.1 Validación de Plausibilidad Física calibrada por unidad_uso (HORAS / CICLOS / KM_ODO / UPM)
+      const diasPositivos = Math.max(0, diasTranscurridos ?? 0);
       const limiteFisicoHoras =
-        diasTranscurridos != null ? Math.max(250, (diasTranscurridos + 3) * 24) : 5000;
+        diasTranscurridos != null
+          ? Math.max(metrica.minMargen, (diasPositivos + 3) * metrica.maxDiario)
+          : metrica.sinPrevioMax;
 
       const esSaltoAnomalo = horasTranscurridas != null && horasTranscurridas > limiteFisicoHoras;
       if (esSaltoAnomalo) {
         this.logger.warn(
-          `⚠️ Salto anómalo de horómetro detectado (+${horasTranscurridas}h en ${diasTranscurridos} días, límite físico: ${limiteFisicoHoras}h) en equipo ${equipo?.codigo_equipo || idEquipo}. Se audita sin alterar hoja de vida.`,
+          `⚠️ Salto anómalo de ${metrica.label} detectado (+${horasTranscurridas}${sufStr} en ${diasTranscurridos} días, límite físico [${metrica.unidadUso}]: ${limiteFisicoHoras}${sufStr}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se audita sin alterar hoja de vida.`,
         );
         await this.prisma.lecturas_horometro.create({
           data: {
@@ -3071,7 +3310,7 @@ export class FinalizacionOrdenService {
             horas_transcurridas: horasTranscurridas,
             dias_transcurridos: diasTranscurridos,
             registrado_por: usuarioId,
-            observaciones: `⚠️ ALERTA OUTLIER: Incremento de ${horasTranscurridas}h en ${diasTranscurridos} días supera el límite físico (${limiteFisicoHoras}h). Registrado para auditoría técnica sin alterar horas acumuladas.`,
+            observaciones: `⚠️ ALERTA OUTLIER: Incremento de ${horasTranscurridas}${sufStr} en ${diasTranscurridos} días supera el límite físico (${limiteFisicoHoras}${sufStr} para ${metrica.unidadUso}). Registrado para auditoría técnica sin alterar acumulado.`,
           },
         });
         return;
@@ -3101,12 +3340,12 @@ export class FinalizacionOrdenService {
       });
 
       this.logger.log(
-        `   ✅ Horómetro registrado y sincronizado en Hoja de Vida: ${horas}h (Equipo: ${equipo?.codigo_equipo || idEquipo})`,
+        `   ✅ ${metrica.label} registrado y sincronizado en Hoja de Vida: ${horas}${sufStr} (Equipo: ${equipo?.codigo_equipo || idEquipo})`,
       );
     } catch (error: unknown) {
       const err = error as Error;
-      this.logger.error(`❌ Error persistiendo horómetro: ${err.message}`);
-      // No fallar la finalización si falla el horómetro (non-critical path)
+      this.logger.error(`❌ Error persistiendo lectura de uso: ${err.message}`);
+      // No fallar la finalización si falla la lectura de uso (non-critical path)
     }
   }
 

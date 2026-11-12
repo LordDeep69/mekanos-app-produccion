@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import 'parametro_override_resolver.dart';
 
 /// Provider para el servicio de ejecución
 final ejecucionServiceProvider = Provider<EjecucionService>((ref) {
@@ -102,7 +101,10 @@ class EjecucionService {
 
         if (actividadesConMedicion.isNotEmpty && medicionesExistentes.isEmpty) {
           // ✅ FLEXIBILIZACIÓN PARÁMETROS: Obtener config del equipo
-          final configEquipoJson = await _obtenerConfigEquipo(idOrdenLocal);
+          final configEquipoBaseJson = await _obtenerConfigEquipo(
+            idOrdenLocal,
+            idOrdenEquipo: idOrdenEquipo,
+          );
 
           int medicionesReparadas = 0;
           for (final act in actividadesConMedicion) {
@@ -112,14 +114,24 @@ class EjecucionService {
                     .getSingleOrNull();
 
             if (parametro != null) {
+              final actIdOrdenEquipo = act.idOrdenEquipo ?? idOrdenEquipo;
+              final configEquipoJson = actIdOrdenEquipo != idOrdenEquipo
+                  ? await _obtenerConfigEquipo(
+                      idOrdenLocal,
+                      idOrdenEquipo: actIdOrdenEquipo,
+                    )
+                  : configEquipoBaseJson;
+
               // ✅ FLEXIBILIZACIÓN PARÁMETROS: Resolver rangos y unidades (equipo > catálogo)
               final rangosCustom = _resolverRangosPersonalizados(
                 configParametrosJson: configEquipoJson,
                 codigoParametro: parametro.codigo,
+                idParametro: parametro.id,
               );
               final unidadCustom = _resolverUnidadPersonalizada(
                 configParametrosJson: configEquipoJson,
                 codigoParametro: parametro.codigo,
+                idParametro: parametro.id,
               );
 
               await _db.insertMedicion(
@@ -231,7 +243,10 @@ class EjecucionService {
       // Y crear mediciones con SNAPSHOT completo para actividades de medición
       // ✅ MULTI-EQUIPOS: Incluir idOrdenEquipo si se proporciona
       // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Obtener config del equipo
-      final configEquipoJson = await _obtenerConfigEquipo(idOrdenLocal);
+      final configEquipoJson = await _obtenerConfigEquipo(
+        idOrdenLocal,
+        idOrdenEquipo: idOrdenEquipo,
+      );
       debugPrint(
         '🔍 [CONFIG] idOrdenLocal: $idOrdenLocal, idEquipo: ${orden.idEquipo}',
       );
@@ -298,10 +313,12 @@ class EjecucionService {
             final rangosCustom = _resolverRangosPersonalizados(
               configParametrosJson: configEquipoJson,
               codigoParametro: parametro.codigo,
+              idParametro: parametro.id,
             );
             final unidadCustom = _resolverUnidadPersonalizada(
               configParametrosJson: configEquipoJson,
               codigoParametro: parametro.codigo,
+              idParametro: parametro.id,
             );
 
             // Crear fila de medición VACÍA con SNAPSHOT de rangos y unidad
@@ -473,14 +490,19 @@ class EjecucionService {
 
         if (parametro != null) {
           // ✅ FLEXIBILIZACIÓN PARÁMETROS: Obtener config y resolver rangos/unidades
-          final configEquipoJson = await _obtenerConfigEquipo(idOrdenLocal);
+          final configEquipoJson = await _obtenerConfigEquipo(
+            idOrdenLocal,
+            idOrdenEquipo: idOrdenEquipo,
+          );
           final rangosCustom = _resolverRangosPersonalizados(
             configParametrosJson: configEquipoJson,
             codigoParametro: parametro.codigo,
+            idParametro: parametro.id,
           );
           final unidadCustom = _resolverUnidadPersonalizada(
             configParametrosJson: configEquipoJson,
             codigoParametro: parametro.codigo,
+            idParametro: parametro.id,
           );
 
           await _db.insertMedicion(
@@ -622,68 +644,23 @@ class EjecucionService {
   // Prioridad: configParametros del equipo > catálogo global
   // =========================================================================
 
-  /// Clase helper para rangos resueltos
   /// Retorna los rangos personalizados del equipo si existen, o null para usar catálogo
-  _RangosResueltos? _resolverRangosPersonalizados({
+  RangosParametroResueltos? _resolverRangosPersonalizados({
     required String? configParametrosJson,
     required String codigoParametro,
+    int? idParametro,
   }) {
-    if (configParametrosJson == null || configParametrosJson.isEmpty) {
-      return null;
-    }
-
-    try {
-      final config = jsonDecode(configParametrosJson) as Map<String, dynamic>;
-      final rangos = config['rangos'] as Map<String, dynamic>?;
-      if (rangos == null) return null;
-
-      // Mapeo de códigos de parámetro del catálogo a claves del config
-      // El frontend usa claves como "frecuencia_generador", "voltaje_generador", etc.
-      // IMPORTANTE: Los códigos deben coincidir EXACTAMENTE con los del seed
-      final mapaClaves = {
-        // Generadores - códigos del catálogo (fase-menos-1-ejecutar.ts)
-        'GEN_RPM': 'velocidad_motor',
-        'GEN_PRESION_ACEITE': 'presion_aceite',
-        'GEN_TEMP_REFRIGERANTE': 'temperatura_refrigerante',
-        'GEN_VOLTAJE_BATERIA': 'carga_bateria', // Carga de Batería
-        'GEN_HOROMETRO': 'horas_trabajo', // Sin rangos normalmente
-        'GEN_VOLTAJE_SALIDA': 'voltaje_generador', // Voltaje del Generador
-        'GEN_FRECUENCIA': 'frecuencia_generador',
-        'GEN_AMPERAJE': 'corriente_generador',
-        // Alias por si hay variaciones de nombre
-        'GEN_VOLTAJE': 'voltaje_generador',
-        'GEN_CORRIENTE': 'corriente_generador',
-        // Bombas
-        'BOM_VIBRACION': 'vibracion',
-        'BOM_PRESION_DESCARGA': 'presion_descarga',
-        'BOM_PRESION_SUCCION': 'presion_succion',
-        'BOM_VOLTAJE': 'voltaje_motor',
-        'BOM_AMPERAJE': 'corriente_motor',
-        'BOM_TEMPERATURA': 'temperatura_motor',
-        'BOM_CAUDAL': 'caudal',
-        'BOM_RPM': 'velocidad_bomba',
-      };
-
-      final claveConfig = mapaClaves[codigoParametro.toUpperCase()];
-      if (claveConfig == null) return null;
-
-      final rangoParam = rangos[claveConfig] as Map<String, dynamic>?;
-      if (rangoParam == null) return null;
-
+    final resuelto = ParametroOverrideResolver.resolverOverride(
+      configParametrosJson: configParametrosJson,
+      codigoParametro: codigoParametro,
+      idParametro: idParametro,
+    );
+    if (resuelto != null) {
       debugPrint(
-        '✅ [CONFIG] Usando rangos personalizados para $codigoParametro: $rangoParam',
+        '✅ [CONFIG] Usando rangos personalizados para $codigoParametro (id=$idParametro): [${resuelto.minNormal} - ${resuelto.maxNormal}] ${resuelto.unidadMedida ?? ""}',
       );
-
-      return _RangosResueltos(
-        minNormal: (rangoParam['min_normal'] as num?)?.toDouble(),
-        maxNormal: (rangoParam['max_normal'] as num?)?.toDouble(),
-        minCritico: (rangoParam['min_critico'] as num?)?.toDouble(),
-        maxCritico: (rangoParam['max_critico'] as num?)?.toDouble(),
-      );
-    } catch (e) {
-      debugPrint('⚠️ [CONFIG] Error parseando configParametros: $e');
-      return null;
     }
+    return resuelto;
   }
 
   /// Resuelve la unidad personalizada del equipo para un parámetro
@@ -691,59 +668,44 @@ class EjecucionService {
   String? _resolverUnidadPersonalizada({
     required String? configParametrosJson,
     required String codigoParametro,
+    int? idParametro,
   }) {
-    if (configParametrosJson == null || configParametrosJson.isEmpty) {
-      return null;
+    final unidadCustom = ParametroOverrideResolver.resolverUnidadPersonalizada(
+      configParametrosJson: configParametrosJson,
+      codigoParametro: codigoParametro,
+      idParametro: idParametro,
+    );
+    if (unidadCustom != null) {
+      debugPrint(
+        '✅ [CONFIG] Usando unidad personalizada para $codigoParametro (id=$idParametro): $unidadCustom',
+      );
     }
-
-    try {
-      final config = jsonDecode(configParametrosJson) as Map<String, dynamic>;
-      final unidades = config['unidades'] as Map<String, dynamic>?;
-      if (unidades == null) return null;
-
-      // Mapeo de códigos de parámetro a tipo de magnitud
-      final mapaParamAMagnitud = {
-        // Generadores
-        'GEN_TEMP_REFRIGERANTE': 'temperatura',
-        'GEN_PRESION_ACEITE': 'presion',
-        'GEN_VOLTAJE_SALIDA': 'voltaje',
-        'GEN_VOLTAJE_BATERIA': 'voltaje',
-        'GEN_VOLTAJE': 'voltaje',
-        'GEN_FRECUENCIA': 'frecuencia',
-        'GEN_AMPERAJE': 'corriente',
-        'GEN_CORRIENTE': 'corriente',
-        // Bombas
-        'BOM_PRESION_DESCARGA': 'presion',
-        'BOM_PRESION_SUCCION': 'presion',
-        'BOM_VOLTAJE': 'voltaje',
-        'BOM_AMPERAJE': 'corriente',
-        'BOM_TEMPERATURA': 'temperatura',
-      };
-
-      final magnitud = mapaParamAMagnitud[codigoParametro.toUpperCase()];
-      if (magnitud == null) return null;
-
-      final unidadCustom = unidades[magnitud] as String?;
-      if (unidadCustom != null) {
-        debugPrint(
-          '✅ [CONFIG] Usando unidad personalizada para $codigoParametro: $unidadCustom',
-        );
-      }
-      return unidadCustom;
-    } catch (e) {
-      debugPrint('⚠️ [CONFIG] Error parseando unidades: $e');
-      return null;
-    }
+    return unidadCustom;
   }
 
-  /// Obtiene el configParametros del equipo de una orden
-  Future<String?> _obtenerConfigEquipo(int idOrdenLocal) async {
-    final orden = await _db.getOrdenById(idOrdenLocal);
-    if (orden == null) return null;
+  /// Obtiene el configParametros del equipo de una orden (soporta multi-equipos)
+  Future<String?> _obtenerConfigEquipo(
+    int idOrdenLocal, {
+    int? idOrdenEquipo,
+  }) async {
+    int? idEquipoObjetivo;
+    if (idOrdenEquipo != null) {
+      final ordEq = await (_db.select(
+        _db.ordenesEquipos,
+      )..where((oe) => oe.idOrdenEquipo.equals(idOrdenEquipo)))
+          .getSingleOrNull();
+      idEquipoObjetivo = ordEq?.idEquipo;
+    }
+
+    if (idEquipoObjetivo == null) {
+      final orden = await _db.getOrdenById(idOrdenLocal);
+      if (orden == null) return null;
+      idEquipoObjetivo = orden.idEquipo;
+    }
 
     final equipo = await (_db.select(
       _db.equipos,
-    )..where((e) => e.id.equals(orden.idEquipo))).getSingleOrNull();
+    )..where((e) => e.id.equals(idEquipoObjetivo!))).getSingleOrNull();
 
     return equipo?.configParametros;
   }
@@ -1109,19 +1071,4 @@ class ResumenEjecucion {
   int get totalItems => totalActividades + totalMediciones;
 
   bool get tieneAlertas => malos > 0 || medicionesCriticas > 0;
-}
-
-/// ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Helper para rangos resueltos
-class _RangosResueltos {
-  final double? minNormal;
-  final double? maxNormal;
-  final double? minCritico;
-  final double? maxCritico;
-
-  _RangosResueltos({
-    this.minNormal,
-    this.maxNormal,
-    this.minCritico,
-    this.maxCritico,
-  });
 }

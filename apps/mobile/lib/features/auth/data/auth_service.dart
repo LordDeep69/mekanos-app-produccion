@@ -84,6 +84,7 @@ class AuthService {
         if (userInfo.idEmpleado != null) {
           await _storage.saveIdEmpleado(userInfo.idEmpleado!);
         }
+        await _storage.saveSessionApiUrl(Environment.apiBaseUrl);
 
         debugPrint(
           '✅ Login exitoso - ID: ${userInfo.id}, idEmpleado: ${userInfo.idEmpleado}, syncId: ${userInfo.syncId}',
@@ -301,6 +302,19 @@ class AuthService {
   /// Si expiró, intenta refresh proactivo.
   Future<UserInfo?> checkAuthStatus() async {
     try {
+      // Zero-Trust: si la app arrancó en Producción (permanente por defecto)
+      // pero los tokens almacenados pertenecen a una sesión QA (Local/Directa),
+      // limpiar credenciales para no enviar tokens de prueba a Producción.
+      final sessionOriginUrl = await _storage.getSessionApiUrl();
+      if (sessionOriginUrl != null &&
+          sessionOriginUrl != Environment.apiBaseUrl) {
+        debugPrint(
+          '🛡️ [Auth] Sesión previa pertenecía a otro entorno ($sessionOriginUrl). Limpiando credenciales para iniciar en ${Environment.apiBaseUrl}.',
+        );
+        await _storage.clearAll();
+        return null;
+      }
+
       String? token = await _storage.getAccessToken();
       if (token == null) {
         // No hay access token: intentar conservar la sesión local offline

@@ -38,6 +38,11 @@ import { R2StorageService } from '../storage/r2-storage.service';
 import { buildInformeFilename } from './pdf-naming.helper';
 import { PdfService, TipoInforme } from './pdf.service';
 import { DatosOrdenPDF, RepuestoUtilizadoPDF, DatosEquipoDetalladoPDF } from './templates';
+import {
+  evaluarValorContraRangos,
+  extraerConfigEquipoDeOrden,
+  resolverParametroConConfig,
+} from '../config-parametros/parametros-override.helper';
 import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
 
 /**
@@ -146,6 +151,51 @@ export class PdfController {
     private readonly r2Service: R2StorageService,
   ) {}
 
+  private mapMedicionConOverride(
+    med: any,
+    orden: any,
+    idOrdenEquipo?: number | null,
+    parametroNombreFallback?: string,
+  ) {
+    const param = med.parametros_medicion;
+    const { configEquipo, configPlantilla } = extraerConfigEquipoDeOrden(orden, idOrdenEquipo);
+    const resolved = resolverParametroConConfig(param, configEquipo, configPlantilla);
+    const valorNum = Number(med.valor_numerico) || 0;
+    const unidad = resolved.esPersonalizado
+      ? resolved.unidadMedida
+      : (med.unidad_medida && String(med.unidad_medida).trim()) ||
+        resolved.unidadMedida ||
+        med.unidad_medida_snapshot ||
+        '';
+    const ev = evaluarValorContraRangos(valorNum, resolved, unidad, 'OK');
+    const alertaRaw = (med.nivel_alerta || ev.nivelAlerta || 'OK') as string;
+    const tieneOverride = resolved.esPersonalizado;
+    const alertaFinal =
+      tieneOverride || ev.nivelAlerta === 'CRITICO' || ev.nivelAlerta === 'ADVERTENCIA'
+        ? ev.nivelAlerta
+        : (alertaRaw as any);
+    const estado =
+      alertaFinal === 'CRITICO' || alertaFinal === 'CRITICAL'
+        ? 'CRITICO'
+        : alertaFinal === 'ADVERTENCIA' || alertaFinal === 'WARNING'
+          ? 'ALERTA'
+          : 'NORMAL';
+
+    return {
+      parametro:
+        parametroNombreFallback ||
+        param?.nombre_parametro ||
+        med.nombre_parametro_snapshot ||
+        'N/A',
+      valor: valorNum,
+      unidad,
+      nivelAlerta: alertaFinal,
+      rangoMin: resolved.minNormal,
+      rangoMax: resolved.maxNormal,
+      estado,
+    };
+  }
+
   /**
    * Genera PDF de una orden de servicio
    */
@@ -161,9 +211,9 @@ export class PdfController {
   })
   @ApiQuery({
     name: 'tipo',
-    description: 'Tipo de informe (GENERADOR_A, GENERADOR_B, BOMBA_A)',
+    description: 'Tipo de informe (GENERADOR_A, GENERADOR_B, BOMBA_A, UNIVERSAL_EAM, CORRECTIVO)',
     required: false,
-    enum: ['GENERADOR_A', 'GENERADOR_B', 'BOMBA_A'],
+    enum: ['GENERADOR_A', 'GENERADOR_B', 'BOMBA_A', 'UNIVERSAL_EAM', 'CORRECTIVO'],
   })
   @ApiResponse({
     status: 200,
@@ -202,7 +252,28 @@ export class PdfController {
       include: {
         equipos: {
           include: {
-            tipos_equipo: true,
+            tipos_equipo: {
+              include: {
+                tipo_equipo_modulos: {
+                  include: {
+                    modulo: {
+                      include: {
+                        modulo_atributos: {
+                          include: {
+                            atributo: {
+                              include: { unidad_defecto: true },
+                            },
+                          },
+                          orderBy: [{ grupo_visual: 'asc' }, { orden_visual: 'asc' }],
+                        },
+                      },
+                    },
+                  },
+                  orderBy: { orden_visual: 'asc' },
+                },
+              },
+            },
+            equipos_atributos_filtro: true,
             equipos_generador: true,
             equipos_motor: true,
             equipos_bomba: true,
@@ -221,6 +292,9 @@ export class PdfController {
         },
         tipos_servicio: true,
         orden_padre: { select: { numero_orden: true } },
+        ordenes_pendientes: {
+          orderBy: { id_orden_pendiente: 'asc' },
+        },
         actividades_ejecutadas: {
           include: {
             catalogo_actividades: {
@@ -514,12 +588,7 @@ export class PdfController {
           },
           mediciones: medicionesConEquipo
             .filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo)
-            .map((med: any) => ({
-              parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
-              valor: Number(med.valor_numerico) || 0,
-              unidad: med.parametros_medicion?.unidad_medida || '',
-              nivelAlerta: (med.nivel_alerta as any) || 'OK',
-            })),
+            .map((med: any) => this.mapMedicionConOverride(med, orden, oe.id_orden_equipo)),
         }));
       } else if (medicionesSinEquipo.length > 0) {
         // ✅ FALLBACK INTELIGENTE: Distribuir mediciones entre equipos
@@ -551,12 +620,7 @@ export class PdfController {
               (a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0),
             );
             const medEquipo = ordenados[equipoIndex] || ordenados[0];
-            return {
-              parametro: parametro,
-              valor: Number(medEquipo.valor_numerico) || 0,
-              unidad: medEquipo.parametros_medicion?.unidad_medida || '',
-              nivelAlerta: (medEquipo.nivel_alerta as any) || 'OK',
-            };
+            return this.mapMedicionConOverride(medEquipo, orden, oe.id_orden_equipo, parametro);
           }),
         }));
 
@@ -704,26 +768,7 @@ export class PdfController {
       mediciones:
         orden.mediciones_servicio
           ?.filter((med: any) => !med.excluido_pdf)
-          .map((med: any) => ({
-            parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
-            valor: Number(med.valor_numerico) || 0,
-            unidad: med.parametros_medicion?.unidad_medida || '',
-            nivelAlerta: (med.nivel_alerta as any) || 'OK',
-            rangoMin:
-              med.parametros_medicion?.valor_minimo_normal != null
-                ? Number(med.parametros_medicion.valor_minimo_normal)
-                : undefined,
-            rangoMax:
-              med.parametros_medicion?.valor_maximo_normal != null
-                ? Number(med.parametros_medicion.valor_maximo_normal)
-                : undefined,
-            estado:
-              med.nivel_alerta === 'CRITICAL'
-                ? 'CRITICO'
-                : med.nivel_alerta === 'WARNING'
-                  ? 'ALERTA'
-                  : 'NORMAL',
-          })) || [],
+          .map((med: any) => this.mapMedicionConOverride(med, orden, med.id_orden_equipo)) || [],
       // ✅ FIX 06-FEB-2026: Mapear evidencias como objetos con caption/tipo (no solo URL)
       // Esto permite al template separar fotos GENERALES de fotos de actividad
       evidencias:
@@ -767,6 +812,12 @@ export class PdfController {
       placaUniversal: orden.equipos
         ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
         : undefined,
+      pendientes: (orden.ordenes_pendientes || []).map((p: any) => ({
+        descripcion: p.descripcion,
+        prioridad: p.prioridad,
+        estado: p.estado,
+        observaciones: p.observaciones || p.notas_resolucion || undefined,
+      })),
       // ✅ MULTI-EQUIPOS: Datos adicionales
       esMultiEquipo,
       equiposOrden,
@@ -958,8 +1009,8 @@ export class PdfController {
           tipoServicioReal,
         );
       } else {
-        // ✅ FALLBACK: Si es correctivo, usar CORRECTIVO; sino GENERADOR_A
-        tipo = tipoServicioReal === 'CORRECTIVO' ? 'CORRECTIVO' : 'GENERADOR_A';
+        // ✅ FALLBACK EAM: Si es correctivo, usar CORRECTIVO; sino UNIVERSAL_EAM
+        tipo = tipoServicioReal === 'CORRECTIVO' ? 'CORRECTIVO' : 'UNIVERSAL_EAM';
         this.logger.log(`📊 DEBUG PDF - Usando tipo por defecto: ${tipo}`);
       }
 
@@ -967,7 +1018,7 @@ export class PdfController {
     }
 
     // ✅ FIX: Asegurar que tipo nunca sea undefined
-    const tipoFinal: TipoInforme = tipo || 'GENERADOR_A';
+    const tipoFinal: TipoInforme = tipo || 'UNIVERSAL_EAM';
 
     // Generar PDF
     const resultado = await this.pdfService.generarPDF({
@@ -1385,7 +1436,28 @@ export class PdfController {
       include: {
         equipos: {
           include: {
-            tipos_equipo: true,
+            tipos_equipo: {
+              include: {
+                tipo_equipo_modulos: {
+                  include: {
+                    modulo: {
+                      include: {
+                        modulo_atributos: {
+                          include: {
+                            atributo: {
+                              include: { unidad_defecto: true },
+                            },
+                          },
+                          orderBy: [{ grupo_visual: 'asc' }, { orden_visual: 'asc' }],
+                        },
+                      },
+                    },
+                  },
+                  orderBy: { orden_visual: 'asc' },
+                },
+              },
+            },
+            equipos_atributos_filtro: true,
             equipos_generador: true,
             equipos_motor: true,
             equipos_bomba: true,
@@ -1411,6 +1483,9 @@ export class PdfController {
         },
         tipos_servicio: true,
         orden_padre: { select: { numero_orden: true } },
+        ordenes_pendientes: {
+          orderBy: { id_orden_pendiente: 'asc' },
+        },
         actividades_ejecutadas: {
           include: {
             catalogo_actividades: {
@@ -1603,6 +1678,14 @@ export class PdfController {
                 act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
               resultado: (act.estado as any) || 'NA',
               observaciones: act.observaciones || '',
+              tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
+              idParametroMedicion: act.catalogo_actividades?.id_parametro_medicion || undefined,
+              tipoControlInput: act.catalogo_actividades?.tipo_control_input || undefined,
+              configInputJson: act.catalogo_actividades?.config_input_json || undefined,
+              rolSemantico: act.catalogo_actividades?.rol_semantico || undefined,
+              naturalezaPersonalizada:
+                act.catalogo_actividades?.naturaleza_personalizada || undefined,
+              respuestaJson: act.respuesta_json ?? undefined,
             }));
 
           return {
@@ -1646,6 +1729,15 @@ export class PdfController {
               descripcion,
               resultado: (actEquipo.estado as any) || 'NA',
               observaciones: actEquipo.observaciones || '',
+              tipoActividad: actEquipo.catalogo_actividades?.tipo_actividad || undefined,
+              idParametroMedicion:
+                actEquipo.catalogo_actividades?.id_parametro_medicion || undefined,
+              tipoControlInput: actEquipo.catalogo_actividades?.tipo_control_input || undefined,
+              configInputJson: actEquipo.catalogo_actividades?.config_input_json || undefined,
+              rolSemantico: actEquipo.catalogo_actividades?.rol_semantico || undefined,
+              naturalezaPersonalizada:
+                actEquipo.catalogo_actividades?.naturaleza_personalizada || undefined,
+              respuestaJson: actEquipo.respuesta_json ?? undefined,
             };
           }),
         }));
@@ -1663,13 +1755,7 @@ export class PdfController {
         medicionesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
           const medicionesEquipo = medicionesConEquipo
             .filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo)
-            .map((med: any) => ({
-              parametro:
-                med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
-              valor: Number(med.valor_numerico) || 0,
-              unidad: med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
-              nivelAlerta: (med.nivel_alerta as any) || 'OK',
-            }));
+            .map((med: any) => this.mapMedicionConOverride(med, orden, oe.id_orden_equipo));
 
           return {
             equipo: {
@@ -1703,15 +1789,7 @@ export class PdfController {
               (a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0),
             );
             const medEquipo = ordenados[equipoIndex] || ordenados[0];
-            return {
-              parametro,
-              valor: Number(medEquipo.valor_numerico) || 0,
-              unidad:
-                medEquipo.parametros_medicion?.unidad_medida ||
-                medEquipo.unidad_medida_snapshot ||
-                '',
-              nivelAlerta: (medEquipo.nivel_alerta as any) || 'OK',
-            };
+            return this.mapMedicionConOverride(medEquipo, orden, oe.id_orden_equipo, parametro);
           }),
         }));
       }
@@ -1866,18 +1944,19 @@ export class PdfController {
             resultado: (act.estado as any) || 'NA',
             observaciones: act.observaciones || '',
             tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
+            idParametroMedicion: act.catalogo_actividades?.id_parametro_medicion ?? undefined,
+            tipoControlInput: act.catalogo_actividades?.tipo_control_input || undefined,
+            configInputJson: act.catalogo_actividades?.config_input_json || undefined,
+            rolSemantico: act.catalogo_actividades?.rol_semantico || undefined,
+            naturalezaPersonalizada:
+              act.catalogo_actividades?.naturaleza_personalizada || undefined,
+            respuestaJson: act.respuesta_json ?? undefined,
           })) || [],
       // Mediciones flat (para backward compatibility y single-equipo)
       mediciones:
         orden.mediciones_servicio
           ?.filter((med: any) => !med.excluido_pdf)
-          .map((med: any) => ({
-            parametro:
-              med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
-            valor: Number(med.valor_numerico) || 0,
-            unidad: med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
-            nivelAlerta: (med.nivel_alerta as any) || 'OK',
-          })) || [],
+          .map((med: any) => this.mapMedicionConOverride(med, orden, med.id_orden_equipo)) || [],
       // Evidencias flat (para backward compatibility y single-equipo)
       evidencias:
         orden.evidencias_fotograficas?.map((ev: any) => ({
@@ -1920,6 +1999,12 @@ export class PdfController {
       placaUniversal: orden.equipos
         ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
         : undefined,
+      pendientes: (orden.ordenes_pendientes || []).map((p: any) => ({
+        descripcion: p.descripcion,
+        prioridad: p.prioridad,
+        estado: p.estado,
+        observaciones: p.observaciones || p.notas_resolucion || undefined,
+      })),
       // ✅ FIX 19-ENE-2026: Estructuras multi-equipo (igual que mobile)
       esMultiEquipo,
       actividadesPorEquipo,
@@ -2823,8 +2908,37 @@ export class PdfController {
       ? `${bom.altura_presion_trabajo_m} m`
       : undefined;
 
+    const contadorDesdeActividad = (() => {
+      const acts = Array.isArray(orden.actividades_ejecutadas) ? orden.actividades_ejecutadas : [];
+      for (const act of acts) {
+        const esContador =
+          act.catalogo_actividades?.rol_semantico === 'LECTURA_CONTADOR_ACTIVO' ||
+          act.catalogo_actividades?.tipo_control_input === 'LECTURA_CONTADOR';
+        if (esContador && act.respuesta_json && typeof act.respuesta_json === 'object') {
+          const raw = (act.respuesta_json as Record<string, unknown>).valor;
+          if (raw != null) {
+            const n = parseFloat(String(raw).replace(',', '.'));
+            if (!isNaN(n) && n > 0) return n;
+          }
+        }
+        const obs = typeof act.observaciones === 'string' ? act.observaciones : '';
+        const match = obs.match(
+          /(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*([\d.]+)/i,
+        );
+        if (match?.[1]) {
+          const n = parseFloat(match[1]);
+          if (!isNaN(n) && n > 0) return n;
+        }
+      }
+      return undefined;
+    })();
+
     const horometroInterv =
-      datosModulo?.horasTrabajo ?? orden.horometro_final ?? orden.horometro_inicial ?? undefined;
+      datosModulo?.horasTrabajo ??
+      orden.horometro_final ??
+      orden.horometro_inicial ??
+      contadorDesdeActividad ??
+      undefined;
     const horometroAcum = eq.horas_actuales ? Number(eq.horas_actuales) : undefined;
 
     return {
@@ -2870,10 +2984,17 @@ export class PdfController {
         med.nombre_parametro_snapshot ||
         ''
       ).toLowerCase();
+      const unidadParametro = String(
+        med.unidad_medida || med.unidad || med.parametros_medicion?.unidad_medida || '',
+      ).toLowerCase();
       const valor = Number(med.valor_numerico) || 0;
 
-      // Mapear según el nombre del parámetro
-      if (nombreParametro.includes('velocidad') || nombreParametro.includes('rpm')) {
+      // Mapear según el nombre del parámetro (evitar falso positivo RPM para velocidades lineales m/s)
+      if (
+        nombreParametro.includes('rpm') ||
+        (nombreParametro.includes('velocidad') &&
+          (!unidadParametro || unidadParametro.includes('rpm')))
+      ) {
         datosModulo.rpm = valor;
       } else if (
         nombreParametro.includes('presión') ||
@@ -2895,7 +3016,12 @@ export class PdfController {
       } else if (
         nombreParametro.includes('horas') ||
         nombreParametro.includes('horómetro') ||
-        nombreParametro.includes('horometro')
+        nombreParametro.includes('horometro') ||
+        nombreParametro.includes('ciclo') ||
+        nombreParametro.includes('odómetro') ||
+        nombreParametro.includes('odometro') ||
+        nombreParametro.includes('kilometr') ||
+        nombreParametro.includes('contador')
       ) {
         datosModulo.horasTrabajo = valor;
       } else if (nombreParametro.includes('voltaje')) {

@@ -49,6 +49,7 @@ import {
   TipoServicioEam,
   TIPOS_CONTROL_HUMANOS,
   getCriterioIntervaloHumano,
+  getMetricaUsoMeta,
   getModuloBadgeInfo,
   useArquetipoEsquemaEam,
   useArquetiposEam,
@@ -1777,13 +1778,21 @@ export function TabArquetiposEquipo() {
                         <span>•</span>
                         <span className="font-bold text-amber-700">
                           Cada {Number(plan.frecuencia_uso ?? 250)}{' '}
-                          {selectedArquetipo.unidad_uso
-                            ? selectedArquetipo.unidad_uso.toLowerCase()
-                            : 'horas'}
+                          {
+                            getMetricaUsoMeta({
+                              unidadUso: selectedArquetipo.unidad_uso,
+                              etiquetaContador: selectedArquetipo.etiqueta_contador,
+                              requiereHorometro: selectedArquetipo.requiere_horometro,
+                            }).sufijoCorto
+                          }
                         </span>
                         <span>•</span>
                         <span className="text-slate-600 font-medium">
-                          {getCriterioIntervaloHumano(plan.criterio_intervalo)}
+                          {getCriterioIntervaloHumano(plan.criterio_intervalo, {
+                            unidadUso: selectedArquetipo.unidad_uso,
+                            etiquetaContador: selectedArquetipo.etiqueta_contador,
+                            requiereHorometro: selectedArquetipo.requiere_horometro,
+                          })}
                         </span>
                       </div>
                     </div>
@@ -3058,21 +3067,23 @@ export function TabArquetiposEquipo() {
                   />
                   <div className="flex items-center gap-1.5 mt-2">
                     <span className="text-[10px] text-slate-400">Atajos:</span>
-                    {[
-                      { label: `100 ${selectedArquetipo.unidad_uso || 'h'}`, val: '100' },
-                      { label: `250 ${selectedArquetipo.unidad_uso || 'h'}`, val: '250' },
-                      { label: `500 ${selectedArquetipo.unidad_uso || 'h'}`, val: '500' },
-                      { label: `1000 ${selectedArquetipo.unidad_uso || 'h'}`, val: '1000' },
-                    ].map((shortcut) => (
-                      <button
-                        key={shortcut.val}
-                        type="button"
-                        onClick={() => setPlanForm({ ...planForm, frecuencia_uso: shortcut.val })}
-                        className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700"
-                      >
-                        {shortcut.label}
-                      </button>
-                    ))}
+                    {(['100', '250', '500', '1000'] as const).map((val) => {
+                      const sufijo = getMetricaUsoMeta({
+                        unidadUso: selectedArquetipo.unidad_uso,
+                        etiquetaContador: selectedArquetipo.etiqueta_contador,
+                        requiereHorometro: selectedArquetipo.requiere_horometro,
+                      }).sufijoCorto;
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setPlanForm({ ...planForm, frecuencia_uso: val })}
+                          className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700"
+                        >
+                          {val} {sufijo}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -3088,12 +3099,26 @@ export function TabArquetiposEquipo() {
                   options={[
                     {
                       value: 'LO_QUE_OCURRA_PRIMERO',
-                      label: `⚡ Lo que ocurra primero (Días o ${selectedArquetipo.etiqueta_contador || 'Horas de uso'}) - Recomendado`,
+                      label: `⚡ ${getCriterioIntervaloHumano('LO_QUE_OCURRA_PRIMERO', {
+                        unidadUso: selectedArquetipo.unidad_uso,
+                        etiquetaContador: selectedArquetipo.etiqueta_contador,
+                        requiereHorometro: selectedArquetipo.requiere_horometro,
+                      })} - Recomendado`,
                     },
                     { value: 'DIAS', label: '📅 Solo por Calendario (Días transcurridos)' },
                     {
                       value: 'HORAS',
-                      label: `⏱️ Solo por Uso (${selectedArquetipo.etiqueta_contador || 'Horas registradas'})`,
+                      label: `${
+                        getMetricaUsoMeta({
+                          unidadUso: selectedArquetipo.unidad_uso,
+                          etiquetaContador: selectedArquetipo.etiqueta_contador,
+                          requiereHorometro: selectedArquetipo.requiere_horometro,
+                        }).icono
+                      } ${getCriterioIntervaloHumano('HORAS', {
+                        unidadUso: selectedArquetipo.unidad_uso,
+                        etiquetaContador: selectedArquetipo.etiqueta_contador,
+                        requiereHorometro: selectedArquetipo.requiere_horometro,
+                      })}`,
                     },
                   ]}
                   placeholder="Seleccionar regla..."

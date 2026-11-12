@@ -4,15 +4,15 @@ import { ClientesService } from '../../clientes/clientes.service';
 
 /**
  * PrismaEquipoRepository - Implementación con Prisma Client real
- * 
+ *
  * Reemplaza MockEquipoRepository para trabajar con schema Supabase real
  */
 @Injectable()
 export class PrismaEquipoRepository {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() private readonly clientesService?: ClientesService
-  ) { }
+    @Optional() private readonly clientesService?: ClientesService,
+  ) {}
 
   /**
    * Guardar equipo (crear o actualizar)
@@ -181,7 +181,10 @@ export class PrismaEquipoRepository {
             select: {
               id_tipo_equipo: true,
               nombre_tipo: true,
-              codigo_tipo: true
+              codigo_tipo: true,
+              unidad_uso: true,
+              etiqueta_contador: true,
+              requiere_horometro: true,
             },
           },
         },

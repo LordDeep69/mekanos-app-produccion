@@ -1,9 +1,17 @@
 import { PrismaService } from '@mekanos/database';
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  evaluarValorContraRangos,
+  EvaluacionRangoResult,
+  extraerConfigEquipoDeOrden,
+  ParametroCatalogoArquetipo,
+  ResolvedParametroEquipo,
+  resolverParametroConConfig,
+  toFiniteNumber,
+} from './parametros-override.helper';
+import {
   ConfigParametrosEquipo,
   ConfigResuelta,
-  MAGNITUD_A_PARAMETROS,
   ParametroResuelto,
   RangoParametro,
   UNIDADES_DEFAULT,
@@ -155,9 +163,25 @@ export class ConfigParametrosService {
   ): Promise<RangoParametro | undefined> {
     const { config } = await this.resolverConfiguracion(idEquipo);
 
+    const byPorParam =
+      config.por_parametro?.[codigoParametro] ??
+      config.por_parametro?.[codigoParametro.toUpperCase()];
+    if (byPorParam) {
+      return {
+        min_normal: toFiniteNumber(byPorParam.min_normal),
+        max_normal: toFiniteNumber(byPorParam.max_normal),
+        min_critico: toFiniteNumber(byPorParam.min_critico),
+        max_critico: toFiniteNumber(byPorParam.max_critico),
+        valor_ideal: toFiniteNumber(byPorParam.valor_ideal),
+      };
+    }
+
     // Buscar en config del equipo/plantilla
-    if (config.rangos && config.rangos[codigoParametro]) {
-      return config.rangos[codigoParametro];
+    if (
+      config.rangos &&
+      (config.rangos[codigoParametro] || config.rangos[codigoParametro.toUpperCase()])
+    ) {
+      return config.rangos[codigoParametro] || config.rangos[codigoParametro.toUpperCase()];
     }
 
     // No hay override - el caller debe usar catálogo global
@@ -189,70 +213,232 @@ export class ConfigParametrosService {
 
     // 2. Obtener config del equipo
     const { config, origen } = await this.resolverConfiguracion(idEquipo);
+    const resolved = resolverParametroConConfig(parametroGlobal, config);
 
-    // 3. Determinar unidad (override o global)
-    let unidad = parametroGlobal.unidad_medida;
-    const tipoMagnitud = this.detectarTipoMagnitud(codigoParametro);
-    if (tipoMagnitud && config.unidades?.[tipoMagnitud]) {
-      unidad = config.unidades[tipoMagnitud]!;
-    }
-
-    // 4. Determinar rangos (override o global)
-    const rangosOverride = config.rangos?.[codigoParametro];
-    const rango: RangoParametro = rangosOverride || {
-      min_normal: parametroGlobal.valor_minimo_normal
-        ? Number(parametroGlobal.valor_minimo_normal)
-        : undefined,
-      max_normal: parametroGlobal.valor_maximo_normal
-        ? Number(parametroGlobal.valor_maximo_normal)
-        : undefined,
-      min_critico: parametroGlobal.valor_minimo_critico
-        ? Number(parametroGlobal.valor_minimo_critico)
-        : undefined,
-      max_critico: parametroGlobal.valor_maximo_critico
-        ? Number(parametroGlobal.valor_maximo_critico)
-        : undefined,
-      valor_ideal: parametroGlobal.valor_ideal ? Number(parametroGlobal.valor_ideal) : undefined,
+    const rango: RangoParametro = {
+      min_normal: resolved.minNormal,
+      max_normal: resolved.maxNormal,
+      min_critico: resolved.minCritico,
+      max_critico: resolved.maxCritico,
+      valor_ideal: resolved.valorIdeal,
     };
 
     return {
       codigo: codigoParametro,
       nombre: parametroGlobal.nombre_parametro,
-      unidad,
+      unidad: resolved.unidadMedida,
       rango,
-      origen: rangosOverride ? origen : 'global',
+      origen: resolved.esPersonalizado ? origen : 'global',
     };
   }
 
   /**
-   * Detectar tipo de magnitud basado en código de parámetro
+   * Resuelve parámetros efectivos de medición para una orden/equipo sin consultar BD adicional.
    */
-  private detectarTipoMagnitud(codigoParametro: string): keyof UnidadesConfig | null {
-    const codigoUpper = codigoParametro.toUpperCase();
-
-    for (const [magnitud, codigos] of Object.entries(MAGNITUD_A_PARAMETROS)) {
-      if (codigos.some((c) => codigoUpper.includes(c))) {
-        return magnitud as keyof UnidadesConfig;
-      }
-    }
-
-    return null;
+  resolverParametroParaOrden(
+    parametroGlobal: any,
+    orden: any,
+    idOrdenEquipo?: number | null,
+  ): ResolvedParametroEquipo {
+    const { configEquipo, configPlantilla } = extraerConfigEquipoDeOrden(orden, idOrdenEquipo);
+    return resolverParametroConConfig(parametroGlobal, configEquipo, configPlantilla);
   }
 
   /**
-   * Guardar configuración de parámetros para un equipo
-   *
-   * @param idEquipo - ID del equipo
-   * @param config - Configuración a guardar
-   * @param usuarioId - ID del usuario que realiza el cambio
+   * Evalúa un valor numérico contra los rangos efectivos del equipo (override -> plantilla -> global).
+   */
+  evaluarMedicionParaOrden(
+    valor: number,
+    parametroGlobal: any,
+    orden: any,
+    idOrdenEquipo?: number | null,
+    fallbackSinRango: 'OK' | 'INFORMATIVO' = 'INFORMATIVO',
+  ): { resolved: ResolvedParametroEquipo; evaluacion: EvaluacionRangoResult } {
+    const resolved = this.resolverParametroParaOrden(parametroGlobal, orden, idOrdenEquipo);
+    const evaluacion = evaluarValorContraRangos(
+      valor,
+      resolved,
+      resolved.unidadMedida,
+      fallbackSinRango,
+    );
+    return { resolved, evaluacion };
+  }
+
+  /**
+   * Obtiene todos los parámetros de telemetría asociados a un Tipo de Equipo (arquetipo),
+   * combinando parámetros directos (`parametros_medicion.id_tipo_equipo`) y parámetros
+   * enlazados en protocolos/actividades de tipo MEDICION (`catalogo_actividades`),
+   * incluyendo aliases históricos (`GENERADOR`<->`GEN`, `BOMBA`<->`BOM`, `MOTOR`<->`MOT`).
+   */
+  async obtenerParametrosCatalogoPorTipoEquipo(
+    idTipoEquipo: number,
+  ): Promise<ParametroCatalogoArquetipo[]> {
+    const tiposActivos = await this.prisma.tipos_equipo.findMany({
+      where: { activo: true },
+      select: { id_tipo_equipo: true, codigo_tipo: true },
+    });
+
+    const seleccionado = tiposActivos.find((t) => t.id_tipo_equipo === idTipoEquipo);
+    if (!seleccionado) return [];
+
+    const gruposAlias = [
+      ['GENERADOR', 'GEN'],
+      ['BOMBA', 'BOM'],
+      ['MOTOR', 'MOT'],
+    ];
+    const codigoSel = (seleccionado.codigo_tipo || '').toUpperCase();
+    const grupo = gruposAlias.find((g) => g.includes(codigoSel));
+
+    const targetIds = Array.from(
+      new Set<number>(
+        grupo
+          ? tiposActivos
+              .filter((t) => grupo.includes((t.codigo_tipo || '').toUpperCase()))
+              .map((t) => t.id_tipo_equipo)
+          : [idTipoEquipo],
+      ),
+    );
+
+    const [parametros, unidadesActivas] = await Promise.all([
+      this.prisma.parametros_medicion.findMany({
+        where: {
+          activo: true,
+          OR: [
+            { id_tipo_equipo: { in: targetIds } },
+            {
+              catalogo_actividades: {
+                some: {
+                  activo: true,
+                  OR: [
+                    { id_tipo_equipo: { in: targetIds } },
+                    { tipos_servicio: { id_tipo_equipo: { in: targetIds } } },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+        include: {
+          unidad_ref: {
+            include: {
+              magnitud: {
+                select: { id_magnitud: true, codigo_magnitud: true, nombre_magnitud: true },
+              },
+            },
+          },
+          catalogo_actividades: {
+            where: {
+              activo: true,
+              OR: [
+                { id_tipo_equipo: { in: targetIds } },
+                { tipos_servicio: { id_tipo_equipo: { in: targetIds } } },
+              ],
+            },
+            include: {
+              catalogo_sistemas: {
+                select: { id_sistema: true, nombre_sistema: true },
+              },
+            },
+            orderBy: { orden_ejecucion: 'asc' },
+          },
+        },
+        orderBy: [{ es_obligatorio: 'desc' }, { categoria: 'asc' }, { nombre_parametro: 'asc' }],
+      }),
+      this.prisma.unidades_medida.findMany({
+        where: { activo: true },
+        select: {
+          codigo: true,
+          simbolo: true,
+          id_magnitud: true,
+          tipo_magnitud: true,
+          magnitud: {
+            select: { nombre_magnitud: true },
+          },
+        },
+      }),
+    ]);
+
+    const findUomMeta = (unidadStr: string) => {
+      const norm = unidadStr.trim().toLowerCase();
+      if (!norm) return null;
+      return (
+        unidadesActivas.find(
+          (u) => u.codigo.trim().toLowerCase() === norm || u.simbolo.trim().toLowerCase() === norm,
+        ) ||
+        // Alias comunes de voltios / horas heredados
+        unidadesActivas.find((u) => {
+          const c = u.codigo.trim().toLowerCase();
+          if ((norm === 'vac' || norm === 'vdc') && c === 'v') return true;
+          if (norm === 'hrs' && (c === 'h' || c === 'hr')) return true;
+          return false;
+        }) ||
+        null
+      );
+    };
+
+    const dedup = new Map<number, ParametroCatalogoArquetipo>();
+    for (const p of parametros) {
+      if (dedup.has(p.id_parametro_medicion)) continue;
+
+      const uomMeta = p.unidad_ref ?? findUomMeta(p.unidad_medida || '');
+      const sistema =
+        p.catalogo_actividades.find((a) => a.catalogo_sistemas?.nombre_sistema)?.catalogo_sistemas
+          ?.nombre_sistema || null;
+
+      dedup.set(p.id_parametro_medicion, {
+        id_parametro_medicion: p.id_parametro_medicion,
+        codigo_parametro: p.codigo_parametro,
+        nombre_parametro: p.nombre_parametro,
+        unidad_medida: p.unidad_medida,
+        unidad_codigo: p.unidad_codigo ?? null,
+        id_magnitud: uomMeta?.id_magnitud ?? null,
+        tipo_magnitud: uomMeta?.tipo_magnitud ?? null,
+        nombre_magnitud: uomMeta?.magnitud?.nombre_magnitud ?? null,
+        nombre_sistema: sistema,
+        valor_minimo_normal: toFiniteNumber(p.valor_minimo_normal) ?? null,
+        valor_maximo_normal: toFiniteNumber(p.valor_maximo_normal) ?? null,
+        valor_minimo_critico: toFiniteNumber(p.valor_minimo_critico) ?? null,
+        valor_maximo_critico: toFiniteNumber(p.valor_maximo_critico) ?? null,
+        valor_ideal: toFiniteNumber(p.valor_ideal) ?? null,
+        es_critico_seguridad: Boolean(p.es_critico_seguridad),
+        es_obligatorio: Boolean(p.es_obligatorio),
+        decimales_precision: p.decimales_precision ?? 2,
+        tipo_dato: (p.tipo_dato as string) || 'NUMERICO',
+      });
+    }
+
+    return Array.from(dedup.values()).sort((a, b) => {
+      const sisA = a.nombre_sistema || 'ZZZ';
+      const sisB = b.nombre_sistema || 'ZZZ';
+      if (sisA !== sisB) return sisA.localeCompare(sisB);
+      return a.nombre_parametro.localeCompare(b.nombre_parametro);
+    });
+  }
+
+  /**
+   * Guardar configuración de parámetros para un equipo preservando claves operativas (ej. planes_preventivos)
    */
   async guardarConfiguracion(
     idEquipo: number,
     config: ConfigParametrosEquipo,
     usuarioId: number,
   ): Promise<void> {
-    // Usar SQL raw hasta que se regenere el cliente Prisma
-    const configJson = JSON.stringify(config);
+    const existingRows: Array<{ config_parametros: any }> = await this.prisma.$queryRaw`
+            SELECT config_parametros FROM equipos WHERE id_equipo = ${idEquipo}
+        `;
+    const existing =
+      existingRows?.[0]?.config_parametros && typeof existingRows[0].config_parametros === 'object'
+        ? existingRows[0].config_parametros
+        : {};
+
+    const merged: ConfigParametrosEquipo = {
+      ...config,
+      ...(config.planes_preventivos === undefined && existing.planes_preventivos !== undefined
+        ? { planes_preventivos: existing.planes_preventivos }
+        : {}),
+    };
+
+    const configJson = JSON.stringify(merged);
     await this.prisma.$executeRaw`
             UPDATE equipos 
             SET config_parametros = ${configJson}::jsonb,

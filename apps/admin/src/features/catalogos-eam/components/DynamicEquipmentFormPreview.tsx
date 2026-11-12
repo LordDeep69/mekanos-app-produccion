@@ -843,7 +843,11 @@ export function DynamicEquipmentFormPreview({
                             : ''}
                         </div>
                         <div className="text-[11px] text-slate-500">
-                          {getCriterioIntervaloHumano(plan.criterio_intervalo)}
+                          {getCriterioIntervaloHumano(plan.criterio_intervalo, {
+                            unidadUso: arq.unidad_uso,
+                            etiquetaContador: arq.etiqueta_contador,
+                            requiereHorometro: arq.requiere_horometro,
+                          })}
                         </div>
                       </div>
                     ))}

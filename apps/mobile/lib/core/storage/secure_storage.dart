@@ -22,6 +22,7 @@ class SecureStorageService {
   static const String _userEmailKey = 'user_email';
   static const String _userNameKey = 'user_name'; // ✅ NUEVO: Nombre del usuario
   static const String _idEmpleadoKey = 'id_empleado';
+  static const String _sessionApiUrlKey = 'session_api_url';
 
   SecureStorageService()
     : _storage = const FlutterSecureStorage(
@@ -92,6 +93,16 @@ class SecureStorageService {
   Future<int?> getIdEmpleado() async {
     final value = await _storage.read(key: _idEmpleadoKey);
     return value != null ? int.tryParse(value) : null;
+  }
+
+  // ============ ORIGEN DE SESIÓN (Zero-Trust Entornos) ============
+
+  Future<void> saveSessionApiUrl(String apiBaseUrl) async {
+    await _storage.write(key: _sessionApiUrlKey, value: apiBaseUrl);
+  }
+
+  Future<String?> getSessionApiUrl() async {
+    return await _storage.read(key: _sessionApiUrlKey);
   }
 
   // ============ CLEAR ALL ============

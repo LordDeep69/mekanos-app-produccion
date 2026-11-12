@@ -1,14 +1,20 @@
 import { createHash } from 'crypto';
 import { PrismaService } from '@mekanos/database';
-import { BadRequestException, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { EmailService } from '../../email/email.service';
+import { EquipoSpecsReader } from '../../equipos/services/equipo-specs.reader';
 import { PdfService } from '../../pdf/pdf.service';
 import { R2StorageService } from '../../storage/r2-storage.service';
 import {
   esEstadoFinal,
   validarCamposRequeridos,
-  validarTransicion
+  validarTransicion,
 } from '../domain/workflow-estados';
 import { CambiarEstadoOrdenCommand } from './cambiar-estado-orden.command';
 
@@ -27,9 +33,9 @@ export interface CambiarEstadoResult {
 
 /**
  * Handler: CambiarEstadoOrdenHandler
- * 
+ *
  * Procesa transiciones de estado para órdenes de servicio.
- * 
+ *
  * Responsabilidades:
  * 1. Validar que la orden existe
  * 2. Validar que la transición es permitida (FSM)
@@ -47,7 +53,7 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
     private readonly pdfService: PdfService,
     private readonly r2StorageService: R2StorageService,
     private readonly emailService: EmailService,
-  ) { }
+  ) {}
 
   async execute(command: CambiarEstadoOrdenCommand): Promise<CambiarEstadoResult> {
     const { ordenId, nuevoEstado, usuarioId, motivo, observaciones, datosAdicionales } = command;
@@ -74,7 +80,7 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
     if (!estadoActual) {
       throw new InternalServerErrorException(
         `Orden ${ordenId} tiene id_estado_actual=${orden.id_estado_actual} sin relación válida en estados_orden. ` +
-        `No se puede evaluar la transición. Verifique integridad referencial de la orden.`,
+          `No se puede evaluar la transición. Verifique integridad referencial de la orden.`,
       );
     }
 
@@ -98,7 +104,7 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
     if (!nuevoEstadoRecord) {
       throw new BadRequestException(
         `Estado ${nuevoEstado} no existe en la base de datos. ` +
-        `Verifique que los estados estén cargados en la tabla estados_orden.`,
+          `Verifique que los estados estén cargados en la tabla estados_orden.`,
       );
     }
 
@@ -143,14 +149,18 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
 
     this.logger.log(
       `[CambiarEstado] ✅ Orden ${ordenId}: ${estadoActual} → ${nuevoEstado} ` +
-      `(Historial ID: ${resultado.historial.id_historial})`,
+        `(Historial ID: ${resultado.historial.id_historial})`,
     );
 
     // 8. Si la orden se completó, generar PDF, subir a R2 y enviar email automáticamente
     if (nuevoEstado === 'COMPLETADA') {
-      this.logger.log(`[CambiarEstado] 🔄 Iniciando proceso automático para orden completada ${ordenId}`);
+      this.logger.log(
+        `[CambiarEstado] 🔄 Iniciando proceso automático para orden completada ${ordenId}`,
+      );
       this.procesarOrdenCompletada(ordenId).catch((error) => {
-        this.logger.error(`[CambiarEstado] ❌ Error procesando orden completada ${ordenId}: ${error.message}`);
+        this.logger.error(
+          `[CambiarEstado] ❌ Error procesando orden completada ${ordenId}: ${error.message}`,
+        );
         // No fallar la transacción principal si falla el proceso automático
       });
     }
@@ -227,47 +237,81 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
         throw new Error(`Orden ${ordenId} no encontrada`);
       }
 
-      // 2. Determinar tipo de template según tipo de equipo.
-      //    `tipos_equipo` no tiene columna `nombre`; la real es `nombre_tipo`.
-      let tipoTemplate = 'GENERADOR_A';
+      // 2. Determinar tipo de template según categoría de servicio y tipo de equipo.
+      const codigoTipoServicio = (orden.tipos_servicio?.codigo_tipo || '').toUpperCase();
+      const categoriaServicio = (orden.tipos_servicio?.categoria || '').toUpperCase();
+      const nombreTipoServicio = (orden.tipos_servicio?.nombre_tipo || '').toUpperCase();
+      const esServicioNarrativo =
+        ['CORRECTIVO', 'EMERGENCIA', 'DIAGNOSTICO'].includes(categoriaServicio) ||
+        codigoTipoServicio.includes('CORR') ||
+        nombreTipoServicio.includes('CORRECTIVO');
+
+      let tipoTemplate = 'UNIVERSAL_EAM';
       const nombreTipoEquipo = orden.equipos?.tipos_equipo?.nombre_tipo || '';
-      if (nombreTipoEquipo) {
+      const codigoTipoEquipo = (orden.equipos?.tipos_equipo?.codigo_tipo || '').toUpperCase();
+      if (esServicioNarrativo) {
+        tipoTemplate = 'CORRECTIVO';
+      } else if (nombreTipoEquipo || codigoTipoEquipo) {
         const tipoEquipo = nombreTipoEquipo.toLowerCase();
-        if (tipoEquipo.includes('bomba') || tipoEquipo.includes('motor')) {
+        if (tipoEquipo.includes('bomba') || codigoTipoEquipo === 'BOM') {
           tipoTemplate = 'BOMBA_A';
-        } else if (tipoEquipo.includes('generador')) {
-          tipoTemplate = this.mapTipoServicio(orden.tipos_servicio?.nombre_tipo) === 'PREVENTIVO_B'
-            ? 'GENERADOR_B'
-            : 'GENERADOR_A';
+        } else if (
+          tipoEquipo.includes('generador') ||
+          tipoEquipo.includes('electrogeno') ||
+          tipoEquipo.includes('planta') ||
+          codigoTipoEquipo === 'GEN'
+        ) {
+          tipoTemplate =
+            this.mapTipoServicio(orden.tipos_servicio?.nombre_tipo) === 'PREVENTIVO_B'
+              ? 'GENERADOR_B'
+              : 'GENERADOR_A';
         }
       }
 
-      this.logger.log(`[ProcesarOrdenCompletada] Generando PDF con template ${tipoTemplate} para orden ${ordenId}`);
+      this.logger.log(
+        `[ProcesarOrdenCompletada] Generando PDF con template ${tipoTemplate} para orden ${ordenId}`,
+      );
 
       // 3. Preparar datos para PDF (igual que PdfController)
       const clientePersona = orden.clientes?.persona;
       // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
-      const clienteNombreBase = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
+      const clienteNombreBase =
+        clientePersona?.razon_social ||
+        clientePersona?.nombre_comercial ||
+        clientePersona?.nombre_completo ||
+        'N/A';
       const clienteNombre = (orden.clientes as any)?.nombre_sede
         ? `${clienteNombreBase} - ${(orden.clientes as any).nombre_sede}`
         : clienteNombreBase;
       // ✅ FIX MULTI-SEDE: Priorizar dirección de sede sobre persona.
       // `direccion_servicio` no existe en ordenes_servicio; se usa descripcion_inicial
       // como respaldo para no inventar un campo inexistente.
-      const clienteDireccion = (orden as any).sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
+      const clienteDireccion =
+        (orden as any).sedes_cliente?.direccion_sede ||
+        clientePersona?.direccion_principal ||
+        'N/A';
 
       let marcaEquipo = 'N/A';
       let serieEquipo = 'N/A';
       if (orden.equipos) {
         if (orden.equipos.equipos_generador) {
           marcaEquipo = orden.equipos.equipos_generador.marca_generador || 'N/A';
-          serieEquipo = orden.equipos.equipos_generador.numero_serie_generador || orden.equipos.numero_serie_equipo || 'N/A';
+          serieEquipo =
+            orden.equipos.equipos_generador.numero_serie_generador ||
+            orden.equipos.numero_serie_equipo ||
+            'N/A';
         } else if (orden.equipos.equipos_motor) {
           marcaEquipo = orden.equipos.equipos_motor.marca_motor || 'N/A';
-          serieEquipo = orden.equipos.equipos_motor.numero_serie_motor || orden.equipos.numero_serie_equipo || 'N/A';
+          serieEquipo =
+            orden.equipos.equipos_motor.numero_serie_motor ||
+            orden.equipos.numero_serie_equipo ||
+            'N/A';
         } else if (orden.equipos.equipos_bomba) {
           marcaEquipo = orden.equipos.equipos_bomba.marca_bomba || 'N/A';
-          serieEquipo = orden.equipos.equipos_bomba.numero_serie_bomba || orden.equipos.numero_serie_equipo || 'N/A';
+          serieEquipo =
+            orden.equipos.equipos_bomba.numero_serie_bomba ||
+            orden.equipos.numero_serie_equipo ||
+            'N/A';
         } else {
           marcaEquipo = orden.equipos.nombre_equipo || 'N/A';
           serieEquipo = orden.equipos.numero_serie_equipo || 'N/A';
@@ -275,6 +319,52 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
       }
 
       const tecnicoRelacion = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
+
+      const contadorDesdeActividad = (() => {
+        for (const act of orden.actividades_ejecutadas || []) {
+          const esContador =
+            act.catalogo_actividades?.rol_semantico === 'LECTURA_CONTADOR_ACTIVO' ||
+            act.catalogo_actividades?.tipo_control_input === 'LECTURA_CONTADOR';
+          if (esContador && act.respuesta_json && typeof act.respuesta_json === 'object') {
+            const raw = (act.respuesta_json as Record<string, unknown>).valor;
+            if (raw != null) {
+              const n = parseFloat(String(raw).replace(',', '.'));
+              if (!isNaN(n) && n > 0) return n;
+            }
+          }
+          const obs = typeof act.observaciones === 'string' ? act.observaciones : '';
+          const match = obs.match(
+            /(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*([\d.]+)/i,
+          );
+          if (match?.[1]) {
+            const n = parseFloat(match[1]);
+            if (!isNaN(n) && n > 0) return n;
+          }
+        }
+        return undefined;
+      })();
+
+      const contadorDesdeMedicion = (() => {
+        for (const med of orden.mediciones_servicio || []) {
+          const nombre = (med?.parametros_medicion?.nombre_parametro || '').toLowerCase();
+          if (
+            nombre.includes('horometro') ||
+            nombre.includes('horómetro') ||
+            nombre.includes('horas') ||
+            nombre.includes('ciclo') ||
+            nombre.includes('odometr') ||
+            nombre.includes('odómetr') ||
+            nombre.includes('kilometr') ||
+            nombre.includes('contador')
+          ) {
+            const val = Number(med?.valor_numerico);
+            if (!isNaN(val) && val > 0) return val;
+          }
+        }
+        return undefined;
+      })();
+
+      const horometroIntervencion = contadorDesdeActividad ?? contadorDesdeMedicion ?? undefined;
 
       // 4. Generar PDF usando el servicio directamente
       const resultado = await this.pdfService.generarPDF({
@@ -289,29 +379,69 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
             ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
             : new Date().toLocaleDateString('es-CO'),
           tecnico: tecnicoRelacion?.persona
-            ? `${tecnicoRelacion.persona.primer_nombre || ''} ${tecnicoRelacion.persona.primer_apellido || ''}`.trim() || 'N/A'
+            ? `${tecnicoRelacion.persona.primer_nombre || ''} ${tecnicoRelacion.persona.primer_apellido || ''}`.trim() ||
+              'N/A'
             : 'N/A',
-          horaEntrada: orden.fecha_inicio_real ? new Date(orden.fecha_inicio_real).toLocaleTimeString('es-CO') : 'N/A',
-          horaSalida: orden.fecha_fin_real ? new Date(orden.fecha_fin_real).toLocaleTimeString('es-CO') : 'N/A',
+          horaEntrada: orden.fecha_inicio_real
+            ? new Date(orden.fecha_inicio_real).toLocaleTimeString('es-CO')
+            : 'N/A',
+          horaSalida: orden.fecha_fin_real
+            ? new Date(orden.fecha_fin_real).toLocaleTimeString('es-CO')
+            : 'N/A',
           tipoServicio: this.mapTipoServicio(orden.tipos_servicio?.nombre_tipo),
           numeroOrden: orden.numero_orden || `ORD-${ordenId}`,
           datosModulo: this.extraerDatosModulo(orden.mediciones_servicio),
-          actividades: orden.actividades_ejecutadas?.map(act => ({
-            // ✅ FIX: nombres reales -> catalogo_sistemas.nombre_sistema,
-            // catalogo_actividades.descripcion_actividad, actividades_ejecutadas.estado
-            sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
-            descripcion: act.catalogo_actividades?.descripcion_actividad || 'N/A',
-            resultado: act.estado || 'NA',
-            observaciones: act.observaciones || '',
-          })) || [],
-          mediciones: orden.mediciones_servicio?.map(med => ({
-            // ✅ FIX: mediciones_servicio usa valor_numerico y su propia unidad_medida
-            parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
-            valor: Number(med.valor_numerico ?? 0) || 0,
-            unidad: med.unidad_medida || med.parametros_medicion?.unidad_medida || '',
-            nivelAlerta: (med.nivel_alerta as any) || 'OK',
-          })) || [],
-          evidencias: orden.evidencias_fotograficas?.map(ev => ev.ruta_archivo) || [],
+          equipoDetalle: orden.equipos
+            ? {
+                codigoEquipo: orden.equipos.codigo_equipo || 'S/C',
+                nombreEquipo: orden.equipos.nombre_equipo || undefined,
+                tipoEquipo: nombreTipoEquipo || 'EQUIPO',
+                tipoEquipoNombre: nombreTipoEquipo || 'EQUIPO',
+                marca: EquipoSpecsReader.getMarca(orden.equipos),
+                modelo: EquipoSpecsReader.getModelo(orden.equipos),
+                serie: EquipoSpecsReader.getSerie(orden.equipos),
+                ubicacion: orden.equipos.ubicacion_texto || undefined,
+                sede: (orden as any).sedes_cliente?.nombre_sede || undefined,
+                cliente: clienteNombre,
+                direccion: clienteDireccion,
+                horometroIntervencion:
+                  horometroIntervencion != null ? Number(horometroIntervencion) : undefined,
+                horometroAcumulado: orden.equipos.horas_actuales
+                  ? Number(orden.equipos.horas_actuales)
+                  : undefined,
+                unidadUso: orden.equipos.tipos_equipo?.unidad_uso || undefined,
+                etiquetaContador: orden.equipos.tipos_equipo?.etiqueta_contador || undefined,
+                requiereHorometro: orden.equipos.tipos_equipo?.requiere_horometro ?? undefined,
+              }
+            : undefined,
+          placaUniversal: orden.equipos
+            ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
+            : undefined,
+          actividades:
+            orden.actividades_ejecutadas?.map((act) => ({
+              // ✅ FIX: nombres reales -> catalogo_sistemas.nombre_sistema,
+              // catalogo_actividades.descripcion_actividad, actividades_ejecutadas.estado
+              sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+              descripcion: act.catalogo_actividades?.descripcion_actividad || 'N/A',
+              resultado: act.estado || 'NA',
+              observaciones: act.observaciones || '',
+              tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
+              tipoControlInput: act.catalogo_actividades?.tipo_control_input || undefined,
+              configInputJson: act.catalogo_actividades?.config_input_json || undefined,
+              rolSemantico: act.catalogo_actividades?.rol_semantico || undefined,
+              naturalezaPersonalizada:
+                act.catalogo_actividades?.naturaleza_personalizada || undefined,
+              respuestaJson: act.respuesta_json || undefined,
+            })) || [],
+          mediciones:
+            orden.mediciones_servicio?.map((med) => ({
+              // ✅ FIX: mediciones_servicio usa valor_numerico y su propia unidad_medida
+              parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
+              valor: Number(med.valor_numerico ?? 0) || 0,
+              unidad: med.unidad_medida || med.parametros_medicion?.unidad_medida || '',
+              nivelAlerta: (med.nivel_alerta as any) || 'OK',
+            })) || [],
+          evidencias: orden.evidencias_fotograficas?.map((ev) => ev.ruta_archivo) || [],
           observaciones: orden.observaciones_cierre || orden.observaciones_tecnico || '',
         },
       });
@@ -323,7 +453,9 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
       //    ✅ FIX: el método real es `uploadPDF(buffer, filename, options?)` y devuelve
       //    un string (URL), no un objeto `{success,url}`. La llamada a `uploadFile`
       //    lanzaba TypeError y abortaba el cierre de la orden.
-      const nombreArchivo = resultado.filename || `MEKANOS_${orden.numero_orden}_${new Date().toISOString().split('T')[0]}.pdf`;
+      const nombreArchivo =
+        resultado.filename ||
+        `MEKANOS_${orden.numero_orden}_${new Date().toISOString().split('T')[0]}.pdf`;
       const r2Url = await this.r2StorageService.uploadPDF(pdfBuffer, nombreArchivo, {
         downloadFilename: nombreArchivo,
       });
@@ -379,7 +511,6 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
       });
 
       this.logger.log(`[ProcesarOrdenCompletada] ✅ Email enviado a ${emailCliente}`);
-
     } catch (error) {
       const err = error as { message?: string; stack?: string };
       this.logger.error(
@@ -395,11 +526,14 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
    * estuvo definido en la clase -> TypeError en tiempo de ejecución al finalizar una
    * orden, lo que abortaba la generación del PDF y el envío del email.
    */
-  private mapTipoEquipo(nombreTipoEquipo: string): 'GENERADOR' | 'BOMBA' | 'MOTOR' {
+  private mapTipoEquipo(nombreTipoEquipo: string): string {
     const n = (nombreTipoEquipo || '').toLowerCase();
     if (n.includes('bomba')) return 'BOMBA';
     if (n.includes('motor')) return 'MOTOR';
-    return 'GENERADOR';
+    if (n.includes('generador') || n.includes('electrogeno') || n.includes('planta')) {
+      return 'GENERADOR';
+    }
+    return nombreTipoEquipo ? nombreTipoEquipo.toUpperCase() : 'EQUIPO';
   }
 
   /**
@@ -407,7 +541,9 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
    * tipos_servicio con valores libres (PREVENTIVO, CORRECTIVO, EMERGENCIA...), así que
    * se normaliza en vez de filtrar el valor crudo.
    */
-  private mapTipoServicio(nombreTipo?: string | null): 'CORRECTIVO' | 'PREVENTIVO_A' | 'PREVENTIVO_B' {
+  private mapTipoServicio(
+    nombreTipo?: string | null,
+  ): 'CORRECTIVO' | 'PREVENTIVO_A' | 'PREVENTIVO_B' {
     const n = (nombreTipo || '').toUpperCase();
     if (n.includes('CORRECTIV')) return 'CORRECTIVO';
     if (n.endsWith('_B') || n === 'B' || n.includes(' TIPO B')) return 'PREVENTIVO_B';
@@ -432,10 +568,12 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
       const valor = Number(med?.valor_numerico);
       if (Number.isNaN(valor)) continue;
 
-      const bucket = porParametro[nombre] ?? (porParametro[nombre] = {
-        valores: [],
-        unidad: med?.unidad_medida || med?.parametros_medicion?.unidad_medida || '',
-      });
+      const bucket =
+        porParametro[nombre] ??
+        (porParametro[nombre] = {
+          valores: [],
+          unidad: med?.unidad_medida || med?.parametros_medicion?.unidad_medida || '',
+        });
       bucket.valores.push(valor);
     }
 
