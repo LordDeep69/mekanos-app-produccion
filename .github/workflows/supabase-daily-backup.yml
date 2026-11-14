@@ -130,7 +130,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload to private Cloudflare R2 off-site archive (GFS retention)
-        if: ${{ secrets.R2_BACKUP_ENDPOINT != '' && secrets.R2_BACKUP_BUCKET != '' && secrets.R2_BACKUP_ACCESS_KEY_ID != '' && secrets.R2_BACKUP_SECRET_ACCESS_KEY != '' }}
+        id: r2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
@@ -145,6 +145,11 @@ jobs:
           DOM: ${{ steps.dump.outputs.dom }}
         run: |
           set -euo pipefail
+          if [ -z "${R2_ENDPOINT:-}" ] || [ -z "${R2_BUCKET:-}" ] || [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "status=Pending R2_BACKUP_* secrets (GitHub 14d active)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           aws s3 cp "$ENC_PATH" "s3://${R2_BUCKET}/daily/${YM}/${ENC_NAME}" --endpoint-url "$R2_ENDPOINT"
           aws s3 cp "$SHA_PATH" "s3://${R2_BUCKET}/daily/${YM}/${ENC_NAME}.sha256" --endpoint-url "$R2_ENDPOINT"
 
@@ -154,6 +159,7 @@ jobs:
           if [ "$DOM" = "01" ]; then
             aws s3 cp "s3://${R2_BUCKET}/daily/${YM}/${ENC_NAME}" "s3://${R2_BUCKET}/monthly/${ENC_NAME}" --endpoint-url "$R2_ENDPOINT"
           fi
+          echo "status=Enabled (${R2_BUCKET})" >> "$GITHUB_OUTPUT"
 
       - name: Write sanitized backup summary
         run: |
@@ -164,5 +170,5 @@ jobs:
             echo "- **Verified Tables in TOC:** \`${{ steps.dump.outputs.table_count }}\`"
             echo "- **Raw Dump Bytes:** \`${{ steps.dump.outputs.raw_bytes }}\`"
             echo "- **Encrypted Archive Bytes:** \`${{ steps.encrypt.outputs.enc_bytes }}\`"
-            echo "- **Off-site R2 Archive:** \`${{ secrets.R2_BACKUP_BUCKET != '' && 'Enabled' || 'Pending R2_BACKUP_* secrets (GitHub 14d active)' }}\`"
+            echo "- **Off-site R2 Archive:** \`${{ steps.r2.outputs.status }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
