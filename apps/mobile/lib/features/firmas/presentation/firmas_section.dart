@@ -47,29 +47,447 @@ class _FirmasSectionState extends ConsumerState<FirmasSection> {
     }
   }
 
-  Future<void> _abrirCaptura(String tipoFirma) async {
+  Future<bool> _abrirCaptura(
+    String tipoFirma, {
+    String? nombreInicial,
+    String? cargoInicial,
+  }) async {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) =>
-          FirmaBottomSheet(idOrden: widget.idOrden, tipoFirma: tipoFirma),
+      builder: (context) => FirmaBottomSheet(
+        idOrden: widget.idOrden,
+        tipoFirma: tipoFirma,
+        nombreInicial: nombreInicial,
+        cargoInicial: cargoInicial,
+      ),
     );
 
     if (result == true) {
       await _cargarFirmas();
       widget.onFirmaGuardada?.call();
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _mostrarMenuFirma(String tipoFirma, Firma firma) async {
+    final esTecnico = tipoFirma == 'TECNICO';
+    final colorRol = esTecnico ? Colors.blue.shade700 : Colors.purple.shade700;
+    final tituloRol = esTecnico ? 'Firma Técnico' : 'Firma Cliente';
+
+    final accion = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: firma.rutaLocal.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(7),
+                            child: Image.file(
+                              File(firma.rutaLocal),
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) =>
+                                  Icon(Icons.draw, color: colorRol),
+                            ),
+                          )
+                        : Icon(Icons.draw, color: colorRol),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tituloRol,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: colorRol,
+                          ),
+                        ),
+                        Text(
+                          firma.nombreFirmante ?? 'Sin nombre',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (firma.cargoFirmante != null &&
+                            firma.cargoFirmante!.trim().isNotEmpty)
+                          Text(
+                            firma.cargoFirmante!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue.shade50,
+                  child: Icon(
+                    Icons.visibility_outlined,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+                title: const Text(
+                  'Visualizar firma',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('Ampliar trazo y ver datos registrados'),
+                onTap: () => Navigator.pop(ctx, 'ver'),
+              ),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: Colors.teal.shade50,
+                  child: Icon(
+                    Icons.edit_outlined,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                title: const Text(
+                  'Editar',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text(
+                  'Modificar nombre o cargo conservando la firma actual',
+                ),
+                onTap: () => Navigator.pop(ctx, 'editar'),
+              ),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: Colors.orange.shade50,
+                  child: Icon(
+                    Icons.refresh_rounded,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+                title: Text(
+                  'Rehacer',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange.shade900,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Dibujar nuevamente (conserva la previa hasta guardar)',
+                ),
+                onTap: () => Navigator.pop(ctx, 'rehacer'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || accion == null) return;
+    if (accion == 'ver') {
+      await _visualizarFirma(tipoFirma, firma);
+    } else if (accion == 'editar') {
+      await _editarDatosFirma(tipoFirma, firma);
+    } else if (accion == 'rehacer') {
+      await _rehacerFirma(tipoFirma, firma);
     }
   }
 
-  /// ✅ Rehacer firma existente con confirmación
+  Future<void> _visualizarFirma(String tipoFirma, Firma firma) async {
+    final esTecnico = tipoFirma == 'TECNICO';
+    final colorRol = esTecnico ? Colors.blue.shade700 : Colors.purple.shade700;
+    final tituloRol = esTecnico ? 'Firma Técnico' : 'Firma Cliente';
+
+    final siguienteAccion = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              color: colorRol,
+              child: Row(
+                children: [
+                  Icon(
+                    esTecnico ? Icons.engineering : Icons.person,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      tituloRol,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    tooltip: 'Cerrar',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    height: 220,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300, width: 1.5),
+                    ),
+                    child: firma.rutaLocal.isNotEmpty
+                        ? InteractiveViewer(
+                            minScale: 1.0,
+                            maxScale: 4.0,
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Image.file(
+                                  File(firma.rutaLocal),
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, _, _) => const Center(
+                                    child: Text('No se pudo cargar la imagen'),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                        : const Center(child: Text('Sin imagen de firma')),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'Firmante: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                firma.nombreFirmante ?? 'Sin nombre',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (firma.cargoFirmante != null &&
+                            firma.cargoFirmante!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Text(
+                                'Cargo: ',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  firma.cargoFirmante!,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              'Registrada: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              _formatearFecha(firma.fechaFirma),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.pop(ctx, 'editar'),
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          label: const Text('Editar'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.pop(ctx, 'rehacer'),
+                          icon: Icon(
+                            Icons.refresh_rounded,
+                            size: 18,
+                            color: Colors.orange.shade700,
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.orange.shade800,
+                            side: BorderSide(color: Colors.orange.shade300),
+                          ),
+                          label: const Text('Rehacer'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || siguienteAccion == null) return;
+    if (siguienteAccion == 'editar') {
+      await _editarDatosFirma(tipoFirma, firma);
+    } else if (siguienteAccion == 'rehacer') {
+      await _rehacerFirma(tipoFirma, firma);
+    }
+  }
+
+  Future<void> _editarDatosFirma(String tipoFirma, Firma firma) async {
+    final resultado = await showDialog<_DatosFirmanteResult>(
+      context: context,
+      builder: (ctx) => _EditarDatosFirmaDialog(
+        tipoFirma: tipoFirma,
+        nombreInicial: firma.nombreFirmante ?? '',
+        cargoInicial: firma.cargoFirmante ?? '',
+      ),
+    );
+
+    if (!mounted || resultado == null) return;
+    final service = ref.read(firmaServiceProvider);
+    final ok = await service.actualizarDatosFirma(
+      idFirma: firma.idLocal,
+      nombreFirmante: resultado.nombre,
+      cargoFirmante: resultado.cargo,
+    );
+
+    if (!mounted) return;
+    if (ok) {
+      await _cargarFirmas();
+      widget.onFirmaGuardada?.call();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Datos del firmante actualizados'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudieron actualizar los datos de la firma'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// ✅ Rehacer firma existente de forma atómica:
+  /// NO elimina la firma previa hasta que el usuario guarde efectivamente la nueva.
+  /// Si cierra o desliza hacia abajo sin guardar, la firma previa permanece intacta.
   Future<void> _rehacerFirma(String tipoFirma, Firma firma) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('¿Rehacer firma?'),
         content: Text(
-          'La firma actual de ${firma.nombreFirmante ?? tipoFirma} será reemplazada.',
+          'La firma actual de ${firma.nombreFirmante ?? tipoFirma} será reemplazada únicamente cuando guarde la nueva firma.',
         ),
         actions: [
           TextButton(
@@ -86,12 +504,16 @@ class _FirmasSectionState extends ConsumerState<FirmasSection> {
     );
 
     if (confirmar == true) {
-      // Eliminar firma anterior
-      final service = ref.read(firmaServiceProvider);
-      await service.eliminarFirma(firma.idLocal);
-
-      // Abrir captura de nueva firma
-      await _abrirCaptura(tipoFirma);
+      final guardada = await _abrirCaptura(
+        tipoFirma,
+        nombreInicial: firma.nombreFirmante,
+        cargoInicial: firma.cargoFirmante,
+      );
+      if (guardada) {
+        final service = ref.read(firmaServiceProvider);
+        await service.eliminarFirma(firma.idLocal);
+        await _cargarFirmas();
+      }
     }
   }
 
@@ -204,7 +626,7 @@ class _FirmasSectionState extends ConsumerState<FirmasSection> {
 
     return InkWell(
       onTap: tieneFirma
-          ? () => _rehacerFirma(tipoFirma, firma)
+          ? () => _mostrarMenuFirma(tipoFirma, firma)
           : () => _abrirCaptura(tipoFirma),
       borderRadius: BorderRadius.circular(12),
       child: Container(
@@ -310,12 +732,23 @@ class _FirmasSectionState extends ConsumerState<FirmasSection> {
                 ),
                 if (tieneFirma) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    'Rehacer',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.orange.shade700,
-                      fontWeight: FontWeight.w500,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Text(
+                      'Ver · Editar',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.green.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -336,5 +769,114 @@ class _FirmasSectionState extends ConsumerState<FirmasSection> {
       return 'Hoy ${fecha.hour.toString().padLeft(2, '0')}:${fecha.minute.toString().padLeft(2, '0')}';
     }
     return '${fecha.day}/${fecha.month}/${fecha.year} ${fecha.hour.toString().padLeft(2, '0')}:${fecha.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _DatosFirmanteResult {
+  final String nombre;
+  final String? cargo;
+
+  const _DatosFirmanteResult({required this.nombre, this.cargo});
+}
+
+class _EditarDatosFirmaDialog extends StatefulWidget {
+  final String tipoFirma;
+  final String nombreInicial;
+  final String cargoInicial;
+
+  const _EditarDatosFirmaDialog({
+    required this.tipoFirma,
+    required this.nombreInicial,
+    required this.cargoInicial,
+  });
+
+  @override
+  State<_EditarDatosFirmaDialog> createState() => _EditarDatosFirmaDialogState();
+}
+
+class _EditarDatosFirmaDialogState extends State<_EditarDatosFirmaDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nombreCtrl;
+  late final TextEditingController _cargoCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _nombreCtrl = TextEditingController(text: widget.nombreInicial);
+    _cargoCtrl = TextEditingController(text: widget.cargoInicial);
+  }
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _cargoCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final esCliente = widget.tipoFirma == 'CLIENTE';
+
+    return AlertDialog(
+      title: Text('Editar datos (${esCliente ? "Cliente" : "Técnico"})'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _nombreCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Nombre del firmante *',
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.words,
+              validator: (val) =>
+                  (val == null || val.trim().isEmpty)
+                      ? 'El nombre es obligatorio'
+                      : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _cargoCtrl,
+              decoration: InputDecoration(
+                labelText: esCliente ? 'Cargo *' : 'Cargo (opcional)',
+                border: const OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.words,
+              validator: esCliente
+                  ? (val) =>
+                        (val == null || val.trim().isEmpty)
+                            ? 'El cargo es obligatorio para el cliente'
+                            : null
+                  : null,
+            ),
+          ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState?.validate() != true) return;
+            Navigator.pop(
+              context,
+              _DatosFirmanteResult(
+                nombre: _nombreCtrl.text.trim(),
+                cargo: _cargoCtrl.text.trim().isNotEmpty
+                    ? _cargoCtrl.text.trim()
+                    : null,
+              ),
+            );
+          },
+          child: const Text('Guardar'),
+        ),
+      ],
+    );
   }
 }

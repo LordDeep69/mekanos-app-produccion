@@ -139,7 +139,8 @@ class SignatureCanvasController extends ChangeNotifier {
         ..color = stroke.color
         ..style = PaintingStyle.fill
         ..isAntiAlias = true;
-      canvas.drawCircle(stroke.points[0], stroke.strokeWidth / 2, dotPaint);
+      final radius = (stroke.strokeWidth * 0.65).clamp(2.0, 8.0);
+      canvas.drawCircle(stroke.points[0], radius, dotPaint);
       return;
     }
 
@@ -167,7 +168,7 @@ class SignatureCanvasController extends ChangeNotifier {
 }
 
 /// Widget del lienzo interactivo de firma
-class SignatureCanvasWidget extends StatelessWidget {
+class SignatureCanvasWidget extends StatefulWidget {
   final SignatureCanvasController controller;
   final Color backgroundColor;
 
@@ -178,30 +179,60 @@ class SignatureCanvasWidget extends StatelessWidget {
   });
 
   @override
+  State<SignatureCanvasWidget> createState() => _SignatureCanvasWidgetState();
+}
+
+class _SignatureCanvasWidgetState extends State<SignatureCanvasWidget> {
+  int? _activePointerId;
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
-        controller.updateCanvasSize(size);
+        widget.controller.updateCanvasSize(size);
 
         return ClipRect(
+          // GestureDetector vacío bloquea el drag-to-dismiss del BottomSheet/ScrollView
+          // mientras el Listener captura puntos instantáneos (incluso un toque/punto único sin arrastrar).
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onPanStart: (details) => controller.onPanStart(details.localPosition),
-            onPanUpdate: (details) => controller.onPanUpdate(details.localPosition),
-            onPanEnd: (_) => controller.onPanEnd(),
-            child: AnimatedBuilder(
-              animation: controller,
-              builder: (context, child) {
-                return CustomPaint(
-                  size: size,
-                  painter: _SignaturePainter(
-                    strokes: controller.strokes,
-                    currentStroke: controller.currentStroke,
-                    backgroundColor: backgroundColor,
-                  ),
-                );
+            onVerticalDragStart: (_) {},
+            onHorizontalDragStart: (_) {},
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (event) {
+                if (_activePointerId != null) return;
+                _activePointerId = event.pointer;
+                widget.controller.onPanStart(event.localPosition);
               },
+              onPointerMove: (event) {
+                if (_activePointerId != event.pointer) return;
+                widget.controller.onPanUpdate(event.localPosition);
+              },
+              onPointerUp: (event) {
+                if (_activePointerId != event.pointer) return;
+                _activePointerId = null;
+                widget.controller.onPanEnd();
+              },
+              onPointerCancel: (event) {
+                if (_activePointerId != event.pointer) return;
+                _activePointerId = null;
+                widget.controller.onPanEnd();
+              },
+              child: AnimatedBuilder(
+                animation: widget.controller,
+                builder: (context, child) {
+                  return CustomPaint(
+                    size: size,
+                    painter: _SignaturePainter(
+                      strokes: widget.controller.strokes,
+                      currentStroke: widget.controller.currentStroke,
+                      backgroundColor: widget.backgroundColor,
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         );

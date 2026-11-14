@@ -1246,6 +1246,20 @@ class AppDatabase extends _$AppDatabase {
     return (select(firmas)..where((f) => f.idOrden.equals(idOrden))).get();
   }
 
+  /// Actualizar nombre y cargo de una firma existente sin perder el trazo PNG
+  Future<int> updateFirmaDatos(
+    int idLocal, {
+    required String nombreFirmante,
+    String? cargoFirmante,
+  }) {
+    return (update(firmas)..where((f) => f.idLocal.equals(idLocal))).write(
+      FirmasCompanion(
+        nombreFirmante: Value(nombreFirmante),
+        cargoFirmante: Value(cargoFirmante),
+      ),
+    );
+  }
+
   // ============================================================================
   // MÉTODOS DE SYNC STATUS
   // ============================================================================

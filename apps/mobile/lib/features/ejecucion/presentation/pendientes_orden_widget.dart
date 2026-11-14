@@ -37,11 +37,29 @@ class PendientesOrdenWidget extends ConsumerStatefulWidget {
       _PendientesOrdenWidgetState();
 }
 
+class _HallazgoSugerido {
+  final String badge;
+  final bool esCritico;
+  final String descripcion;
+  final String observaciones;
+  final String prioridad;
+  final int? idOrdenEquipo;
+
+  const _HallazgoSugerido({
+    required this.badge,
+    required this.esCritico,
+    required this.descripcion,
+    required this.observaciones,
+    required this.prioridad,
+    this.idOrdenEquipo,
+  });
+}
+
 class _PendientesOrdenWidgetState
     extends ConsumerState<PendientesOrdenWidget> {
   List<OrdenesPendiente> _pendientes = [];
   List<PendientesCatalogoData> _catalogo = [];
-  List<ActividadesEjecutada> _hallazgosSugeridos = [];
+  List<_HallazgoSugerido> _hallazgosSugeridos = [];
   bool _isLoading = true;
 
   @override
@@ -59,23 +77,19 @@ class _PendientesOrdenWidgetState
     }
   }
 
-  Future<void> _convertirHallazgoAPendiente(
-    ActividadesEjecutada act,
-    String prioridad,
-  ) async {
+  Future<void> _convertirHallazgoAPendiente(_HallazgoSugerido hallazgo) async {
     final db = ref.read(databaseProvider);
-    final obs = (act.observacion ?? '').trim();
     final nuevo = OrdenesPendientesCompanion(
       idOrden: Value(widget.idOrdenLocal),
       idOrdenBackend: Value(widget.idOrdenBackend),
       idCliente: Value(widget.idCliente),
       idEquipo: Value(widget.idEquipo),
-      idOrdenEquipo: Value(act.idOrdenEquipo ?? widget.idOrdenEquipo),
-      descripcion: Value(act.descripcion.trim()),
-      origen: const Value('CHECKLIST'),
-      prioridad: Value(prioridad),
+      idOrdenEquipo: Value(hallazgo.idOrdenEquipo ?? widget.idOrdenEquipo),
+      descripcion: Value(hallazgo.descripcion.trim()),
+      origen: const Value('MANUAL'),
+      prioridad: Value(hallazgo.prioridad),
       estado: const Value('PENDIENTE'),
-      observaciones: Value(obs.isNotEmpty ? obs : 'Hallazgo (${act.simbologia ?? 'R'}) en checklist'),
+      observaciones: Value(hallazgo.observaciones),
       fechaCreacion: Value(DateTime.now()),
       isDirty: const Value(true),
     );
@@ -84,7 +98,7 @@ class _PendientesOrdenWidgetState
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✓ Convertido a pendiente: ${act.descripcion}'),
+          content: Text('✓ Convertido a pendiente: ${hallazgo.descripcion}'),
           backgroundColor: Colors.amber.shade900,
           duration: const Duration(seconds: 2),
         ),
@@ -99,18 +113,67 @@ class _PendientesOrdenWidgetState
       final pends = await db.getPendientesByOrden(widget.idOrdenLocal);
       final cats = await db.getPendientesCatalogo();
       final todasActs = await db.getActividadesByOrden(widget.idOrdenLocal);
+      final todasMeds = await db.getMedicionesByOrden(widget.idOrdenLocal);
       final pendsNorm = pends
           .map((p) => p.descripcion.trim().toLowerCase())
           .toSet();
-      final sugeridos = todasActs.where((act) {
+
+      final sugeridos = <_HallazgoSugerido>[];
+
+      for (final act in todasActs) {
         if (widget.idOrdenEquipo != null && act.idOrdenEquipo != widget.idOrdenEquipo) {
-          return false;
+          continue;
         }
         final est = (act.simbologia ?? '').trim().toUpperCase();
-        if (est != 'R' && est != 'M') return false;
-        final desc = act.descripcion.trim().toLowerCase();
-        return desc.isNotEmpty && !pendsNorm.contains(desc);
-      }).toList();
+        if (est != 'R' && est != 'M') continue;
+        final desc = act.descripcion.trim();
+        if (desc.isEmpty || pendsNorm.contains(desc.toLowerCase())) continue;
+        final obs = (act.observacion ?? '').trim();
+        sugeridos.add(
+          _HallazgoSugerido(
+            badge: est,
+            esCritico: est == 'M',
+            descripcion: desc,
+            observaciones: obs.isNotEmpty ? obs : 'Hallazgo ($est) en checklist',
+            prioridad: est == 'M' ? 'ALTA' : 'NORMAL',
+            idOrdenEquipo: act.idOrdenEquipo,
+          ),
+        );
+      }
+
+      for (final med in todasMeds) {
+        if (widget.idOrdenEquipo != null && med.idOrdenEquipo != widget.idOrdenEquipo) {
+          continue;
+        }
+        if (med.valor == null) continue;
+        final estadoVal = (med.estadoValor ?? '').trim().toUpperCase();
+        if (estadoVal != 'ADVERTENCIA' && estadoVal != 'CRITICO') continue;
+        final uni = med.unidadMedida.trim();
+        final valFmt = med.valor! % 1 == 0
+            ? med.valor!.toInt().toString()
+            : med.valor!.toString();
+        final valConUnidad = uni.isNotEmpty ? '$valFmt $uni' : valFmt;
+        final hasRango = med.rangoMinimoNormal != null && med.rangoMaximoNormal != null;
+        final rangoTxt = hasRango
+            ? ' [Normal: ${med.rangoMinimoNormal} - ${med.rangoMaximoNormal}${uni.isNotEmpty ? ' $uni' : ''}]'
+            : '';
+        final desc = '${med.nombreParametro.trim()} fuera de rango: $valConUnidad$rangoTxt';
+        if (pendsNorm.contains(desc.toLowerCase())) continue;
+        final esCritico = estadoVal == 'CRITICO';
+        final obs = (med.observacion ?? '').trim();
+        sugeridos.add(
+          _HallazgoSugerido(
+            badge: esCritico ? 'CRÍTICO' : 'ALERTA',
+            esCritico: esCritico,
+            descripcion: desc,
+            observaciones: obs.isNotEmpty
+                ? obs
+                : 'Medición fuera de rango ($valConUnidad$rangoTxt)',
+            prioridad: esCritico ? 'ALTA' : 'NORMAL',
+            idOrdenEquipo: med.idOrdenEquipo,
+          ),
+        );
+      }
 
       if (mounted) {
         setState(() {
@@ -410,7 +473,7 @@ class _PendientesOrdenWidgetState
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Hallazgos R/M detectados (${_hallazgosSugeridos.length}) — convertir en 1 toque:',
+                          'Hallazgos detectados (${_hallazgosSugeridos.length}) — convertir en 1 toque:',
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.bold,
@@ -421,10 +484,8 @@ class _PendientesOrdenWidgetState
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ..._hallazgosSugeridos.map((act) {
-                    final est = (act.simbologia ?? '').trim().toUpperCase();
-                    final esCritico = est == 'M';
-                    final prioridadSugerida = esCritico ? 'ALTA' : 'NORMAL';
+                  ..._hallazgosSugeridos.map((item) {
+                    final esCritico = item.esCritico;
                     return Container(
                       margin: const EdgeInsets.only(bottom: 6),
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -444,7 +505,7 @@ class _PendientesOrdenWidgetState
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              est,
+                              item.badge,
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -455,7 +516,7 @@ class _PendientesOrdenWidgetState
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              act.descripcion,
+                              item.descripcion,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
@@ -463,7 +524,7 @@ class _PendientesOrdenWidgetState
                           ),
                           const SizedBox(width: 6),
                           TextButton.icon(
-                            onPressed: () => _convertirHallazgoAPendiente(act, prioridadSugerida),
+                            onPressed: () => _convertirHallazgoAPendiente(item),
                             icon: const Icon(Icons.add_circle_outline, size: 15),
                             label: const Text('Pendiente', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                             style: TextButton.styleFrom(
@@ -654,12 +715,26 @@ class _ModalGestionPendientesState
   String _prioridadCustom = 'NORMAL';
   bool _isSaving = false;
 
+  // Estado reactivo dentro del modal para feedback inmediato (visible sobre el BottomSheet)
+  late int _totalRegistrados;
+  final Map<int, int> _agregadosCatalogoCount = {};
+  String? _feedbackMensaje;
+  bool _feedbackEsError = false;
+  int _feedbackToken = 0;
+
   @override
   void initState() {
     super.initState();
     _catalogoItems = List.from(widget.catalogo);
     _idOrdenEquipoSeleccionado = widget.widget.idOrdenEquipo;
     _idEquipoSeleccionado = widget.widget.idEquipo;
+    _totalRegistrados = widget.pendientesActuales.length;
+    for (final p in widget.pendientesActuales) {
+      if (p.idPendienteCatalogo != null) {
+        _agregadosCatalogoCount[p.idPendienteCatalogo!] =
+            (_agregadosCatalogoCount[p.idPendienteCatalogo!] ?? 0) + 1;
+      }
+    }
 
     // Inicializar con el primer equipo si es multi-equipo
     if (_idOrdenEquipoSeleccionado == null &&
@@ -761,6 +836,19 @@ class _ModalGestionPendientesState
     return setCat.toList();
   }
 
+  void _mostrarFeedbackModal(String mensaje, {bool esError = false}) {
+    final token = ++_feedbackToken;
+    setState(() {
+      _feedbackMensaje = mensaje;
+      _feedbackEsError = esError;
+    });
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _feedbackToken == token) {
+        setState(() => _feedbackMensaje = null);
+      }
+    });
+  }
+
   Future<void> _agregarPendienteDesdeCatalogo(
     PendientesCatalogoData cat,
     String prioridad,
@@ -785,24 +873,21 @@ class _ModalGestionPendientesState
     widget.onCambio();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✓ Agregado: ${cat.descripcion}'),
-          backgroundColor: Colors.amber.shade900,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      setState(() {
+        _totalRegistrados += 1;
+        _agregadosCatalogoCount[cat.id] =
+            (_agregadosCatalogoCount[cat.id] ?? 0) + 1;
+      });
+      _mostrarFeedbackModal('Agregado ($prioridad): ${cat.descripcion}');
     }
   }
 
   Future<void> _guardarPendientePersonalizado() async {
     final desc = _descCustomController.text.trim();
     if (desc.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor ingrese la descripción del pendiente'),
-          backgroundColor: Colors.red,
-        ),
+      _mostrarFeedbackModal(
+        'Por favor ingrese la descripción del hallazgo',
+        esError: true,
       );
       return;
     }
@@ -832,11 +917,12 @@ class _ModalGestionPendientesState
       widget.onCambio();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('✓ Hallazgo personalizado registrado'),
-            backgroundColor: Colors.amber.shade900,
-          ),
+        FocusScope.of(context).unfocus();
+        setState(() {
+          _totalRegistrados += 1;
+        });
+        _mostrarFeedbackModal(
+          'Hallazgo personalizado registrado: $desc',
         );
       }
     } finally {
@@ -1092,6 +1178,69 @@ class _ModalGestionPendientesState
               ),
             ),
 
+            // Banner de feedback inmediato dentro del modal (visible sobre el BottomSheet)
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: _feedbackMensaje == null
+                  ? const SizedBox.shrink()
+                  : Container(
+                      key: ValueKey(_feedbackMensaje),
+                      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: _feedbackEsError
+                            ? Colors.red.shade50
+                            : Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _feedbackEsError
+                              ? Colors.red.shade300
+                              : Colors.green.shade400,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _feedbackEsError
+                                ? Icons.error_outline
+                                : Icons.check_circle,
+                            size: 18,
+                            color: _feedbackEsError
+                                ? Colors.red.shade700
+                                : Colors.green.shade700,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _feedbackMensaje!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _feedbackEsError
+                                    ? Colors.red.shade900
+                                    : Colors.green.shade900,
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () =>
+                                setState(() => _feedbackMensaje = null),
+                            child: Icon(
+                              Icons.close,
+                              size: 16,
+                              color: _feedbackEsError
+                                  ? Colors.red.shade700
+                                  : Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+
             // TabBarView
             Expanded(
               child: TabBarView(
@@ -1115,13 +1264,27 @@ class _ModalGestionPendientesState
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Registrados en orden: ${widget.pendientesActuales.length}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.playlist_add_check_rounded,
+                        size: 18,
+                        color: _totalRegistrados > 0
+                            ? Colors.green.shade700
+                            : Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Registrados en orden: $_totalRegistrados',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _totalRegistrados > 0
+                              ? Colors.green.shade800
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
                   ),
                   FilledButton(
                     style: FilledButton.styleFrom(
@@ -1241,6 +1404,7 @@ class _ModalGestionPendientesState
                     final item = itemsFiltrados[index];
                     return _CardItemCatalogo(
                       item: item,
+                      vecesAgregado: _agregadosCatalogoCount[item.id] ?? 0,
                       onAgregar: (prio) =>
                           _agregarPendienteDesdeCatalogo(item, prio),
                     );
@@ -1395,10 +1559,12 @@ class _ModalGestionPendientesState
 /// Tarjeta táctil interactiva para cada ítem del catálogo con selector rápido de prioridad
 class _CardItemCatalogo extends StatefulWidget {
   final PendientesCatalogoData item;
+  final int vecesAgregado;
   final Function(String prioridad) onAgregar;
 
   const _CardItemCatalogo({
     required this.item,
+    this.vecesAgregado = 0,
     required this.onAgregar,
   });
 
@@ -1411,12 +1577,16 @@ class _CardItemCatalogoState extends State<_CardItemCatalogo> {
 
   @override
   Widget build(BuildContext context) {
+    final yaAgregado = widget.vecesAgregado > 0;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: yaAgregado ? Colors.green.shade50.withValues(alpha: 0.45) : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+          color: yaAgregado ? Colors.green.shade400 : Colors.grey.shade200,
+          width: yaAgregado ? 1.4 : 1.0,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
@@ -1512,14 +1682,28 @@ class _CardItemCatalogoState extends State<_CardItemCatalogo> {
                 ),
               ),
               const Spacer(),
-              // Botón rápido de agregar
+              // Botón rápido de agregar con feedback inmediato
               FilledButton.tonalIcon(
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Agregar',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                icon: Icon(
+                  yaAgregado ? Icons.check_circle : Icons.add,
+                  size: 16,
+                ),
+                label: Text(
+                  yaAgregado
+                      ? (widget.vecesAgregado > 1
+                          ? 'Agregado (${widget.vecesAgregado})'
+                          : 'Agregado')
+                      : 'Agregar',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 11),
+                ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.amber.shade100,
-                  foregroundColor: Colors.amber.shade900,
+                  backgroundColor: yaAgregado
+                      ? Colors.green.shade100
+                      : Colors.amber.shade100,
+                  foregroundColor: yaAgregado
+                      ? Colors.green.shade900
+                      : Colors.amber.shade900,
                   visualDensity: VisualDensity.compact,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

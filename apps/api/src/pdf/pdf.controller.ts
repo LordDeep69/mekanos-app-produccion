@@ -808,6 +808,7 @@ export class PdfController {
       equipoDetalle: this.extraerEquipoDetallado(
         orden,
         this.extraerDatosModulo(orden.mediciones_servicio),
+        await this.obtenerContadorAnteriorEquipo(orden),
       ),
       placaUniversal: orden.equipos
         ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
@@ -1995,6 +1996,7 @@ export class PdfController {
       equipoDetalle: this.extraerEquipoDetallado(
         orden,
         this.extraerDatosModulo(orden.mediciones_servicio),
+        await this.obtenerContadorAnteriorEquipo(orden),
       ),
       placaUniversal: orden.equipos
         ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
@@ -2837,11 +2839,90 @@ export class PdfController {
   }
 
   /**
+   * Obtiene el registro previo del contador del equipo y el delta transcurrido
+   * de forma agnóstica (horas, ciclos, km, unidades) para el PDF.
+   */
+  private async obtenerContadorAnteriorEquipo(orden: any): Promise<{
+    horometroActualLectura?: number;
+    horometroAnterior?: number;
+    horometroTranscurrido?: number;
+  }> {
+    const idEquipo = orden?.equipos?.id_equipo;
+    const idOrden = orden?.id_orden_servicio;
+    if (!idEquipo || !idOrden) return {};
+
+    try {
+      const lecturaActualRow = await this.prisma.lecturas_horometro.findFirst({
+        where: { id_equipo: idEquipo, id_orden_servicio: idOrden },
+        orderBy: [{ fecha_lectura: 'desc' }, { id_lectura: 'desc' }],
+      });
+
+      const fechaCorte =
+        lecturaActualRow?.fecha_lectura ??
+        orden.fecha_fin_real ??
+        orden.fecha_creacion ??
+        new Date();
+
+      const lecturaPreviaRow = await this.prisma.lecturas_horometro.findFirst({
+        where: {
+          id_equipo: idEquipo,
+          OR: [{ id_orden_servicio: null }, { id_orden_servicio: { not: idOrden } }],
+          fecha_lectura: { lte: fechaCorte },
+          ...(lecturaActualRow ? { id_lectura: { lt: lecturaActualRow.id_lectura } } : {}),
+        },
+        orderBy: [{ fecha_lectura: 'desc' }, { id_lectura: 'desc' }],
+      });
+
+      if (lecturaActualRow) {
+        const lecturaActual = Number(lecturaActualRow.horas_lectura);
+        const transcurrido =
+          lecturaActualRow.horas_transcurridas != null
+            ? Number(lecturaActualRow.horas_transcurridas)
+            : lecturaPreviaRow
+              ? lecturaActual - Number(lecturaPreviaRow.horas_lectura)
+              : undefined;
+        const anterior =
+          lecturaPreviaRow != null
+            ? Number(lecturaPreviaRow.horas_lectura)
+            : transcurrido != null && Number.isFinite(lecturaActual - transcurrido)
+              ? lecturaActual - transcurrido
+              : undefined;
+
+        return {
+          horometroActualLectura: Number.isFinite(lecturaActual) ? lecturaActual : undefined,
+          ...(anterior != null && Number.isFinite(anterior) && anterior >= 0
+            ? {
+                horometroAnterior: anterior,
+                horometroTranscurrido:
+                  transcurrido != null && Number.isFinite(transcurrido) && transcurrido >= 0
+                    ? transcurrido
+                    : undefined,
+              }
+            : {}),
+        };
+      } else if (lecturaPreviaRow) {
+        const anterior = Number(lecturaPreviaRow.horas_lectura);
+        if (Number.isFinite(anterior) && anterior >= 0) {
+          return { horometroAnterior: anterior };
+        }
+      }
+    } catch {
+      // Silencioso: no bloquear generación PDF si falla consulta auxiliar
+    }
+    return {};
+  }
+
+  /**
    * ✅ ENRIQUECIMIENTO FICHA TÉCNICA: Extrae datos técnicos de placa del activo
    */
   private extraerEquipoDetallado(
     orden: any,
     datosModulo?: any,
+    contadorPrevio?: {
+      horometroActualLectura?: number;
+      horometroAnterior?: number;
+      horometroTranscurrido?: number;
+    },
   ): DatosEquipoDetalladoPDF | undefined {
     const eq = orden.equipos;
     if (!eq) return undefined;
@@ -2923,10 +3004,16 @@ export class PdfController {
         }
         const obs = typeof act.observaciones === 'string' ? act.observaciones : '';
         const match = obs.match(
-          /(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*([\d.]+)/i,
+          /(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*([\d.,]+)/i,
         );
         if (match?.[1]) {
-          const n = parseFloat(match[1]);
+          let raw = match[1].trim();
+          if (/^\d{1,3}(\.\d{3})+$/.test(raw)) {
+            raw = raw.replace(/\./g, '');
+          } else {
+            raw = raw.replace(',', '.');
+          }
+          const n = parseFloat(raw);
           if (!isNaN(n) && n > 0) return n;
         }
       }
@@ -2936,10 +3023,15 @@ export class PdfController {
     const horometroInterv =
       datosModulo?.horasTrabajo ??
       orden.horometro_final ??
-      orden.horometro_inicial ??
       contadorDesdeActividad ??
+      contadorPrevio?.horometroActualLectura ??
+      orden.horometro_inicial ??
       undefined;
-    const horometroAcum = eq.horas_actuales ? Number(eq.horas_actuales) : undefined;
+    const horometroAcum =
+      Math.max(
+        eq.horas_actuales ? Number(eq.horas_actuales) : 0,
+        horometroInterv != null ? Number(horometroInterv) : 0,
+      ) || undefined;
 
     return {
       codigoEquipo: eq.codigo_equipo || 'S/C',
@@ -2967,6 +3059,14 @@ export class PdfController {
       presionPsi,
       horometroIntervencion: horometroInterv != null ? Number(horometroInterv) : undefined,
       horometroAcumulado: horometroAcum != null ? Number(horometroAcum) : undefined,
+      horometroAnterior: contadorPrevio?.horometroAnterior,
+      horometroTranscurrido:
+        contadorPrevio?.horometroTranscurrido ??
+        (horometroInterv != null &&
+        contadorPrevio?.horometroAnterior != null &&
+        Number(horometroInterv) >= contadorPrevio.horometroAnterior
+          ? Number(horometroInterv) - contadorPrevio.horometroAnterior
+          : undefined),
       unidadUso: eq.tipos_equipo?.unidad_uso || undefined,
       etiquetaContador: eq.tipos_equipo?.etiqueta_contador || undefined,
       requiereHorometro: eq.tipos_equipo?.requiere_horometro ?? undefined,

@@ -160,6 +160,34 @@ function observacionTienePrefijoEstructurado(observacion: string): boolean {
   return PREFIJOS_MOVIL_ESTRUCTURADOS.some((p) => upper.startsWith(p));
 }
 
+function parseObservacionYLeyenda(raw?: string | null): {
+  prefijoEstructurado: string | null;
+  notaTecnica: string;
+} {
+  const txt = (raw || '').trim();
+  if (!txt) return { prefijoEstructurado: null, notaTecnica: '' };
+  if (txt.includes('|||')) {
+    const partes = txt
+      .split('|||')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (partes.length > 0 && observacionTienePrefijoEstructurado(partes[0])) {
+      return {
+        prefijoEstructurado: partes[0],
+        notaTecnica: partes.slice(1).join(' ').trim(),
+      };
+    }
+    return {
+      prefijoEstructurado: null,
+      notaTecnica: partes.join(' ').trim(),
+    };
+  }
+  if (observacionTienePrefijoEstructurado(txt)) {
+    return { prefijoEstructurado: txt, notaTecnica: '' };
+  }
+  return { prefijoEstructurado: null, notaTecnica: txt };
+}
+
 /**
  * ✅ FIX 20-AGO-2026: Por DESCRIPCIÓN detecta si la actividad usa un input
  * estructurado en la app móvil (aunque aún no tenga valor guardado).
@@ -574,25 +602,69 @@ export function ActividadCardAdvanced({
                   {actividad.sistema}
                 </span>
               )}
-              {respuestaActualObj?.etiqueta != null && (
-                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded">
-                  {String(respuestaActualObj.etiqueta)}
-                </span>
-              )}
-              {tipoControlInput !== 'ESCALA_ESTADO' && !respuestaActualObj?.etiqueta && (
-                <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
-                  {getModoRespuestaBadgeLabel(
-                    tipoControlInput,
-                    actividad.catalogo_actividades?.config_input_json,
-                  )}
-                </span>
-              )}
-              {actividad.observaciones && (
-                <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                  <MessageSquare className="h-2.5 w-2.5" />
-                  Nota
-                </span>
-              )}
+              {(() => {
+                const esContadorAct =
+                  tipoControlInput === 'LECTURA_CONTADOR' ||
+                  rolSemantico === 'LECTURA_CONTADOR_ACTIVO';
+                if (esContadorAct && valorContadorInicial) {
+                  const numC = Number(valorContadorInicial.replace(',', '.'));
+                  const valFmt = Number.isFinite(numC)
+                    ? numC.toLocaleString('es-CO')
+                    : valorContadorInicial;
+                  return (
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded">
+                      🔢 Lectura: {valFmt} {metricaUso.sufijoCorto}
+                    </span>
+                  );
+                }
+                const { prefijoEstructurado } = parseObservacionYLeyenda(actividad.observaciones);
+                const obsRespMatch = (prefijoEstructurado || '').match(/^Respuesta\s*:\s*(.+)$/i);
+                const respuestaEtiqueta =
+                  respuestaActualObj?.etiqueta != null
+                    ? String(respuestaActualObj.etiqueta)
+                    : obsRespMatch?.[1]?.trim() || null;
+                if (respuestaEtiqueta) {
+                  const semaforoResp =
+                    (respuestaActualObj?.semaforo as keyof typeof SEMAFORO_META) ||
+                    (estadoActual as keyof typeof SEMAFORO_META) ||
+                    'B';
+                  const metaResp = SEMAFORO_META[semaforoResp] || SEMAFORO_META.B;
+                  return (
+                    <span
+                      className={cn(
+                        'text-[10px] font-bold border px-1.5 py-0.5 rounded',
+                        metaResp.badgeClass,
+                      )}
+                    >
+                      {respuestaEtiqueta}
+                    </span>
+                  );
+                }
+                if (tipoControlInput !== 'ESCALA_ESTADO') {
+                  return (
+                    <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                      {getModoRespuestaBadgeLabel(
+                        tipoControlInput,
+                        actividad.catalogo_actividades?.config_input_json,
+                      )}
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+              {(() => {
+                const { notaTecnica } = parseObservacionYLeyenda(actividad.observaciones);
+                const tieneNotaVisible = esRico
+                  ? Boolean(separado.contenido?.trim())
+                  : Boolean(notaTecnica);
+                if (!tieneNotaVisible) return null;
+                return (
+                  <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                    <MessageSquare className="h-2.5 w-2.5" />
+                    Nota
+                  </span>
+                );
+              })()}
               {actividad.fecha_ejecucion && (
                 <span className="text-[10px] text-gray-400">
                   {new Date(actividad.fecha_ejecucion).toLocaleTimeString('es-CO', {
@@ -750,13 +822,20 @@ export function ActividadCardAdvanced({
           {!showObservaciones ? (
             <button
               onClick={() => {
-                setObservaciones(actividad.observaciones || '');
+                const { notaTecnica } = parseObservacionYLeyenda(actividad.observaciones);
+                setObservaciones(esRico ? actividad.observaciones || '' : notaTecnica);
                 setShowObservaciones(true);
               }}
               className="w-full py-2 text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-all flex items-center justify-center gap-1"
             >
               <MessageSquare className="h-3.5 w-3.5" />
-              {actividad.observaciones ? 'Editar Observación' : 'Agregar Observación'}
+              {(() => {
+                const { notaTecnica } = parseObservacionYLeyenda(actividad.observaciones);
+                const tieneNota = esRico
+                  ? Boolean(separado.contenido?.trim())
+                  : Boolean(notaTecnica);
+                return tieneNota ? 'Editar Observación' : 'Agregar Observación';
+              })()}
             </button>
           ) : esRico && editor ? (
             /* ✅ Editor TipTap para campos correctivos narrativos */
@@ -852,12 +931,16 @@ export function ActividadCardAdvanced({
                 )}
               </div>
             ) : (
-              /* Texto plano para observaciones normales */
-              <div className="bg-white/80 rounded-lg p-2 border border-purple-100">
-                <p className="text-xs text-gray-600 italic">
-                  &ldquo;{actividad.observaciones}&rdquo;
-                </p>
-              </div>
+              /* Texto plano para observaciones normales (sin prefijos ni delimitadores |||) */
+              (() => {
+                const { notaTecnica } = parseObservacionYLeyenda(actividad.observaciones);
+                if (!notaTecnica) return null;
+                return (
+                  <div className="bg-white/80 rounded-lg p-2.5 border border-purple-100">
+                    <p className="text-xs text-gray-700 leading-relaxed">{notaTecnica}</p>
+                  </div>
+                );
+              })()
             ))}
 
           {/* Galería de Fotos ANTES/DURANTE/DESPUÉS */}

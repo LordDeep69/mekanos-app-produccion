@@ -23,11 +23,15 @@ import 'signature_canvas.dart';
 class FirmaBottomSheet extends ConsumerStatefulWidget {
   final int idOrden;
   final String tipoFirma; // TECNICO o CLIENTE
+  final String? nombreInicial;
+  final String? cargoInicial;
 
   const FirmaBottomSheet({
     super.key,
     required this.idOrden,
     required this.tipoFirma,
+    this.nombreInicial,
+    this.cargoInicial,
   });
 
   @override
@@ -46,6 +50,12 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
   @override
   void initState() {
     super.initState();
+    if (widget.nombreInicial != null && widget.nombreInicial!.trim().isNotEmpty) {
+      _nombreController.text = widget.nombreInicial!.trim();
+    }
+    if (widget.cargoInicial != null && widget.cargoInicial!.trim().isNotEmpty) {
+      _cargoController.text = widget.cargoInicial!.trim();
+    }
     _canvasController.addListener(_onCanvasChange);
   }
 

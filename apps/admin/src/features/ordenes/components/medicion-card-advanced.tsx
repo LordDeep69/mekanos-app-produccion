@@ -81,7 +81,8 @@ interface MedicionCardAdvancedProps {
 }
 
 function getNivelAlertaColor(nivel?: string, fueraDeRango?: boolean) {
-  if (fueraDeRango || nivel === 'CRITICO') {
+  const n = (nivel || '').toUpperCase();
+  if (n === 'CRITICO' || n === 'CRITICAL') {
     return {
       bg: 'bg-red-50 border-red-200',
       badge: 'bg-red-500 text-white',
@@ -89,12 +90,12 @@ function getNivelAlertaColor(nivel?: string, fueraDeRango?: boolean) {
       icon: 'text-red-500',
     };
   }
-  if (nivel === 'ADVERTENCIA') {
+  if (n === 'ADVERTENCIA' || n === 'WARNING' || fueraDeRango) {
     return {
-      bg: 'bg-yellow-50 border-yellow-200',
-      badge: 'bg-yellow-500 text-white',
-      text: 'text-yellow-700',
-      icon: 'text-yellow-500',
+      bg: 'bg-amber-50 border-amber-200',
+      badge: 'bg-amber-500 text-white',
+      text: 'text-amber-700',
+      icon: 'text-amber-500',
     };
   }
   return {
@@ -453,12 +454,20 @@ export function ResumenMediciones({
   mediciones: Medicion[];
   totalParametros?: number;
 }) {
+  const esCritico = (m: Medicion) => {
+    const n = (m.nivel_alerta || '').toUpperCase();
+    return n === 'CRITICO' || n === 'CRITICAL';
+  };
+  const esAdvertencia = (m: Medicion) => {
+    if (esCritico(m)) return false;
+    const n = (m.nivel_alerta || '').toUpperCase();
+    return n === 'ADVERTENCIA' || n === 'WARNING' || Boolean(m.fuera_de_rango);
+  };
+
   const contadores = {
-    ok: mediciones.filter(
-      (m) => !m.fuera_de_rango && m.nivel_alerta !== 'CRITICO' && m.nivel_alerta !== 'ADVERTENCIA',
-    ).length,
-    advertencia: mediciones.filter((m) => m.nivel_alerta === 'ADVERTENCIA').length,
-    critico: mediciones.filter((m) => m.fuera_de_rango || m.nivel_alerta === 'CRITICO').length,
+    ok: mediciones.filter((m) => !esCritico(m) && !esAdvertencia(m)).length,
+    advertencia: mediciones.filter(esAdvertencia).length,
+    critico: mediciones.filter(esCritico).length,
   };
 
   const completadas = mediciones.filter(

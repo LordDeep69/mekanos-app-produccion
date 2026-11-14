@@ -54,14 +54,17 @@ Uint8List? _comprimirImagenParaSubida(Uint8List bytes) {
   }
 }
 
-/// ✅ FIX 03-FEB-2026: Helper para combinar valor principal + observación técnico
-/// Mantiene compatibilidad con backend que espera formato: "VALOR|||ObsTecnico"
+/// Serializa observaciones de actividad para backend.
+/// Cuando existe `respuestaJson`, el dato estructurado viaja en `respuestaJson`
+/// y `observaciones` lleva únicamente la nota libre del técnico (sin mezclar con `|||`).
 String _combinarObservacionesParaBackend(
   String? valorPrincipal,
-  String? obsTecnico,
-) {
-  final vp = valorPrincipal?.trim() ?? '';
+  String? obsTecnico, {
+  bool tieneRespuestaJson = false,
+}) {
   final ot = obsTecnico?.trim() ?? '';
+  if (tieneRespuestaJson) return ot;
+  final vp = valorPrincipal?.trim() ?? '';
   if (vp.isEmpty && ot.isEmpty) return '';
   if (ot.isEmpty) return vp;
   if (vp.isEmpty) return ot;
@@ -237,10 +240,11 @@ class SyncUploadService {
             'sistema': a.sistema ?? 'Sin sistema',
             'descripcion': a.descripcion,
             'resultado': a.simbologia ?? 'N/A',
-            // ✅ FIX 03-FEB-2026: Combinar valor principal + observación técnico
             'observaciones': _combinarObservacionesParaBackend(
               a.observacion,
               a.observacionTecnico,
+              tieneRespuestaJson:
+                  a.respuestaJson != null && a.respuestaJson!.isNotEmpty,
             ),
             if (a.respuestaJson != null && a.respuestaJson!.isNotEmpty)
               'respuestaJson': decodeRespJson(a.respuestaJson),
@@ -275,10 +279,11 @@ class SyncUploadService {
                 'sistema': a.sistema ?? 'Sin sistema',
                 'descripcion': a.descripcion,
                 'resultado': a.simbologia ?? 'N/A',
-                // ✅ FIX 03-FEB-2026: Combinar valor principal + observación técnico
                 'observaciones': _combinarObservacionesParaBackend(
                   a.observacion,
                   a.observacionTecnico,
+                  tieneRespuestaJson:
+                      a.respuestaJson != null && a.respuestaJson!.isNotEmpty,
                 ),
                 'idOrdenEquipo': a.idOrdenEquipo,
                 if (a.respuestaJson != null && a.respuestaJson!.isNotEmpty)
@@ -296,10 +301,11 @@ class SyncUploadService {
                 'sistema': a.sistema ?? 'Sin sistema',
                 'descripcion': a.descripcion,
                 'resultado': a.simbologia ?? 'N/A',
-                // ✅ FIX 03-FEB-2026: Combinar valor principal + observación técnico
                 'observaciones': _combinarObservacionesParaBackend(
                   a.observacion,
                   a.observacionTecnico,
+                  tieneRespuestaJson:
+                      a.respuestaJson != null && a.respuestaJson!.isNotEmpty,
                 ),
                 if (a.respuestaJson != null && a.respuestaJson!.isNotEmpty)
                   'respuestaJson': decodeRespJson(a.respuestaJson),

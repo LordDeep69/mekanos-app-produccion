@@ -36,6 +36,7 @@ export interface ProgresoResumenDto {
   };
   mediciones: {
     registradas: number;
+    total?: number;
     con_alerta: number;
   };
   evidencias_fotos: number;
@@ -169,31 +170,67 @@ export class ProgresoRegistroService {
       throw new NotFoundException(`Orden #${idOrden} no encontrada`);
     }
 
-    // 1. Total actividades esperadas
-    let totalActividades = orden.ordenes_actividades_plan.length;
-    if (totalActividades === 0 && orden.id_tipo_servicio) {
+    const esMedicionCatalogo = (
+      cat?: { tipo_actividad?: string | null; id_parametro_medicion?: number | null } | null,
+    ) => cat?.tipo_actividad === 'MEDICION' || cat?.id_parametro_medicion != null;
+
+    // 1. Total actividades esperadas (solo checklist, excluyendo mediciones)
+    const tienePlanExplicito = orden.ordenes_actividades_plan.length > 0;
+    let totalActividades = tienePlanExplicito
+      ? orden.ordenes_actividades_plan.filter((p) => !esMedicionCatalogo(p.catalogo_actividades))
+          .length
+      : 0;
+    if (!tienePlanExplicito && orden.id_tipo_servicio) {
       totalActividades = await this.prisma.catalogo_actividades.count({
-        where: { id_tipo_servicio: orden.id_tipo_servicio, activo: true },
+        where: {
+          id_tipo_servicio: orden.id_tipo_servicio,
+          activo: true,
+          tipo_actividad: { not: 'MEDICION' },
+          id_parametro_medicion: null,
+        },
       });
     }
-    // Si aún es 0 pero hay actividades ejecutadas, el total es al menos las ejecutadas
+    // Si aún es 0 pero hay actividades ejecutadas de checklist, el total es al menos las ejecutadas
     if (totalActividades === 0) {
-      totalActividades = orden.actividades_ejecutadas.length;
+      totalActividades = orden.actividades_ejecutadas.filter(
+        (a) => !esMedicionCatalogo(a.catalogo_actividades),
+      ).length;
     }
 
     const actividadesCompletadas = orden.actividades_ejecutadas.filter(
-      (a) => a.ejecutada === true || a.estado != null,
+      (a) =>
+        (a.ejecutada === true || a.estado != null) && !esMedicionCatalogo(a.catalogo_actividades),
     ).length;
 
     const porcentajeActividades =
       totalActividades > 0
         ? Math.min(100, Math.round((actividadesCompletadas / totalActividades) * 100))
-        : orden.actividades_ejecutadas.length > 0
+        : actividadesCompletadas > 0
           ? 100
           : 0;
 
     // 2. Mediciones
     const medicionesRegistradas = orden.mediciones_servicio.length;
+    let totalMedicionesEsperadas = medicionesRegistradas;
+    if (tienePlanExplicito) {
+      const medsPlan = orden.ordenes_actividades_plan.filter((p) =>
+        esMedicionCatalogo(p.catalogo_actividades),
+      ).length;
+      if (medsPlan > totalMedicionesEsperadas) {
+        totalMedicionesEsperadas = medsPlan;
+      }
+    } else if (orden.id_tipo_servicio) {
+      const medsCatalogo = await this.prisma.catalogo_actividades.count({
+        where: {
+          id_tipo_servicio: orden.id_tipo_servicio,
+          activo: true,
+          OR: [{ tipo_actividad: 'MEDICION' }, { id_parametro_medicion: { not: null } }],
+        },
+      });
+      if (medsCatalogo > totalMedicionesEsperadas) {
+        totalMedicionesEsperadas = medsCatalogo;
+      }
+    }
     const medicionesConAlerta = orden.mediciones_servicio.filter(
       (m) =>
         m.fuera_de_rango === true ||
@@ -401,6 +438,7 @@ export class ProgresoRegistroService {
       },
       mediciones: {
         registradas: medicionesRegistradas,
+        total: totalMedicionesEsperadas,
         con_alerta: medicionesConAlerta,
       },
       evidencias_fotos: totalFotos,

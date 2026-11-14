@@ -822,7 +822,13 @@ function EquipoHeader({
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TabEjecucion({ orden }: { orden: Orden }) {
+function TabEjecucion({
+  orden,
+  onOpenPendientesTab,
+}: {
+  orden: Orden;
+  onOpenPendientesTab?: () => void;
+}) {
   const [subTab, setSubTab] = useState<'checklist' | 'mediciones'>('checklist');
   const { data: actividadesData, isLoading: isLoadingAct } = useActividadesOrden(
     orden.id_orden_servicio,
@@ -1328,8 +1334,23 @@ function TabEjecucion({ orden }: { orden: Orden }) {
         </div>
       </div>
 
-      {/* 📌 Sección transversal de Pendientes Técnicos y Hallazgos R/M directamente en Ejecución */}
-      <PendientesSection orden={orden} />
+      {/* 📌 Banner compacto con acceso directo a la pestaña dedicada de Pendientes & Hallazgos */}
+      <div className="bg-amber-50/80 border border-amber-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-amber-950">
+          <span>📌</span>
+          <span>Tienes hallazgos o pendientes asociados a esta orden</span>
+        </div>
+        {onOpenPendientesTab && (
+          <button
+            type="button"
+            onClick={onOpenPendientesTab}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors shrink-0 cursor-pointer"
+          >
+            <span>Ir a Pestaña Pendientes &amp; Hallazgos</span>
+            <span>→</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -4597,7 +4618,9 @@ export default function OrdenDetallePage() {
         {activeTab === 'general' && (
           <TabGeneral orden={orden} onOpenPendientesTab={() => setActiveTab('pendientes')} />
         )}
-        {activeTab === 'ejecucion' && <TabEjecucion orden={orden} />}
+        {activeTab === 'ejecucion' && (
+          <TabEjecucion orden={orden} onOpenPendientesTab={() => setActiveTab('pendientes')} />
+        )}
         {activeTab === 'pendientes' && <PendientesSection orden={orden} />}
         {activeTab === 'financiero' && <TabFinanciero orden={orden} />}
         {activeTab === 'documentos' && <TabDocumentos orden={orden} />}

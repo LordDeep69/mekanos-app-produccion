@@ -34,7 +34,7 @@ import {
 } from '@/types/ordenes';
 import { ProgramarVisitaModal } from './hilo-continuidad-caso';
 import { useQueryClient } from '@tanstack/react-query';
-import { useActividadesOrden } from '../hooks/use-ordenes';
+import { useActividadesOrden, useMedicionesCompletasOrden } from '../hooks/use-ordenes';
 
 interface CatalogoPendienteItem {
   id_pendiente_catalogo: number;
@@ -71,6 +71,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
   const queryClient = useQueryClient();
   const { data: actividadesData } = useActividadesOrden(orden.id_orden_servicio);
+  const { data: medicionesData } = useMedicionesCompletasOrden(orden.id_orden_servicio);
   const [pendientes, setPendientes] = useState<OrdenPendiente[]>(initialUnificados);
   useEffect(() => {
     setPendientes(initialUnificados);
@@ -404,6 +405,15 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
     () => pendientes.filter((p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION'),
     [pendientes],
   );
+  // Solo pendientes heredados de visitas anteriores (id_orden_origen !== orden.id_orden_servicio)
+  const pendientesHeredadosPorResolver = useMemo(
+    () =>
+      pendientesActivosCaso.filter((p) => {
+        const idOrigen = p.ordenes_servicio?.id_orden_servicio ?? p.id_orden_servicio;
+        return idOrigen !== orden.id_orden_servicio;
+      }),
+    [pendientesActivosCaso, orden.id_orden_servicio],
+  );
   const totalPendientesActivos = pendientesActivosCaso.length;
   const totalPendientesResueltos = useMemo(
     () => pendientes.filter((p) => p.estado === 'RESUELTO').length,
@@ -420,9 +430,22 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
   const numVisitaActual = orden.numero_visita_caso || 1;
 
-  // Sugerencias automáticas desde ítems R / M del checklist que aún no tienen pendiente
-  const hallazgosChecklistRM = useMemo(() => {
+  // Sugerencias automáticas desde ítems R / M del checklist y mediciones fuera de rango sin pendiente
+  interface HallazgoSugeridoItem {
+    key: string;
+    idRef: number;
+    badge: string;
+    esCritico: boolean;
+    descripcion: string;
+    detalle?: string;
+    idOrdenEquipo?: number | null;
+    prioridadSugerida: 'NORMAL' | 'ALTA';
+    observacionesAuto: string;
+  }
+
+  const hallazgosChecklistRM = useMemo((): HallazgoSugeridoItem[] => {
     const acts = Array.isArray(actividadesData?.data) ? actividadesData.data : [];
+    const meds = Array.isArray(medicionesData?.data) ? medicionesData.data : [];
     const descsExistentes = new Set(
       pendientes.map((p) =>
         String(p.descripcion || '')
@@ -430,60 +453,105 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
           .toLowerCase(),
       ),
     );
-    return acts.filter(
-      (act: {
-        estado?: string | null;
-        descripcion_manual?: string | null;
-        catalogo_actividades?: { descripcion_actividad?: string | null };
-      }) => {
-        const est = String(act?.estado || '')
-          .trim()
-          .toUpperCase();
-        if (est !== 'R' && est !== 'M') return false;
-        const desc = (
-          act.catalogo_actividades?.descripcion_actividad ||
-          act.descripcion_manual ||
-          ''
-        )
-          .trim()
-          .toLowerCase();
-        return desc.length > 0 && !descsExistentes.has(desc);
-      },
-    );
-  }, [actividadesData?.data, pendientes]);
+    const items: HallazgoSugeridoItem[] = [];
 
-  const handleConvertirHallazgoRM = async (act: {
-    id_actividad_ejecutada: number;
-    estado?: string | null;
-    observaciones?: string | null;
-    id_orden_equipo?: number | null;
-    descripcion_manual?: string | null;
-    catalogo_actividades?: { descripcion_actividad?: string | null };
-  }) => {
-    const desc = (
-      act.catalogo_actividades?.descripcion_actividad ||
-      act.descripcion_manual ||
-      ''
-    ).trim();
-    if (!desc) return;
-    setConvertingActId(act.id_actividad_ejecutada);
-    try {
-      const est = String(act.estado || 'R')
+    for (const act of acts) {
+      const est = String(act?.estado || '')
         .trim()
         .toUpperCase();
+      if (est !== 'R' && est !== 'M') continue;
+      const desc = (
+        act.catalogo_actividades?.descripcion_actividad ||
+        act.descripcion_manual ||
+        ''
+      ).trim();
+      if (!desc || descsExistentes.has(desc.toLowerCase())) continue;
+      items.push({
+        key: `act-${act.id_actividad_ejecutada}`,
+        idRef: act.id_actividad_ejecutada,
+        badge: est,
+        esCritico: est === 'M',
+        descripcion: desc,
+        detalle: (act.observaciones || '').trim() || undefined,
+        idOrdenEquipo: act.id_orden_equipo ?? null,
+        prioridadSugerida: est === 'M' ? 'ALTA' : 'NORMAL',
+        observacionesAuto:
+          (act.observaciones || '').trim() || `Hallazgo (${est}) convertido desde checklist`,
+      });
+    }
+
+    for (const rawMed of meds) {
+      const med = rawMed as typeof rawMed & {
+        nombre_parametro_snapshot?: string | null;
+        rango_efectivo?: {
+          valor_minimo_normal?: number | null;
+          valor_maximo_normal?: number | null;
+        } | null;
+        rango_minimo_normal?: number | null;
+        rango_maximo_normal?: number | null;
+      };
+      const alerta = String(med?.nivel_alerta || '').toUpperCase();
+      const fuera =
+        Boolean(med?.fuera_de_rango) ||
+        alerta === 'ADVERTENCIA' ||
+        alerta === 'WARNING' ||
+        alerta === 'CRITICO' ||
+        alerta === 'CRITICAL';
+      if (!fuera) continue;
+      const nombre = String(
+        med?.parametros_medicion?.nombre_parametro || med?.nombre_parametro_snapshot || 'Parámetro',
+      ).trim();
+      const val =
+        med?.valor_numerico != null
+          ? `${med.valor_numerico}${med.unidad_medida || med.parametros_medicion?.unidad_medida ? ` ${med.unidad_medida || med.parametros_medicion?.unidad_medida}` : ''}`
+          : String(med?.valor_texto || '').trim();
+      const rMin =
+        med?.rango_efectivo?.valor_minimo_normal ??
+        med?.rango_minimo_normal ??
+        med?.parametros_medicion?.valor_minimo_normal;
+      const rMax =
+        med?.rango_efectivo?.valor_maximo_normal ??
+        med?.rango_maximo_normal ??
+        med?.parametros_medicion?.valor_maximo_normal;
+      const uni = med?.unidad_medida || med?.parametros_medicion?.unidad_medida || '';
+      const rangoTxt =
+        rMin != null && rMax != null ? ` [Normal: ${rMin} - ${rMax}${uni ? ` ${uni}` : ''}]` : '';
+      const desc = `${nombre} fuera de rango: ${val}${rangoTxt}`;
+      if (descsExistentes.has(desc.toLowerCase())) continue;
+      const esCritico = alerta === 'CRITICO' || alerta === 'CRITICAL';
+      items.push({
+        key: `med-${med.id_medicion}`,
+        idRef: med.id_medicion,
+        badge: esCritico ? 'CRÍTICO' : 'ALERTA',
+        esCritico,
+        descripcion: desc,
+        detalle: med?.mensaje_alerta || undefined,
+        idOrdenEquipo: med?.id_orden_equipo ?? null,
+        prioridadSugerida: esCritico ? 'ALTA' : 'NORMAL',
+        observacionesAuto:
+          String(med?.mensaje_alerta || '').trim() || `Medición fuera de rango (${val})`,
+      });
+    }
+
+    return items;
+  }, [actividadesData?.data, medicionesData?.data, pendientes]);
+
+  const handleConvertirHallazgoRM = async (item: HallazgoSugeridoItem) => {
+    if (!item.descripcion) return;
+    setConvertingActId(item.idRef);
+    try {
       const oeMatch = (orden.ordenes_equipos || []).find(
-        (oe) => oe.id_orden_equipo === act.id_orden_equipo,
+        (oe) => oe.id_orden_equipo === item.idOrdenEquipo,
       );
       const idEq = oeMatch?.id_equipo || orden.equipos?.id_equipo || undefined;
       const res = await apiClient.post(`/ordenes/${orden.id_orden_servicio}/pendientes`, {
-        descripcion: desc,
+        descripcion: item.descripcion,
         idEquipo: idEq,
-        ...(act.id_orden_equipo ? { idOrdenEquipo: act.id_orden_equipo } : {}),
-        alcance: idEq || act.id_orden_equipo ? 'EQUIPO' : 'SERVICIO',
+        ...(item.idOrdenEquipo ? { idOrdenEquipo: item.idOrdenEquipo } : {}),
+        alcance: idEq || item.idOrdenEquipo ? 'EQUIPO' : 'SERVICIO',
         origen: 'MANUAL',
-        prioridad: est === 'M' ? 'ALTA' : 'NORMAL',
-        observaciones:
-          (act.observaciones || '').trim() || `Hallazgo (${est}) convertido desde checklist`,
+        prioridad: item.prioridadSugerida,
+        observaciones: item.observacionesAuto,
       });
       const data = res.data;
       if (data?.success) {
@@ -513,85 +581,70 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
-      {/* Sugerencias automáticas desde ítems R / M del checklist */}
+      {/* Sugerencias automáticas desde ítems R / M del checklist y mediciones en alerta */}
       {hallazgosChecklistRM.length > 0 && (
         <div className="p-4 bg-gradient-to-r from-amber-50 via-orange-50/70 to-red-50/40 border-b border-amber-200">
           <div className="flex items-center gap-2 mb-2.5">
             <AlertCircle className="h-4 w-4 text-amber-700 shrink-0" />
             <h4 className="text-xs font-extrabold text-amber-950 uppercase tracking-wide">
-              Hallazgos en Checklist (R / M) sin Pendiente ({hallazgosChecklistRM.length})
+              Hallazgos Detectados sin Pendiente ({hallazgosChecklistRM.length})
             </h4>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {hallazgosChecklistRM.map(
-              (act: {
-                id_actividad_ejecutada: number;
-                estado?: string | null;
-                observaciones?: string | null;
-                id_orden_equipo?: number | null;
-                descripcion_manual?: string | null;
-                catalogo_actividades?: { descripcion_actividad?: string | null };
-              }) => {
-                const est = String(act.estado || 'R')
-                  .trim()
-                  .toUpperCase();
-                const esCritico = est === 'M';
-                const desc =
-                  act.catalogo_actividades?.descripcion_actividad ||
-                  act.descripcion_manual ||
-                  'Actividad';
-                const isBusy = convertingActId === act.id_actividad_ejecutada;
-                return (
-                  <div
-                    key={act.id_actividad_ejecutada}
-                    className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white border border-amber-200 shadow-2xs"
-                  >
-                    <div className="min-w-0 flex items-center gap-2">
-                      <span
-                        className={cn(
-                          'px-2 py-0.5 rounded text-[10px] font-extrabold shrink-0',
-                          esCritico
-                            ? 'bg-red-100 text-red-800 border border-red-300'
-                            : 'bg-amber-100 text-amber-800 border border-amber-300',
-                        )}
-                      >
-                        {est}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-900 truncate">{desc}</p>
-                        {act.observaciones && (
-                          <p className="text-[11px] text-slate-500 truncate">{act.observaciones}</p>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => handleConvertirHallazgoRM(act)}
-                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white shrink-0 transition-colors disabled:opacity-50 cursor-pointer"
+            {hallazgosChecklistRM.map((item) => {
+              const isBusy = convertingActId === item.idRef;
+              return (
+                <div
+                  key={item.key}
+                  className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white border border-amber-200 shadow-2xs"
+                >
+                  <div className="min-w-0 flex items-center gap-2">
+                    <span
+                      className={cn(
+                        'px-2 py-0.5 rounded text-[10px] font-extrabold shrink-0',
+                        item.esCritico
+                          ? 'bg-red-100 text-red-800 border border-red-300'
+                          : 'bg-amber-100 text-amber-800 border border-amber-300',
+                      )}
                     >
-                      {isBusy ? 'Creando...' : '+ Convertir a Pendiente'}
-                    </button>
+                      {item.badge}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-900 truncate">
+                        {item.descripcion}
+                      </p>
+                      {item.detalle && (
+                        <p className="text-[11px] text-slate-500 truncate">{item.detalle}</p>
+                      )}
+                    </div>
                   </div>
-                );
-              },
-            )}
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => handleConvertirHallazgoRM(item)}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white shrink-0 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isBusy ? 'Creando...' : '+ Convertir a Pendiente'}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* BLOQUE A (CLOSED-LOOP): PENDIENTES ACTIVOS DEL CASO POR RESOLVER    */}
+      {/* BLOQUE A (CLOSED-LOOP): PENDIENTES HEREDADOS POR RESOLVER           */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {pendientesActivosCaso.length > 0 && (
+      {pendientesHeredadosPorResolver.length > 0 && (
         <div className="p-5 bg-gradient-to-r from-indigo-50 via-blue-50/60 to-emerald-50/40 border-b border-indigo-200">
           {esVisitaCompletada && (
             <div className="mb-3 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start sm:items-center gap-2.5 text-xs text-amber-900 shadow-2xs">
               <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
               <div>
                 <span className="font-bold">⚠️ Esta visita ya fue completada en campo:</span>{' '}
-                Confirme si estos hallazgos quedaron solucionados durante la visita o si deben
-                devolverse a pendientes abiertos para programar un seguimiento posterior.
+                Confirme si estos hallazgos heredados quedaron solucionados durante la visita o si
+                deben devolverse a pendientes abiertos para programar un seguimiento posterior.
               </div>
             </div>
           )}
@@ -602,15 +655,15 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
               </div>
               <div>
                 <h4 className="text-sm font-extrabold text-indigo-950 flex items-center gap-2 flex-wrap">
-                  <span>Pendientes Activos del Caso por Resolver en Visita #{numVisitaActual}</span>
+                  <span>Pendientes Heredados por Resolver en Visita #{numVisitaActual}</span>
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
-                    {pendientesActivosCaso.length} activo(s) • {totalPendientesResueltos}{' '}
+                    {pendientesHeredadosPorResolver.length} heredado(s) • {totalPendientesResueltos}{' '}
                     resuelto(s) en el caso
                   </span>
                 </h4>
                 <p className="text-xs text-indigo-700/80">
-                  Marque en 1 clic los hallazgos que hayan quedado solucionados durante esta visita
-                  o programe una nueva visita de seguimiento.
+                  Marque en 1 clic los hallazgos de visitas anteriores que hayan quedado
+                  solucionados durante esta visita o programe una nueva visita de seguimiento.
                 </p>
               </div>
             </div>
@@ -618,18 +671,22 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
             <button
               type="button"
               onClick={() => {
-                setFollowUpInitialIds(pendientesActivosCaso.map((p) => p.id_orden_pendiente));
+                setFollowUpInitialIds(
+                  pendientesHeredadosPorResolver.map((p) => p.id_orden_pendiente),
+                );
                 setFollowUpModalOpen(true);
               }}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer"
             >
               <CornerDownRight className="h-3.5 w-3.5" />
-              <span>Programar Visita con estos {pendientesActivosCaso.length} Pendientes</span>
+              <span>
+                Programar Visita con estos {pendientesHeredadosPorResolver.length} Pendientes
+              </span>
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {pendientesActivosCaso.map((p) => {
+            {pendientesHeredadosPorResolver.map((p) => {
               const numOrigen = p.ordenes_servicio?.numero_orden || orden.numero_orden;
               const numVisitaOrigen = p.ordenes_servicio?.numero_visita_caso || 1;
               const codEq = p.equipos?.codigo_equipo;

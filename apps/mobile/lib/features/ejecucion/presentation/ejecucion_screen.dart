@@ -3990,12 +3990,17 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                     Colors.green,
                   ),
                   _buildResumenEstadoRow(
+                    'Regular (R)',
+                    _contarPorSimbologia('R'),
+                    Colors.amber.shade700,
+                  ),
+                  _buildResumenEstadoRow(
                     'Malo (M)',
                     _contarPorSimbologia('M'),
                     Colors.red,
                   ),
                   _buildResumenEstadoRow(
-                    'Cambiado (C)',
+                    'Cambio / Corregido (C)',
                     _contarPorSimbologia('C'),
                     Colors.orange,
                   ),
@@ -4005,7 +4010,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                     Colors.grey,
                   ),
                   _buildResumenEstadoRow(
-                    'Pendientes',
+                    'Sin diligenciar',
                     _total - _completadas,
                     Colors.blue,
                   ),

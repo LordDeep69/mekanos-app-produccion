@@ -4032,8 +4032,14 @@ export class OrdenesController {
     );
     console.log('');
     console.log('📝 ACTIVIDADES recibidas:', dto.actividades?.length || 0);
-    dto.actividades?.slice(0, 3).forEach((act, i) => {
-      console.log(`   [${i}] sistema="${act.sistema}", resultado="${act.resultado}"`);
+    dto.actividades?.slice(0, 5).forEach((act, i) => {
+      const respSummary =
+        act.respuestaJson != null
+          ? `, respuestaJson=${JSON.stringify(act.respuestaJson).substring(0, 80)}`
+          : '';
+      console.log(
+        `   [${i}] sistema="${act.sistema}", idCat=${act.idActividadCatalogo ?? 'NULL'}, resultado="${act.resultado}"${respSummary}`,
+      );
     });
     console.log('');
     console.log('📏 MEDICIONES:', dto.mediciones?.length || 0);
@@ -4045,15 +4051,29 @@ export class OrdenesController {
     console.log('🔬 ═══════════════════════════════════════════════════════════════');
     console.log('');
 
-    // Construir DTO interno con ID de orden
-    const finalizarDto = {
+    // Construir DTO interno con ID de orden (conservando idActividadCatalogo, respuestaJson e idOrdenEquipo)
+    const finalizarDto = this.buildFinalizarDto(id, dto, userId);
+
+    // Ejecutar flujo de finalización (solo datos, sin PDF ni email).
+    // Se pasa el usuario autenticado para validar asignación (Zero Trust).
+    const result = await this.finalizacionService.finalizarOrden(finalizarDto, undefined, user);
+
+    return {
+      success: result.success,
+      message: result.mensaje,
+      data: result.datos,
+      tiempoTotal: `${result.tiempoTotal}ms`,
+    };
+  }
+
+  private buildFinalizarDto(id: string, dto: FinalizarOrdenCompletoDto, userId?: number) {
+    return {
       idOrden: parseInt(id, 10),
       evidencias: dto.evidencias.map((e) => ({
         tipo: e.tipo as 'ANTES' | 'DURANTE' | 'DESPUES' | 'MEDICION',
         base64: e.base64,
         descripcion: e.descripcion,
         formato: e.formato,
-        // ✅ FIX 17-DIC-2025: Incluir idOrdenEquipo para multi-equipos
         idOrdenEquipo: e.idOrdenEquipo,
       })),
       firmas: {
@@ -4069,7 +4089,6 @@ export class OrdenesController {
               base64: dto.firmas.cliente.base64,
               idPersona: dto.firmas.cliente.idPersona,
               formato: dto.firmas.cliente.formato,
-              // ✅ FIX 06-FEB-2026: Pasar nombre y cargo del firmante cliente al servicio
               nombreFirmante: dto.firmas.cliente.nombreFirmante,
               cargoFirmante: dto.firmas.cliente.cargoFirmante,
             }
@@ -4080,34 +4099,26 @@ export class OrdenesController {
         descripcion: a.descripcion,
         resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
         observaciones: a.observaciones,
+        idOrdenEquipo: a.idOrdenEquipo,
+        idActividadCatalogo: a.idActividadCatalogo,
+        respuestaJson: a.respuestaJson,
       })),
       mediciones: dto.mediciones?.map((m) => ({
         parametro: m.parametro,
         valor: m.valor,
         unidad: m.unidad,
         nivelAlerta: m.nivelAlerta as 'OK' | 'WARNING' | 'CRITICAL' | undefined,
+        idOrdenEquipo: m.idOrdenEquipo,
       })),
       observaciones: dto.observaciones,
       datosModulo: dto.datosModulo,
       horaEntrada: dto.horaEntrada,
       horaSalida: dto.horaSalida,
       emailAdicional: dto.emailAdicional,
-      usuarioId: userId || 1, // Fallback si JWT no disponible
-      // ✅ PENDIENTES TÉCNICOS:
+      usuarioId: userId || 1,
       pendientes: dto.pendientes,
-      // ✅ FIX 19-FEB-2026: SIEMPRE SOLO_DATOS - PDF y email desde Admin Portal
+      // ✅ SIEMPRE SOLO_DATOS - PDF y email desde Admin Portal
       modo: 'SOLO_DATOS' as 'COMPLETO' | 'SOLO_DATOS',
-    };
-
-    // Ejecutar flujo de finalización (solo datos, sin PDF ni email).
-    // Se pasa el usuario autenticado para validar asignación (Zero Trust).
-    const result = await this.finalizacionService.finalizarOrden(finalizarDto, undefined, user);
-
-    return {
-      success: result.success,
-      message: result.mensaje,
-      data: result.datos,
-      tiempoTotal: `${result.tiempoTotal}ms`,
     };
   }
 
@@ -4168,58 +4179,8 @@ export class OrdenesController {
     };
 
     try {
-      // Construir DTO interno con ID de orden
-      const finalizarDto = {
-        idOrden: parseInt(id, 10),
-        evidencias: dto.evidencias.map((e) => ({
-          tipo: e.tipo as 'ANTES' | 'DURANTE' | 'DESPUES' | 'MEDICION',
-          base64: e.base64,
-          descripcion: e.descripcion,
-          formato: e.formato,
-          idOrdenEquipo: e.idOrdenEquipo,
-        })),
-        firmas: {
-          tecnico: {
-            tipo: 'TECNICO' as const,
-            base64: dto.firmas.tecnico.base64,
-            idPersona: dto.firmas.tecnico.idPersona,
-            formato: dto.firmas.tecnico.formato,
-          },
-          cliente: dto.firmas.cliente
-            ? {
-                tipo: 'CLIENTE' as const,
-                base64: dto.firmas.cliente.base64,
-                idPersona: dto.firmas.cliente.idPersona,
-                formato: dto.firmas.cliente.formato,
-                // ✅ FIX 06-AGO-2026: Pasar nombre y cargo del firmante cliente al servicio
-                nombreFirmante: dto.firmas.cliente.nombreFirmante,
-                cargoFirmante: dto.firmas.cliente.cargoFirmante,
-              }
-            : undefined,
-        },
-        actividades: dto.actividades.map((a) => ({
-          sistema: a.sistema,
-          descripcion: a.descripcion,
-          resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
-          observaciones: a.observaciones,
-        })),
-        mediciones: dto.mediciones?.map((m) => ({
-          parametro: m.parametro,
-          valor: m.valor,
-          unidad: m.unidad,
-          nivelAlerta: m.nivelAlerta as 'OK' | 'WARNING' | 'CRITICAL' | undefined,
-        })),
-        observaciones: dto.observaciones,
-        datosModulo: dto.datosModulo,
-        horaEntrada: dto.horaEntrada,
-        horaSalida: dto.horaSalida,
-        emailAdicional: dto.emailAdicional,
-        usuarioId: userId || 1,
-        // ✅ PENDIENTES TÉCNICOS:
-        pendientes: dto.pendientes,
-        // ✅ FIX 19-FEB-2026: SIEMPRE SOLO_DATOS - PDF y email desde Admin Portal
-        modo: 'SOLO_DATOS' as 'COMPLETO' | 'SOLO_DATOS',
-      };
+      // Construir DTO interno con ID de orden (compartido con finalizarCompleto)
+      const finalizarDto = this.buildFinalizarDto(id, dto, userId);
 
       // Ejecutar flujo de finalización con callback de progreso (solo datos)
       const result = await this.finalizacionService.finalizarOrden(

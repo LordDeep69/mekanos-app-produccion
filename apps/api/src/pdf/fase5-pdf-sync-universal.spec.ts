@@ -417,4 +417,133 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
       expect(configResuelta.presion_min).toBe(30); // Del modelo OEM (la máquina no lo sobreescribió)
     });
   });
+
+  describe('4. Trazabilidad Universal Fase 6.2: 3 Señales (Estado + Input Custom + Nota) y Contador Comparativo', () => {
+    it('debe renderizar los 3 inputs en OBSERVACIONES TÉCNICAS con semántica de criticidad sin delimitador |||', () => {
+      const mockAscensor: DatosOrdenPDF = {
+        numeroOrden: 'OS-202611-0063',
+        cliente: 'Empresa Test Refactorizada SAS',
+        direccion: 'Calle 100 #45-67',
+        marcaEquipo: 'OTIS',
+        serieEquipo: 'ELEV-9876',
+        tipoEquipo: 'ASCENSOR' as any,
+        tipoServicio: 'MANTENIMIENTO PREVENTIVO',
+        fecha: '12/11/2026',
+        tecnico: 'JUAN GRAU',
+        horaEntrada: '20:11',
+        horaSalida: '20:17',
+        equipoDetalle: {
+          codigoEquipo: 'ELEV-TEST-1LUHC7',
+          nombreEquipo: 'Ascensor Otis Gen2',
+          tipoEquipo: 'ASCENSOR',
+          tipoEquipoNombre: 'ASCENSOR DE PASAJEROS',
+          marca: 'OTIS',
+          modelo: 'GEN2-COMFORT',
+          serie: 'ELEV-9876',
+          cliente: 'Empresa Test Refactorizada SAS',
+          horometroIntervencion: 52000,
+          horometroAcumulado: 52000,
+          horometroAnterior: 51000,
+          horometroTranscurrido: 1000,
+          unidadUso: 'CICLOS',
+          etiquetaContador: 'Ciclos de Viaje',
+          requiereHorometro: true,
+        },
+        actividades: [
+          {
+            sistema: 'CABINA, PUERTAS Y OPERADOR',
+            descripcion:
+              'Inspección de fotocelda, cortina infrarroja y cierre de puertas de cabina',
+            resultado: 'C',
+            tipoControlInput: 'BOTON_OPCIONES',
+            observaciones: 'Bloqueo mecánico en puertas.',
+            respuestaJson: {
+              valor: 'DESNIVEL_CRITICO_5MM',
+              etiqueta: 'Desnivel Crítico (>5mm)',
+              semaforo: 'M',
+            },
+          },
+          {
+            sistema: 'GENERAL',
+            descripcion: 'Registrar lectura actual del contador de viajes del ascensor',
+            resultado: 'B',
+            tipoControlInput: 'LECTURA_CONTADOR',
+            rolSemantico: 'LECTURA_CONTADOR_ACTIVO',
+            observaciones: 'Sin novedad en tablero.',
+            respuestaJson: {
+              valor: 52000,
+              etiqueta: 'Ciclos de Viaje',
+              unidad: 'ciclos',
+              unidadUso: 'CICLOS',
+              semaforo: 'B',
+            },
+          },
+          {
+            sistema: 'TRACCIÓN',
+            descripcion: 'Medición de velocidad real de desplazamiento',
+            tipoActividad: 'INSPECCION',
+            resultado: 'B',
+            tipoControlInput: 'INPUT_NUMERICO',
+            respuestaJson: {
+              valor: 2.5,
+              etiqueta: 'Velocidad',
+              unidad: 'm/s',
+              semaforo: 'B',
+            },
+          },
+          {
+            sistema: 'MOTORIZACIÓN',
+            descripcion: 'Consumo eléctrico de motor principal',
+            tipoActividad: 'MEDICION',
+            resultado: 'R',
+            tipoControlInput: 'INPUT_NUMERICO',
+            respuestaJson: {
+              valor: 18.4,
+              unidad: 'A',
+              semaforo: 'R',
+            },
+          },
+        ],
+        mediciones: [],
+        evidencias: [],
+        pendientes: [
+          {
+            descripcion: 'Ajustar nivelación de cabina en piso 4',
+            prioridad: 'CRITICA',
+            estado: 'PENDIENTE',
+            observaciones: 'Pendiente programación con cliente',
+          },
+        ],
+      };
+
+      const html = generarTipoUniversalEamHTML(mockAscensor);
+
+      // Ficha del contador: nuevo valor, anterior y diferencia
+      expect(html).toContain('52.000 ciclos');
+      expect(html).toContain('Anterior: 51.000 ciclos');
+      expect(html).toContain('Dif: +1.000 ciclos');
+
+      // 3 señales de input personalizado: Estado (CORREGIDO) + Píldora roja (Desnivel Crítico) + Nota técnica
+      expect(html).toContain('CORREGIDO');
+      expect(html).toContain('Desnivel Crítico (&gt;5mm)');
+      expect(html).toContain('#FEF2F2');
+      expect(html).toContain('#991B1B');
+      expect(html).toContain('Nota:');
+      expect(html).toContain('Bloqueo mecánico en puertas.');
+      expect(html).not.toContain('|||');
+
+      // Contador e input numérico genérico futuro + telemetría con respuestaJson
+      expect(html).toContain('Lectura:');
+      expect(html).toContain('Sin novedad en tablero.');
+      expect(html).toContain('Velocidad: 2.5 m/s');
+      expect(html).toContain('18.4 A');
+
+      // Bloque de pendientes protegido contra cortes entre páginas
+      expect(html).toContain('class="pendientes-bloque"');
+      expect(html).toContain('margin-bottom: 14px');
+      expect(html).toContain('break-inside: avoid');
+      expect(html).toContain('page-break-inside: avoid');
+      expect(html).toContain('class="pendientes-tabla"');
+    });
+  });
 });

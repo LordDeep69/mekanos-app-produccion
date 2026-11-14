@@ -134,6 +134,8 @@ export interface DatosEquipoDetalladoPDF {
   // Horómetros / Metrología dinámica EAM
   horometroIntervencion?: number | string;
   horometroAcumulado?: number | string;
+  horometroAnterior?: number | string;
+  horometroTranscurrido?: number | string;
   unidadUso?: string;
   etiquetaContador?: string;
   requiereHorometro?: boolean;
@@ -1985,14 +1987,35 @@ export const generarDatosClienteConFichaTecnica = (
     badgeControl = 'Mantenimiento por Calendario';
   }
 
-  const horometroInterv =
+  const formatContadorValor = (val: unknown): string => {
+    if (val === null || val === undefined || val === '') return '';
+    const n = Number(val);
+    if (!Number.isFinite(n)) return String(val);
+    return n.toLocaleString('es-CO');
+  };
+
+  const horometroIntervRaw =
     eq?.horometroIntervencion != null
-      ? `${eq.horometroIntervencion} ${sufijoUso}`.trim()
+      ? eq.horometroIntervencion
       : datos.datosModulo?.horasTrabajo != null
-        ? `${datos.datosModulo.horasTrabajo} ${sufijoUso}`.trim()
-        : '';
+        ? datos.datosModulo.horasTrabajo
+        : null;
+  const horometroInterv =
+    horometroIntervRaw != null
+      ? `${formatContadorValor(horometroIntervRaw)} ${sufijoUso}`.trim()
+      : '';
+
+  const horometroAcumRaw =
+    eq?.horometroAcumulado != null || horometroIntervRaw != null
+      ? Math.max(
+          eq?.horometroAcumulado != null ? Number(eq.horometroAcumulado) : 0,
+          horometroIntervRaw != null ? Number(horometroIntervRaw) : 0,
+        )
+      : null;
   const horometroAcum =
-    eq?.horometroAcumulado != null ? `${eq.horometroAcumulado} ${sufijoUso}`.trim() : '';
+    horometroAcumRaw != null && horometroAcumRaw > 0
+      ? `${formatContadorValor(horometroAcumRaw)} ${sufijoUso}`.trim()
+      : '';
 
   return `
   <div class="section ficha-tecnica-box" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 12px;">
@@ -2111,6 +2134,18 @@ export const generarDatosClienteConFichaTecnica = (
         <div style="display: flex; flex-direction: column; grid-column: span 2; background: #f8fafc; padding: 3px 6px; border-radius: 3px; border: 1px solid #e2e8f0; margin-top: 2px;">
           <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">${labelInterv}</span>
           <span style="color: #0f172a; font-weight: 700; font-size: 9.5px;">${horometroInterv || horometroAcum}</span>
+          ${
+            horometroInterv && eq?.horometroAnterior != null
+              ? `<span style="font-size: 7.2px; color: #64748b; font-weight: 500; margin-top: 1px;">Anterior: ${formatContadorValor(eq.horometroAnterior)} ${sufijoUso}${
+                  eq?.horometroTranscurrido != null && Number(eq.horometroTranscurrido) >= 0
+                    ? ` · <strong style="color: #0369a1;">Dif: +${formatContadorValor(eq.horometroTranscurrido)} ${sufijoUso}</strong>`
+                    : eq?.horometroIntervencion != null &&
+                        Number(eq.horometroIntervencion) >= Number(eq.horometroAnterior)
+                      ? ` · <strong style="color: #0369a1;">Dif: +${formatContadorValor(Number(eq.horometroIntervencion) - Number(eq.horometroAnterior))} ${sufijoUso}</strong>`
+                      : ''
+                }</span>`
+              : ''
+          }
         </div>
         <div style="display: flex; flex-direction: column; grid-column: span 2; background: #f8fafc; padding: 3px 6px; border-radius: 3px; border: 1px solid #e2e8f0; margin-top: 2px;">
           <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">${labelAcum}</span>
@@ -2121,12 +2156,49 @@ export const generarDatosClienteConFichaTecnica = (
         }
 
         ${(() => {
+          const capTextoTop =
+            (potencia && potencia !== '-' ? String(potencia).trim() : '') ||
+            String(placa?.capacidadPrincipal?.texto || '').trim();
+          const tTop = tension && tension !== '-' ? String(tension).trim() : '';
+          const rTop = rpm && rpm !== '-' ? String(rpm).trim() : '';
+          const velKpiTop = (placa?.kpis || []).find(
+            (k: any) => k?.codigo === 'velocidad' || String(k?.codigo || '').includes('velocidad'),
+          );
+          const vTextoTop = rTop || String(velKpiTop?.valorTexto || '').trim();
+          const tensionVelTop =
+            tTop && vTextoTop && !tTop.includes(vTextoTop)
+              ? `${tTop} · ${vTextoTop}`
+              : tTop || vTextoTop || '';
+
           const tieneCajasContador = Boolean(
             requiereContador && (horometroInterv || horometroAcum),
           );
+          const norm = (s: unknown) =>
+            String(s || '')
+              .trim()
+              .toLowerCase();
+          const capNorm = norm(capTextoTop);
+          const tvNorm = norm(tensionVelTop);
+
           const kpisVisibles = (placa?.kpis || []).filter((kpi: any) => {
-            if (kpi?.codigo === 'horas_actuales') {
+            const cod = String(kpi?.codigo || '').toLowerCase();
+            if (cod === 'horas_actuales') {
               return !tieneCajasContador && unidadUso === 'HORAS';
+            }
+            if (cod === 'capacidad_principal') {
+              return false;
+            }
+            const valNorm = norm(kpi?.valorTexto || kpi?.valor || kpi?.valor_texto);
+            if (!valNorm) return false;
+            if (cod === 'capacidad_de_carga_nominal' && capNorm && valNorm === capNorm) {
+              return false;
+            }
+            if (
+              (cod.includes('velocidad') || cod.includes('voltaje') || cod === 'rpm') &&
+              tvNorm &&
+              tvNorm.includes(valNorm)
+            ) {
+              return false;
             }
             return true;
           });

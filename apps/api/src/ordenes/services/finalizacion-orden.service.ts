@@ -633,8 +633,61 @@ export class FinalizacionOrdenService {
             this.logger.log(`   🗑️ Eliminados ${pendientesResExist} pendientes residuales`);
           }
 
+          // ✅ SANEAMIENTO RESUBIDA: Limpiar lecturas de contador registradas por esta orden
+          // y restaurar el acumulado previo del equipo antes de volver a ejecutar Paso 3.8
+          const lecturasResExist = await this.prisma.lecturas_horometro.findMany({
+            where: { id_orden_servicio: orden.id_orden_servicio },
+            select: {
+              id_equipo: true,
+              horas_lectura: true,
+              horas_transcurridas: true,
+            },
+          });
+          if (lecturasResExist.length > 0) {
+            await this.prisma.lecturas_horometro.deleteMany({
+              where: { id_orden_servicio: orden.id_orden_servicio },
+            });
+            const equiposAfectados = Array.from(new Set(lecturasResExist.map((l) => l.id_equipo)));
+            for (const idEq of equiposAfectados) {
+              const ultimaRestante = await this.prisma.lecturas_horometro.findFirst({
+                where: { id_equipo: idEq },
+                orderBy: [{ fecha_lectura: 'desc' }, { id_lectura: 'desc' }],
+              });
+              const borradaEq = lecturasResExist.find((l) => l.id_equipo === idEq);
+              const valorRestaurado = ultimaRestante
+                ? Number(ultimaRestante.horas_lectura)
+                : borradaEq?.horas_transcurridas != null
+                  ? Math.max(
+                      0,
+                      Number(borradaEq.horas_lectura) - Number(borradaEq.horas_transcurridas),
+                    )
+                  : null;
+              if (valorRestaurado != null && Number.isFinite(valorRestaurado)) {
+                const eqActualizado = await this.prisma.equipos.update({
+                  where: { id_equipo: idEq },
+                  data: {
+                    horas_actuales: valorRestaurado,
+                    ...(ultimaRestante
+                      ? { fecha_ultima_lectura_horas: ultimaRestante.fecha_lectura }
+                      : {}),
+                  },
+                });
+                if (orden.equipos && orden.equipos.id_equipo === idEq) {
+                  orden.equipos.horas_actuales = eqActualizado.horas_actuales;
+                }
+              }
+            }
+            this.logger.log(
+              `   🗑️ Eliminadas ${lecturasResExist.length} lectura(s) de contador de la orden para recálculo limpio`,
+            );
+          }
+
           const totalResidual =
-            evidenciasExistentes + actividadesResExist + medicionesResExist + pendientesResExist;
+            evidenciasExistentes +
+            actividadesResExist +
+            medicionesResExist +
+            pendientesResExist +
+            lecturasResExist.length;
           emitProgress(
             'limpieza_residuales',
             'completed',
@@ -783,6 +836,12 @@ export class FinalizacionOrdenService {
       const datosModuloMapeado = this.mapearMedicionesADatosModulo(dto.mediciones || []);
 
       // ========================================================================
+      // PASO 3.8: Sincronizar contador(es) en hoja de vida ANTES del PDF
+      // ========================================================================
+      this.logger.log('⏳ Paso 3.8: Sincronizando contador(es) en hoja de vida...');
+      await this.sincronizarContadoresHojaDeVida(orden, dto, datosModuloMapeado);
+
+      // ========================================================================
       // MODO DE FINALIZACIÓN: COMPLETO vs SOLO_DATOS
       // ========================================================================
       const modoCompleto = dto.modo !== 'SOLO_DATOS';
@@ -884,162 +943,6 @@ export class FinalizacionOrdenService {
           'Documento se registrará desde Admin Portal',
           90,
         );
-      }
-
-      // ========================================================================
-      // PASO 7.5: Registrar lectura de horómetro - ROBUSTO MULTI-EQUIPO & MONO-EQUIPO
-      // ========================================================================
-      emitProgress(
-        'actualizando_estado',
-        'in_progress',
-        'Sincronizando horómetro(s) en hoja de vida...',
-        93,
-      );
-      this.logger.log('⏳ Paso 7.5: Sincronizando horómetro(s) en hoja de vida...');
-
-      const contadoresCatalogo = await this.prisma.catalogo_actividades.findMany({
-        where: { rol_semantico: 'LECTURA_CONTADOR_ACTIVO' },
-        select: { id_actividad_catalogo: true },
-      });
-      const idsContadorActivo = new Set(contadoresCatalogo.map((c) => c.id_actividad_catalogo));
-
-      const equiposSincronizados = new Set<number>();
-
-      // A. Si la orden tiene equipos asociados en ordenes_equipos (Multi-Equipo o Mono con relación)
-      if (orden.ordenes_equipos && orden.ordenes_equipos.length > 0) {
-        for (const oe of orden.ordenes_equipos) {
-          if (!oe.id_equipo) continue;
-          let horasEquipo: number | null = null;
-
-          // 0. Prioritario Fase 6: Buscar actividad por rol_semantico === 'LECTURA_CONTADOR_ACTIVO'
-          if (idsContadorActivo.size > 0) {
-            const grupoAct = dto.actividadesPorEquipo?.find(
-              (g) => g.idOrdenEquipo === oe.id_orden_equipo,
-            );
-            const actsEq =
-              grupoAct?.actividades ||
-              (orden.ordenes_equipos.length === 1 ? dto.actividades : []) ||
-              [];
-            for (const act of actsEq) {
-              if (
-                act.idActividadCatalogo != null &&
-                idsContadorActivo.has(Number(act.idActividadCatalogo))
-              ) {
-                const h = this.extraerHorasDeActividad(act);
-                if (h != null && h > 0) {
-                  horasEquipo = h;
-                  break;
-                }
-              }
-            }
-          }
-
-          // 1. Buscar en dto.medicionesPorEquipo
-          if (horasEquipo == null && dto.medicionesPorEquipo) {
-            const grupo = dto.medicionesPorEquipo.find(
-              (g) => g.idOrdenEquipo === oe.id_orden_equipo,
-            );
-            const med = grupo?.mediciones?.find((m) => this.esParametroHorometro(m.parametro));
-            if (med && med.valor != null) {
-              const v = typeof med.valor === 'number' ? med.valor : parseFloat(String(med.valor));
-              if (!isNaN(v) && v > 0) horasEquipo = v;
-            }
-          }
-
-          // 2. Buscar en dto.mediciones flat asociadas a este orden_equipo
-          if (horasEquipo == null && dto.mediciones) {
-            const med = dto.mediciones.find(
-              (m) =>
-                m.idOrdenEquipo === oe.id_orden_equipo && this.esParametroHorometro(m.parametro),
-            );
-            if (med && med.valor != null) {
-              const v = typeof med.valor === 'number' ? med.valor : parseFloat(String(med.valor));
-              if (!isNaN(v) && v > 0) horasEquipo = v;
-            }
-          }
-
-          // 3. Buscar en dto.actividadesPorEquipo (fallback regex legacy)
-          if (horasEquipo == null && dto.actividadesPorEquipo) {
-            const grupo = dto.actividadesPorEquipo.find(
-              (g) => g.idOrdenEquipo === oe.id_orden_equipo,
-            );
-            for (const act of grupo?.actividades || []) {
-              const h = this.extraerHorasDeObservacion(act.observaciones);
-              if (h != null && h > 0) {
-                horasEquipo = h;
-                break;
-              }
-            }
-          }
-
-          // 4. Si la orden solo tiene 1 equipo en ordenes_equipos, usar el general
-          if (horasEquipo == null && orden.ordenes_equipos.length === 1) {
-            const vGeneral = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
-            if (vGeneral != null) {
-              const v = typeof vGeneral === 'number' ? vGeneral : parseFloat(String(vGeneral));
-              if (!isNaN(v) && v > 0) horasEquipo = v;
-            }
-          }
-
-          if (horasEquipo != null && horasEquipo > 0) {
-            await this.persistirHorometro(
-              orden.id_orden_servicio,
-              oe.id_equipo,
-              horasEquipo,
-              dto.usuarioId,
-            );
-            equiposSincronizados.add(oe.id_equipo);
-          }
-        }
-      }
-
-      // B. Para el equipo principal (orden.id_equipo), si no se sincronizó aún
-      const idEquipoPrincipal =
-        orden.id_equipo ||
-        (orden.ordenes_equipos?.length === 1 ? orden.ordenes_equipos[0].id_equipo : null);
-      if (idEquipoPrincipal && !equiposSincronizados.has(idEquipoPrincipal)) {
-        let horasPrincipal: number | null = null;
-        const vGeneral = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
-        if (vGeneral != null) {
-          const v = typeof vGeneral === 'number' ? vGeneral : parseFloat(String(vGeneral));
-          if (!isNaN(v) && v > 0) horasPrincipal = v;
-        }
-
-        // Prioritario Fase 6: actividad con rol_semantico LECTURA_CONTADOR_ACTIVO
-        if (idsContadorActivo.size > 0 && dto.actividades) {
-          for (const act of dto.actividades) {
-            if (
-              act.idActividadCatalogo != null &&
-              idsContadorActivo.has(Number(act.idActividadCatalogo))
-            ) {
-              const h = this.extraerHorasDeActividad(act);
-              if (h != null && h > 0) {
-                horasPrincipal = h;
-                break;
-              }
-            }
-          }
-        }
-
-        // Fallback: buscar en dto.actividades generales
-        if (horasPrincipal == null && dto.actividades) {
-          for (const act of dto.actividades) {
-            const h = this.extraerHorasDeObservacion(act.observaciones);
-            if (h != null && h > 0) {
-              horasPrincipal = h;
-              break;
-            }
-          }
-        }
-
-        if (horasPrincipal != null && horasPrincipal > 0) {
-          await this.persistirHorometro(
-            orden.id_orden_servicio,
-            idEquipoPrincipal,
-            horasPrincipal,
-            dto.usuarioId,
-          );
-        }
       }
 
       // ========================================================================
@@ -2210,8 +2113,8 @@ export class FinalizacionOrdenService {
       dto.datosModulo?.horasTrabajo ??
       datosModuloMapeado.horasTrabajo ??
       orden.horometro_final ??
-      orden.horometro_inicial ??
-      contadorDesdeActividad;
+      contadorDesdeActividad ??
+      orden.horometro_inicial;
 
     const datosPDF = {
       cliente:
@@ -2308,9 +2211,11 @@ export class FinalizacionOrdenService {
               : undefined,
             horometroIntervencion:
               contadorIntervencion != null ? Number(contadorIntervencion) : undefined,
-            horometroAcumulado: orden.equipos.horas_actuales
-              ? Number(orden.equipos.horas_actuales)
-              : undefined,
+            horometroAcumulado:
+              Math.max(
+                orden.equipos.horas_actuales ? Number(orden.equipos.horas_actuales) : 0,
+                contadorIntervencion != null ? Number(contadorIntervencion) : 0,
+              ) || undefined,
             unidadUso: orden.equipos.tipos_equipo?.unidad_uso || undefined,
             etiquetaContador: orden.equipos.tipos_equipo?.etiqueta_contador || undefined,
             requiereHorometro: orden.equipos.tipos_equipo?.requiere_horometro ?? undefined,
@@ -2945,13 +2850,7 @@ export class FinalizacionOrdenService {
         ejecutada: true,
         fecha_ejecucion: ahora,
         ejecutada_por: usuarioId,
-        observaciones:
-          act.observaciones ||
-          (respuestaJson?.etiqueta
-            ? respuestaJson?.detalle
-              ? `Respuesta: ${respuestaJson.etiqueta} · ${respuestaJson.detalle}`
-              : `Respuesta: ${respuestaJson.etiqueta}`
-            : null),
+        observaciones: act.observaciones?.trim() ? act.observaciones.trim() : null,
         ...(respuestaJson !== undefined ? { respuesta_json: respuestaJson } : {}),
       };
     });
@@ -3146,7 +3045,7 @@ export class FinalizacionOrdenService {
         label: rawEtiqueta || 'Ciclos de Viaje',
         sufijo: 'ciclos',
         maxDiario: 10000,
-        minMargen: 25000,
+        minMargen: 250000,
         sinPrevioMax: 10000000,
       };
     }
@@ -3211,12 +3110,141 @@ export class FinalizacionOrdenService {
 
   private extraerHorasDeObservacion(obs?: string): number | null {
     if (!obs) return null;
-    const match = obs.match(/(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*([\d.]+)/i);
+    const match = obs.match(
+      /(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR|Lectura registrada)\s*:\s*([\d.,]+)/i,
+    );
     if (match && match[1]) {
-      const val = parseFloat(match[1]);
+      let raw = match[1].trim();
+      if (/^\d{1,3}(\.\d{3})+$/.test(raw)) {
+        raw = raw.replace(/\./g, '');
+      } else {
+        raw = raw.replace(',', '.');
+      }
+      const val = parseFloat(raw);
       return isNaN(val) ? null : val;
     }
     return null;
+  }
+
+  private async sincronizarContadoresHojaDeVida(
+    orden: any,
+    dto: FinalizarOrdenDto,
+    datosModuloMapeado: { horasTrabajo?: number },
+  ): Promise<void> {
+    const contadoresCatalogo = await this.prisma.catalogo_actividades.findMany({
+      where: { rol_semantico: 'LECTURA_CONTADOR_ACTIVO' },
+      select: { id_actividad_catalogo: true },
+    });
+    const idsContadorActivo = new Set(contadoresCatalogo.map((c) => c.id_actividad_catalogo));
+
+    const equiposSincronizados = new Set<number>();
+
+    const actualizarMemoriaEquipo = (idEq: number, horas: number) => {
+      if (orden.equipos && orden.equipos.id_equipo === idEq) {
+        const prev = orden.equipos.horas_actuales ? Number(orden.equipos.horas_actuales) : 0;
+        if (horas >= prev) {
+          orden.equipos.horas_actuales = horas;
+        }
+      }
+    };
+
+    const extraerDeActividades = (acts?: ActividadInput[]): number | null => {
+      if (!acts || acts.length === 0) return null;
+      if (idsContadorActivo.size > 0) {
+        for (const act of acts) {
+          if (
+            act.idActividadCatalogo != null &&
+            idsContadorActivo.has(Number(act.idActividadCatalogo))
+          ) {
+            const h = this.extraerHorasDeActividad(act);
+            if (h != null && h > 0) return h;
+          }
+        }
+      }
+      for (const act of acts) {
+        const h = this.extraerHorasDeObservacion(act.observaciones);
+        if (h != null && h > 0) return h;
+      }
+      return null;
+    };
+
+    if (orden.ordenes_equipos && orden.ordenes_equipos.length > 0) {
+      for (const oe of orden.ordenes_equipos) {
+        if (!oe.id_equipo) continue;
+        let horasEquipo: number | null = null;
+
+        const grupoAct = dto.actividadesPorEquipo?.find(
+          (g) => g.idOrdenEquipo === oe.id_orden_equipo,
+        );
+        const actsEq =
+          grupoAct?.actividades ||
+          (orden.ordenes_equipos.length === 1 ? dto.actividades : []) ||
+          [];
+        horasEquipo = extraerDeActividades(actsEq);
+
+        if (horasEquipo == null && dto.medicionesPorEquipo) {
+          const grupo = dto.medicionesPorEquipo.find((g) => g.idOrdenEquipo === oe.id_orden_equipo);
+          const med = grupo?.mediciones?.find((m) => this.esParametroHorometro(m.parametro));
+          if (med && med.valor != null) {
+            const v = typeof med.valor === 'number' ? med.valor : parseFloat(String(med.valor));
+            if (!isNaN(v) && v > 0) horasEquipo = v;
+          }
+        }
+
+        if (horasEquipo == null && dto.mediciones) {
+          const med = dto.mediciones.find(
+            (m) => m.idOrdenEquipo === oe.id_orden_equipo && this.esParametroHorometro(m.parametro),
+          );
+          if (med && med.valor != null) {
+            const v = typeof med.valor === 'number' ? med.valor : parseFloat(String(med.valor));
+            if (!isNaN(v) && v > 0) horasEquipo = v;
+          }
+        }
+
+        if (horasEquipo == null && orden.ordenes_equipos.length === 1) {
+          const vGeneral = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
+          if (vGeneral != null) {
+            const v = typeof vGeneral === 'number' ? vGeneral : parseFloat(String(vGeneral));
+            if (!isNaN(v) && v > 0) horasEquipo = v;
+          }
+        }
+
+        if (horasEquipo != null && horasEquipo > 0) {
+          await this.persistirHorometro(
+            orden.id_orden_servicio,
+            oe.id_equipo,
+            horasEquipo,
+            dto.usuarioId,
+          );
+          actualizarMemoriaEquipo(oe.id_equipo, horasEquipo);
+          equiposSincronizados.add(oe.id_equipo);
+        }
+      }
+    }
+
+    const idEquipoPrincipal =
+      orden.id_equipo ||
+      (orden.ordenes_equipos?.length === 1 ? orden.ordenes_equipos[0].id_equipo : null);
+    if (idEquipoPrincipal && !equiposSincronizados.has(idEquipoPrincipal)) {
+      let horasPrincipal: number | null = null;
+      const vGeneral = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
+      if (vGeneral != null) {
+        const v = typeof vGeneral === 'number' ? vGeneral : parseFloat(String(vGeneral));
+        if (!isNaN(v) && v > 0) horasPrincipal = v;
+      }
+      if (horasPrincipal == null) {
+        horasPrincipal = extraerDeActividades(dto.actividades);
+      }
+      if (horasPrincipal != null && horasPrincipal > 0) {
+        await this.persistirHorometro(
+          orden.id_orden_servicio,
+          idEquipoPrincipal,
+          horasPrincipal,
+          dto.usuarioId,
+        );
+        actualizarMemoriaEquipo(idEquipoPrincipal, horasPrincipal);
+      }
+    }
   }
 
   private async persistirHorometro(
@@ -3278,9 +3306,13 @@ export class FinalizacionOrdenService {
         return;
       }
 
-      const horasTranscurridas = ultimaLectura
-        ? Math.max(0, horas - Number(ultimaLectura.horas_lectura))
-        : null;
+      const valorBasePrevio = ultimaLectura
+        ? Number(ultimaLectura.horas_lectura)
+        : horasActuales > 0
+          ? horasActuales
+          : null;
+      const horasTranscurridas =
+        valorBasePrevio != null ? Math.max(0, horas - valorBasePrevio) : null;
       const diasTranscurridos = ultimaLectura
         ? Math.floor(
             (new Date().getTime() - new Date(ultimaLectura.fecha_lectura).getTime()) /
@@ -3298,22 +3330,8 @@ export class FinalizacionOrdenService {
       const esSaltoAnomalo = horasTranscurridas != null && horasTranscurridas > limiteFisicoHoras;
       if (esSaltoAnomalo) {
         this.logger.warn(
-          `⚠️ Salto anómalo de ${metrica.label} detectado (+${horasTranscurridas}${sufStr} en ${diasTranscurridos} días, límite físico [${metrica.unidadUso}]: ${limiteFisicoHoras}${sufStr}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se audita sin alterar hoja de vida.`,
+          `⚠️ Salto amplio de ${metrica.label} (+${horasTranscurridas}${sufStr} en ${diasTranscurridos} días, límite referencial [${metrica.unidadUso}]: ${limiteFisicoHoras}${sufStr}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se registra con nota de auditoría.`,
         );
-        await this.prisma.lecturas_horometro.create({
-          data: {
-            id_equipo: idEquipo,
-            id_orden_servicio: idOrden,
-            horas_lectura: horas,
-            fecha_lectura: new Date(),
-            tipo_lectura: 'MANTENIMIENTO',
-            horas_transcurridas: horasTranscurridas,
-            dias_transcurridos: diasTranscurridos,
-            registrado_por: usuarioId,
-            observaciones: `⚠️ ALERTA OUTLIER: Incremento de ${horasTranscurridas}${sufStr} en ${diasTranscurridos} días supera el límite físico (${limiteFisicoHoras}${sufStr} para ${metrica.unidadUso}). Registrado para auditoría técnica sin alterar acumulado.`,
-          },
-        });
-        return;
       }
       // 3. Registrar nueva lectura en tabla histórica
       await this.prisma.lecturas_horometro.create({
@@ -3326,7 +3344,9 @@ export class FinalizacionOrdenService {
           horas_transcurridas: horasTranscurridas,
           dias_transcurridos: diasTranscurridos,
           registrado_por: usuarioId,
-          observaciones: `Registrado automáticamente al finalizar orden #${idOrden}`,
+          observaciones: esSaltoAnomalo
+            ? `⚠️ ALERTA OUTLIER AUDITADA: Incremento de ${horasTranscurridas}${sufStr} en ${diasTranscurridos} días supera el límite referencial (${limiteFisicoHoras}${sufStr} para ${metrica.unidadUso}). Acumulado actualizado automáticamente al finalizar orden #${idOrden}.`
+            : `Registrado automáticamente al finalizar orden #${idOrden}`,
         },
       });
 

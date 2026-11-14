@@ -8,7 +8,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useProgresoRegistro } from '../hooks/use-ordenes';
 import { cn } from '@/lib/utils';
 import {
@@ -43,6 +43,7 @@ export function ProgresoRegistroTelemetria({
   onVerDocumentosTab,
 }: ProgresoRegistroTelemetriaProps) {
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+  const [ordenFinalizada, setOrdenFinalizada] = useState<boolean>(false);
   const refreshIntervalMs = 15000; // 15 segundos
   const [isExpanded, setIsExpanded] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -68,8 +69,17 @@ export function ProgresoRegistroTelemetria({
     isFetching,
     refetch,
   } = useProgresoRegistro(idOrden, {
-    refetchInterval: autoRefresh ? refreshIntervalMs : false,
+    refetchInterval: autoRefresh && !ordenFinalizada ? refreshIntervalMs : false,
   });
+
+  const esFinalizadaMemo =
+    progreso?.estado_actual?.codigo_estado === 'COMPLETADA' ||
+    progreso?.estado_actual?.codigo_estado === 'APROBADA' ||
+    progreso?.estado_conexion === 'COMPLETADO';
+
+  useEffect(() => {
+    setOrdenFinalizada(Boolean(esFinalizadaMemo));
+  }, [esFinalizadaMemo]);
 
   if (isLoading && !progreso) {
     return (
@@ -225,8 +235,12 @@ export function ProgresoRegistroTelemetria({
               </div>
               <p className="text-xs text-slate-300 flex items-center gap-2 mt-0.5 flex-wrap">
                 <span>{statusStyle.label}</span>
-                <span className="text-slate-500">•</span>
-                <span>{formatRelativo()}</span>
+                {!esFinalizada && (
+                  <>
+                    <span className="text-slate-500">•</span>
+                    <span>{formatRelativo()}</span>
+                  </>
+                )}
                 {tecnico && (
                   <>
                     <span className="text-slate-500">•</span>
@@ -260,11 +274,17 @@ export function ProgresoRegistroTelemetria({
               <span className="text-slate-500 text-xs">•</span>
               <span className="text-xs text-slate-300">
                 <strong className="text-white">{actividades.completadas}</strong>/
-                {actividades.total} acts
+                {Math.max(actividades.total, actividades.completadas)} acts
               </span>
               <span className="text-slate-500 text-xs">•</span>
               <span className="text-xs text-slate-300">
-                <strong className="text-white">{mediciones.registradas}</strong> meds
+                <strong className="text-white">{mediciones.registradas}</strong>/
+                {Math.max(
+                  (mediciones as { registradas: number; total?: number }).total ??
+                    mediciones.registradas,
+                  mediciones.registradas,
+                )}{' '}
+                meds
               </span>
               <span className="text-slate-500 text-xs">•</span>
               <span className="text-xs text-slate-300">
@@ -273,44 +293,50 @@ export function ProgresoRegistroTelemetria({
             </div>
           )}
 
-          {/* Controles: Auto-refresco + Refrescar Ahora + Botón Desplegar/Contraer */}
+          {/* Controles: Auto-refresco / Sincronizada + Refrescar Ahora + Botón Desplegar/Contraer */}
           <div className="flex items-center gap-2 self-end lg:self-auto">
-            {/* Switch de Auto-refresh */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                const nuevoEstado = !autoRefresh;
-                setAutoRefresh(nuevoEstado);
-                toast.info(
-                  nuevoEstado ? 'Auto-refresco activado (cada 15s)' : 'Auto-refresco pausado',
-                );
-              }}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
-                autoRefresh
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
-                  : 'bg-white/10 text-slate-300 border-white/10 hover:bg-white/15',
-              )}
-              title={
-                autoRefresh
-                  ? 'Pausar actualización en vivo'
-                  : 'Activar actualización automática en vivo'
-              }
-            >
-              <span className="relative flex h-2 w-2">
-                {autoRefresh && (
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                )}
-                <span
-                  className={cn(
-                    'relative inline-flex rounded-full h-2 w-2',
-                    autoRefresh ? 'bg-emerald-400' : 'bg-slate-400',
-                  )}
-                />
+            {esFinalizada ? (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40">
+                <span>✓</span>
+                <span>Sincronizada</span>
               </span>
-              <span>{autoRefresh ? 'En vivo (15s)' : 'Pausado'}</span>
-            </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const nuevoEstado = !autoRefresh;
+                  setAutoRefresh(nuevoEstado);
+                  toast.info(
+                    nuevoEstado ? 'Auto-refresco activado (cada 15s)' : 'Auto-refresco pausado',
+                  );
+                }}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
+                  autoRefresh
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
+                    : 'bg-white/10 text-slate-300 border-white/10 hover:bg-white/15',
+                )}
+                title={
+                  autoRefresh
+                    ? 'Pausar actualización en vivo'
+                    : 'Activar actualización automática en vivo'
+                }
+              >
+                <span className="relative flex h-2 w-2">
+                  {autoRefresh && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  )}
+                  <span
+                    className={cn(
+                      'relative inline-flex rounded-full h-2 w-2',
+                      autoRefresh ? 'bg-emerald-400' : 'bg-slate-400',
+                    )}
+                  />
+                </span>
+                <span>{autoRefresh ? 'En vivo (15s)' : 'Pausado'}</span>
+              </button>
+            )}
 
             {/* Botón Refrescar */}
             <button

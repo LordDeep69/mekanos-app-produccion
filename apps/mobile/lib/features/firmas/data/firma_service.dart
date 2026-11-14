@@ -100,6 +100,30 @@ class FirmaService {
     return firma != null;
   }
 
+  /// Actualiza metadatos de una firma existente preservando el archivo PNG
+  Future<bool> actualizarDatosFirma({
+    required int idFirma,
+    required String nombreFirmante,
+    String? cargoFirmante,
+  }) async {
+    try {
+      final nombreLimpio = nombreFirmante.trim();
+      if (nombreLimpio.isEmpty) return false;
+      final cargoLimpio =
+          cargoFirmante != null && cargoFirmante.trim().isNotEmpty
+              ? cargoFirmante.trim()
+              : null;
+      final rows = await _db.updateFirmaDatos(
+        idFirma,
+        nombreFirmante: nombreLimpio,
+        cargoFirmante: cargoLimpio,
+      );
+      return rows > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Elimina una firma (archivo y registro BD)
   Future<bool> eliminarFirma(int idFirma) async {
     try {
