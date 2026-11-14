@@ -63,6 +63,8 @@ export class HealthController {
         this.prisma.ordenes_servicio.count(),
       ]);
 
+      const dbInfo = this.parseDatabaseMetadata(process.env.DATABASE_URL);
+
       return {
         status: 'healthy',
         database: 'connected',
@@ -74,11 +76,7 @@ export class HealthController {
           equipos: equiposCount,
           ordenes_servicio: ordenesCount,
         },
-        supabase: {
-          host: 'aws-1-sa-east-1.pooler.supabase.com',
-          port: 6543,
-          pooler: 'PgBouncer Transaction Mode',
-        },
+        supabase: dbInfo,
       };
     } catch (error) {
       return {
@@ -87,6 +85,30 @@ export class HealthController {
         timestamp: new Date().toISOString(),
         error: error instanceof Error ? error.message : 'Unknown error',
       };
+    }
+  }
+
+  /**
+   * Extrae host/puerto sin credenciales desde DATABASE_URL para diagnostico seguro.
+   */
+  private parseDatabaseMetadata(rawUrl?: string) {
+    if (!rawUrl) {
+      return { host: 'not-configured', port: null, pooler: 'unknown' };
+    }
+    try {
+      const parsed = new URL(rawUrl);
+      const port = parsed.port ? Number(parsed.port) : 5432;
+      const isPgBouncer =
+        port === 6543 || parsed.searchParams.get('pgbouncer') === 'true';
+      return {
+        host: parsed.hostname || 'unknown',
+        port,
+        pooler: isPgBouncer
+          ? 'PgBouncer Transaction Mode'
+          : 'Direct / Session Pooler',
+      };
+    } catch {
+      return { host: 'invalid-url', port: null, pooler: 'unknown' };
     }
   }
 }
