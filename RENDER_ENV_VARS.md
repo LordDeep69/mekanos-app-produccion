@@ -15,11 +15,11 @@ PORT=10000
 
 ---
 
-## 🗄️ DATABASE (Supabase)
+## 🗄️ DATABASE (Supabase `mekanos-produccion-v2` — `us-east-1`)
 
 ```bash
-DATABASE_URL=postgresql://postgres.nemrrkaobdlwehfnetxs:Mekanos2025%23sas@aws-1-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
-DIRECT_URL=postgresql://postgres.nemrrkaobdlwehfnetxs:Mekanos2025%23sas@aws-1-sa-east-1.pooler.supabase.com:5432/postgres
+DATABASE_URL=postgresql://postgres.trpkyzpgbwniztitqrab:<PASSWORD>@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+DIRECT_URL=postgresql://postgres.trpkyzpgbwniztitqrab:<PASSWORD>@aws-1-us-east-1.pooler.supabase.com:5432/postgres
 ```
 
 ---

@@ -1,7 +1,6 @@
 # Despliegue y Alojamiento — MEKANOS App
 
-> Documento de arquitectura de despliegue verificado con evidencia real el **2026-08-20**.
-> Cada afirmación de "producción" fue comprobada vía DNS, HTTP y procesos del sistema (ver Anexo A).
+> Documento de arquitectura de despliegue actualizado tras la consolidación de infraestructura del **2026-11-14** (línea base inicial del 2026-08-20 conservada en el Anexo A).
 > Los valores secretos (contraseñas, tokens, claves API) **no** se documentan aquí.
 
 ---
@@ -10,14 +9,15 @@
 
 | Componente | Tecnología | ¿Dónde vive HOY? | ¿Cómo se expone? | Estado |
 |---|---|---|---|---|
-| API / Backend | NestJS (Node) | **PC del desarrollador** (Windows) | Cloudflare Tunnel → `https://api.mekanosapp.dpdns.org/api` | ✅ Activo (verificado) |
-| Admin Web | Next.js 16 | **Vercel** (producción) + PC del desarrollador (modo dev 3001) | `https://mekanos-admin-portal.vercel.app` (+ previews por push desde GitHub) | ✅ Activo (verificado) |
-| Base de datos | Supabase (Postgres) | Nube Supabase (región `aws-1-us-east-2`) | Pooler público `aws-1-us-east-2.pooler.supabase.com:6543` | ✅ Activo |
-| Imágenes / evidencias | Cloudinary + Cloudflare R2 | Nube Cloudinary (2 clouds) + R2 | API REST + CDN público `pub-0252b7824c754d46a15fe3acf8d52450.r2.dev` | ✅ Activo |
+| API / Backend | NestJS (Node) | **PC servidor del desarrollador** (Windows, `auto-sync-remote.mjs` / `INICIAR-AUTO-SYNC-API.bat`) | Cloudflare Tunnel → `https://api.mekanosapp.dpdns.org/api` | ✅ Activo en operación (verificado) |
+| Admin Web | Next.js 16 | **Vercel** (`prj_xm8liDn0pmIjxZjJ6AQ7DOIlA5kQ`, región `iad1`) + dev local `3001` | `https://mekanos-admin-portal.vercel.app` (solo usa `NEXT_PUBLIC_API_URL` + `AUTH_SECRET`) | ✅ Activo (verificado) |
+| Base de datos | Supabase (Postgres 17.11) | Nube Supabase Org `Anyerson` (`lorddeep3@gmail.com` / GitHub `LordDeep69`), proyecto **`mekanos-produccion-v2`** (`trpkyzpgbwniztitqrab`, región `us-east-1`) | Transaction Pooler `:6543?pgbouncer=true` + Session Pooler IPv4 `:5432` (`aws-1-us-east-1.pooler.supabase.com`) | ✅ Activo y optimizado (2026-11-14) |
+| Backups BD (DRP) | GitHub Actions + OpenSSL AES-256 + R2 | Workflow diario `03:17 UTC` + bucket privado R2 **`mekanos-db-backups`** | Cifrado `.dump.enc` (14d GitHub Artifacts + GFS `90d/180d/365d` en R2 privado) | ✅ Activo y verificado (Run `43619473071`) |
+| Imágenes / evidencias | Cloudinary + Cloudflare R2 | Nube Cloudinary (2 clouds) + R2 (`mekanos-plantas-produccion`) | API REST + CDN público `pub-0252b7824c754d46a15fe3acf8d52450.r2.dev` | ✅ Activo |
 | Email (PDFs) | SMTP Gmail | Nube Google | `smtp.gmail.com:587` (cuenta `mekanossas4@gmail.com`) | ✅ Activo |
 | DNS / TLS | Cloudflare (proxy) + dpdns.org | Nube Cloudflare | DNS proxied + certificado TLS de Cloudflare | ✅ Activo |
 
-**Conclusión central**: el backend **NO está en un servidor remoto**. "Producción" = esta PC encendida con el proceso `node dist/main` en el puerto 3000 y un túnel `cloudflared` que lo publica. Si la PC se apaga o el proceso muere, el API público cae.
+**Conclusión central**: el backend **NO está en un servidor remoto**. "Producción" = el PC servidor encendido con el proceso `node dist/main` en el puerto 3000 (administrado por `scripts/auto-sync-remote.mjs` / `INICIAR-AUTO-SYNC-API.bat`) y el servicio Windows `Cloudflared` que lo publica en `https://api.mekanosapp.dpdns.org/api`. Si ese PC se apaga, entra en suspensión o el servicio muere, el API público responde `530 / 1033`.
 
 ---
 
@@ -95,13 +95,20 @@
 - `apps/admin/vercel.json`: framework Next.js, región `iad1`, headers de seguridad, rewrites `/health` → `/api/health`
 - El deployment preview existente confirma la **integración Git (GitHub) activa** en el proyecto de Vercel
 
-### 3.3 Base de datos (Supabase / Postgres)
+### 3.3 Base de datos (Supabase / Postgres) — Consolidado 2026-11-14
 
-- Proveedor: **Supabase** (nube, no en la PC)
-- Cadena de conexión: `postgresql://postgres.***@aws-1-us-east-2.pooler.supabase.com:6543/postgres` (proyecto `kmwfsvocmlusoxnsgyrx`)
-- Región: `aws-1-us-east-2` (AWS Ohio)
-- **Pooler** de Supabase (puerto 6543) para conexiones del API; `sslmode=require`
-- Tablas clave: `ordenes_servicio`, `estados_orden`, `clientes`, `personas`, `equipos`, `ordenes_equipos`, `evidencias_fotograficas`, `actividades_ejecutadas`, `historial_estados_orden`, `firmas_digitales`, etc.
+- **Organización Supabase:** `Anyerson` (`lorddeep3@gmail.com`, alineada con GitHub `LordDeep69`).
+- **Proyecto activo:** **`mekanos-produccion-v2`** (`ref: trpkyzpgbwniztitqrab`, PostgreSQL `17.11`).
+- **Región:** **`us-east-1`** (East US - North Virginia, co-ubicada con Vercel `iad1` para mínima latencia).
+- **Cadenas de conexión IPv4 (obligatorio usar pooler en IPv4, ya que `db.<ref>.supabase.co` resuelve solo por IPv6):**
+  - `DATABASE_URL` (Transaction Pooler PgBouncer): `postgresql://postgres.trpkyzpgbwniztitqrab:[PASSWORD]@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true`
+  - `DIRECT_URL` (Session Pooler para migraciones/backups): `postgresql://postgres.trpkyzpgbwniztitqrab:[PASSWORD]@aws-1-us-east-1.pooler.supabase.com:5432/postgres`
+- **Seguridad e índices:** Data API (PostgREST) deshabilitada; RLS automático habilitado en `public` (Prisma opera como rol `postgres` con `BYPASSRLS`); función `public.propagar_empleado_firma_a_clientes()` endurecida con `search_path = public`; 44 índices en llaves foráneas agregados (`477` índices totales).
+- **Proyectos históricos retirados:**
+  - `kmwfsvocmlusoxnsgyrx` (`mekanos-app-base-de-datos`, `us-east-2`): base origen migrada 1:1 el 2026-11-14 (`94` tablas, `116,398` filas). Conservar apagada/sin escrituras como respaldo en frío temporal antes de pausar.
+  - `nemrrkaobdlwehfnetxs` (`mekanos-produccion`, `sa-east-1`): proyecto antiguo en pausa (no usado por el API).
+- **Health endpoint dinámico:** `GET /api/health/detailed` parsea dinámicamente `process.env.DATABASE_URL` y reporta el host/puerto real conectado.
+- **Respaldo automático 3-2-1:** ver [SUPABASE-BACKUP-RESTORE.md](./SUPABASE-BACKUP-RESTORE.md).
 
 ### 3.4 Almacenamiento de evidencias e imágenes
 
@@ -132,48 +139,45 @@
 | Archivo | Plataforma | Contenido | Estado real |
 |---|---|---|---|
 | `apps/api/render.yaml` | Render.com | Blueprint del servicio `mekanos-api` (plan free, región Oregon, rama `fix/admin-order-creation-and-detail-sync`, health `/api/health`, build `render-build.sh`, start `render-start.sh`, `NODE_ENV=production`, PUPPETEER, Cloudinary, R2, SMTP) | **Sin evidencia de uso**: `https://mekanos-api.onrender.com/api/health` → timeout (60 s, 0 bytes); el API vivo reporta `environment: development` (no `production`); no hay CI que lo despliegue |
-| `apps/admin/vercel.json` | Vercel | Config Next.js monorepo (pnpm), región `iad1`, headers de seguridad, rewrite `/health` | **EN USO**: el admin está desplegado y activo en `https://mekanos-admin-portal.vercel.app` (producción) + previews por push; verificado el 2026-08-20 |
+| `apps/admin/vercel.json` | Vercel | Config Next.js monorepo (pnpm), región `iad1`, headers de seguridad, rewrite `/health` | **EN USO**: desplegado en `https://mekanos-admin-portal.vercel.app` (`prj_xm8liDn0pmIjxZjJ6AQ7DOIlA5kQ`); solo usa `NEXT_PUBLIC_API_URL` y `AUTH_SECRET` |
 | `apps/api/render-build.sh` / `render-start.sh` | Render | Scripts de build/start del blueprint | Referenciados solo por `render.yaml` |
-
-No existe carpeta `.github/workflows` → **no hay CI/CD**. Todos los deploys son manuales.
+| `.github/workflows/ci.yml` | GitHub Actions | Lint básico en push/PR a `main` | **EN USO** |
+| `.github/workflows/supabase-daily-backup.yml` | GitHub Actions | Backup diario cifrado `pg_dump` 17 → GitHub Artifacts (14d) + R2 privado GFS (`90d/180d/365d`) | **EN USO** (cron `17 3 * * *` + `workflow_dispatch`, verificado Run `43619473071`) |
 
 ---
 
 ## 5. ¿Cómo se publica un cambio hoy?
 
-1. **Build local** del API: `pnpm --filter api build` (genera `apps/api/dist/`)
-2. **Reinicio del proceso**: matar y relanzar `node dist/main` (el puerto 3000 debe quedar escuchando)
-3. El servicio `Cloudflared` (autostart) sigue publicando `localhost:3000` → el cambio queda en internet inmediatamente
-4. Para el admin: relanzar `next dev -p 3001` (solo accesible localmente, salvo otra hostname del túnel en el panel)
-5. Los cambios de BD se aplican directamente contra Supabase (pooler) o vía migraciones Prisma
-
-No hay pipeline de build/test/deploy automatizado.
+1. **Build local** del API en el PC servidor: `pnpm --filter @mekanos/api build` (genera `apps/api/dist/`).
+2. **Reinicio del proceso**: `INICIAR-AUTO-SYNC-API.bat` / `node scripts/auto-sync-remote.mjs` mantiene `node --enable-source-maps apps/api/dist/main` escuchando en `:3000` (o reiniciar manualmente desde Explorador si se cierra el IDE).
+3. El servicio Windows `Cloudflared` (`Automatic`, `LocalSystem`) sigue publicando `localhost:3000` en `https://api.mekanosapp.dpdns.org/api`.
+4. Para el portal admin: hacer push/merge a `main` dispara automáticamente el despliegue en Vercel (`https://mekanos-admin-portal.vercel.app`).
+5. **Verificación obligatoria post-cambio:** consultar `https://api.mekanosapp.dpdns.org/api/health/detailed` y confirmar `"status": "healthy"`, `"database": "connected"` y `"supabase.host": "aws-1-us-east-1.pooler.supabase.com"`.
 
 ---
 
 ## 6. Riesgos y dependencias críticas
 
-1. **La PC es el servidor de producción** — apagado, corte de luz, cierre de sesión de Windows o muerte del proceso `node` derriban el API público.
-2. **Modo desarrollo en producción**: `NODE_ENV=development` (más logs/verbosidad, sin optimizaciones de producción).
-3. **Sin CI/CD**: los despliegues dependen de pasos manuales en una sola máquina.
-4. **Túnel dependiente del panel Cloudflare**: la hostname del túnel está gestionada por token (no hay config local); cambios en el panel requieren acceso a la cuenta Cloudflare.
-5. **El admin en Vercel y el API en la PC están desacoplados**: el admin de Vercel apunta al API público (`api.mekanosapp.dpdns.org`); si la PC se apaga, el portal web funciona pero el API no responde.
-6. **Supabase en plan gratuito/desatendido** (no verificado aquí): pausas por inactividad posibles; el pooler responde pero la región es remota (AWS Ohio).
-7. **Sin respaldo documentado de infraestructura**: no hay evidencia de backups ni estrategia de recuperación.
+1. **El PC servidor sigue siendo el host del API** — apagado, suspensión, corte de luz o cierre de `INICIAR-AUTO-SYNC-API.bat` / `Cloudflared` provocan HTTP `530` / Cloudflare `1033` en `api.mekanosapp.dpdns.org`. *(Si se lanza el backend desde dentro de Antigravity IDE, cerrar el IDE detiene los procesos hijos).*
+2. **Modo desarrollo en el proceso actual**: `NODE_ENV=development` (más logs/verbosidad, sin optimizaciones de producción).
+3. **Túnel dependiente del panel Cloudflare**: la hostname del túnel está gestionada por token (sin `cert.pem` local); cambios requieren acceso a Cloudflare Zero Trust.
+4. **El admin en Vercel y el API en el PC están desacoplados**: Vercel solo habla con `api.mekanosapp.dpdns.org`; si el API local cae, el portal web carga la UI pero no hay datos.
+5. **Supabase Free Tier (mitigado):** el respaldo diario a las `03:17 UTC` mantiene actividad cada 24 h (evita pausa de 7 días) y almacena copias cifradas fuera de Supabase (GitHub Artifacts + R2 privado `mekanos-db-backups`).
+6. **Dependencia crítica de `BACKUP_ENCRYPTION_KEY`:** todos los `.dump.enc` están cifrados con AES-256-CBC PBKDF2; conservar la clave en el gestor de contraseñas es obligatorio para poder restaurar.
 
 ---
 
 ## 7. Recomendaciones (opcional)
 
-- Desplegar el API en Render (el blueprint ya existe) o en un VPS con PM2 + Caddy/Nginx, con `NODE_ENV=production`.
-- Desplegar el admin en Vercel (el `vercel.json` ya está listo) y apuntarle una hostname del túnel o dominio propio.
-- Migrar el túnel a un agente remoto (p.ej. mismo cloudflared en un VPS) para no depender de la PC.
-- Definir CI/CD (GitHub Actions → Render/Vercel) y respaldos de Supabase.
-- Centralizar secretos en el panel de la plataforma elegida (Render/Vercel) en lugar de `.env` locales.
+- Migrar el API NestJS + `cloudflared` a un VPS con PM2/systemd en `NODE_ENV=production` para eliminar la dependencia de tener un PC encendido.
+- Rotar periódicamente credenciales sensibles (`SUPABASE_DIRECT_URL`, `BACKUP_ENCRYPTION_KEY`) en Supabase, `.env` de ambos PCs y GitHub Actions Secrets.
+- Ejecutar un simulacro semestral de restauración usando `scripts/restore-supabase.ps1` contra un proyecto temporal para validar RTO.
 
 ---
 
-## Anexo A — Evidencia recopilada (2026-08-20)
+## Anexo A — Línea base histórica recopilada (2026-08-20)
+
+> Conservado únicamente como registro histórico del estado previo a la migración del 2026-11-14 (`aws-1-us-east-2`, sin backups ni CI).
 
 | # | Verificación | Resultado |
 |---|---|---|
@@ -192,3 +196,16 @@ No hay pipeline de build/test/deploy automatizado.
 | 13 | DNS `mekanos-admin-portal-mc2vlnbsa-lorddeep69s-projects.vercel.app` | A: 216.198.79.131, 64.29.17.131 (Vercel) — deployment **preview** con protección SSO (302 → `vercel.com/sso-api`) |
 | 14 | `curl https://mekanos-admin-portal.vercel.app/` | HTTP 307 → `/login?callbackUrl=%2F`; `Server: Vercel`, `X-Vercel-Id: iad1::…`; cookies NextAuth con callback-url = producción |
 | 15 | `curl https://mekanos-admin-portal.vercel.app/login` | Página real: `<title>MEKANOS Admin | Portal de Gestión</title>`, "MEKANOS S.A.S — Portal de Administración", LoginForm, enlaces /ordenes /clientes /empleados /equipos /configuracion /dashboard; headers de seguridad coinciden con `vercel.json` |
+
+---
+
+## Anexo B — Consolidación de infraestructura, migración Supabase y backups (2026-11-14)
+
+| # | Verificación | Resultado observado |
+|---|---|---|
+| 1 | Proyecto Supabase activo | `mekanos-produccion-v2` (`trpkyzpgbwniztitqrab`), Org `Anyerson`, `us-east-1`, PostgreSQL `17.11` |
+| 2 | Migración `kmwfsvocmlusoxnsgyrx` → `trpkyzpgbwniztitqrab` | `pg_dump` / `pg_restore` 17.9 atómico (`--single-transaction`): `94/94` tablas, `116,398/116,398` filas (`0` diferencias), `90/90` secuencias, `78/78` enums, `306/306` constraints, trigger `trigger_propagar_empleado_firma` y función `propagar_empleado_firma_a_clientes` |
+| 3 | Optimización y seguridad BD | `propagar_empleado_firma_a_clientes()` con `search_path = public`; 44 índices FK nuevos (`477` índices totales); `VACUUM ANALYZE` (`121 MB`); Advisors: `0` FKs sin índice, `0` warnings de funciones |
+| 4 | Backup automático cifrado (`supabase-daily-backup.yml`) | Run `43619473071` en `main` (`✓ 24s`): artefacto GitHub 14d + copia cifrada en bucket privado R2 `mekanos-db-backups` (`daily/2026/11/...dump.enc`, `48,235,984` bytes) con lifecycle `90d/180d/365d` |
+| 5 | Cutover PC servidor (`api.mekanosapp.dpdns.org`) | Paridad previa `0` diferencias en `94/94` tablas (`116,398` filas), build `@mekanos/api` en `main` (`9d37bdd`), `/api/health/detailed` respondió `healthy` con `supabase.host: "aws-1-us-east-1.pooler.supabase.com"`, `port: 6543` |
+| 6 | Auditoría Vercel (`mekanos-admin-portal`) | Env vars: solo `NEXT_PUBLIC_API_URL` y `AUTH_SECRET`; último deployment en `main` (`dpl_3oTZjNLZYhdM95Y2nPihnckgoGgy`) en estado `READY` |

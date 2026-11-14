@@ -30,20 +30,21 @@ Debido a que Supabase Free Tier **no incluye backups descargables ni PITR** y pa
 
 ---
 
-## 3. Configuracion de Secrets en GitHub Actions
-En GitHub (`Settings -> Secrets and variables -> Actions -> New repository secret`):
+## 3. Configuracion Activa de Secrets y R2 Privado (Verificado 2026-11-14)
+Todos los secrets ya estan configurados en GitHub (`LordDeep69/mekanos-app-produccion` -> `Settings -> Secrets and variables -> Actions`) y validados mediante la ejecucion verde [Run 43619473071](https://github.com/LordDeep69/mekanos-app-produccion/actions/runs/43619473071):
 
-| Secret | Obligatorio | Descripcion |
+| Secret | Estado | Descripcion |
 |---|---|---|
-| `SUPABASE_DIRECT_URL` | Si | Connection string **Session Pooler puerto 5432** (con `?sslmode=require`). Nunca usar `:6543`. |
-| `BACKUP_ENCRYPTION_KEY` | Si | Frase secreta fuerte (>= 32 chars aleatorios). **Guardala en tu gestor de contrasenas**; sin ella el `.dump.enc` es irrecuperable. |
-| `R2_BACKUP_ENDPOINT` | Recomendado | Endpoint S3 de Cloudflare R2 (`https://<account_id>.r2.cloudflarestorage.com`). |
-| `R2_BACKUP_BUCKET` | Recomendado | Bucket **PRIVADO** dedicado (ej. `mekanos-db-backups`) con **r2.dev Public Access DESHABILITADO** y Lifecycle rule de expiracion (ej. 90 dias en `daily/`). |
-| `R2_BACKUP_ACCESS_KEY_ID` | Recomendado | Token S3 R2 con permisos solo `Object Read & Write` sobre `mekanos-db-backups`. |
-| `R2_BACKUP_SECRET_ACCESS_KEY` | Recomendado | Secret del token S3 R2. |
+| `SUPABASE_DIRECT_URL` | ✅ Configurado | Connection string **Session Pooler puerto 5432** de `trpkyzpgbwniztitqrab` (con `?sslmode=require`). Nunca usar `:6543`. |
+| `BACKUP_ENCRYPTION_KEY` | ✅ Configurado | Clave simetrica fuerte (>= 32 chars) usada para AES-256-CBC PBKDF2. **Debe conservarse en gestor de contrasenas**; sin ella el `.dump.enc` es irrecuperable. |
+| `R2_BACKUP_ENDPOINT` | ✅ Configurado | Endpoint S3 de Cloudflare R2 (`https://<account_id>.r2.cloudflarestorage.com`). |
+| `R2_BACKUP_BUCKET` | ✅ Configurado | Bucket **PRIVADO** dedicado `mekanos-db-backups` (sin `r2.dev`, con Lifecycle GFS activo: `daily/` 90d, `weekly/` 180d, `monthly/` 365d). |
+| `R2_BACKUP_ACCESS_KEY_ID` | ✅ Configurado | Access Key R2 para subida S3 cifrada. |
+| `R2_BACKUP_SECRET_ACCESS_KEY` | ✅ Configurado | Secret Key R2 para subida S3 cifrada. |
 
 > [!WARNING]
-> **Nunca** uses el bucket publico de evidencias (`mekanos-plantas-produccion`) con URL `r2.dev` activa para guardar respaldos de base de datos, ni subas archivos `.dump` al repositorio Git (el repo es publico).
+> **Nunca** uses el bucket publico de evidencias (`mekanos-plantas-produccion`) con URL `r2.dev` activa para guardar respaldos de base de datos, ni subas archivos `.dump` o `.env` al repositorio Git (el repo es publico).
+> Si rotas la contrasena de Supabase o `BACKUP_ENCRYPTION_KEY`, actualiza de inmediato los secrets correspondientes en GitHub Actions (`SUPABASE_DIRECT_URL` / `BACKUP_ENCRYPTION_KEY`) y dispara `workflow_dispatch` para validar una nueva corrida en verde.
 
 ---
 
