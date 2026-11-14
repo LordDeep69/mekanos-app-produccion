@@ -1,0 +1,168 @@
+name: Supabase Daily Encrypted Backup
+
+on:
+  schedule:
+    # 03:17 UTC = 22:17 COT (off-peak, mantiene activa la DB Free Tier y evita pausas de 7 dias)
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Motivo del respaldo manual (ej. pre-migracion, auditoria)'
+        required: false
+        default: 'manual-trigger'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-daily-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Dump, Verify, Encrypt & Archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Validate required secrets
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          if [ -z "$SUPABASE_DIRECT_URL" ]; then
+            echo "::error::Missing secret SUPABASE_DIRECT_URL (use IPv4 Session Pooler port 5432)."
+            exit 1
+          fi
+          if [ -z "$BACKUP_ENCRYPTION_KEY" ]; then
+            echo "::error::Missing secret BACKUP_ENCRYPTION_KEY (required before public/artifact storage)."
+            exit 1
+          fi
+          if [[ "$SUPABASE_DIRECT_URL" == *":6543"* ]]; then
+            echo "::error::SUPABASE_DIRECT_URL must use Session Pooler port 5432, not PgBouncer transaction pooler 6543."
+            exit 1
+          fi
+
+      - name: Install PostgreSQL 17 client tools (matching Supabase PG 17)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+
+      - name: Verify DB connectivity & Free Tier keep-alive
+        env:
+          PGURL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          psql "$PGURL" -v ON_ERROR_STOP=1 -c "SELECT current_database(), current_user, pg_size_pretty(pg_database_size('postgres')) AS db_size, now() AT TIME ZONE 'UTC' AS utc_now;"
+
+      - name: Run pg_dump & verify TOC integrity
+        id: dump
+        env:
+          PGURL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          TS=$(date -u +"%Y%m%d_%H%M%S")
+          YEAR_MONTH=$(date -u +"%Y/%m")
+          DAY_OF_WEEK=$(date -u +"%u")
+          DAY_OF_MONTH=$(date -u +"%d")
+          DUMP_FILE="/tmp/mekanos_prod_${TS}.dump"
+
+          pg_dump "$PGURL" \
+            --format=custom \
+            --compress=9 \
+            --no-owner \
+            --no-privileges \
+            --schema=public \
+            --file="$DUMP_FILE"
+
+          TABLE_DATA_COUNT=$(pg_restore --list "$DUMP_FILE" | grep -c "TABLE DATA public" || true)
+          RAW_BYTES=$(stat -c%s "$DUMP_FILE")
+          if [ "$TABLE_DATA_COUNT" -lt 1 ] || [ "$RAW_BYTES" -lt 10240 ]; then
+            echo "::error::Backup integrity check failed (tables=${TABLE_DATA_COUNT}, bytes=${RAW_BYTES})."
+            exit 1
+          fi
+
+          echo "ts=${TS}" >> "$GITHUB_OUTPUT"
+          echo "year_month=${YEAR_MONTH}" >> "$GITHUB_OUTPUT"
+          echo "dow=${DAY_OF_WEEK}" >> "$GITHUB_OUTPUT"
+          echo "dom=${DAY_OF_MONTH}" >> "$GITHUB_OUTPUT"
+          echo "dump_file=${DUMP_FILE}" >> "$GITHUB_OUTPUT"
+          echo "table_count=${TABLE_DATA_COUNT}" >> "$GITHUB_OUTPUT"
+          echo "raw_bytes=${RAW_BYTES}" >> "$GITHUB_OUTPUT"
+
+      - name: Encrypt dump client-side (AES-256-CBC PBKDF2) & compute SHA-256
+        id: encrypt
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          DUMP_FILE: ${{ steps.dump.outputs.dump_file }}
+          TS: ${{ steps.dump.outputs.ts }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/backup_out
+          ENC_NAME="mekanos_prod_${TS}.dump.enc"
+          ENC_PATH="/tmp/backup_out/${ENC_NAME}"
+          SHA_PATH="/tmp/backup_out/${ENC_NAME}.sha256"
+
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+            -in "$DUMP_FILE" \
+            -out "$ENC_PATH" \
+            -pass env:BACKUP_ENCRYPTION_KEY
+
+          rm -f "$DUMP_FILE"
+          (cd /tmp/backup_out && sha256sum "$ENC_NAME" > "${ENC_NAME}.sha256")
+          ENC_BYTES=$(stat -c%s "$ENC_PATH")
+
+          echo "enc_name=${ENC_NAME}" >> "$GITHUB_OUTPUT"
+          echo "enc_path=${ENC_PATH}" >> "$GITHUB_OUTPUT"
+          echo "sha_path=${SHA_PATH}" >> "$GITHUB_OUTPUT"
+          echo "enc_bytes=${ENC_BYTES}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload encrypted artifact to GitHub Actions (14-day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mekanos-db-backup-${{ steps.dump.outputs.ts }}
+          path: |
+            ${{ steps.encrypt.outputs.enc_path }}
+            ${{ steps.encrypt.outputs.sha_path }}
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload to private Cloudflare R2 off-site archive (GFS retention)
+        if: ${{ secrets.R2_BACKUP_ENDPOINT != '' && secrets.R2_BACKUP_BUCKET != '' && secrets.R2_BACKUP_ACCESS_KEY_ID != '' && secrets.R2_BACKUP_SECRET_ACCESS_KEY != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_BACKUP_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+          ENC_PATH: ${{ steps.encrypt.outputs.enc_path }}
+          SHA_PATH: ${{ steps.encrypt.outputs.sha_path }}
+          ENC_NAME: ${{ steps.encrypt.outputs.enc_name }}
+          YM: ${{ steps.dump.outputs.year_month }}
+          DOW: ${{ steps.dump.outputs.dow }}
+          DOM: ${{ steps.dump.outputs.dom }}
+        run: |
+          set -euo pipefail
+          aws s3 cp "$ENC_PATH" "s3://${R2_BUCKET}/daily/${YM}/${ENC_NAME}" --endpoint-url "$R2_ENDPOINT"
+          aws s3 cp "$SHA_PATH" "s3://${R2_BUCKET}/daily/${YM}/${ENC_NAME}.sha256" --endpoint-url "$R2_ENDPOINT"
+
+          if [ "$DOW" = "7" ]; then
+            aws s3 cp "s3://${R2_BUCKET}/daily/${YM}/${ENC_NAME}" "s3://${R2_BUCKET}/weekly/${ENC_NAME}" --endpoint-url "$R2_ENDPOINT"
+          fi
+          if [ "$DOM" = "01" ]; then
+            aws s3 cp "s3://${R2_BUCKET}/daily/${YM}/${ENC_NAME}" "s3://${R2_BUCKET}/monthly/${ENC_NAME}" --endpoint-url "$R2_ENDPOINT"
+          fi
+
+      - name: Write sanitized backup summary
+        run: |
+          {
+            echo "### Supabase Automated Encrypted Backup"
+            echo "- **Timestamp (UTC):** \`${{ steps.dump.outputs.ts }}\`"
+            echo "- **Trigger:** \`${{ github.event_name }}\` (${{ github.event.inputs.reason || 'scheduled' }})"
+            echo "- **Verified Tables in TOC:** \`${{ steps.dump.outputs.table_count }}\`"
+            echo "- **Raw Dump Bytes:** \`${{ steps.dump.outputs.raw_bytes }}\`"
+            echo "- **Encrypted Archive Bytes:** \`${{ steps.encrypt.outputs.enc_bytes }}\`"
+            echo "- **Off-site R2 Archive:** \`${{ secrets.R2_BACKUP_BUCKET != '' && 'Enabled' || 'Pending R2_BACKUP_* secrets (GitHub 14d active)' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
