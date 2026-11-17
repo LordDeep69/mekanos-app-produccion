@@ -29,37 +29,39 @@ Las **Fases 0 a 6** definidas en [10-PLAN-MAESTRO-TRANSFORMACION-POR-FASES.md](.
 
 ---
 
-## 2. Investigación de Compatibilidad con Producción (`origin/main` — Plantas y Bombas)
+## 2. Aislamiento Físico Permanente de Ramas y Bases de Datos (`main` vs `feat/eam-universal-activos-maestros`)
 
-### Aislamiento en Git
-- Toda la evolución EAM Universal y White-Label vive **exclusivamente en `feat/eam-universal-activos-maestros`**.
-- `main` / `origin/main` (`6a10799`) permanece intacta: no habrá conflictos ni cambios de código en producción mientras no se realice merge hacia `main`.
+### Separación estricta de entornos (Cero Conflictos)
+- **Producción (`origin/main` — Plantas y Bombas):**
+  - Rama dedicada exclusivamente a la operación estable actual de Mekanos Plantas & Bombas; **no** recibe merges desde `feat/eam-universal-activos-maestros`.
+  - Conectada físicamente a **`mekanos-produccion-v2`** (`ref: trpkyzpgbwniztitqrab`, región `us-east-1`, PostgreSQL `17.11`, `94` tablas), protegida con respaldo diario cifrado automatizado en GitHub Actions + Cloudflare R2 (`mekanos-db-backups`).
+- **Desarrollo EAM Universal & White-Label (`feat/eam-universal-activos-maestros`):**
+  - Rama donde evoluciona todo el ecosistema comercial instalable, EAM agnóstico y certificación de nuevas verticales (`SUBEST`, `ASCENSOR`, etc.).
+  - Conectada físicamente de forma aislada a **`mekanos-app-base-de-datos`** (`ref: kmwfsvocmlusoxnsgyrx`, región `us-east-2`, PostgreSQL `17.6`, `98` tablas), la cual contiene `upgrade-existing-db-fase1.sql`, `configuracion_organizacion`, `252` permisos RBAC, rol `ADMIN` para `admin@mekanos.com` y `Fase A + B.1` de Subestación Eléctrica (`modulos 19` y `20`).
+  - Los archivos `.env` / `.env.local` están ignorados en `.gitignore`, por lo que cada entorno conserva sus credenciales sin conflictos de Git.
 
-### Compatibilidad Binaria en Base de Datos Compartida
-Al auditar `git diff origin/main -- packages/database/prisma/schema.prisma` frente al DDL aplicado en la base de datos conectada, se verificaron y blindaron los siguientes 4 puntos críticos para que el `@prisma/client` compilado en `origin/main` siga operando sin errores:
-1. **`usuarios.password_plain` (Hallazgo crítico corregido):** `origin/main` declara `password_plain String? @db.VarChar(255)` en `model usuarios`, por lo que sus consultas `findUnique` sin `select` explícito fallarían con `P2022` si la columna desapareciera físicamente. Se restauró la columna `password_plain VARCHAR(255) DEFAULT NULL` nullable en PostgreSQL con `0` registros no nulos y se actualizó `tools/migrations/upgrade-existing-db-fase1.sql` para conservarla en `NULL` (nuestra rama la ignora en `schema.prisma`, así mantiene seguridad sin romper `origin/main`).
-2. **`tipos_equipo.categoria` y `tipos_componente.aplica_a`:** En `origin/main` son `NOT NULL`. Verificado en BD: `0` registros con `NULL` actualmente, y ambas columnas mantienen `DEFAULT` en Postgres (`'OTRO'` y `'AMBOS'`).
-3. **`cuentas_email.gmail_*`:** En `origin/main` las credenciales OAuth2 son `String` no nulables. Verificado en BD: `0` filas con `NULL` en `cuentas_email`.
-4. **`catalogo_actividades.id_tipo_servicio`:** En `origin/main` es `Int` no nulable. Verificado en BD: `0` filas con `NULL`.
-5. **Columnas nuevas y secuencias:** Todas las columnas nuevas agregadas sobre tablas preexistentes tienen nulabilidad o `DEFAULT` en BD, y las tablas nuevas no son tocadas por `origin/main`.
-
-> **Regla operativa mientras producción siga en `main`:** Si en pruebas futuras sobre BD compartida creas actividades puras de Banco Universal (`id_tipo_servicio = NULL`), cuentas `SMTP` sin campos Gmail (`NULL`) o tipos de equipo/componente sin sus campos legacy, hazlo consciente de esa convivencia o usa un esquema/BD independiente para staging `V1–V8`.
+### Compatibilidad Binaria de Esquema (Para un Eventual Upgrade Futuro)
+Al auditar `git diff origin/main -- packages/database/prisma/schema.prisma` frente al DDL de `upgrade-existing-db-fase1.sql`, quedaron blindados los puntos críticos por si en un futuro se decide migrar una instancia de `main`:
+1. **`usuarios.password_plain`:** `origin/main` declara `password_plain String? @db.VarChar(255)` en `model usuarios`, por lo que `tools/migrations/upgrade-existing-db-fase1.sql` conserva físicamente la columna nullable `VARCHAR(255) DEFAULT NULL` con `0` valores en texto plano (esta rama la omite en `schema.prisma` y mantiene seguridad sin romper clientes legacy).
+2. **`tipos_equipo.categoria` y `tipos_componente.aplica_a`:** Mantienen `DEFAULT 'OTRO'` y `DEFAULT 'AMBOS'` respectivamente en PostgreSQL.
+3. **`cuentas_email.gmail_*` y `catalogo_actividades.id_tipo_servicio`:** Soportan evolución a `SMTP` / Banco Universal en la BD de desarrollo sin afectar la BD de producción `trpkyzpgbwniztitqrab`, al estar físicamente separadas.
 
 ---
 
-## 3. Cómo Retomar en la Otra PC de Trabajo
+## 3. Cómo Retomar en Cualquier PC de Desarrollo (`feat/eam-universal-activos-maestros`)
 
 1. Cambiar de rama y traer los últimos commits:
    - `git fetch origin`
    - `git checkout feat/eam-universal-activos-maestros`
    - `git pull origin feat/eam-universal-activos-maestros`
-2. Instalar dependencias si hay cambios en paquetes y regenerar cliente Prisma si aplica:
+2. Instalar dependencias, regenerar cliente Prisma y compilar base/API (`AGENTS.md` Windows `cmd /c`):
    - `pnpm install`
-   - `pnpm --filter @mekanos/database build`
-3. Verificar `.env` locales (no versionados en Git):
-   - `apps/api/.env`: `DATABASE_URL`, `JWT_SECRET` (mín. 32 chars, no por defecto) y **`CONFIG_ENCRYPTION_KEY`** (hex de 64 chars para cifrado SMTP).
+   - `pnpm --filter @mekanos/database exec prisma generate && pnpm --filter @mekanos/database build`
+3. Verificar `.env` locales de desarrollo (apuntando a **`kmwfsvocmlusoxnsgyrx` en `us-east-2`**, nunca a la BD de producción `trpkyzpgbwniztitqrab`):
+   - `packages/database/.env`: `DATABASE_URL` (`:6543?pgbouncer=true`) y `DIRECT_URL` (`:5432`) hacia `aws-1-us-east-2.pooler.supabase.com`.
+   - `apps/api/.env`: `DATABASE_URL`, `DIRECT_URL` hacia `kmwfsvocmlusoxnsgyrx`, `JWT_SECRET` (mín. 32 chars), **`CONFIG_ENCRYPTION_KEY`** (hex de 64 chars para cifrado SMTP) y **`PUPPETEER_EXECUTABLE_PATH`** (ej. `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe` en Windows para generación local de PDFs).
    - `apps/admin/.env.local`: `AUTH_SECRET`, `NEXTAUTH_SECRET`, `NEXT_PUBLIC_API_URL=http://localhost:3000/api`, `INTERNAL_API_URL=http://localhost:3000/api`.
-4. Levantar servidores con `pnpm dev`.
+4. Levantar servidores con `pnpm --filter @mekanos/api build` + `node dist/main` (`:3000`) y `pnpm --filter @mekanos/admin dev` (`:3001`).
 
 ---
 
