@@ -11,7 +11,6 @@
 
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
-import { getNextTableId } from '../common/utils/next-id.helper';
 
 /**
  * Tipos de notificación
@@ -94,11 +93,8 @@ export class NotificacionesService {
         throw new NotFoundException(`Usuario ${input.idUsuarioDestino} no encontrado`);
       }
 
-      const nextId = await getNextTableId(this.prisma, 'notificaciones', 'id_notificacion');
-
       const notificacion = await this.prisma.notificaciones.create({
         data: {
-          id_notificacion: nextId,
           id_usuario: input.idUsuarioDestino,
           tipo_notificacion: input.tipo,
           titulo: input.titulo,
@@ -137,9 +133,7 @@ export class NotificacionesService {
     input: Omit<CrearNotificacionInput, 'idUsuarioDestino'>,
   ): Promise<NotificacionResult> {
     try {
-      const baseId = await getNextTableId(this.prisma, 'notificaciones', 'id_notificacion');
-      const notificaciones = idUsuarios.map((idUsuario, idx) => ({
-        id_notificacion: baseId + idx,
+      const notificaciones = idUsuarios.map((idUsuario) => ({
         id_usuario: idUsuario,
         tipo_notificacion: input.tipo,
         titulo: input.titulo,

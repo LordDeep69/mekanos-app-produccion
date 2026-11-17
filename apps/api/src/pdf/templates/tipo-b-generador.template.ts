@@ -25,6 +25,8 @@ import {
   generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
   MEKANOS_COLORS,
+  buildBrandCssVars,
+  generarFooterCorporativoHtml,
 } from './mekanos-base.template';
 
 /**
@@ -54,6 +56,7 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Informe Mantenimiento - ${datos.numeroOrden}</title>
   <style>
+    ${buildBrandCssVars(datos.branding)}
     ${baseStyles}
     
     .cambio-badge {
@@ -156,7 +159,7 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     }
     
     <!-- SECCIÓN DE REPUESTOS, FILTROS Y FLUIDOS DE SERVICIO (TIPO B) -->
-    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, 'PREVENTIVO_B')}
+    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, 'PREVENTIVO_B', datos.branding)}
     
     <!-- LISTA DE ACTIVIDADES DE MANTENIMIENTO -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
@@ -197,7 +200,7 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     ${generarFirmas(datos)}
     
     <!-- FOOTER -->
-    ${generarFooter()}
+    ${generarFooterCorporativoHtml(datos.branding)}
   </div>
 </body>
 </html>
@@ -209,6 +212,7 @@ const generarHeader = (datos: DatosOrdenPDF): string =>
     'MANTENIMIENTO PREVENTIVO TIPO B',
     'GENERADORES ELÉCTRICOS - CAMBIO DE FILTROS Y FLUIDOS',
     datos.numeroOrden,
+    datos.branding,
   );
 
 /**
@@ -845,14 +849,6 @@ const generarFirmas = (datos: DatosOrdenPDF): string => `
       <div class="firma-cargo">${datos.cargoCliente || 'Cliente / Autorizador'}</div>
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
     </div>
-  </div>
-`;
-
-const generarFooter = (): string => `
-  <div class="footer">
-    <strong>MEKANOS S.A.S</strong><br/>
-    BARRIO LIBANO CRA 49C #31-35 DIAG. AL SENA - TEL: 6359384<br/>
-    CEL: 315-7083350 E-MAIL: mekanossas2@gmail.com
   </div>
 `;
 

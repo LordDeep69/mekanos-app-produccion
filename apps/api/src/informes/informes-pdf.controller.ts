@@ -17,6 +17,7 @@
  */
 
 import { PrismaService } from '@mekanos/database';
+import { Prisma } from '@prisma/client';
 import {
     BadRequestException,
     Controller,
@@ -520,7 +521,7 @@ export class InformesPdfController {
         rutaArchivo: string;
         input: Parameters<typeof buildInformeFilename>[0];
     } | null> {
-        const filas: any[] = await this.prisma.$queryRawUnsafe(`
+        const filas: any[] = await this.prisma.$queryRaw`
             SELECT
                 dg.id_documento,
                 dg.ruta_archivo,
@@ -540,10 +541,10 @@ export class InformesPdfController {
             LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
             LEFT JOIN clientes c ON c.id_cliente = os.id_cliente
             LEFT JOIN personas p ON p.id_persona = c.id_persona
-            WHERE dg.id_documento = $1
+            WHERE dg.id_documento = ${idDocumento}
               AND dg.tipo_documento = 'INFORME_SERVICIO'
             LIMIT 1
-        `, idDocumento);
+        `;
 
         if (!filas || filas.length === 0) return null;
         const row = filas[0];
@@ -573,7 +574,7 @@ export class InformesPdfController {
         rutaArchivo: string;
         input: Parameters<typeof buildInformeFilename>[0];
     } | null> {
-        const filas: any[] = await this.prisma.$queryRawUnsafe(`
+        const filas: any[] = await this.prisma.$queryRaw`
             SELECT
                 dg.id_documento,
                 dg.ruta_archivo,
@@ -593,11 +594,11 @@ export class InformesPdfController {
             LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
             LEFT JOIN clientes c ON c.id_cliente = os.id_cliente
             LEFT JOIN personas p ON p.id_persona = c.id_persona
-            WHERE dg.id_referencia = $1
+            WHERE dg.id_referencia = ${idOrden}
               AND dg.tipo_documento = 'INFORME_SERVICIO'
             ORDER BY dg.fecha_generacion DESC
             LIMIT 1
-        `, idOrden);
+        `;
 
         if (!filas || filas.length === 0) return null;
         const row = filas[0];
@@ -635,8 +636,11 @@ export class InformesPdfController {
         nombre_equipo: string | null;
         nombre_cliente: string;
     }>> {
-        const limitClause = limit ? `LIMIT ${limit}` : '';
-        const filas: any[] = await this.prisma.$queryRawUnsafe(`
+        const limitSql =
+            limit && Number.isFinite(limit) && limit > 0
+                ? Prisma.sql`LIMIT ${Math.floor(limit)}`
+                : Prisma.empty;
+        const filas: any[] = await this.prisma.$queryRaw`
             SELECT
                 dg.id_documento,
                 dg.ruta_archivo,
@@ -659,8 +663,8 @@ export class InformesPdfController {
             WHERE dg.tipo_documento = 'INFORME_SERVICIO'
               AND dg.ruta_archivo IS NOT NULL
             ORDER BY dg.fecha_generacion DESC
-            ${limitClause}
-        `);
+            ${limitSql}
+        `;
 
         return filas as any;
     }

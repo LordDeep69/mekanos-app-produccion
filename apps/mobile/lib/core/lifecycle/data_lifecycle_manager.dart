@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../database/app_database.dart';
 import '../database/database_service.dart';
 import '../errors/user_friendly_error.dart';
+import '../storage/account_scope.dart';
 import '../storage/storage_preferences.dart';
 
 /// Provider para el servicio de ciclo de vida de datos
@@ -834,9 +836,11 @@ class DataLifecycleManager {
       }
     }
 
-    // Espacio de BD
+    // Espacio de BD aislada de la cuenta activa
     final dbFolder = await getApplicationDocumentsDirectory();
-    final dbFile = File('${dbFolder.path}/mekanos_local.db');
+    final dbFile = File(
+      p.join(dbFolder.path, AccountScope.dbFileName(_db.scopedUserId)),
+    );
     if (await dbFile.exists()) {
       stats.espacioBDMB = (await dbFile.length()) / (1024 * 1024);
     }

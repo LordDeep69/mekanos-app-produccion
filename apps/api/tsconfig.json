@@ -2,6 +2,8 @@
   "extends": "../../packages/config/typescript/nestjs.json",
   "compilerOptions": {
     "strictPropertyInitialization": false,
+    "incremental": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "outDir": "./dist",
     "baseUrl": "./",
     "paths": {

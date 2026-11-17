@@ -25,6 +25,8 @@ import {
   generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
   MEKANOS_COLORS,
+  buildBrandCssVars,
+  generarFooterCorporativoHtml,
 } from './mekanos-base.template';
 
 /**
@@ -53,6 +55,7 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Informe Mantenimiento - ${datos.numeroOrden}</title>
   <style>
+    ${buildBrandCssVars(datos.branding)}
     ${baseStyles}
     
     .bomba-icon {
@@ -128,7 +131,7 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
     }
     
     <!-- SECCIÓN REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO (SI APLICA) -->
-    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, 'PREVENTIVO_A')}
+    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, 'PREVENTIVO_A', datos.branding)}
     
     <!-- SIMBOLOGÍA -->
     ${generarSimbologia()}
@@ -147,7 +150,7 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
     ${generarFirmas(datos)}
     
     <!-- FOOTER -->
-    ${generarFooter()}
+    ${generarFooterCorporativoHtml(datos.branding)}
   </div>
 </body>
 </html>
@@ -155,7 +158,12 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
 };
 
 const generarHeader = (datos: DatosOrdenPDF): string =>
-  generarHeaderConLogo('MANTENIMIENTO PREVENTIVO TIPO A', 'SISTEMAS DE BOMBEO', datos.numeroOrden);
+  generarHeaderConLogo(
+    'MANTENIMIENTO PREVENTIVO TIPO A',
+    'SISTEMAS DE BOMBEO',
+    datos.numeroOrden,
+    datos.branding,
+  );
 
 /**
  * Función auxiliar para obtener valor de medición por nombre EXACTO de parámetro
@@ -726,18 +734,6 @@ const generarFirmas = (datos: DatosOrdenPDF): string => `
   </div>
 `;
 
-const generarFooter = (): string => `
-  <div class="footer">
-    <strong>MEKANOS S.A.S</strong><br/>
-    BARRIO LIBANO CRA 49C #31-35 DIAG. AL SENA - TEL: 6359384<br/>
-    CEL: 315-7083350 E-MAIL: mekanossas2@gmail.com
-  </div>
-`;
-
-/**
- * ✅ MULTI-EQUIPOS: Genera evidencias agrupadas por equipo
- * Cada equipo tiene su propia sección con fotos ANTES/DURANTE/DESPUÉS
- */
 const generarEvidenciasMultiEquipo = (
   evidenciasPorEquipo: EvidenciasPorEquipoPDF[],
   lotesGaleria?: LoteGaleriaPDF[],

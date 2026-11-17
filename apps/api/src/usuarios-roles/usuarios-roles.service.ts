@@ -1,10 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../database/prisma.service';
 import { AsignarRolDto } from './dto/asignar-rol.dto';
 
 @Injectable()
 export class UsuariosRolesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly authService?: AuthService,
+  ) {}
 
   async asignarRol(asignarDto: AsignarRolDto, asignadoPor: number) {
     // Validar que usuario existe
@@ -39,7 +43,7 @@ export class UsuariosRolesService {
       throw new Error('El rol ya está asignado a este usuario');
     }
 
-    return this.prisma.usuarios_roles.create({
+    const created = await this.prisma.usuarios_roles.create({
       data: {
         id_usuario: asignarDto.id_usuario,
         id_rol: asignarDto.id_rol,
@@ -57,6 +61,8 @@ export class UsuariosRolesService {
         roles: true,
       },
     });
+    this.authService?.invalidateUserCache(asignarDto.id_usuario);
+    return created;
   }
 
   async listarRolesPorUsuario(idUsuario: number) {
@@ -82,7 +88,7 @@ export class UsuariosRolesService {
       throw new Error('La asignación no existe');
     }
 
-    return this.prisma.usuarios_roles.delete({
+    const deleted = await this.prisma.usuarios_roles.delete({
       where: {
         id_usuario_id_rol: {
           id_usuario: idUsuario,
@@ -90,5 +96,7 @@ export class UsuariosRolesService {
         },
       },
     });
+    this.authService?.invalidateUserCache(idUsuario);
+    return deleted;
   }
 }

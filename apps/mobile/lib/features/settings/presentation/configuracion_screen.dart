@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/config/environment.dart';
 import '../../../core/errors/error_feedback.dart';
 import '../../../core/errors/user_friendly_error.dart';
+import '../../../core/storage/account_scope.dart';
 import '../../../core/sync/sync_service.dart';
 import '../../auth/data/auth_provider.dart';
 import 'storage_settings_screen.dart';
@@ -17,18 +19,21 @@ import 'storage_settings_screen.dart';
 /// - Modo de Finalización (siempre SOLO_DATOS - PDF/email desde Admin Portal)
 /// - Futuras configuraciones...
 
-/// Provider para el modo de finalización persistente
+/// Provider para el modo de finalización persistente (aislado por cuenta)
 final modoFinalizacionProvider =
     StateNotifierProvider<ModoFinalizacionNotifier, String>((ref) {
-      return ModoFinalizacionNotifier();
+      final userId = ref.watch(activeUserIdProvider);
+      return ModoFinalizacionNotifier(userId: userId);
     });
 
 class ModoFinalizacionNotifier extends StateNotifier<String> {
-  ModoFinalizacionNotifier() : super('SOLO_DATOS') {
+  final int? userId;
+
+  ModoFinalizacionNotifier({this.userId}) : super('SOLO_DATOS') {
     _cargarModo();
   }
 
-  static const _key = 'modo_finalizacion_default';
+  String get _key => AccountScope.prefsKey(userId, 'modo_finalizacion_default');
   bool _initialized = false;
 
   /// Indica si el modo ya fue cargado de SharedPreferences
@@ -67,19 +72,22 @@ class ModoFinalizacionNotifier extends StateNotifier<String> {
   }
 }
 
-/// Provider para el formato de hora (true = 24H, false = 12H AM/PM)
+/// Provider para el formato de hora (true = 24H, false = 12H AM/PM, aislado por cuenta)
 final formatoHora24Provider = StateNotifierProvider<FormatoHoraNotifier, bool>((
   ref,
 ) {
-  return FormatoHoraNotifier();
+  final userId = ref.watch(activeUserIdProvider);
+  return FormatoHoraNotifier(userId: userId);
 });
 
 class FormatoHoraNotifier extends StateNotifier<bool> {
-  FormatoHoraNotifier() : super(false) {
+  final int? userId;
+
+  FormatoHoraNotifier({this.userId}) : super(false) {
     _cargar();
   }
 
-  static const _key = 'formato_hora_24h';
+  String get _key => AccountScope.prefsKey(userId, 'formato_hora_24h');
 
   Future<void> _cargar() async {
     try {
@@ -569,9 +577,13 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.cloud, color: Colors.grey),
-                  title: const Text('Backend'),
+                  title: const Text('Servidor API'),
+                  subtitle: Text(
+                    Environment.apiBaseUrl,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
                   trailing: Text(
-                    'Render (Producción)',
+                    Environment.currentState.originLabel ?? 'Producción',
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                 ),

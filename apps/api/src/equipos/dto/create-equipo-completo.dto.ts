@@ -28,7 +28,6 @@ import {
   MaxLength,
   Min,
   MinLength,
-  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -200,6 +199,11 @@ export class DatosEquipoBaseDto {
   @Type(() => Number)
   @IsNumber()
   horas_actuales?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  lectura_uso_actual?: number;
 
   @IsOptional()
   @IsString()
@@ -796,28 +800,17 @@ export class CreateEquipoCompletoDto {
   datosMotor?: DatosMotorDto;
 
   /**
-   * Datos específicos de generador.
-   * Requerido para tipo GENERADOR solo cuando no se envía el documento modular especificaciones.
+   * Datos específicos de generador (opcional en arquitectura EAM universal).
    */
-  @ValidateIf(
-    (o) =>
-      (o.tipo === TipoEquipoDiscriminator.GENERADOR || o.tipo === 'GEN') && !o.especificaciones,
-  )
-  @IsNotEmpty({
-    message: 'datosGenerador o especificaciones es requerido para equipos tipo GENERADOR',
-  })
+  @IsOptional()
   @ValidateNested()
   @Type(() => DatosGeneradorDto)
   datosGenerador?: DatosGeneradorDto;
 
   /**
-   * Datos específicos de bomba.
-   * Requerido para tipo BOMBA solo cuando no se envía el documento modular especificaciones.
+   * Datos específicos de bomba (opcional en arquitectura EAM universal).
    */
-  @ValidateIf(
-    (o) => (o.tipo === TipoEquipoDiscriminator.BOMBA || o.tipo === 'BOM') && !o.especificaciones,
-  )
-  @IsNotEmpty({ message: 'datosBomba o especificaciones es requerido para equipos tipo BOMBA' })
+  @IsOptional()
   @ValidateNested()
   @Type(() => DatosBombaDto)
   datosBomba?: DatosBombaDto;

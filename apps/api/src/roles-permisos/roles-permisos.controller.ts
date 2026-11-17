@@ -9,13 +9,18 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermisosGuard } from '../auth/guards/permisos.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AsignarPermisoDto } from './dto/asignar-permiso.dto';
 import { RolesPermisosService } from './roles-permisos.service';
 
 @Controller('roles-permisos')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
+@Roles('ADMIN')
+@Permisos('CONFIG_ROLES')
 export class RolesPermisosController {
   constructor(
     private readonly rolesPermisosService: RolesPermisosService,

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/config/environment.dart';
 import '../../../core/config/local_api_discovery.dart';
 import '../../../core/database/database_service.dart';
@@ -165,6 +166,7 @@ Future<void> showQaPasswordAndServerSelector(
   BuildContext context,
   WidgetRef ref,
 ) async {
+  if (!AppConfig.enableQaServerSwitcher) return;
   final unlocked = await showDialog<bool>(
     context: context,
     barrierDismissible: true,
@@ -288,10 +290,10 @@ class _ServerSelectorSheetState extends ConsumerState<ServerSelectorSheet> {
 
   bool _scanningLocal = false;
   String _scanStatus = '';
-  List<VerifiedMekanosServer> _localServers = const [];
+  List<VerifiedApiServer> _localServers = const [];
 
   bool _verifyingCustom = false;
-  VerifiedMekanosServer? _verifiedCustomServer;
+  VerifiedApiServer? _verifiedCustomServer;
   String? _customError;
 
   @override
@@ -330,8 +332,8 @@ class _ServerSelectorSheetState extends ConsumerState<ServerSelectorSheet> {
       _scanningLocal = false;
       _localServers = results;
       _scanStatus = results.isEmpty
-          ? 'No se detectó ningún backend Mekanos activo en puerto ${Environment.localPort}.'
-          : 'Se detectaron ${results.length} servidor(es) Mekanos verificado(s).';
+          ? 'No se detectó ningún servidor API activo en puerto ${Environment.localPort}.'
+          : 'Se detectaron ${results.length} servidor(es) API verificado(s).';
     });
   }
 
@@ -364,7 +366,7 @@ class _ServerSelectorSheetState extends ConsumerState<ServerSelectorSheet> {
       _verifiedCustomServer = verified;
       if (verified == null) {
         _customError =
-            'No respondió como Mekanos API en $normalized/health.';
+            'No respondió como servidor EAM API en $normalized/health.';
       }
     });
   }
@@ -428,7 +430,7 @@ class _ServerSelectorSheetState extends ConsumerState<ServerSelectorSheet> {
     _showSnack('Conectado a Producción (${Environment.apiBaseUrl})', Colors.blue);
   }
 
-  Future<void> _selectLocalServer(VerifiedMekanosServer server) async {
+  Future<void> _selectLocalServer(VerifiedApiServer server) async {
     final prev = Environment.apiBaseUrl;
     if (!await _confirmSwitchIfPendingSync(server.baseUrl)) return;
     await LocalApiDiscovery.rememberLocalServer(server);
@@ -481,7 +483,7 @@ class _ServerSelectorSheetState extends ConsumerState<ServerSelectorSheet> {
         builder: (ctx) => AlertDialog(
           title: const Text('No se pudo verificar /health'),
           content: Text(
-            'El endpoint $normalized no respondió como "Mekanos API".\n\n'
+            'El endpoint $normalized no respondió como servidor EAM API.\n\n'
             '¿Deseas aplicarlo igualmente solo para esta sesión?',
           ),
           actions: [

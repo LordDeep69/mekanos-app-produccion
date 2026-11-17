@@ -29,6 +29,7 @@ import {
   TipoOperacionInventario,
 } from '@/features/inventario/components/MovimientoModal';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   AlertCircle,
   AlertTriangle,
@@ -115,6 +116,7 @@ function KPICard({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function InventarioPage() {
+  const { formatCurrency, formatDate, formatDateTime } = useOrgFormatters();
   // Pestaña activa
   const [tabActiva, setTabActiva] = useState<'stock' | 'kardex' | 'lotes' | 'bodegas'>('stock');
 
@@ -298,7 +300,7 @@ export default function InventarioPage() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
         <KPICard
           title="Valor Inventario"
-          value={kpis ? `$${Number(kpis.valor_inventario).toLocaleString('es-CO')}` : '--'}
+          value={kpis ? formatCurrency(kpis.valor_inventario) : '--'}
           subtitle="Valorización de catálogo activo"
           icon={TrendingUp}
           color="emerald"
@@ -619,7 +621,7 @@ export default function InventarioPage() {
                           </span>
                         </td>
                         <td className="py-2 px-2.5 text-right font-mono text-xs font-semibold text-slate-900 whitespace-nowrap align-middle">
-                          ${Number(comp.valor_stock || 0).toLocaleString('es-CO')}
+                          {formatCurrency(comp.valor_stock || 0)}
                         </td>
                         <td className="py-2 px-2 text-center align-middle whitespace-nowrap">
                           <div className="inline-flex items-center gap-1 justify-center">
@@ -765,13 +767,7 @@ export default function InventarioPage() {
                           className="hover:bg-slate-50/80 transition-colors"
                         >
                           <td className="py-2 px-2.5 font-mono text-[11px] text-slate-600 whitespace-nowrap align-middle">
-                            {new Date(mov.fecha).toLocaleString('es-CO', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
+                            {formatDateTime(mov.fecha)}
                           </td>
                           <td className="py-2 px-2 text-center whitespace-nowrap align-middle">
                             <span
@@ -995,7 +991,7 @@ export default function InventarioPage() {
                           <td className="py-2 px-2 text-center font-mono whitespace-nowrap align-middle text-xs">
                             {lote.fecha_vencimiento ? (
                               <span>
-                                {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}
+                                {formatDate(lote.fecha_vencimiento)}
                               </span>
                             ) : (
                               <span className="text-slate-400 text-[11px]">No perecedero</span>
@@ -1110,7 +1106,7 @@ export default function InventarioPage() {
                     <div>
                       <p className="text-[11px] text-slate-500">Valor</p>
                       <p className="text-xs font-bold text-emerald-700 mt-0.5">
-                        ${Number(bodega.valor_total).toLocaleString('es-CO')}
+                        {formatCurrency(bodega.valor_total)}
                       </p>
                     </div>
                   </div>

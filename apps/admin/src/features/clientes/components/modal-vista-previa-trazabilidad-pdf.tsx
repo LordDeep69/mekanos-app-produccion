@@ -248,7 +248,7 @@ export function ModalVistaPreviaTrazabilidadPdf({
                 <p className="text-sm font-bold text-white">Generando Informe Ejecutivo PDF...</p>
                 <p className="text-xs text-slate-400 max-w-sm">
                   Consolidando histórico operacional, métricas de confiabilidad y formateando
-                  plantilla corporativa MEKANOS.
+                  plantilla corporativa.
                 </p>
               </div>
             </div>
@@ -303,7 +303,7 @@ export function ModalVistaPreviaTrazabilidadPdf({
             <span className="font-mono text-slate-400 truncate">{filename}</span>
           </div>
           <span className="text-slate-400 hidden sm:inline">
-            Formato A4 Oficial • Motor Puppeteer MEKANOS
+            Formato A4 Oficial • Motor Documental PDF
           </span>
         </div>
       </div>

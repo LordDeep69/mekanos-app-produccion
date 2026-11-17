@@ -20,7 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { formatDateSafe } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   PERIODICIDAD_LABELS,
   TIPO_CLIENTE_LABELS,
@@ -67,6 +67,7 @@ interface ClienteDetailProps {
 
 export function ClienteDetail({ clienteId }: ClienteDetailProps) {
   const router = useRouter();
+  const { formatCurrency: formatOrgCurrency, formatDate: formatOrgDate } = useOrgFormatters();
   const [activeTab, setActiveTab] = useState<'general' | 'trazabilidad' | 'bitacora'>('general');
   const { data: cliente, isLoading, isError, error } = useCliente(clienteId);
 
@@ -150,7 +151,7 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
   // Helpers de formato y utilidades
   const formatDate = (date: string | null | undefined) => {
     if (!date) return 'Sin fecha registrada';
-    return formatDateSafe(date, {
+    return formatOrgDate(date, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -158,14 +159,8 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
   };
 
   const formatCurrency = (value: number | string | null | undefined) => {
-    if (value == null) return '$ 0';
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    if (isNaN(num)) return '$ 0';
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-    }).format(num);
+    if (value == null || value === '') return formatOrgCurrency(0);
+    return formatOrgCurrency(value);
   };
 
   const copyText = (text: string, label: string) => {
@@ -204,13 +199,24 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   };
 
-  const totalEquipos = cliente.equipos?.length ?? 0;
-  const totalPlantas =
-    cliente.total_equipos_plantas ??
-    cliente.equipos?.filter((e) => e.tipo === 'GENERADOR' || e.id_tipo_equipo === 3).length ??
-    0;
-  const totalBombas =
-    cliente.total_equipos_bombas ?? cliente.equipos?.filter((e) => e.tipo === 'BOMBA').length ?? 0;
+  const totalEquipos = cliente.total_equipos ?? cliente.equipos?.length ?? 0;
+  const resumenTipos = (() => {
+    if (cliente.resumen_equipos_por_tipo && cliente.resumen_equipos_por_tipo.length > 0) {
+      return cliente.resumen_equipos_por_tipo;
+    }
+    const map = new Map<
+      string,
+      { id_tipo_equipo: number | null; codigo_tipo: string; nombre_tipo: string; cantidad: number }
+    >();
+    for (const eq of cliente.equipos || []) {
+      const code = String(eq.tipo || eq.tipos_equipo?.codigo_tipo || 'ACTIVO').toUpperCase();
+      const nombre = eq.tipos_equipo?.nombre_tipo || code;
+      const cur = map.get(code);
+      if (cur) cur.cantidad += 1;
+      else map.set(code, { id_tipo_equipo: eq.id_tipo_equipo ?? null, codigo_tipo: code, nombre_tipo: nombre, cantidad: 1 });
+    }
+    return Array.from(map.values()).sort((a, b) => b.cantidad - a.cantidad);
+  })();
 
   // Ubicación descriptiva y enlace de geolocalización satelital
   const ubicacionDescriptiva =
@@ -388,11 +394,14 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
               </span>
               <Wrench className="h-4 w-4 text-blue-500 group-hover:scale-110 transition-transform" />
             </div>
-            <div className="flex items-baseline gap-2 mt-1">
+            <div className="flex items-baseline gap-2 mt-1 flex-wrap">
               <span className="text-2xl font-extrabold text-blue-900">{totalEquipos}</span>
-              <div className="flex items-center gap-1 text-[11px] text-blue-700">
-                {totalPlantas > 0 && <span>⚡ {totalPlantas} Plantas</span>}
-                {totalBombas > 0 && <span>💧 {totalBombas} Bombas</span>}
+              <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-blue-700">
+                {resumenTipos.slice(0, 3).map((item) => (
+                  <span key={`${item.codigo_tipo}-${item.id_tipo_equipo ?? 'x'}`}>
+                    {item.cantidad} {item.nombre_tipo}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -452,7 +461,7 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
             <div className="mt-1">
               <p className="text-sm font-extrabold text-amber-900 truncate">
                 {cliente.fecha_proximo_servicio
-                  ? formatDateSafe(cliente.fecha_proximo_servicio, {
+                  ? formatOrgDate(cliente.fecha_proximo_servicio, {
                       day: 'numeric',
                       month: 'short',
                       year: 'numeric',

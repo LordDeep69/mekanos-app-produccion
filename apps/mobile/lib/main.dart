@@ -1,9 +1,9 @@
-/// App Mobile Mekanos - Punto de entrada
+/// App Mobile EAM/CMMS - Punto de entrada White-Label
 ///
 /// Estructura:
 /// - ProviderScope (Riverpod) envuelve toda la app
-/// - AuthWrapper decide qué pantalla mostrar según estado de auth
-/// - ✅ ENTERPRISE: SyncNotificationService para feedback de sincronización
+/// - BrandingProvider hidrata tema/título/locale desde `/configuracion/publica`
+/// - AuthWrapper decide qué pantalla mostrar según estado de auth y aísla por cuenta
 library;
 
 import 'dart:async';
@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/api/api_client.dart';
+import 'core/config/branding_provider.dart';
 import 'core/config/supabase_config.dart';
 import 'core/errors/user_friendly_error.dart';
 import 'core/sync/sync_notification_service.dart';
@@ -86,7 +87,7 @@ void main() {
         );
       };
 
-      runApp(const ProviderScope(child: MekanosApp()));
+      runApp(const ProviderScope(child: EamMobileApp()));
     },
     (error, stackTrace) {
       if (kDebugMode) {
@@ -112,14 +113,16 @@ void main() {
   );
 }
 
-class MekanosApp extends ConsumerStatefulWidget {
-  const MekanosApp({super.key});
+typedef MekanosApp = EamMobileApp;
+
+class EamMobileApp extends ConsumerStatefulWidget {
+  const EamMobileApp({super.key});
 
   @override
-  ConsumerState<MekanosApp> createState() => _MekanosAppState();
+  ConsumerState<EamMobileApp> createState() => _EamMobileAppState();
 }
 
-class _MekanosAppState extends ConsumerState<MekanosApp> {
+class _EamMobileAppState extends ConsumerState<EamMobileApp> {
   @override
   void initState() {
     super.initState();
@@ -132,6 +135,8 @@ class _MekanosAppState extends ConsumerState<MekanosApp> {
 
   @override
   Widget build(BuildContext context) {
+    final branding = ref.watch(brandingProvider);
+
     // ✅ ENTERPRISE: Escuchar evento de sesión expirada
     ref.listen<DateTime?>(authExpiredEventProvider, (previous, next) {
       if (next != null && previous != next) {
@@ -147,7 +152,7 @@ class _MekanosAppState extends ConsumerState<MekanosApp> {
     });
 
     return MaterialApp(
-      title: 'Mekanos Técnicos',
+      title: branding.nombreComercial,
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey:
           scaffoldMessengerKey, // ✅ ENTERPRISE: Key global para SnackBars
@@ -159,12 +164,14 @@ class _MekanosAppState extends ConsumerState<MekanosApp> {
       ],
       supportedLocales: const [
         Locale('es', 'CO'), // Español Colombia
+        Locale('es', 'MX'),
         Locale('es', ''), // Español genérico
+        Locale('en', 'US'),
         Locale('en', ''), // Inglés fallback
       ],
-      locale: const Locale('es', 'CO'),
+      locale: branding.materialLocale,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(seedColor: branding.colorPrimario),
         useMaterial3: true,
         appBarTheme: const AppBarTheme(centerTitle: true, elevation: 2),
       ),
@@ -200,8 +207,10 @@ class AuthWrapper extends ConsumerWidget {
         );
 
       case AuthStatus.authenticated:
-        // Usuario autenticado → Home de Producción
-        return const HomeProductionScreen();
+        // Usuario autenticado → Home con Key única por cuenta para reiniciar todo árbol UI
+        return HomeProductionScreen(
+          key: ValueKey('home_user_${authState.user?.id ?? 0}'),
+        );
 
       case AuthStatus.unauthenticated:
       case AuthStatus.error:

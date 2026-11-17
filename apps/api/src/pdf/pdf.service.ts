@@ -1,18 +1,6 @@
 /**
- * PDF Service - MEKANOS S.A.S
- *
- * Generación de PDFs profesionales con Puppeteer + Templates HTML
- *
- * Templates disponibles:
- * - GENERADOR_A: Preventivo Tipo A para Generadores
- * - GENERADOR_B: Preventivo Tipo B (Cambio de filtros)
- * - BOMBA_A: Preventivo para Bombas
- *
- * Colores MEKANOS:
- * #244673 - Azul Oscuro (principal)
- * #3290A6 - Azul Claro (secundario)
- * #56A672 - Verde (OK)
- * #9EC23D - Verde Claro (destacados)
+ * PDF Service White-Label
+ * Generación de PDFs corporativos con Puppeteer + Templates HTML parametrizados.
  */
 
 import {
@@ -21,18 +9,31 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as puppeteer from 'puppeteer';
+import { ConfiguracionOrganizacionService } from '../configuracion-organizacion/configuracion-organizacion.service';
+import {
+  OrgBrandingContext,
+  buildOrgBranding,
+  formatDateOrg,
+  resolveOrgBranding,
+} from './org-branding.types';
 import {
   DatosCorrectivoOrdenPDF,
   DatosCotizacionPDF,
+  DatosOrdenCompraPDF,
   DatosOrdenPDF,
+  DatosPropuestaCorrectivoPDF,
+  DatosRemisionPDF,
   DatosTrazabilidadClientePDF,
   generarCorrectivoOrdenHTML,
   generarCotizacionHTML,
+  generarOrdenCompraHTML,
+  generarPropuestaCorrectivoHTML,
+  generarRemisionHTML,
   generarTipoABombaHTML,
   generarTipoAGeneradorHTML,
   generarTipoBGeneradorHTML,
@@ -42,15 +43,16 @@ import {
 import { DatosEstructuradosCorrectivoPorEquipo } from './templates/tipo-correctivo.template';
 
 export type TipoInforme =
-  | 'GENERADOR_A'
-  | 'GENERADOR_B'
-  | 'BOMBA_A'
   | 'UNIVERSAL_EAM'
   | 'CORRECTIVO'
   | 'COTIZACION'
   | 'PROPUESTA_CORRECTIVO'
   | 'REMISION'
-  | 'ORDEN_COMPRA';
+  | 'ORDEN_COMPRA'
+  | 'TRAZABILIDAD'
+  | 'GENERADOR_A'
+  | 'GENERADOR_B'
+  | 'BOMBA_A';
 
 export interface GenerarPDFOptions {
   tipoInforme: TipoInforme;
@@ -84,20 +86,103 @@ export interface OrdenPdfData {
 @Injectable()
 export class PdfService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PdfService.name);
-  private browser: puppeteer.Browser | null = null;
 
-  /**
-   * ✅ FIX 23-ENE-2026: NO pre-inicializar browser para ahorrar memoria
-   * En Render Free Tier (512MB), mantener Chrome idle consume demasiada RAM
-   * Ahora creamos/destruimos browser por cada generación de PDF
-   */
+  constructor(
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
+    @Optional() _compatArg1?: unknown,
+    @Optional() _compatArg2?: unknown,
+  ) {}
+
   async onModuleInit(): Promise<void> {
-    this.logger.log('📋 PdfService listo (browser se creará bajo demanda para ahorrar memoria)');
-    // NO pre-inicializar - Chrome consume ~300MB idle
+    this.logger.log('📋 PdfService listo (browser aislado bajo demanda para control de memoria)');
   }
 
   /**
-   * Genera un PDF profesional MEKANOS
+   * Resuelve el contexto visual/fiscal de la organización (con cache de logo en memoria).
+   */
+  async resolveBranding(override?: Partial<OrgBrandingContext> | null): Promise<OrgBrandingContext> {
+    if (override && (override as OrgBrandingContext).nombreComercial && (override as OrgBrandingContext).colores) {
+      return resolveOrgBranding(override);
+    }
+    if (!this.configOrgService) {
+      return resolveOrgBranding(override);
+    }
+    const [ctx, logoUri] = await Promise.all([
+      this.configOrgService.getContext().catch(() => null),
+      typeof this.configOrgService.resolveLogoDataUri === 'function'
+        ? this.configOrgService.resolveLogoDataUri().catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    const built = buildOrgBranding(ctx, logoUri);
+    return override ? resolveOrgBranding({ ...built, ...override }) : built;
+  }
+
+  private slugEmpresa(brand: OrgBrandingContext): string {
+    const slug = (brand.nombreComercial || 'DOC')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 24);
+    return slug || 'EAM';
+  }
+
+  /**
+   * Ejecuta la renderización HTML->PDF garantizando cierre simétrico por petición
+   * (sin compartir instancia mutable entre peticiones concurrentes ni fugas de RAM).
+   */
+  private async renderHtmlToPdf(
+    html: string,
+    pdfOptions: puppeteer.PDFOptions = {
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+      preferCSSPageSize: true,
+      timeout: 90000,
+    },
+    waitMsPostLoad = 0,
+  ): Promise<Buffer> {
+    const browser = await this.launchBrowser();
+    const page = await browser.newPage();
+
+    try {
+      await page.setExtraHTTPHeaders({
+        'Content-Type': 'text/html; charset=utf-8',
+        'Accept-Charset': 'utf-8',
+      });
+
+      page.on('console', (msg) => {
+        if (msg.type() === 'error' || msg.text().includes('Error cargando imagen')) {
+          this.logger.warn(`🌐 Browser console [${msg.type()}]: ${msg.text()}`);
+        }
+      });
+
+      const htmlConEncoding = html.includes('<meta http-equiv="Content-Type"')
+        ? html
+        : html.replace(
+            '<meta charset="UTF-8">',
+            '<meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8">',
+          );
+
+      await page.setContent(htmlConEncoding, {
+        waitUntil: ['networkidle0', 'load'],
+        timeout: 90000,
+      });
+
+      if (waitMsPostLoad > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitMsPostLoad));
+      }
+
+      const pdfBuffer = await page.pdf(pdfOptions);
+      return Buffer.from(pdfBuffer);
+    } finally {
+      await page.close().catch(() => {});
+      await browser.close().catch(() => {});
+    }
+  }
+
+  /**
+   * Genera un PDF corporativo para una orden de servicio.
    */
   async generarPDF(options: GenerarPDFOptions): Promise<PDFResult> {
     const startTime = Date.now();
@@ -106,99 +191,35 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     );
 
     try {
-      // Obtener el HTML según el tipo de informe
-      const html = this.obtenerHTML(options.tipoInforme, options.datos);
+      const brand = await this.resolveBranding(options.datos?.branding);
+      const datosConBranding: DatosOrdenPDF = {
+        ...options.datos,
+        branding: brand,
+      };
+      const html = this.obtenerHTML(options.tipoInforme, datosConBranding, brand);
 
-      // ✅ FIX 23-ENE-2026: Crear browser fresco para cada PDF (libera memoria después)
-      this.logger.log('🚀 Iniciando Chrome para generación de PDF...');
-      await this.initBrowser();
-
-      // Crear nueva página
-      const page = await this.browser!.newPage();
-
-      try {
-        // ✅ FIX MEJORADO: Configurar encoding UTF-8 explícitamente
-        await page.setExtraHTTPHeaders({
-          'Content-Type': 'text/html; charset=utf-8',
-          'Accept-Charset': 'utf-8',
-        });
-
-        // ✅ FIX 27-MAR-2026: Capturar mensajes de consola para diagnóstico de imágenes
-        page.on('console', (msg) => {
-          if (msg.type() === 'error' || msg.text().includes('Error cargando imagen')) {
-            this.logger.warn(`🌐 Browser console [${msg.type()}]: ${msg.text()}`);
-          }
-        });
-
-        // Inyectar meta http-equiv para reforzar encoding UTF-8
-        const htmlConEncoding = html.replace(
-          '<meta charset="UTF-8">',
-          '<meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8">',
-        );
-
-        // 🔧 FIX 02-ENE-2026: Revertir a 'networkidle0' - Las imágenes son URLs de Cloudinary
-        // que necesitan cargarse via HTTP. 'domcontentloaded' NO espera las imágenes,
-        // causando que aparezcan en blanco en el PDF generado.
-        // ✅ FIX 27-MAR-2026: Agregar 'load' adicional para asegurar que las imágenes se carguen
-        await page.setContent(htmlConEncoding, {
-          waitUntil: ['networkidle0', 'load'],
-          timeout: 90000, // ✅ FIX 23-ENE-2026: 90s para Render free tier
-        });
-
-        // ✅ FIX 27-MAR-2026: Espera adicional para asegurar que las imágenes de Cloudinary carguen
-        // Las imágenes externas a veces necesitan más tiempo para renderizarse
-        this.logger.log('⏳ Esperando carga de imágenes (2s)...');
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-
-        // Verificar que las imágenes se cargaron (opcional, para debug)
-        const imagenesCargadas = await page.evaluate(() => {
-          const imgs = Array.from((globalThis as any).document.querySelectorAll('img'));
-          return {
-            total: imgs.length,
-            completadas: imgs.filter((img: any) => img.complete && img.naturalWidth > 0).length,
-            fallidas: imgs.filter((img: any) => !img.complete || img.naturalWidth === 0).length,
-          };
-        });
-        this.logger.log(
-          `📷 Estado de imágenes: ${imagenesCargadas.completadas}/${imagenesCargadas.total} cargadas (${imagenesCargadas.fallidas} fallidas)`,
-        );
-
-        // Generar PDF
-        const pdfBuffer = await page.pdf({
+      const buffer = await this.renderHtmlToPdf(
+        html,
+        {
           format: 'A4',
           printBackground: true,
-          margin: {
-            top: '0',
-            right: '0',
-            bottom: '0',
-            left: '0',
-          },
+          margin: { top: '0', right: '0', bottom: '0', left: '0' },
           preferCSSPageSize: true,
-          timeout: 90000, // ✅ FIX 23-ENE-2026: 90s para Render free tier
-        });
+          timeout: 90000,
+        },
+        2000,
+      );
 
-        const buffer: Buffer = Buffer.from(pdfBuffer);
-        const filename = this.generarFilename(options.tipoInforme, options.datos.numeroOrden);
+      const filename = this.generarFilename(options.tipoInforme, options.datos.numeroOrden, brand);
+      const elapsed = Date.now() - startTime;
+      this.logger.log(`✅ PDF listo en ${elapsed}ms - Tamaño: ${(buffer.length / 1024).toFixed(2)} KB`);
 
-        const elapsed = Date.now() - startTime;
-        const finalSizeKB = (buffer.length / 1024).toFixed(2);
-        this.logger.log(`✅ PDF listo en ${elapsed}ms - Tamaño: ${finalSizeKB} KB`);
-
-        return {
-          buffer,
-          filename,
-          size: buffer.length,
-          tipoInforme: options.tipoInforme,
-        };
-      } finally {
-        await page.close();
-        // ✅ FIX 23-ENE-2026: Cerrar browser inmediatamente para liberar ~300MB RAM
-        if (this.browser) {
-          this.logger.log('🔒 Cerrando Chrome para liberar memoria...');
-          await this.browser.close();
-          this.browser = null;
-        }
-      }
+      return {
+        buffer,
+        filename,
+        size: buffer.length,
+        tipoInforme: options.tipoInforme,
+      };
     } catch (error: unknown) {
       const err = error as Error;
       this.logger.error(`❌ Error generando PDF: ${err.message}`, err.stack);
@@ -207,24 +228,71 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Genera HTML según el tipo de informe
+   * Renderiza cualquier tipo de documento soportado en HTML White-Label.
    */
-  private obtenerHTML(tipo: TipoInforme, datos: DatosOrdenPDF): string {
+  obtenerHTML(
+    tipo: TipoInforme,
+    datos: DatosOrdenPDF | Record<string, any>,
+    branding?: OrgBrandingContext,
+  ): string {
+    const brand = resolveOrgBranding(branding || (datos as any)?.branding);
     switch (tipo) {
-      case 'GENERADOR_A':
-        return generarTipoAGeneradorHTML(datos);
-      case 'GENERADOR_B':
-        return generarTipoBGeneradorHTML(datos);
-      case 'BOMBA_A':
-        return generarTipoABombaHTML(datos);
       case 'UNIVERSAL_EAM':
-        return generarTipoUniversalEamHTML(datos);
+        return generarTipoUniversalEamHTML({ ...(datos as DatosOrdenPDF), branding: brand });
       case 'CORRECTIVO':
-        return generarCorrectivoOrdenHTML(this.adaptarDatosParaCorrectivo(datos));
+        return generarCorrectivoOrdenHTML(
+          this.adaptarDatosParaCorrectivo(datos as DatosOrdenPDF, brand),
+        );
       case 'COTIZACION':
-        return generarCotizacionHTML(datos as unknown as DatosCotizacionPDF);
+        return generarCotizacionHTML({ ...(datos as DatosCotizacionPDF), branding: brand });
+      case 'PROPUESTA_CORRECTIVO':
+        return generarPropuestaCorrectivoHTML({
+          ...(datos as DatosPropuestaCorrectivoPDF),
+          branding: brand,
+        });
+      case 'REMISION':
+        return generarRemisionHTML({ ...(datos as DatosRemisionPDF), branding: brand });
+      case 'ORDEN_COMPRA':
+        return generarOrdenCompraHTML({ ...(datos as DatosOrdenCompraPDF), branding: brand });
+      case 'TRAZABILIDAD':
+        return generarTrazabilidadClienteHTML({
+          ...(datos as DatosTrazabilidadClientePDF),
+          branding: brand,
+        });
+      case 'GENERADOR_A':
+        return generarTipoAGeneradorHTML({ ...(datos as DatosOrdenPDF), branding: brand });
+      case 'GENERADOR_B':
+        return generarTipoBGeneradorHTML({ ...(datos as DatosOrdenPDF), branding: brand });
+      case 'BOMBA_A':
+        return generarTipoABombaHTML({ ...(datos as DatosOrdenPDF), branding: brand });
       default:
-        return generarTipoAGeneradorHTML(datos);
+        return generarTipoUniversalEamHTML({ ...(datos as DatosOrdenPDF), branding: brand });
+    }
+  }
+
+  /**
+   * Método unificado para generar PDF de cualquier documento documental (Propuesta, Remisión, OC, etc.).
+   */
+  async generarPDFDocumento(
+    tipoInforme: TipoInforme,
+    datos: Record<string, any>,
+    numeroReferencia = 'DOC',
+  ): Promise<PDFResult> {
+    try {
+      const brand = await this.resolveBranding(datos?.branding);
+      const html = this.obtenerHTML(tipoInforme, datos, brand);
+      const buffer = await this.renderHtmlToPdf(html);
+      const filename = this.generarFilename(tipoInforme, numeroReferencia, brand);
+      return {
+        buffer,
+        filename,
+        size: buffer.length,
+        tipoInforme,
+      };
+    } catch (error: unknown) {
+      const err = error as Error;
+      this.logger.error(`❌ Error generando PDF documento ${tipoInforme}: ${err.message}`, err.stack);
+      throw new InternalServerErrorException(`Error generando PDF (${tipoInforme}): ${err.message}`);
     }
   }
 
@@ -326,7 +394,10 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * ✅ REDISEÑO 06-FEB-2026: Cada campo estructurado va directo al template como campo dedicado
    * Ya no se usa tabla checklist B/M/C/NA ni blob HTML de observaciones
    */
-  private adaptarDatosParaCorrectivo(datos: DatosOrdenPDF): DatosCorrectivoOrdenPDF {
+  private adaptarDatosParaCorrectivo(
+    datos: DatosOrdenPDF,
+    branding?: OrgBrandingContext,
+  ): DatosCorrectivoOrdenPDF {
     // ═══════════════════════════════════════════════════════════════════════════
     // PASO 1: Extraer datos estructurados de observaciones de actividades
     // Los widgets móviles guardan datos con prefijos: ESTADO_INICIAL:, PROBLEMA:, etc.
@@ -568,6 +639,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       repuestosDetallados: datos.repuestosDetallados,
       equipoDetalle: datos.equipoDetalle,
       placaUniversal: datos.placaUniversal,
+      branding: branding || datos.branding,
     };
   }
 
@@ -681,6 +753,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
             : null;
         const valRaw =
           (Array.isArray(respObj?.seleccionados) ? respObj.seleccionados.join(', ') : null) ??
+          (Array.isArray(respObj?.items) ? respObj.items.join('; ') : null) ??
+          respObj?.texto ??
           respObj?.etiqueta ??
           respObj?.valor ??
           obs
@@ -958,9 +1032,13 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Genera nombre de archivo para el PDF
+   * Genera nombre de archivo neutro parametrizado por la organización.
    */
-  private generarFilename(tipo: TipoInforme, numeroOrden: string): string {
+  private generarFilename(
+    tipo: TipoInforme,
+    numeroOrden: string,
+    brand: OrgBrandingContext = resolveOrgBranding(),
+  ): string {
     const fecha = new Date().toISOString().split('T')[0];
     const tipoNombreMap: Record<TipoInforme, string> = {
       GENERADOR_A: 'Preventivo_A_Generador',
@@ -972,74 +1050,38 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       PROPUESTA_CORRECTIVO: 'Propuesta_Correctivo',
       REMISION: 'Remision',
       ORDEN_COMPRA: 'Orden_Compra',
+      TRAZABILIDAD: 'Trazabilidad',
     };
     const tipoNombre = tipoNombreMap[tipo] || 'Informe';
+    const refSanitizada = String(numeroOrden || 'DOC').replace(/[^a-zA-Z0-9-_]/g, '_');
 
-    return `MEKANOS_${tipoNombre}_${numeroOrden}_${fecha}.pdf`;
+    return `${this.slugEmpresa(brand)}_${tipoNombre}_${refSanitizada}_${fecha}.pdf`;
   }
 
   /**
-   * Inicializa el browser de Puppeteer
-   * ✅ FIX 09-JUN-2026: Soporte cross-platform Windows/Linux robusto
+   * Lanza una instancia aislada de Chromium/Chrome preinstalada en el host/contenedor.
+   * Nunca ejecuta descargas/instalaciones en tiempo de petición HTTP.
    */
-  private async initBrowser(): Promise<void> {
+  private async launchBrowser(): Promise<puppeteer.Browser> {
     const isWindows = process.platform === 'win32';
-    // Fallback inteligente: en Windows no existe /tmp
     const defaultCacheDir = isWindows
       ? path.join(process.env.USERPROFILE || process.env.HOME || '.', '.cache', 'puppeteer')
       : '/tmp/.cache/puppeteer';
     const cacheDir = process.env.PUPPETEER_CACHE_DIR || defaultCacheDir;
 
-    this.logger.log('🚀 Inicializando Puppeteer browser...');
-    this.logger.log(`📍 Plataforma: ${process.platform}, Entorno: ${process.env.NODE_ENV}`);
-    this.logger.log(`📍 PUPPETEER_CACHE_DIR: ${cacheDir}`);
+    this.logger.log('🚀 Lanzando Puppeteer browser aislado...');
 
     try {
-      // ═══════════════════════════════════════════════════════════════════
-      // PASO 1: Resolver Chrome executable path de forma robusta
-      // Busca en múltiples ubicaciones para máxima compatibilidad
-      // ═══════════════════════════════════════════════════════════════════
-      let executablePath = this.resolverChromePath(cacheDir);
-      this.logger.log(`📍 Chrome executable path resuelto: ${executablePath || '(no encontrado)'}`);
+      const envExec = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+      const executablePath =
+        envExec && fs.existsSync(envExec) ? envExec : this.resolverChromePath(cacheDir);
 
-      // ═══════════════════════════════════════════════════════════════════
-      // PASO 2: Si Chrome no existe, instalarlo en runtime
-      // ═══════════════════════════════════════════════════════════════════
       if (!executablePath) {
-        this.logger.warn(
-          '⚠️ Chrome no encontrado en ninguna ubicación conocida, instalando en runtime...',
+        throw new Error(
+          'Chromium/Chrome no está preinstalado. Defina PUPPETEER_EXECUTABLE_PATH o instale Chrome en el paso de build/Dockerfile.',
         );
-        try {
-          // ✅ FIX 09-JUN-2026: Comando cross-platform (sin prefijo de env vars estilo Unix)
-          // Las env vars se pasan únicamente via el objeto `env` de execSync
-          const installCmd = 'npx puppeteer browsers install chrome';
-          this.logger.log(`📦 Ejecutando: ${installCmd} (con PUPPETEER_CACHE_DIR=${cacheDir})`);
-          execSync(installCmd, {
-            stdio: 'inherit',
-            timeout: 120000,
-            env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir },
-          });
-          this.logger.log('✅ Chrome instalado correctamente');
-
-          // Resolver de nuevo después de la instalación
-          executablePath = this.resolverChromePath(cacheDir);
-          if (!executablePath) {
-            throw new Error('Chrome se instaló pero no se encontró el ejecutable');
-          }
-          this.logger.log(`📍 Chrome encontrado post-instalación: ${executablePath}`);
-        } catch (installError: any) {
-          this.logger.error(`❌ Error instalando Chrome: ${installError.message}`);
-          throw new Error(`No se pudo instalar Chrome: ${installError.message}`);
-        }
-      } else {
-        this.logger.log('✅ Chrome encontrado en el path esperado');
       }
 
-      // ═══════════════════════════════════════════════════════════════════
-      // PASO 3: Configurar args por plataforma y lanzar browser
-      // ═══════════════════════════════════════════════════════════════════
-
-      // Args base que funcionan en ambas plataformas
       const baseArgs = [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -1054,7 +1096,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         '--disable-popup-blocking',
       ];
 
-      // Args adicionales solo para Linux/producción (causan ECONNRESET en Windows)
       const linuxOnlyArgs = isWindows
         ? []
         : [
@@ -1082,21 +1123,17 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
             '--memory-pressure-off',
           ];
 
-      this.browser = await puppeteer.launch({
+      return await puppeteer.launch({
         headless: true,
         executablePath,
         protocolTimeout: 120000,
         args: [...baseArgs, ...linuxOnlyArgs],
       });
-
-      this.logger.log('✅ Browser inicializado correctamente');
     } catch (error: any) {
       this.logger.error(`❌ Error inicializando Puppeteer: ${error.message}`);
       this.logger.error(`📍 Cache path configurado: ${cacheDir}`);
-      this.logger.error(`📍 CWD: ${process.cwd()}`);
       throw new InternalServerErrorException(
-        `Error inicializando generador de PDF: ${error.message}. ` +
-          `Asegúrese de que Chrome está instalado (npx puppeteer browsers install chrome)`,
+        `Error inicializando generador de PDF: ${error.message}`,
       );
     }
   }
@@ -1202,61 +1239,74 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Cierra el browser al destruir el servicio
+   * Hook del ciclo de vida Nest (cada generación usa su propia instancia aislada y la cierra en finally).
    */
   async onModuleDestroy(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      this.logger.log('🔒 Browser cerrado');
-    }
+    this.logger.log('🔒 PdfService finalizado');
   }
 
   /**
-   * Determina el tipo de informe basado en el equipo y servicio.
-   * ✅ FIX EAM FASE 5.4: Soporta categorías extendidas (EMERGENCIA, DIAGNOSTICO, INSPECCION, ESPECIALIZADO)
+   * Determina el tipo de informe de forma declarativa desde tipos_servicio / tipos_equipo.
+   * Por defecto converge todos los equipos preventivos/inspección hacia UNIVERSAL_EAM
+   * y los narrativos (CORRECTIVO / EMERGENCIA / DIAGNOSTICO) hacia CORRECTIVO.
+   * Mantiene enrutamiento legacy únicamente si la organización/arquetipo opta explícitamente
+   * por usaPlantillaUniversal = false.
    */
   determinarTipoInforme(
     tipoEquipo: 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string,
     tipoServicio: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' | string,
+    options?: {
+      usaPlantillaUniversal?: boolean | null;
+      formatoDocumento?: 'CHECKLIST_EAM' | 'NARRATIVO_CORRECTIVO' | string | null;
+      categoriaServicio?: string | null;
+    },
   ): TipoInforme {
-    // Servicios narrativos (CORRECTIVO, EMERGENCIA, DIAGNÓSTICO) → template narrativo universal
-    const tsUpper = (tipoServicio || '').toUpperCase();
-    if (tsUpper === 'CORRECTIVO' || tsUpper === 'EMERGENCIA' || tsUpper === 'DIAGNOSTICO') {
+    const formatoDoc = (options?.formatoDocumento || '').toUpperCase().trim();
+    const catUpper = (options?.categoriaServicio || '').toUpperCase().trim();
+    const tsUpper = (tipoServicio || '').toUpperCase().trim();
+
+    if (
+      formatoDoc === 'NARRATIVO_CORRECTIVO' ||
+      ['CORRECTIVO', 'EMERGENCIA', 'DIAGNOSTICO'].includes(catUpper) ||
+      tsUpper === 'CORRECTIVO' ||
+      tsUpper === 'EMERGENCIA' ||
+      tsUpper === 'DIAGNOSTICO' ||
+      tsUpper.includes('CORR')
+    ) {
       return 'CORRECTIVO';
     }
 
-    const tEq = (tipoEquipo || '').toUpperCase().trim();
-
-    // Legacy: Bombas y Generadores con templates certificados dedicados
-    if (tEq === 'BOMBA' || tEq === 'BOM') {
-      return 'BOMBA_A';
+    if (options?.usaPlantillaUniversal === false) {
+      const tEq = (tipoEquipo || '').toUpperCase().trim();
+      if (tEq === 'BOMBA' || tEq === 'BOM') {
+        return 'BOMBA_A';
+      }
+      if (tEq === 'GENERADOR' || tEq === 'GEN') {
+        return tsUpper.includes('B') && !tsUpper.includes('A') ? 'GENERADOR_B' : 'GENERADOR_A';
+      }
     }
 
-    if (tEq === 'GENERADOR' || tEq === 'GEN') {
-      return tsUpper === 'PREVENTIVO_B' ? 'GENERADOR_B' : 'GENERADOR_A';
-    }
-
-    // Cualquier otro equipo → UNIVERSAL_EAM (dinámico, se adapta al contenido)
     return 'UNIVERSAL_EAM';
   }
 
   /**
-   * Genera un PDF de prueba con datos de ejemplo
+   * Genera un PDF de prueba con branding dinámico de la organización
    */
   async generarPDFPrueba(): Promise<PDFResult> {
+    const brand = await this.resolveBranding();
     const datosPrueba: DatosOrdenPDF = {
-      cliente: 'HOTEL CARIBE S.A.S',
-      direccion: 'Cra 1 #23-45, Cartagena de Indias',
-      marcaEquipo: 'CATERPILLAR',
-      serieEquipo: 'CAT-2024-001',
+      cliente: 'Cliente Demostración S.A.',
+      direccion: [brand.direccionLinea1, brand.ciudadDefecto].filter(Boolean).join(', ') || 'Dirección Principal',
+      marcaEquipo: 'Demo OEM',
+      serieEquipo: 'EAM-2026-001',
       tipoEquipo: 'GENERADOR',
-      fecha: new Date().toLocaleDateString('es-CO'),
-      tecnico: 'Carlos Martínez',
+      fecha: formatDateOrg(new Date(), brand),
+      tecnico: 'Técnico Especialista',
       horaEntrada: '08:00',
       horaSalida: '12:30',
       tipoServicio: 'PREVENTIVO_A',
-      numeroOrden: 'ORD-2025-00001',
+      numeroOrden: 'ORD-DEMO-0001',
+      branding: brand,
       datosModulo: {
         rpm: 1800,
         presionAceite: 65,
@@ -1305,45 +1355,15 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           observaciones: 'Cambiar próximo servicio',
         },
         {
-          sistema: 'COMBUSTIBLE',
-          descripcion: 'Purgar sistema de combustible',
-          resultado: 'B',
-          observaciones: '',
-        },
-        {
           sistema: 'LUBRICACION',
           descripcion: 'Revisar nivel de aceite',
           resultado: 'B',
           observaciones: '',
         },
         {
-          sistema: 'LUBRICACION',
-          descripcion: 'Revisar estado del aceite',
-          resultado: 'B',
-          observaciones: 'Color normal',
-        },
-        {
           sistema: 'ELECTRICO',
           descripcion: 'Revisar bornes de batería',
           resultado: 'B',
-          observaciones: '',
-        },
-        {
-          sistema: 'ELECTRICO',
-          descripcion: 'Revisar cableado general',
-          resultado: 'B',
-          observaciones: '',
-        },
-        {
-          sistema: 'GENERAL',
-          descripcion: '¿El equipo arranca sin dificultad?',
-          resultado: 'B',
-          observaciones: '',
-        },
-        {
-          sistema: 'GENERAL',
-          descripcion: '¿Existe vibración excesiva?',
-          resultado: 'M',
           observaciones: '',
         },
       ],
@@ -1353,23 +1373,13 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         { parametro: 'Voltaje Generador', valor: 220, unidad: 'V', nivelAlerta: 'OK' },
         { parametro: 'Frecuencia', valor: 60, unidad: 'Hz', nivelAlerta: 'OK' },
       ],
-      // EVIDENCIAS FOTOGRÁFICAS DE PRUEBA - Imágenes de equipos industriales
-      evidencias: [
-        // Vista general del generador
-        'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=600&auto=format&fit=crop',
-        // Panel de control / sistemas
-        'https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=400&auto=format&fit=crop',
-        // Detalle de maquinaria
-        'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?q=80&w=400&auto=format&fit=crop',
-        // Sistema eléctrico
-        'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?q=80&w=400&auto=format&fit=crop',
-      ],
+      evidencias: [],
       observaciones:
-        'Equipo en buen estado general. Se recomienda programar cambio de filtros de combustible en el próximo servicio Tipo B. Se detectó leve vibración que debe monitorearse. Batería con carga óptima.',
+        'Equipo operando bajo parámetros normales de servicio.',
     };
 
     return this.generarPDF({
-      tipoInforme: 'GENERADOR_A',
+      tipoInforme: 'UNIVERSAL_EAM',
       datos: datosPrueba,
     });
   }
@@ -1378,17 +1388,16 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * @deprecated Use generarPDF() en su lugar
-   * Método legacy para compatibilidad con código existente
    */
   async generateOrdenServicioPdf(data: OrdenPdfData): Promise<Buffer> {
-    // Convertir datos legacy a nuevo formato
+    const brand = await this.resolveBranding();
     const datosNuevo: DatosOrdenPDF = {
       cliente: data.clienteNombre || 'N/A',
       direccion: 'N/A',
       marcaEquipo: data.equipoNombre || 'N/A',
       serieEquipo: 'N/A',
       tipoEquipo: 'GENERADOR',
-      fecha: this.formatDate(data.fechaCreacion),
+      fecha: formatDateOrg(data.fechaCreacion, brand),
       tecnico: data.tecnicoAsignado || 'N/A',
       horaEntrada: 'N/A',
       horaSalida: 'N/A',
@@ -1398,74 +1407,51 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       mediciones: [],
       evidencias: [],
       observaciones: data.observaciones || data.descripcion || '',
+      branding: brand,
     };
 
     const result = await this.generarPDF({
-      tipoInforme: 'GENERADOR_A',
+      tipoInforme: 'UNIVERSAL_EAM',
       datos: datosNuevo,
     });
 
     return result.buffer;
   }
 
-  private formatDate(date: Date | null | undefined): string {
-    if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('es-CO');
-  }
-
   // ==================== MÉTODOS PARA COTIZACIONES ====================
 
   /**
-   * Genera un PDF para una cotización comercial
+   * Genera un PDF para una cotización comercial con cierre simétrico de browser.
    */
   async generarPDFCotizacion(datosCotizacion: DatosCotizacionPDF): Promise<PDFResult> {
     try {
       this.logger.log(`📄 Generando PDF de Cotización: ${datosCotizacion.numeroCotizacion}`);
+      const brand = await this.resolveBranding(datosCotizacion.branding);
+      const html = this.obtenerHTML('COTIZACION', { ...datosCotizacion, branding: brand }, brand);
+      const filename = this.generarFilename('COTIZACION', datosCotizacion.numeroCotizacion, brand);
 
-      if (!this.browser) {
-        await this.initBrowser();
-      }
+      const buffer = await this.renderHtmlToPdf(html, {
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '15mm', bottom: '15mm', left: '10mm', right: '10mm' },
+        displayHeaderFooter: true,
+        headerTemplate: '<div></div>',
+        footerTemplate: `
+          <div style="font-size: 8px; width: 100%; text-align: center; color: #666;">
+            <span>Cotización ${datosCotizacion.numeroCotizacion} - Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
+          </div>
+        `,
+        timeout: 60000,
+      });
 
-      const html = generarCotizacionHTML(datosCotizacion);
-      const filename = this.generarFilenameCotizacion(datosCotizacion.numeroCotizacion);
+      this.logger.log(`✅ PDF de cotización generado: ${filename} (${buffer.length} bytes)`);
 
-      const page = await this.browser!.newPage();
-
-      try {
-        await page.setContent(html, {
-          waitUntil: 'networkidle0',
-          timeout: 60000,
-        });
-
-        const pdfBuffer = await page.pdf({
-          format: 'A4',
-          printBackground: true,
-          margin: {
-            top: '15mm',
-            bottom: '15mm',
-            left: '10mm',
-            right: '10mm',
-          },
-          displayHeaderFooter: true,
-          headerTemplate: '<div></div>',
-          footerTemplate: `
-            <div style="font-size: 8px; width: 100%; text-align: center; color: #666;">
-              <span>Cotización ${datosCotizacion.numeroCotizacion} - Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
-            </div>
-          `,
-        });
-
-        this.logger.log(`✅ PDF de cotización generado: ${filename} (${pdfBuffer.length} bytes)`);
-
-        return {
-          buffer: Buffer.from(pdfBuffer),
-          filename,
-          size: pdfBuffer.length,
-          tipoInforme: 'COTIZACION' as TipoInforme,
-        };
-      } finally {
-        await page.close();
-      }
+      return {
+        buffer,
+        filename,
+        size: buffer.length,
+        tipoInforme: 'COTIZACION',
+      };
     } catch (error: unknown) {
       const err = error as Error;
       this.logger.error(`❌ Error generando PDF de cotización: ${err.message}`, err.stack);
@@ -1474,130 +1460,78 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Genera nombre de archivo para cotización
-   */
-  private generarFilenameCotizacion(numeroCotizacion: string): string {
-    const fecha = new Date().toISOString().split('T')[0];
-    return `MEKANOS_Cotizacion_${numeroCotizacion.replace(/[^a-zA-Z0-9-]/g, '_')}_${fecha}.pdf`;
-  }
-
-  /**
-   * Genera un PDF de cotización de prueba con datos de ejemplo
+   * Genera un PDF de cotización de prueba con datos neutrales y branding dinámico
    */
   async generarPDFCotizacionPrueba(): Promise<PDFResult> {
+    const brand = await this.resolveBranding();
+    const ivaPct = brand.tasaImpuestoDefecto ?? 19;
+    const subtotalSrv = 1200;
+    const subtotalComp = 450;
+    const subtotalGen = subtotalSrv + subtotalComp;
+    const descuento = 0;
+    const ivaVal = Math.round((subtotalGen * ivaPct) / 100);
+
     const datosPrueba: DatosCotizacionPDF = {
-      numeroCotizacion: 'COT-2025-00001',
-      fechaCotizacion: new Date().toLocaleDateString('es-CO'),
-      fechaVencimiento: new Date(Date.now() + 30 * 86400000).toLocaleDateString('es-CO'),
-      diasValidez: 30,
+      branding: brand,
+      numeroCotizacion: 'COT-DEMO-0001',
+      fechaCotizacion: formatDateOrg(new Date(), brand),
+      fechaVencimiento: formatDateOrg(
+        new Date(Date.now() + brand.validezCotizacionDiasDefecto * 86400000),
+        brand,
+      ),
+      diasValidez: brand.validezCotizacionDiasDefecto,
       version: 1,
-
       cliente: {
-        nombre: 'HOTEL CARIBE S.A.S',
-        nit: '900.123.456-7',
-        direccion: 'Cra 1 #23-45, Cartagena de Indias',
-        telefono: '(605) 642-1234',
-        email: 'compras@hotelcaribe.com',
-        contacto: 'María García - Gerente de Compras',
+        nombre: 'Cliente Demostración S.A.',
+        nit: '000.000.000-0',
+        direccion: brand.ciudadDefecto || 'Sede Principal',
+        telefono: brand.telefonoPrincipal || '-',
+        email: brand.emailContacto || 'contacto@cliente.example',
+        contacto: 'Contacto de Compras',
       },
-
-      asunto: 'Mantenimiento Preventivo Generador 250 KVA',
-      descripcionGeneral: 'Servicio de mantenimiento preventivo completo',
-
+      asunto: 'Servicio Técnico Preventivo Programado',
+      descripcionGeneral: 'Propuesta comercial de demostración White-Label',
       itemsServicios: [
         {
           orden: 1,
-          descripcion: 'Mantenimiento Preventivo Tipo A - Generador 250 KVA',
+          descripcion: 'Mantenimiento Preventivo Programado',
           cantidad: 1,
           unidad: 'UND',
-          precioUnitario: 1500000,
+          precioUnitario: subtotalSrv,
           descuentoPorcentaje: 0,
-          subtotal: 1500000,
-        },
-        {
-          orden: 2,
-          descripcion: 'Mantenimiento Preventivo Tipo B - Generador 250 KVA',
-          cantidad: 1,
-          unidad: 'UND',
-          precioUnitario: 2800000,
-          descuentoPorcentaje: 10,
-          subtotal: 2520000,
-        },
-        {
-          orden: 3,
-          descripcion: 'Servicio de Diagnóstico y Pruebas de Carga',
-          cantidad: 2,
-          unidad: 'UND',
-          precioUnitario: 450000,
-          descuentoPorcentaje: 0,
-          subtotal: 900000,
+          subtotal: subtotalSrv,
         },
       ],
-
       itemsComponentes: [
         {
           orden: 1,
-          descripcion: 'Filtro de Aceite CATERPILLAR Original',
-          referencia: 'FLT-001',
-          cantidad: 3,
-          unidad: 'UND',
-          precioUnitario: 185000,
+          descripcion: 'Kit de Consumibles OEM',
+          referencia: 'KIT-001',
+          cantidad: 1,
+          unidad: 'KIT',
+          precioUnitario: subtotalComp,
           descuentoPorcentaje: 0,
-          subtotal: 555000,
-        },
-        {
-          orden: 2,
-          descripcion: 'Filtro de Combustible Primario',
-          referencia: 'FLT-002',
-          cantidad: 3,
-          unidad: 'UND',
-          precioUnitario: 145000,
-          descuentoPorcentaje: 10,
-          subtotal: 420500,
-        },
-        {
-          orden: 3,
-          descripcion: 'Filtro de Aire Principal',
-          referencia: 'FLT-003',
-          cantidad: 2,
-          unidad: 'UND',
-          precioUnitario: 350000,
-          descuentoPorcentaje: 0,
-          subtotal: 700000,
-        },
-        {
-          orden: 4,
-          descripcion: 'Aceite Lubricante 15W40 (Galón)',
-          referencia: 'ACE-001',
-          cantidad: 8,
-          unidad: 'GAL',
-          precioUnitario: 125000,
-          descuentoPorcentaje: 5,
-          subtotal: 950000,
+          subtotal: subtotalComp,
         },
       ],
-
       totales: {
-        subtotalServicios: 4920000,
-        subtotalComponentes: 2625500,
-        subtotalGeneral: 7545500,
-        descuentoPorcentaje: 5,
-        descuentoValor: 377275,
-        subtotalConDescuento: 7168225,
-        ivaPorcentaje: 19,
-        ivaValor: 1361962,
-        totalCotizacion: 8530187,
+        subtotalServicios: subtotalSrv,
+        subtotalComponentes: subtotalComp,
+        subtotalGeneral: subtotalGen,
+        descuentoPorcentaje: 0,
+        descuentoValor: descuento,
+        subtotalConDescuento: subtotalGen,
+        ivaPorcentaje: ivaPct,
+        ivaValor: ivaVal,
+        totalCotizacion: subtotalGen + ivaVal,
       },
-
       formaPago: 'Crédito 30 días',
-      tiempoEstimadoDias: 7,
-      mesesGarantia: 6,
-      observacionesGarantia: '6 meses sobre repuestos instalados y mano de obra',
-      terminosCondiciones:
-        'Esta cotización incluye transporte e instalación. Los precios pueden variar según condiciones de mercado.',
-
-      elaboradoPor: 'Carlos Martínez',
-      cargoElaborador: 'Asesor Comercial',
+      tiempoEstimadoDias: 5,
+      mesesGarantia: brand.garantiaMesesDefecto,
+      observacionesGarantia: `${brand.garantiaMesesDefecto} meses sobre repuestos instalados y mano de obra`,
+      terminosCondiciones: 'Condiciones comerciales estándar vigentes.',
+      elaboradoPor: 'Asesor Comercial',
+      cargoElaborador: 'Departamento Comercial',
     };
 
     return this.generarPDFCotizacion(datosPrueba);
@@ -1613,55 +1547,22 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         `📄 Generando Informe Ejecutivo de Trazabilidad para: ${datos.cliente.nombre}`,
       );
 
-      await this.initBrowser();
-      const html = generarTrazabilidadClienteHTML(datos);
-      const filename = this.generarFilenameTrazabilidad(datos.cliente.nombre);
+      const brand = await this.resolveBranding(datos.branding);
+      const html = this.obtenerHTML('TRAZABILIDAD', { ...datos, branding: brand }, brand);
+      const filename = this.generarFilename('TRAZABILIDAD', datos.cliente.nombre, brand);
+      const buffer = await this.renderHtmlToPdf(html);
 
-      const page = await this.browser!.newPage();
+      const elapsed = Date.now() - startTime;
+      this.logger.log(
+        `✅ PDF Trazabilidad listo en ${elapsed}ms: ${filename} (${(buffer.length / 1024).toFixed(2)} KB)`,
+      );
 
-      try {
-        await page.setExtraHTTPHeaders({
-          'Content-Type': 'text/html; charset=utf-8',
-          'Accept-Charset': 'utf-8',
-        });
-
-        await page.setContent(html, {
-          waitUntil: ['networkidle0', 'load'],
-          timeout: 90000,
-        });
-
-        const pdfBuffer = await page.pdf({
-          format: 'A4',
-          printBackground: true,
-          margin: {
-            top: '0',
-            right: '0',
-            bottom: '0',
-            left: '0',
-          },
-          preferCSSPageSize: true,
-          timeout: 90000,
-        });
-
-        const elapsed = Date.now() - startTime;
-        const finalSizeKB = (pdfBuffer.length / 1024).toFixed(2);
-        this.logger.log(
-          `✅ PDF Trazabilidad listo en ${elapsed}ms: ${filename} (${finalSizeKB} KB)`,
-        );
-
-        return {
-          buffer: Buffer.from(pdfBuffer),
-          filename,
-          size: pdfBuffer.length,
-          tipoInforme: 'TRAZABILIDAD_CLIENTE' as any,
-        };
-      } finally {
-        await page.close();
-        if (this.browser) {
-          await this.browser.close();
-          this.browser = null;
-        }
-      }
+      return {
+        buffer,
+        filename,
+        size: buffer.length,
+        tipoInforme: 'TRAZABILIDAD',
+      };
     } catch (error: unknown) {
       const err = error as Error;
       this.logger.error(`❌ Error generando PDF de trazabilidad: ${err.message}`, err.stack);
@@ -1669,14 +1570,5 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         `Error al generar PDF de trazabilidad: ${err.message}`,
       );
     }
-  }
-
-  private generarFilenameTrazabilidad(clienteNombre: string): string {
-    const sanitize = (clienteNombre || 'CLIENTE')
-      .replace(/[^a-zA-Z0-9]/g, '_')
-      .toUpperCase()
-      .substring(0, 30);
-    const fecha = new Date().toISOString().split('T')[0];
-    return `INFORME_EJECUTIVO_TRAZABILIDAD_${sanitize}_${fecha}.pdf`;
   }
 }

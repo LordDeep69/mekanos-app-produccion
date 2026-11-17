@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   EamSelect,
   MagnitudFisica,
@@ -222,6 +223,7 @@ function generarCodigoUnidadInteligente(
 }
 
 export function TabMagnitudesUom() {
+  const { formatNumber } = useOrgFormatters();
   const { data: magnitudes = [], isLoading } = useMagnitudesEam();
   const [selectedMagCode, setSelectedMagCode] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -944,9 +946,7 @@ export function TabMagnitudesUom() {
             <div className="h-9 px-3.5 rounded-lg bg-emerald-500/20 border border-emerald-400/40 flex items-center gap-2">
               <span className="text-[11px] font-bold text-emerald-300">=</span>
               <span className="text-sm font-extrabold font-mono text-white">
-                {Number(convertirMut.data.valorDestino).toLocaleString('es-CO', {
-                  maximumFractionDigits: 4,
-                })}{' '}
+                {formatNumber(convertirMut.data.valorDestino, 4)}{' '}
                 <span className="text-emerald-300">{convertirMut.data.unidadDestino}</span>
               </span>
             </div>

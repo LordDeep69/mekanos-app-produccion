@@ -11,14 +11,17 @@ import '../../../core/config/supabase_config.dart';
 import '../../auth/data/auth_provider.dart';
 import 'notificaciones_service.dart';
 
-/// Provider del servicio de notificaciones
+/// Provider del servicio de notificaciones aislado por sesión de usuario.
 final notificacionesServiceProvider = Provider<NotificacionesService>((ref) {
+  ref.watch(activeUserIdProvider);
   final apiClient = ref.watch(apiClientProvider);
 
-  return NotificacionesService(
+  final service = NotificacionesService(
     dio: apiClient.dio,
-    supabase: SupabaseConfig.client,
+    supabase: SupabaseConfig.clientOrNull,
   );
+  ref.onDispose(() => service.dispose());
+  return service;
 });
 
 /// Provider del conteo de notificaciones no leídas

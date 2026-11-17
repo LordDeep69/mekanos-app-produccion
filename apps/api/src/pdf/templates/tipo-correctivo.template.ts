@@ -20,19 +20,24 @@
 
 import {
   ActividadesPorEquipoPDF,
-  generarDatosClienteConFichaTecnica,
-  generarSeccionRepuestosSegregados,
-  RepuestoUtilizadoPDF,
-  DatosEquipoDetalladoPDF,
   baseStyles,
+  buildBrandCssVars,
+  DatosEquipoDetalladoPDF,
   EquipoOrdenPDF,
+  escapeBrandHtml,
   EvidenciasPorEquipoPDF,
+  generarDatosClienteConFichaTecnica,
+  generarFooterCorporativoHtml,
   generarHeaderConLogo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
+  generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
   MedicionesPorEquipoPDF,
   MEKANOS_COLORS,
+  OrgBrandingContext,
+  RepuestoUtilizadoPDF,
+  resolveOrgBranding,
 } from './mekanos-base.template';
 
 /**
@@ -154,6 +159,7 @@ export interface DatosCorrectivoOrdenPDF {
   repuestosDetallados?: RepuestoUtilizadoPDF[];
   equipoDetalle?: DatosEquipoDetalladoPDF;
   placaUniversal?: any;
+  branding?: OrgBrandingContext;
 }
 
 /**
@@ -372,6 +378,7 @@ const correctivoStyles = `
  * ✅ REDISEÑO 06-FEB-2026: Secciones dedicadas por naturaleza de actividad
  */
 export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): string {
+  const brand = resolveOrgBranding(datos.branding);
   const esGenerador = esEquipoGenerador(datos);
   const tieneMediciones = Array.isArray(datos.mediciones) && datos.mediciones.length > 0;
   const tieneDatosModulo =
@@ -410,6 +417,7 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Informe Mantenimiento Correctivo - ${datos.numeroOrden}</title>
     <style>
+        ${buildBrandCssVars(brand)}
         ${baseStyles}
         ${correctivoStyles}
     </style>
@@ -472,7 +480,7 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         ${generarFirmas(datos)}
         
         <!-- 12. FOOTER -->
-        ${generarFooter()}
+        ${generarFooterCorporativoHtml(brand)}
     </div>
 </body>
 </html>
@@ -480,7 +488,7 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
 }
 
 // ============================================================================
-// FUNCIONES DE GENERACIÓN - ESTRUCTURA IDÉNTICA A TIPO A/B
+// FUNCIONES DE GENERACIÓN - ESTRUCTURA UNIFICADA
 // ============================================================================
 
 const generarHeader = (datos: DatosCorrectivoOrdenPDF): string =>
@@ -488,6 +496,7 @@ const generarHeader = (datos: DatosCorrectivoOrdenPDF): string =>
     'MANTENIMIENTO CORRECTIVO',
     datos.tipoEquipo || 'EQUIPOS INDUSTRIALES',
     datos.numeroOrden,
+    datos.branding,
   );
 
 const generarDatosCliente = (datos: DatosCorrectivoOrdenPDF): string => {
@@ -844,7 +853,7 @@ const generarTrabajosRealizados = (datos: DatosCorrectivoOrdenPDF): string => {
 const generarRepuestosYMateriales = (datos: DatosCorrectivoOrdenPDF): string => {
   if (datos.repuestosDetallados && datos.repuestosDetallados.length > 0) {
     return `
-      ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosUtilizados, 'CORRECTIVO')}
+      ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosUtilizados, 'CORRECTIVO', datos.branding)}
       ${renderObsAux(datos.obsRepuestos)}
       ${renderObsAux(datos.obsMateriales)}
     `;
@@ -1456,7 +1465,7 @@ const generarObservaciones = (datos: DatosCorrectivoOrdenPDF): string => {
     <div class="section">
         <div class="section-title">OBSERVACIONES ADICIONALES</div>
         <div class="corr-narrative-box">
-            ${datos.observacionesGenerales}
+            ${escapeBrandHtml(datos.observacionesGenerales)}
         </div>
     </div>
   `;
@@ -1468,42 +1477,26 @@ const generarFirmas = (datos: DatosCorrectivoOrdenPDF): string => `
         <div class="firma-box">
             ${
               datos.firmaTecnico
-                ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" /></div>`
+                ? `<div class="firma-imagen"><img src="${escapeBrandHtml(datos.firmaTecnico)}" alt="Firma Técnico" /></div>`
                 : `<div class="firma-line"></div>`
             }
-            <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || ''}</div>
-            <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable'}</div>
+            <div class="firma-nombre">${escapeBrandHtml(datos.nombreTecnico || datos.tecnico || '')}</div>
+            <div class="firma-cargo">${escapeBrandHtml(datos.cargoTecnico || 'Técnico Responsable')}</div>
             <div class="firma-label">Firma Técnico Asignado</div>
         </div>
         <div class="firma-box">
             ${
               datos.firmaCliente
-                ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" /></div>`
+                ? `<div class="firma-imagen"><img src="${escapeBrandHtml(datos.firmaCliente)}" alt="Firma Cliente" /></div>`
                 : `<div class="firma-line"></div>`
             }
-            <div class="firma-nombre">${datos.nombreCliente || ''}</div>
-            <div class="firma-cargo">${datos.cargoCliente || 'Cliente / Autorizador'}</div>
+            <div class="firma-nombre">${escapeBrandHtml(datos.nombreCliente || '')}</div>
+            <div class="firma-cargo">${escapeBrandHtml(datos.cargoCliente || 'Cliente / Autorizador')}</div>
             <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
         </div>
     </div>
 `;
 
-const generarFooter = (): string => `
-    <div class="footer">
-        <strong>MEKANOS S.A.S</strong><br/>
-        BARRIO LIBANO CRA 49C #31-35 DIAG. AL SENA - TEL: 6359384<br/>
-        CEL: 315-7083350 E-MAIL: mekanossas2@gmail.com
-    </div>
-`;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ✅ MULTI-EQUIPOS (16-DIC-2025): Funciones para evidencias multi-equipo
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * ✅ MULTI-EQUIPOS: Genera sección de evidencias agrupadas por equipo
- * Cada equipo tiene su propia sección con fotos ANTES/DURANTE/DESPUÉS
- */
 const generarEvidenciasMultiEquipo = (
   evidenciasPorEquipo: EvidenciasPorEquipoPDF[],
   lotesGaleria?: LoteGaleriaPDF[],

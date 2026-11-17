@@ -10,16 +10,17 @@
  * ============================================================================
  */
 
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { v2 as cloudinary, UploadApiErrorResponse, UploadApiResponse } from 'cloudinary';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ConfiguracionOrganizacionService } from '../configuracion-organizacion/configuracion-organizacion.service';
 
 const CLOUDINARY_UPLOAD_TIMEOUT_MS = 300_000; // 5 minutos por upload (conexión lenta)
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 5_000; // 5s inicial, luego 10s, 20s
 
-export type CloudinaryAccount = 'PLANTAS' | 'BOMBAS';
+export type CloudinaryAccount = 'PRIMARY' | 'PLANTAS' | 'BOMBAS';
 
 export interface UploadResult {
   success: boolean;
@@ -41,15 +42,44 @@ export class CloudinaryService implements OnModuleInit {
   private readonly logger = new Logger(CloudinaryService.name);
   private configuredAccounts: Set<CloudinaryAccount> = new Set();
 
-  async onModuleInit() {
-    // Verificar configuraciones disponibles
-    if (this.isAccountConfigured('PLANTAS')) {
-      this.configuredAccounts.add('PLANTAS');
-      this.logger.log('✅ Cloudinary PLANTAS configurado');
+  constructor(
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
+  ) {}
+
+  private async resolveDefaultFolder(): Promise<string> {
+    const ctx = await this.configOrgService?.getContext().catch(() => null);
+    const prefix = (ctx?.storage_prefijo_raiz || 'eam-media').replace(/^\/+|\/+$/g, '');
+    return `${prefix}/evidencias`;
+  }
+
+  private getCredentials(account: CloudinaryAccount) {
+    if (account === 'PRIMARY') {
+      return {
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+      };
     }
-    if (this.isAccountConfigured('BOMBAS')) {
-      this.configuredAccounts.add('BOMBAS');
-      this.logger.log('✅ Cloudinary BOMBAS configurado');
+    return {
+      cloud_name: process.env[`CLOUDINARY_CLOUD_NAME_${account}`],
+      api_key: process.env[`CLOUDINARY_API_KEY_${account}`],
+      api_secret: process.env[`CLOUDINARY_API_SECRET_${account}`],
+    };
+  }
+
+  private getDefaultAccount(): CloudinaryAccount {
+    if (this.configuredAccounts.has('PRIMARY')) return 'PRIMARY';
+    if (this.configuredAccounts.has('PLANTAS')) return 'PLANTAS';
+    if (this.configuredAccounts.has('BOMBAS')) return 'BOMBAS';
+    return 'PRIMARY';
+  }
+
+  async onModuleInit() {
+    for (const acc of ['PRIMARY', 'PLANTAS', 'BOMBAS'] as CloudinaryAccount[]) {
+      if (this.isAccountConfigured(acc)) {
+        this.configuredAccounts.add(acc);
+        this.logger.log(`✅ Cloudinary ${acc} configurado`);
+      }
     }
 
     if (this.configuredAccounts.size === 0) {
@@ -57,39 +87,19 @@ export class CloudinaryService implements OnModuleInit {
     }
   }
 
-  /**
-   * Configura Cloudinary para una cuenta específica
-   */
   private configureAccount(account: CloudinaryAccount): void {
-    const suffix = account;
+    const creds = this.getCredentials(account);
     cloudinary.config({
-      cloud_name: process.env[`CLOUDINARY_CLOUD_NAME_${suffix}`],
-      api_key: process.env[`CLOUDINARY_API_KEY_${suffix}`],
-      api_secret: process.env[`CLOUDINARY_API_SECRET_${suffix}`],
+      cloud_name: creds.cloud_name,
+      api_key: creds.api_key,
+      api_secret: creds.api_secret,
       secure: true,
     });
   }
 
-  /**
-   * Verifica si una cuenta está configurada
-   */
   private isAccountConfigured(account: CloudinaryAccount): boolean {
-    const suffix = account;
-    return !!(
-      process.env[`CLOUDINARY_CLOUD_NAME_${suffix}`] &&
-      process.env[`CLOUDINARY_API_KEY_${suffix}`] &&
-      process.env[`CLOUDINARY_API_SECRET_${suffix}`]
-    );
-  }
-
-  /**
-   * Determina la cuenta a usar basado en el tipo de equipo
-   */
-  private determineAccount(tipoEquipo?: string): CloudinaryAccount {
-    if (tipoEquipo?.toUpperCase().includes('BOMBA')) {
-      return 'BOMBAS';
-    }
-    return 'PLANTAS';
+    const creds = this.getCredentials(account);
+    return !!(creds.cloud_name && creds.api_key && creds.api_secret);
   }
 
   /**
@@ -104,7 +114,9 @@ export class CloudinaryService implements OnModuleInit {
       tags?: string[];
     } = {},
   ): Promise<UploadResult> {
-    const account = options.account || 'PLANTAS';
+    const account = options.account && this.configuredAccounts.has(options.account)
+      ? options.account
+      : this.getDefaultAccount();
 
     if (!this.configuredAccounts.has(account)) {
       return {
@@ -113,12 +125,15 @@ export class CloudinaryService implements OnModuleInit {
       };
     }
 
+    const folderResolved = options.folder || (await this.resolveDefaultFolder());
+    const uploadOpts = { ...options, folder: folderResolved };
+
     this.configureAccount(account);
 
     // Intentar Cloudinary con retry
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const result = await this._uploadToCloudinary(buffer, options);
+        const result = await this._uploadToCloudinary(buffer, uploadOpts);
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -132,7 +147,7 @@ export class CloudinaryService implements OnModuleInit {
 
     // Fallback local: guardar imagen en disco
     this.logger.warn('⚠️ Cloudinary no disponible tras reintentos - guardando localmente');
-    return this._saveLocally(buffer, options);
+    return this._saveLocally(buffer, uploadOpts);
   }
 
   /**
@@ -144,7 +159,7 @@ export class CloudinaryService implements OnModuleInit {
   ): Promise<UploadResult> {
     return new Promise((resolve, reject) => {
       const uploadOptions: any = {
-        folder: options.folder || 'mekanos/evidencias',
+        folder: options.folder || 'eam-media/evidencias',
         resource_type: 'image',
         tags: options.tags || [],
         timeout: CLOUDINARY_UPLOAD_TIMEOUT_MS,
@@ -219,7 +234,9 @@ export class CloudinaryService implements OnModuleInit {
       tags?: string[];
     } = {},
   ): Promise<UploadResult> {
-    const account = options.account || 'PLANTAS';
+    const account = options.account && this.configuredAccounts.has(options.account)
+      ? options.account
+      : this.getDefaultAccount();
 
     if (!this.configuredAccounts.has(account)) {
       return {
@@ -231,8 +248,9 @@ export class CloudinaryService implements OnModuleInit {
     this.configureAccount(account);
 
     try {
+      const folderResolved = options.folder || (await this.resolveDefaultFolder());
       const result = await cloudinary.uploader.upload(url, {
-        folder: options.folder || 'mekanos/evidencias',
+        folder: folderResolved,
         public_id: options.publicId,
         tags: options.tags || [],
       });
@@ -255,9 +273,10 @@ export class CloudinaryService implements OnModuleInit {
   /**
    * Sube evidencias fotográficas de una orden de servicio
    */
-  async uploadEvidencia(evidencia: EvidenciaUpload, tipoEquipo?: string): Promise<UploadResult> {
-    const account = this.determineAccount(tipoEquipo);
-    const folder = `mekanos/ordenes/${evidencia.ordenId}/evidencias`;
+  async uploadEvidencia(evidencia: EvidenciaUpload, _tipoEquipo?: string): Promise<UploadResult> {
+    const account = this.getDefaultAccount();
+    const baseFolder = (await this.resolveDefaultFolder()).replace(/\/evidencias$/i, '');
+    const folder = `${baseFolder}/ordenes/${evidencia.ordenId}/evidencias`;
     const publicId = `${evidencia.tipo.toLowerCase()}_${Date.now()}`;
     const tags = ['evidencia', evidencia.tipo, evidencia.ordenId];
 

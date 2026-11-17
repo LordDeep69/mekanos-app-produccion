@@ -538,6 +538,29 @@ export class SyncPendienteCatalogoDto {
   activo?: boolean;
 }
 
+export class SyncSistemaCatalogoDto {
+  @ApiProperty()
+  idSistema: number;
+
+  @ApiProperty()
+  codigoSistema: string;
+
+  @ApiProperty()
+  nombreSistema: string;
+
+  @ApiPropertyOptional()
+  descripcion?: string;
+
+  @ApiProperty({ type: [String] })
+  aplicaA: string[];
+
+  @ApiProperty()
+  ordenVisualizacion: number;
+
+  @ApiPropertyOptional()
+  idModulo?: number;
+}
+
 /**
  * Respuesta de download de datos para técnico
  * 
@@ -582,6 +605,9 @@ export class SyncDownloadResponseDto {
 
   @ApiPropertyOptional({ type: () => [SyncPendienteCatalogoDto], description: 'Catálogo de pendientes frecuentes (vacío en DELTA si no hubo cambios)' })
   catalogoPendientes?: SyncPendienteCatalogoDto[];
+
+  @ApiPropertyOptional({ type: () => [SyncSistemaCatalogoDto], description: 'Subsistemas dinámicos por arquetipo para ejecución offline' })
+  catalogoSistemas?: SyncSistemaCatalogoDto[];
 
   @ApiPropertyOptional({
     type: [Number],

@@ -1,6 +1,10 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Permisos } from '../../auth/decorators/permisos.decorator';
+import { Roles } from '../../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PermisosGuard } from '../../auth/guards/permisos.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
 import {
   ConvertirUomDto,
@@ -11,7 +15,7 @@ import {
 @ApiTags('EAM - Unidades de Medida')
 @ApiBearerAuth()
 @Controller('catalogos/unidades')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 export class UnidadesController {
   constructor(private readonly eamService: CatalogosEamService) {}
 
@@ -35,24 +39,32 @@ export class UnidadesController {
   }
 
   @Post()
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Crear una nueva unidad de medida vinculada a una magnitud física' })
   async create(@Body() dto: CreateUnidadMedidaDto) {
     return this.eamService.createUnidad(dto);
   }
 
   @Patch(':codigo')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar propiedades y factores de una unidad de medida' })
   async update(@Param('codigo') codigo: string, @Body() dto: UpdateUnidadMedidaDto) {
     return this.eamService.updateUnidad(codigo, dto);
   }
 
   @Put(':codigo')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar propiedades y factores de una unidad de medida (PUT)' })
   async updatePut(@Param('codigo') codigo: string, @Body() dto: UpdateUnidadMedidaDto) {
     return this.eamService.updateUnidad(codigo, dto);
   }
 
   @Delete(':codigo')
+  @Roles('ADMIN')
+  @Permisos('CONFIG_SYSTEM')
   @ApiOperation({ summary: 'Eliminar una unidad de medida' })
   async delete(@Param('codigo') codigo: string) {
     return this.eamService.deleteUnidad(codigo);

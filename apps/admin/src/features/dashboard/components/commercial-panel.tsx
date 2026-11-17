@@ -13,20 +13,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { FileText } from 'lucide-react';
 import { useDashboardComercial } from '../hooks/use-dashboard';
 import { KPICard } from './kpi-card';
-
-/**
- * Formatea valor en COP
- */
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 
 export function CommercialPanel() {
+  const { formatCurrency: formatOrgCurrency } = useOrgFormatters();
   const { data, isLoading, isError, error } = useDashboardComercial();
 
   if (isLoading) {
@@ -82,7 +72,7 @@ export function CommercialPanel() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <KPICard
             title="Total Cotizaciones"
             value={data.totalCotizaciones}
@@ -103,7 +93,7 @@ export function CommercialPanel() {
           />
           <KPICard
             title="Valor Pendiente"
-            value={formatCurrency(data.valorPendienteCOP)}
+            value={formatOrgCurrency(data.valorPendienteCOP)}
             icon="DollarSign"
             variant="info"
           />
@@ -120,7 +110,7 @@ function CommercialSkeleton() {
         <Skeleton className="h-6 w-32" />
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="space-y-2">
               <Skeleton className="h-4 w-24" />

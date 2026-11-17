@@ -16,6 +16,7 @@
 
 import { PrismaService } from '@mekanos/database';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { reserveNextSequenceCounter } from '../utils/sequence-counter.helper';
 
 /**
  * Tipos de documentos soportados
@@ -130,53 +131,17 @@ export class NumeracionService implements OnModuleInit {
     const currentYear = new Date().getFullYear();
     const cacheKey = `${type}-${currentYear}`;
 
-    // Usar transacción para garantizar unicidad
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Buscar o crear el registro de secuencia
-      let sequenceRecord = await tx.sequence_counter.findFirst({
-        where: {
-          type: type,
-          year: currentYear,
-        },
-      });
-
-      if (!sequenceRecord) {
-        // Crear nuevo registro para este tipo/año
-        sequenceRecord = await tx.sequence_counter.create({
-          data: {
-            type: type,
-            year: currentYear,
-            current_value: 1,
-            updated_at: new Date(),
-          },
-        });
-      } else {
-        // Incrementar secuencia
-        sequenceRecord = await tx.sequence_counter.update({
-          where: {
-            id: sequenceRecord.id,
-          },
-          data: {
-            current_value: {
-              increment: 1,
-            },
-            updated_at: new Date(),
-          },
-        });
-      }
-
-      return sequenceRecord;
-    });
+    const reserved = await reserveNextSequenceCounter(this.prisma, type, currentYear);
 
     // Actualizar cache
-    this.sequenceCache.set(cacheKey, result.current_value);
+    this.sequenceCache.set(cacheKey, reserved.sequence);
 
     // Formatear código
-    const code = this.formatCode(type, currentYear, result.current_value);
+    const code = this.formatCode(type, currentYear, reserved.sequence);
 
     return {
       code,
-      sequence: result.current_value,
+      sequence: reserved.sequence,
       year: currentYear,
       type,
       generatedAt: new Date(),

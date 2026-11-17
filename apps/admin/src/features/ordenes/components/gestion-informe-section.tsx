@@ -24,6 +24,7 @@ import {
 } from '@/lib/pdf-naming';
 import { useInvalidarReportes } from '@/features/reportes/hooks/use-reportes';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import type { Orden } from '@/types/ordenes';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -59,6 +60,7 @@ interface GestionInformeSectionProps {
 type EmailSendStatus = 'idle' | 'sending' | 'success' | 'error';
 
 export function GestionInformeSection({ orden, onUpdate }: GestionInformeSectionProps) {
+  const { formatDateTime } = useOrgFormatters();
   const queryClient = useQueryClient();
   const invalidateReportes = useInvalidarReportes();
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -505,7 +507,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                   title={
                     `Descargado ${vecesDescargado} vez${vecesDescargado !== 1 ? 'es' : ''}` +
                     (fechaUltimaDescarga
-                      ? `\nÚltima descarga: ${new Date(fechaUltimaDescarga).toLocaleString('es-CO')}`
+                      ? `\nÚltima descarga: ${formatDateTime(fechaUltimaDescarga)}`
                       : '')
                   }
                 >

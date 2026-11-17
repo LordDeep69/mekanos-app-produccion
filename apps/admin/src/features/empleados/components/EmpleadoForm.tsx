@@ -147,7 +147,7 @@ export function EmpleadoForm({ onSuccess, onCancel }: EmpleadoFormProps) {
         defaultValues: {
             tipo_identificacion: 'CC',
             tipo_contrato: 'INDEFINIDO',
-            ciudad: 'CARTAGENA',
+            ciudad: '',
             es_tecnico: false,
             es_asesor: false,
             crear_usuario: false,
@@ -392,7 +392,7 @@ export function EmpleadoForm({ onSuccess, onCancel }: EmpleadoFormProps) {
                             </div>
                             <div className="space-y-2">
                                 <Label>Ciudad</Label>
-                                <Input {...register('ciudad')} defaultValue="CARTAGENA" />
+                                <Input {...register('ciudad')} placeholder="Ciudad de residencia" />
                             </div>
                         </div>
                     </CardContent>

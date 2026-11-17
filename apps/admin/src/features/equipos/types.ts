@@ -544,6 +544,14 @@ export interface EquiposListadoResponse {
     generadores: number;
     bombas: number;
     otros: number;
+    por_tipo?: Array<{
+      id_tipo_equipo: number;
+      codigo_tipo: string;
+      nombre_tipo: string;
+      color_hex?: string | null;
+      icono_ui?: string | null;
+      cantidad: number;
+    }>;
     operativos: number;
     en_reparacion: number;
     fuera_servicio: number;

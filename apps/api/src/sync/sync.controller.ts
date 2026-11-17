@@ -68,7 +68,9 @@ export class SyncController {
   })
   async uploadOrdenes(
     @Body() dto: SyncBatchUploadDto,
+    @CurrentUser() user: any,
   ): Promise<SyncBatchResponseDto> {
+    this.syncService.assertCanAccessTecnicoSync(dto.tecnicoId, user);
     return await this.syncService.syncBatchUpload(dto);
   }
 
@@ -123,9 +125,11 @@ export class SyncController {
   })
   async downloadForTecnico(
     @Param('tecnicoId', ParseIntPipe) tecnicoId: number,
+    @CurrentUser() user: any,
     @Query('since') since?: string,
     @Query('fullCatalogs') fullCatalogs?: string,
   ): Promise<SyncDownloadResponseDto> {
+    this.syncService.assertCanAccessTecnicoSync(tecnicoId, user);
     const sinceDate = since ? new Date(since) : undefined;
     const includeCatalogs = fullCatalogs === 'true' || !sinceDate;
 
@@ -177,8 +181,10 @@ export class SyncController {
   })
   async compareForTecnico(
     @Param('tecnicoId', ParseIntPipe) tecnicoId: number,
+    @CurrentUser() user: any,
     @Query('limit') limit?: string,
   ): Promise<SyncCompareResponseDto> {
+    this.syncService.assertCanAccessTecnicoSync(tecnicoId, user);
     const limitNum = limit ? parseInt(limit, 10) : 500;
     return await this.syncService.getOrdenesResumen(tecnicoId, limitNum);
   }
@@ -240,7 +246,8 @@ export class SyncController {
   })
   async downloadOrden(
     @Param('ordenId', ParseIntPipe) ordenId: number,
+    @CurrentUser() user: any,
   ): Promise<any> {
-    return await this.syncService.getOrdenCompleta(ordenId);
+    return await this.syncService.getOrdenCompleta(ordenId, user);
   }
 }

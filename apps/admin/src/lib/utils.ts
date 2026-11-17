@@ -19,6 +19,7 @@ export function cn(...inputs: ClassValue[]) {
 export function formatDateSafe(
   dateString: string | null | undefined,
   options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' },
+  locale: string = 'es-CO',
 ): string {
   if (!dateString) return 'Sin fecha';
 
@@ -27,7 +28,7 @@ export function formatDateSafe(
   if (!match) {
     // Fallback: intentar parse normal
     try {
-      return new Date(dateString).toLocaleDateString('es-CO', options);
+      return new Date(dateString).toLocaleDateString(locale, options);
     } catch {
       return 'Fecha inválida';
     }
@@ -37,7 +38,7 @@ export function formatDateSafe(
   // Crear fecha local con los componentes extraidos (sin conversion UTC)
   const localDate = new Date(Number(year), Number(month) - 1, Number(day));
 
-  return localDate.toLocaleDateString('es-CO', options);
+  return localDate.toLocaleDateString(locale, options);
 }
 
 /**

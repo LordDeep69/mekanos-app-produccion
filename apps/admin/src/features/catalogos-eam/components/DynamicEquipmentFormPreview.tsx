@@ -30,11 +30,13 @@ import {
 } from '../api/catalogos-eam.service';
 import {
   getCriterioIntervaloHumano,
+  getMetricaUsoMeta,
   getModuloBadgeInfo,
   parseOpcionesSeguras,
 } from '../utils/eam-humanizer';
-import { EamSelect, EamUomSelect } from './EamSelect';
+import { EamSelect, EamSelectWithCustom, EamUomSelect, permiteValorPersonalizado } from './EamSelect';
 import { MarcaCombobox } from './MarcaCombobox';
+import { useBranding } from '@/providers/branding-provider';
 
 const getDynamicNumericPlaceholder = (codigo: string, nombre: string): string => {
   const c = (codigo || '').toLowerCase();
@@ -67,6 +69,7 @@ export function DynamicEquipmentFormPreview({
   initialValues,
   onChangeValues,
 }: DynamicEquipmentFormPreviewProps) {
+  const { branding } = useBranding();
   const [previewMode, setPreviewMode] = useState<'formulario' | 'placa_pdf'>('formulario');
   const [selectedOemId, setSelectedOemId] = useState<string>('');
   const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
@@ -301,52 +304,20 @@ export function DynamicEquipmentFormPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [esquema, formValues, selectedUnits]);
 
-  // Metrología dinámica del arquetipo (Horómetro / Ciclos / Odómetro / Calendario)
+  // Metrología dinámica del arquetipo (Horómetro / Ciclos / Odómetro / Calendario / Personalizado)
   const arq = esquema.arquetipo;
-  const unidadUso = arq.unidad_uso || 'HORAS';
-  const etiquetaRaw = arq.etiqueta_contador;
-  const requiereContador = arq.requiere_horometro !== false && unidadUso !== 'CAL';
-
-  const etiquetaMedidor = etiquetaRaw
-    ? `Control por ${etiquetaRaw}`
-    : unidadUso === 'CICLOS'
-      ? 'Control por Ciclos de Viaje'
-      : unidadUso === 'KM_ODO'
-        ? 'Control por Odómetro'
-        : unidadUso === 'UPM'
-          ? 'Control por Unidades de Producción'
-          : unidadUso === 'CAL'
-            ? 'Mantenimiento por Calendario'
-            : 'Control por Horómetro';
-
-  const sufijoUso =
-    unidadUso === 'CICLOS'
-      ? 'ciclos'
-      : unidadUso === 'KM_ODO'
-        ? 'km'
-        : unidadUso === 'UPM'
-          ? 'und'
-          : unidadUso === 'CAL'
-            ? ''
-            : 'horas';
-
-  const labelIntervencion =
-    unidadUso === 'CICLOS'
-      ? `${etiquetaRaw || 'Ciclos'} Intervención`
-      : unidadUso === 'KM_ODO'
-        ? `${etiquetaRaw || 'Kilometraje'} Intervención`
-        : unidadUso === 'UPM'
-          ? `${etiquetaRaw || 'Producción'} Intervención`
-          : `${etiquetaRaw || 'Horómetro'} Intervención`;
-
-  const labelAcumulado =
-    unidadUso === 'CICLOS'
-      ? `${etiquetaRaw || 'Ciclos'} Acumulados (Hoja de Vida)`
-      : unidadUso === 'KM_ODO'
-        ? `${etiquetaRaw || 'Kilometraje'} Acumulado`
-        : unidadUso === 'UPM'
-          ? `${etiquetaRaw || 'Producción'} Acumulada`
-          : `${etiquetaRaw || 'Horómetro'} Acumulado (Hoja de Vida)`;
+  const metricaUso = getMetricaUsoMeta({
+    unidadUso: arq.unidad_uso,
+    etiquetaContador: arq.etiqueta_contador,
+    requiereHorometro: arq.requiere_horometro,
+  });
+  const requiereContador = !metricaUso.soloCalendario;
+  const etiquetaMedidor = metricaUso.soloCalendario
+    ? 'Mantenimiento por Calendario'
+    : `Control por ${metricaUso.etiquetaContador}`;
+  const sufijoUso = metricaUso.soloCalendario ? '' : metricaUso.sufijoCorto;
+  const labelIntervencion = `${metricaUso.etiquetaContador} Intervención`;
+  const labelAcumulado = `${metricaUso.etiquetaContador} Acumulado (Hoja de Vida)`;
 
   return (
     <div className="bg-white rounded-2xl border-2 border-indigo-200/90 shadow-md overflow-hidden">
@@ -570,7 +541,7 @@ export function DynamicEquipmentFormPreview({
                                     </button>
                                   </div>
                                 ) : ctrl === 'SELECTOR' || ctrl === 'SELECT' ? (
-                                  <EamSelect
+                                  <EamSelectWithCustom
                                     value={String(val)}
                                     onChange={(selectedVal) =>
                                       handleFieldChange(
@@ -583,6 +554,8 @@ export function DynamicEquipmentFormPreview({
                                       value: op.value,
                                       label: op.label,
                                     }))}
+                                    allowCustom={permiteValorPersonalizado(attr.validacion_json)}
+                                    customPlaceholder={`Especificar ${attr.nombre_atributo.toLowerCase()}...`}
                                     placeholder="-- Seleccionar opción --"
                                   />
                                 ) : ctrl === 'NUMERICO_MAGNITUD' ||
@@ -689,15 +662,21 @@ export function DynamicEquipmentFormPreview({
         /* MODO 2: PLACA TÉCNICA CORPORATIVA EN EL PDF */
         <div className="p-6 bg-slate-100/80">
           <div className="max-w-5xl mx-auto bg-white rounded-xl border-2 border-slate-800 shadow-lg overflow-hidden">
-            {/* Encabezado estilo Informe Técnico PDF Mekanos */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b-4 border-blue-600">
+            {/* Encabezado estilo Informe Técnico PDF White-Label */}
+            <div
+              className="bg-slate-900 text-white px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b-4"
+              style={{ borderBottomColor: branding.color_primario || '#1E40AF' }}
+            >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center font-black text-lg">
-                  M
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg"
+                  style={{ backgroundColor: branding.color_primario || '#1E40AF' }}
+                >
+                  {(branding.nombre_comercial || 'EA').slice(0, 2).toUpperCase()}
                 </div>
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-widest text-blue-300">
-                    MEKANOS S.A.S. • FICHA TÉCNICA DE ACTIVO INDUSTRIAL
+                    {branding.nombre_comercial.toUpperCase()} • FICHA TÉCNICA DE ACTIVO INDUSTRIAL
                   </div>
                   <div className="text-base font-extrabold text-white">
                     {esquema.arquetipo.nombre_tipo.toUpperCase()}
@@ -713,7 +692,7 @@ export function DynamicEquipmentFormPreview({
                     {etiquetaMedidor}
                   </span>
                 )}
-                {unidadUso === 'CAL' && (
+                {!requiereContador && (
                   <span className="px-2.5 py-1 rounded bg-slate-700/60 border border-slate-600 text-slate-300 text-xs font-bold">
                     Mantenimiento por Calendario
                   </span>

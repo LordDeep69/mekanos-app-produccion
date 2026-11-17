@@ -25,6 +25,7 @@ import {
     X,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { useUpdateEdicionTecnico } from '../hooks/use-ordenes';
 
 interface EdicionTecnicoSectionProps {
@@ -32,6 +33,7 @@ interface EdicionTecnicoSectionProps {
 }
 
 export function EdicionTecnicoSection({ orden }: EdicionTecnicoSectionProps) {
+    const { formatDateTime } = useOrgFormatters();
     const [motivo, setMotivo] = useState('');
     const [confirmAction, setConfirmAction] = useState<'enable' | 'revoke' | null>(null);
     const updateEdicion = useUpdateEdicionTecnico();
@@ -45,7 +47,7 @@ export function EdicionTecnicoSection({ orden }: EdicionTecnicoSectionProps) {
     }
 
     const fechaDecision = orden.edicion_tecnico_fecha_autorizacion
-        ? new Date(orden.edicion_tecnico_fecha_autorizacion).toLocaleString('es-CO')
+        ? formatDateTime(orden.edicion_tecnico_fecha_autorizacion)
         : null;
 
     const ejecutar = (habilitar: boolean) => {

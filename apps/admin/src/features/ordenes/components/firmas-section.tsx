@@ -9,6 +9,7 @@
 'use client';
 
 import { useImageDropPaste } from '@/hooks/use-image-drop-paste';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { cn } from '@/lib/utils';
 import {
   CheckCircle2,
@@ -692,6 +693,7 @@ function EditFirmaModal({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function FirmaCard({ firma, onEdit }: { firma: Firma; onEdit?: () => void }) {
+  const { formatDateTime } = useOrgFormatters();
   const [isZoomOpen, setIsZoomOpen] = useState(false);
   const config = getTipoFirmaConfig(firma.tipo_firma);
   const Icon = config.icon;
@@ -700,10 +702,7 @@ function FirmaCard({ firma, onEdit }: { firma: Firma; onEdit?: () => void }) {
     firma.url_firma || (firma.firma_base64 ? `data:image/png;base64,${firma.firma_base64}` : null);
   const fechaFirma =
     firma.fecha_firma || firma.fecha_captura
-      ? new Date(firma.fecha_firma || firma.fecha_captura!).toLocaleString('es-CO', {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        })
+      ? formatDateTime(firma.fecha_firma || firma.fecha_captura!)
       : null;
 
   return (

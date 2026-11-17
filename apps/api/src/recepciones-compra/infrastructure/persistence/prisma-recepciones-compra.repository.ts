@@ -7,6 +7,10 @@ import {
 } from '@nestjs/common';
 import { recepciones_compra } from '@prisma/client';
 import {
+  formatCorrelativeCode,
+  reserveNextSequenceCounter,
+} from '../../../common/utils/sequence-counter.helper';
+import {
   CreateRecepcionCompraData,
   CreateRecepcionLoteData,
   IRecepcionesCompraRepository,
@@ -24,64 +28,14 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
    */
   private async generarSiguienteNumeroRecepcion(tx: any): Promise<string> {
     const year = new Date().getFullYear();
-    const rows = await tx.$queryRawUnsafe(`
-      SELECT id, current_value FROM sequence_counter
-      WHERE type = 'REC' AND year = ${year}
-      FOR UPDATE;
-    `);
-
-    let nextVal = 1;
-    if (rows && rows.length > 0) {
-      nextVal = Number(rows[0].current_value) + 1;
-      await tx.$executeRawUnsafe(`
-        UPDATE sequence_counter
-        SET current_value = ${nextVal}, updated_at = NOW()
-        WHERE id = ${rows[0].id};
-      `);
-    } else {
-      const maxRes = await tx.$queryRawUnsafe(`
-        SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM sequence_counter;
-      `);
-      const nextId = Number(maxRes[0]?.next_id || 200);
-      await tx.$executeRawUnsafe(`
-        INSERT INTO sequence_counter (id, type, year, current_value, created_at, updated_at)
-        VALUES (${nextId}, 'REC', ${year}, 1, NOW(), NOW());
-      `);
-      nextVal = 1;
-    }
-
-    return `REC-${year}-${String(nextVal).padStart(4, '0')}`;
+    const { sequence } = await reserveNextSequenceCounter(tx, 'REC', year);
+    return formatCorrelativeCode('REC', year, sequence, 4);
   }
 
   private async generarSiguienteNumeroLote(tx: any): Promise<string> {
     const year = new Date().getFullYear();
-    const rows = await tx.$queryRawUnsafe(`
-      SELECT id, current_value FROM sequence_counter
-      WHERE type = 'LOT' AND year = ${year}
-      FOR UPDATE;
-    `);
-
-    let nextVal = 1;
-    if (rows && rows.length > 0) {
-      nextVal = Number(rows[0].current_value) + 1;
-      await tx.$executeRawUnsafe(`
-        UPDATE sequence_counter
-        SET current_value = ${nextVal}, updated_at = NOW()
-        WHERE id = ${rows[0].id};
-      `);
-    } else {
-      const maxRes = await tx.$queryRawUnsafe(`
-        SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM sequence_counter;
-      `);
-      const nextId = Number(maxRes[0]?.next_id || 300);
-      await tx.$executeRawUnsafe(`
-        INSERT INTO sequence_counter (id, type, year, current_value, created_at, updated_at)
-        VALUES (${nextId}, 'LOT', ${year}, 1, NOW(), NOW());
-      `);
-      nextVal = 1;
-    }
-
-    return `LOT-${year}-${String(nextVal).padStart(4, '0')}`;
+    const { sequence } = await reserveNextSequenceCounter(tx, 'LOT', year);
+    return formatCorrelativeCode('LOT', year, sequence, 4);
   }
 
   /**

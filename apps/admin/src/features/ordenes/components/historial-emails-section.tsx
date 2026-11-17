@@ -2,6 +2,7 @@
 
 import { AlertCircle, Calendar, CheckCircle2, Loader2, Mail, Send, XCircle } from 'lucide-react';
 import type { HistorialEmailEnviado } from '../api/ordenes.service';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { useHistorialEmails } from '../hooks/use-ordenes';
 
 interface HistorialEmailsSectionProps {
@@ -9,6 +10,7 @@ interface HistorialEmailsSectionProps {
 }
 
 export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps) {
+    const { formatDateTime } = useOrgFormatters();
     const { data: emailsData, isLoading, error } = useHistorialEmails(idOrden);
 
     const emails: HistorialEmailEnviado[] = emailsData?.historial || [];
@@ -54,15 +56,7 @@ export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps)
             : 'bg-red-50 border-red-100 text-red-700';
     };
 
-    const formatFecha = (fecha: string) => {
-        return new Date(fecha).toLocaleString('es-CO', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    };
+    const formatFecha = (fecha: string) => formatDateTime(fecha);
 
     const getOrigenLabel = (origen: string) => {
         const origenes: Record<string, string> = {

@@ -14,6 +14,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { Check, ChevronDown, ChevronUp, Loader2, MessageSquare, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { EstadoActividad } from '../api/ordenes.service';
@@ -156,8 +157,12 @@ const PREFIJOS_MOVIL_ESTRUCTURADOS = [
 const REGEX_CONTADOR_OBS = /^(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*(.+)$/i;
 
 function observacionTienePrefijoEstructurado(observacion: string): boolean {
-  const upper = (observacion || '').toUpperCase();
-  return PREFIJOS_MOVIL_ESTRUCTURADOS.some((p) => upper.startsWith(p));
+  const txt = (observacion || '').trim();
+  const upper = txt.toUpperCase();
+  return (
+    PREFIJOS_MOVIL_ESTRUCTURADOS.some((p) => upper.startsWith(p)) ||
+    /^[A-ZÁÉÍÓÚÑ0-9_]{2,25}:\s*[\d.,]+$/i.test(txt)
+  );
 }
 
 function parseObservacionYLeyenda(raw?: string | null): {
@@ -189,58 +194,16 @@ function parseObservacionYLeyenda(raw?: string | null): {
 }
 
 /**
- * ✅ FIX 20-AGO-2026: Por DESCRIPCIÓN detecta si la actividad usa un input
- * estructurado en la app móvil (aunque aún no tenga valor guardado).
- * Replica _getTipoActividadEspecial de ejecucion_screen.dart para los tipos
- * que guardan valores con prefijo (selectores/números de la app móvil).
- */
-function descripcionEsInputEstructurado(descripcion: string): boolean {
-  const desc = descripcion.toUpperCase();
-  if (desc.includes('(SI/NO)') || desc.includes('(S/N)')) return true;
-  if (
-    (desc.includes('NIVEL DE COMBUSTIBLE') || desc.includes('NIVEL COMBUSTIBLE')) &&
-    !desc.includes('TANQUE')
-  )
-    return true;
-  if (desc.includes('NIVEL DE ACEITE') || desc.includes('NIVEL ACEITE')) return true;
-  if (
-    desc.includes('HOROMETRO') ||
-    desc.includes('HORÓMETRO') ||
-    desc.includes('HORÁMETRO') ||
-    desc.includes('HORAS DE TRABAJO') ||
-    desc.includes('LECTURA DE HORAS') ||
-    desc.includes('CONTADOR') ||
-    desc.includes('CICLOS') ||
-    desc.includes('ODOMETRO') ||
-    desc.includes('ODÓMETRO') ||
-    desc.includes('KILOMETRAJE')
-  )
-    return true;
-  if (desc.includes('ELECTROLITOS')) return true;
-  if (
-    desc.includes('CARGA DE BATERIA') &&
-    !desc.includes('CARGADOR') &&
-    !desc.includes('SISTEMA DE CARGA')
-  )
-    return true;
-  if (desc.includes('TEMPERATURA') || desc.includes('TEMP.')) return true;
-  // Correctivo estructurados (excluidos intencionalmente del editor rico
-  // desde el commit 56b0d5f — son selectores/listas, no narrativa libre)
-  if (desc.includes('ESTADO INICIAL DEL EQUIPO') || desc.includes('ESTADO FINAL DEL EQUIPO'))
-    return true;
-  if (desc.includes('SISTEMAS AFECTADOS')) return true;
-  if (desc.includes('REPUESTOS UTILIZADOS') || desc.includes('MATERIALES E INSUMOS')) return true;
-  return false;
-}
-
-/**
  * ✅ FIX 20-AGO-2026: ¿La observación de esta actividad es un valor
  * estructurado de la app móvil?
  */
 function usaObservacionEstructurada(actividad: Actividad): boolean {
-  const desc =
-    actividad.catalogo_actividades?.descripcion_actividad || actividad.descripcion_manual || '';
-  if (descripcionEsInputEstructurado(desc)) return true;
+  const tipoControl = (
+    actividad.catalogo_actividades?.tipo_control_input || 'ESCALA_ESTADO'
+  ).toUpperCase();
+  if (tipoControl !== 'ESCALA_ESTADO') return true;
+  if (Boolean(actividad.catalogo_actividades?.rol_semantico)) return true;
+  if (actividad.respuesta_json != null) return true;
   return observacionTienePrefijoEstructurado(actividad.observaciones || '');
 }
 
@@ -355,6 +318,7 @@ export function ActividadCardAdvanced({
   horasActualesEquipo,
   onUpdate,
 }: ActividadCardAdvancedProps) {
+  const { formatNumber, formatDateTime } = useOrgFormatters();
   const updateActividad = useUpdateActividad();
   const [isExpanded, setIsExpanded] = useState(false);
   const [observaciones, setObservaciones] = useState(actividad.observaciones || '');
@@ -390,7 +354,12 @@ export function ActividadCardAdvanced({
       ? actividad.respuesta_json
       : null;
   const valorDesdeObservacion = (() => {
-    const match = (actividad.observaciones || '').trim().match(REGEX_CONTADOR_OBS);
+    const obsTrim = (actividad.observaciones || '').trim();
+    const esActContador =
+      tipoControlInput === 'LECTURA_CONTADOR' || rolSemantico === 'LECTURA_CONTADOR_ACTIVO';
+    const match = obsTrim.match(
+      esActContador ? /^(?:[A-ZÁÉÍÓÚÑ0-9_]{2,25})\s*:\s*([\d.,]+)$/i : REGEX_CONTADOR_OBS,
+    );
     return match ? match[1].trim() : '';
   })();
   const valorContadorInicial =
@@ -493,6 +462,8 @@ export function ActividadCardAdvanced({
       if (!ok) return;
     }
     const prefijoObs = `${metricaUso.prefijoObservacion}: ${trimmed}`;
+    const { notaTecnica } = parseObservacionYLeyenda(actividad.observaciones);
+    const observacionesGuardar = notaTecnica || prefijoObs;
     const etiquetaDisplay = metricaUso.sufijoCorto
       ? `${trimmed} ${metricaUso.sufijoCorto}`
       : trimmed;
@@ -502,7 +473,7 @@ export function ActividadCardAdvanced({
         data: {
           estado: (estadoActual || 'B') as EstadoActividad,
           ejecutada: true,
-          observaciones: prefijoObs,
+          observaciones: observacionesGuardar,
           respuestaJson: {
             ...(respuestaActualObj || {}),
             valor: trimmed,
@@ -513,7 +484,7 @@ export function ActividadCardAdvanced({
           },
         },
       });
-      setObservaciones(prefijoObs);
+      setObservaciones(observacionesGuardar);
       onUpdate?.();
     } catch (error) {
       console.error('Error al guardar lectura de contador:', error);
@@ -609,7 +580,7 @@ export function ActividadCardAdvanced({
                 if (esContadorAct && valorContadorInicial) {
                   const numC = Number(valorContadorInicial.replace(',', '.'));
                   const valFmt = Number.isFinite(numC)
-                    ? numC.toLocaleString('es-CO')
+                    ? formatNumber(numC, Number.isInteger(numC) ? 0 : 2)
                     : valorContadorInicial;
                   return (
                     <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded">
@@ -667,10 +638,7 @@ export function ActividadCardAdvanced({
               })()}
               {actividad.fecha_ejecucion && (
                 <span className="text-[10px] text-gray-400">
-                  {new Date(actividad.fecha_ejecucion).toLocaleTimeString('es-CO', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatDateTime(actividad.fecha_ejecucion)}
                 </span>
               )}
             </div>
@@ -735,7 +703,7 @@ export function ActividadCardAdvanced({
                 </label>
                 {horasActualesEquipo != null && horasActualesEquipo > 0 && (
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                    Acumulado actual: {horasActualesEquipo.toLocaleString('es-CO')}{' '}
+                    Acumulado actual: {formatNumber(horasActualesEquipo, 0)}{' '}
                     {metricaUso.sufijoCorto}
                   </span>
                 )}
@@ -775,7 +743,7 @@ export function ActividadCardAdvanced({
                 ) {
                   return (
                     <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1">
-                      ⚠️ Lectura menor al acumulado ({horasActualesEquipo.toLocaleString('es-CO')}{' '}
+                      ⚠️ Lectura menor al acumulado ({formatNumber(horasActualesEquipo, 0)}{' '}
                       {metricaUso.sufijoCorto}). El equipo conservará su histórico contra
                       retrocesos.
                     </p>

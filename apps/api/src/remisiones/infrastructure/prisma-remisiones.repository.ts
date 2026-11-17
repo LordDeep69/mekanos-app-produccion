@@ -1,6 +1,9 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { getNextTableId } from '../../common/utils/next-id.helper';
 import { PrismaService } from '../../database/prisma.service';
+import {
+  formatCorrelativeCode,
+  reserveNextSequenceCounter,
+} from '../../common/utils/sequence-counter.helper';
 
 @Injectable()
 export class PrismaRemisionesRepository {
@@ -49,15 +52,13 @@ export class PrismaRemisionesRepository {
         nombre_destinatario = tecnico?.persona?.nombre_completo;
       }
 
-      // Generate unique numero_remision & PK
-      const timestamp = Date.now();
-      const numero_remision = `REM-${timestamp}`;
-      const nextRemisionId = await getNextTableId(tx, 'remisiones', 'id_remision');
-      let nextDetalleId = await getNextTableId(tx, 'remisiones_detalle', 'id_detalle_remision');
+      // Generate unique atomic numero_remision via sequence_counter lock
+      const year = new Date().getFullYear();
+      const { sequence } = await reserveNextSequenceCounter(tx, 'REM', year);
+      const numero_remision = formatCorrelativeCode('REM', year, sequence, 5);
 
       const nuevaRemision = await tx.remisiones.create({
         data: {
-          id_remision: nextRemisionId,
           numero_remision,
           fecha_remision: new Date(),
           tipo_destino: 'TECNICO',
@@ -79,7 +80,6 @@ export class PrismaRemisionesRepository {
 
         await tx.remisiones_detalle.create({
           data: {
-            id_detalle_remision: nextDetalleId++,
             id_remision: nuevaRemision.id_remision,
             tipo_item: 'COMPONENTE', // REQUIRED field - all items are components in this flow
             id_componente: item.id_componente,

@@ -72,6 +72,7 @@ import { OrdenEditModal } from '@/features/ordenes/components/orden-edit-modal';
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
 import { ProgresoRegistroTelemetria } from '@/features/ordenes/components/progreso-registro-telemetria';
 import { cn, getApiErrorMessage } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import type {
   ActividadEjecutadaOrden,
   MedicionOrden,
@@ -313,7 +314,7 @@ function ActionButton({
 // TABS DE CONTENIDO
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function formatDisplayDate(dateStr?: string) {
+function formatDisplayDate(dateStr?: string, locale: string = 'es-CO') {
   if (!dateStr) return 'Sin programar';
   try {
     // ✅ FIX TIMEZONE: Extraer solo la parte de fecha (YYYY-MM-DD) y crear fecha local
@@ -322,7 +323,7 @@ function formatDisplayDate(dateStr?: string) {
     const [year, month, day] = datePart.split('-').map(Number);
     // Crear fecha local (sin conversión UTC)
     const localDate = new Date(year, month - 1, day);
-    return localDate.toLocaleDateString('es-CO', {
+    return localDate.toLocaleDateString(locale, {
       weekday: 'long',
       day: '2-digit',
       month: 'long',
@@ -340,14 +341,15 @@ function TabGeneral({
   orden: Orden;
   onOpenPendientesTab?: () => void;
 }) {
-  const fechaProgramada = formatDisplayDate(orden.fecha_programada);
+  const { locale, formatDateTime } = useOrgFormatters();
+  const fechaProgramada = formatDisplayDate(orden.fecha_programada, locale);
 
   const fechaCreacion = orden.fecha_creacion
-    ? new Date(orden.fecha_creacion).toLocaleString('es-CO')
+    ? formatDateTime(orden.fecha_creacion)
     : '-';
 
   const fechaFinalizacion = orden.fecha_fin_real
-    ? new Date(orden.fecha_fin_real).toLocaleString('es-CO')
+    ? formatDateTime(orden.fecha_fin_real)
     : null;
 
   // ✅ FIX: Solo mostrar banner si tiene fecha_fin_real (servicio realmente finalizado)
@@ -1356,6 +1358,7 @@ function TabEjecucion({
 }
 
 function TabFinanciero({ orden }: { orden: Orden }) {
+  const { formatCurrency, formatDateTime } = useOrgFormatters();
   const [isAddServicioOpen, setIsAddServicioOpen] = useState(false);
   const [isDespacharRepuestoOpen, setIsDespacharRepuestoOpen] = useState(false);
   const [reintegrandoId, setReintegrandoId] = useState<number | null>(null);
@@ -1448,7 +1451,7 @@ function TabFinanciero({ orden }: { orden: Orden }) {
             Servicios
           </p>
           <p className="text-2xl font-bold text-blue-900">
-            ${totalServiciosVivo.toLocaleString('es-CO')}
+            {formatCurrency(totalServiciosVivo)}
           </p>
         </div>
         <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 shadow-sm">
@@ -1461,13 +1464,13 @@ function TabFinanciero({ orden }: { orden: Orden }) {
             </span>
           </div>
           <p className="text-2xl font-bold text-emerald-950">
-            ${totalComponentesVivo.toLocaleString('es-CO')}
+            {formatCurrency(totalComponentesVivo)}
           </p>
         </div>
         <div className="bg-orange-50 rounded-xl p-4 border border-orange-100 shadow-sm">
           <p className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-1">Gastos</p>
           <p className="text-2xl font-bold text-orange-900">
-            ${totalGastosVivo.toLocaleString('es-CO')}
+            {formatCurrency(totalGastosVivo)}
           </p>
         </div>
         <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 shadow-sm ring-2 ring-purple-200">
@@ -1475,7 +1478,7 @@ function TabFinanciero({ orden }: { orden: Orden }) {
             Total General
           </p>
           <p className="text-2xl font-bold text-purple-900">
-            ${totalGeneralVivo.toLocaleString('es-CO')}
+            {formatCurrency(totalGeneralVivo)}
           </p>
         </div>
       </div>
@@ -1641,7 +1644,7 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                             </span>
                             {c.fecha_uso && (
                               <p className="text-[10px] text-slate-400">
-                                {new Date(c.fecha_uso).toLocaleString('es-CO')}
+                                {formatDateTime(c.fecha_uso)}
                               </p>
                             )}
                           </div>
@@ -1663,18 +1666,18 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                       </td>
                       <td className="px-4 py-3.5 text-right text-sm font-mono text-slate-700">
                         {esCliente ? (
-                          <span className="text-xs text-violet-700 font-semibold">$0</span>
+                          <span className="text-xs text-violet-700 font-semibold">{formatCurrency(0)}</span>
                         ) : (
-                          `$${Number(c.costo_unitario || 0).toLocaleString('es-CO')}`
+                          formatCurrency(c.costo_unitario || 0)
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-right text-sm font-mono font-bold text-emerald-800">
                         {esCliente ? (
                           <span className="text-xs font-semibold text-violet-700">
-                            $0 (Cliente)
+                            {formatCurrency(0)} (Cliente)
                           </span>
                         ) : (
-                          `$${Number(c.costo_total || 0).toLocaleString('es-CO')}`
+                          formatCurrency(c.costo_total || 0)
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-right">
@@ -1762,13 +1765,13 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                       {Number(s.cantidad)}
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-medium">
-                      ${Number(s.precio_unitario).toLocaleString('es-CO')}
+                      {formatCurrency(s.precio_unitario)}
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-medium text-orange-600">
                       -{s.descuento_porcentaje}%
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-bold text-blue-700">
-                      ${Number(s.subtotal).toLocaleString('es-CO')}
+                      {formatCurrency(s.subtotal)}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
@@ -1845,6 +1848,7 @@ function ModalConfirmarReintegro({
   onConfirm: (motivo: string) => Promise<void>;
   isPending: boolean;
 }) {
+  const { formatCurrency } = useOrgFormatters();
   const [motivo, setMotivo] = useState('');
   const esBodega = componente.origen_componente === 'BODEGA' && !!componente.id_componente;
   const costoTotal = Number(componente.costo_total || 0);
@@ -1911,7 +1915,7 @@ function ModalConfirmarReintegro({
                 </p>
               </div>
               <span className="font-mono text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg shrink-0">
-                -${costoTotal.toLocaleString('es-CO')} COP
+                -{formatCurrency(costoTotal)}
               </span>
             </div>
 
@@ -1969,14 +1973,14 @@ function ModalConfirmarReintegro({
                   Esta operación ejecutará un{' '}
                   <strong>contra-asiento inmutable de ENTRADA por DEVOLUCIÓN en el Kardex</strong>,
                   incrementará el saldo físico del almacén/lote y descontará{' '}
-                  <strong>${costoTotal.toLocaleString('es-CO')} COP</strong> del costo acumulado de
+                  <strong>{formatCurrency(costoTotal)}</strong> del costo acumulado de
                   la orden.
                 </>
               ) : (
                 <>
                   Esta operación retirará el registro de la orden (
                   <strong>sin afectar el inventario físico de bodega ni el Kardex</strong>) y
-                  ajustará <strong>${costoTotal.toLocaleString('es-CO')} COP</strong> en el balance
+                  ajustará <strong>{formatCurrency(costoTotal)}</strong> en el balance
                   de la orden.
                 </>
               )}
@@ -2045,6 +2049,7 @@ function ModalConfirmarEliminarServicio({
   onConfirm: () => Promise<void>;
   isPending: boolean;
 }) {
+  const { formatCurrency } = useOrgFormatters();
   if (!isOpen || !servicio) return null;
 
   return (
@@ -2081,7 +2086,7 @@ function ModalConfirmarEliminarServicio({
               {servicio.catalogo_servicios?.nombre_servicio}
             </p>
             <p className="text-xs text-slate-600 font-mono pt-1">
-              Subtotal: ${Number(servicio.subtotal || 0).toLocaleString('es-CO')} COP
+              Subtotal: {formatCurrency(servicio.subtotal || 0)}
             </p>
           </div>
           <p className="text-xs text-slate-600">
@@ -2126,6 +2131,7 @@ function ModalDespacharRepuestoOrden({
   onClose: () => void;
   orden: Orden;
 }) {
+  const { formatCurrency, formatDate } = useOrgFormatters();
   const { data: session } = useSession();
   const usuarioId = Number((session?.user as { id?: string | number } | undefined)?.id) || 1;
 
@@ -2557,7 +2563,7 @@ function ModalDespacharRepuestoOrden({
                   <span>3. Suministro Cliente</span>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
-                  Solo trazabilidad técnica • Costo $0 Mekanos
+                  Solo trazabilidad técnica • Costo {formatCurrency(0)}
                 </p>
               </button>
             </div>
@@ -2731,8 +2737,7 @@ function ModalDespacharRepuestoOrden({
                         <span className="text-slate-500 text-[11px]">
                           • Costo catálogo:{' '}
                           <strong>
-                            ${Number(componenteSeleccionado.precio_compra).toLocaleString('es-CO')}{' '}
-                            COP
+                            {formatCurrency(componenteSeleccionado.precio_compra)}
                           </strong>
                         </span>
                       )}
@@ -2834,7 +2839,7 @@ function ModalDespacharRepuestoOrden({
                               </span>
                               {comp.precio_compra ? (
                                 <span className="text-[10px] text-slate-400 font-mono">
-                                  ${Number(comp.precio_compra).toLocaleString('es-CO')}
+                                  {formatCurrency(comp.precio_compra)}
                                 </span>
                               ) : null}
                             </div>
@@ -2872,8 +2877,7 @@ function ModalDespacharRepuestoOrden({
                           {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'}
                           {lote.fecha_vencimiento && (
                             <span className="text-[10px] text-slate-400 font-sans">
-                              (Vence: {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}
-                              )
+                              (Vence: {formatDate(lote.fecha_vencimiento)})
                             </span>
                           )}
                         </span>
@@ -3023,7 +3027,7 @@ function ModalDespacharRepuestoOrden({
                               [{lote.codigo_lote}] ({lote.cantidad_actual}{' '}
                               {componenteSeleccionado?.unidad || 'UND'}){' '}
                               {lote.fecha_vencimiento
-                                ? `• Vto: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}`
+                                ? `• Vto: ${formatDate(lote.fecha_vencimiento)}`
                                 : ''}
                             </option>
                           ))}
@@ -3068,12 +3072,12 @@ function ModalDespacharRepuestoOrden({
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                     {origen === 'CLIENTE'
-                      ? 'Costo Imputado a Mekanos ($)'
-                      : 'Costo Unitario Imputado ($) *'}
+                      ? 'Costo Imputado'
+                      : 'Costo Unitario Imputado *'}
                   </label>
                   {origen === 'CLIENTE' ? (
                     <div className="w-full px-3.5 py-2.5 bg-violet-50/70 border border-violet-200 rounded-xl text-xs font-bold font-mono text-violet-800">
-                      $0 COP (Suministrado por el cliente)
+                      {formatCurrency(0)} (Suministrado por el cliente)
                     </div>
                   ) : (
                     <input
@@ -3145,7 +3149,7 @@ function ModalDespacharRepuestoOrden({
                   {origen === 'BODEGA'
                     ? 'Descuenta existencias físicas de bodega/lote, genera asiento CONSUMO_OS en Kardex y suma al total de la orden'
                     : origen === 'CLIENTE'
-                      ? 'No descuenta stock de almacén ni suma cobro de Mekanos ($0); queda documentado en la OT, Informe PDF e Historial del Equipo'
+                      ? `No descuenta stock de almacén ni suma cobro (${formatCurrency(0)}); queda documentado en la OT, Informe PDF e Historial del Equipo`
                       : 'No descuenta stock físico de bodega ni afecta Kardex; imputa el costo a la orden y al Historial Clínico del Equipo'}
                 </p>
               </div>
@@ -3172,7 +3176,7 @@ function ModalDespacharRepuestoOrden({
                         : 'text-blue-950',
                   )}
                 >
-                  ${subtotalEstimado.toLocaleString('es-CO')} COP
+                  {formatCurrency(subtotalEstimado)}
                 </span>
               </div>
             </div>
@@ -3222,6 +3226,7 @@ function ModalDespacharRepuestoOrden({
 }
 
 function ModalAddServicio({ onClose, idOrden }: { onClose: () => void; idOrden: number }) {
+  const { formatCurrency } = useOrgFormatters();
   const { data: catalogo, isLoading: isLoadingCat } = useServiciosComerciales({ activo: true });
   const addServicio = useAddServicioOrden();
 
@@ -3277,7 +3282,7 @@ function ModalAddServicio({ onClose, idOrden }: { onClose: () => void; idOrden: 
               }}
               getLabel={(s) => s.nombre_servicio}
               getSubtitle={(s) =>
-                `$${(s.precio_base || 0).toLocaleString('es-CO')} • ${s.codigo_servicio}`
+                `${formatCurrency(s.precio_base || 0)} • ${s.codigo_servicio}`
               }
               renderIcon={() => <Tag className="h-5 w-5" />}
               getId={(s) => s.id_servicio}
@@ -3336,10 +3341,7 @@ function ModalAddServicio({ onClose, idOrden }: { onClose: () => void; idOrden: 
                 Cálculo Estimado
               </p>
               <p className="text-2xl font-black text-blue-900">
-                $
-                {((Number(precioCustom) || 0) * cantidad * (1 - descuento / 100)).toLocaleString(
-                  'es-CO',
-                )}
+                {formatCurrency((Number(precioCustom) || 0) * cantidad * (1 - descuento / 100))}
               </p>
             </div>
           </div>
@@ -3371,6 +3373,7 @@ function ModalAddServicio({ onClose, idOrden }: { onClose: () => void; idOrden: 
 }
 
 function TabDocumentos({ orden }: { orden: Orden }) {
+  const { formatDateTime } = useOrgFormatters();
   const queryClient = useQueryClient();
   const invalidateReportes = useInvalidarReportes();
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
@@ -3570,7 +3573,7 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                     title={
                       `Descargado ${vecesDescargado} vez${vecesDescargado !== 1 ? 'es' : ''}` +
                       (fechaUltimaDescarga
-                        ? `\nÚltima descarga: ${new Date(fechaUltimaDescarga).toLocaleString('es-CO')}`
+                        ? `\nÚltima descarga: ${formatDateTime(fechaUltimaDescarga)}`
                         : '')
                     }
                   >
@@ -3581,7 +3584,7 @@ function TabDocumentos({ orden }: { orden: Orden }) {
               </div>
               <p className="text-xs text-red-700 mt-0.5">
                 {fechaUltimaDescarga
-                  ? `Última descarga: ${new Date(fechaUltimaDescarga).toLocaleString('es-CO')}`
+                  ? `Última descarga: ${formatDateTime(fechaUltimaDescarga)}`
                   : 'Generado automáticamente al marcar la orden como COMPLETADA'}
               </p>
             </div>

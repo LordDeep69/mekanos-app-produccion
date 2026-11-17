@@ -13,6 +13,7 @@
 'use client';
 
 import { getNombreCompleto, useEmpleados } from '@/features/empleados';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { cn } from '@/lib/utils';
 import type { EmpleadoConPersona } from '@/types/empleados';
 import {
@@ -94,6 +95,7 @@ function EstadoBadge({ activo }: { activo: boolean }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function EmpleadosPage() {
+    const { formatDate } = useOrgFormatters();
     const [page, setPage] = useState(1);
     const [busqueda, setBusqueda] = useState('');
     const [filtroTecnico, setFiltroTecnico] = useState<string>('');
@@ -282,7 +284,7 @@ export default function EmpleadosPage() {
                                     {/* Footer con fecha ingreso */}
                                     <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs text-gray-500">
                                         {empleado.fecha_ingreso && (
-                                            <span>Ingreso: {new Date(empleado.fecha_ingreso).toLocaleDateString('es-CO')}</span>
+                                            <span>Ingreso: {formatDate(empleado.fecha_ingreso)}</span>
                                         )}
                                         <span className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
                                             Ver detalle →

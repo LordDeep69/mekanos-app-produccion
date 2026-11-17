@@ -5,7 +5,9 @@ import { PassportModule } from '@nestjs/passport';
 import { PrismaModule } from '../database/prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { resolveRequiredAuthSecret } from './config/auth-secrets.helper';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { PermisosGuard } from './guards/permisos.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
@@ -22,7 +24,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        secret: resolveRequiredAuthSecret(configService, 'JWT_SECRET'),
         signOptions: {
           expiresIn: '15m', // Access token expira en 15 minutos
         },
@@ -34,8 +36,16 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     AuthService,
     JwtStrategy,
     JwtAuthGuard, // ✅ AGREGADO FASE 2
-    RolesGuard,   // ✅ AGREGADO FASE 2
+    RolesGuard, // ✅ AGREGADO FASE 2
+    PermisosGuard, // ✅ FASE 1 RBAC
   ],
-  exports: [AuthService, JwtStrategy, PassportModule, JwtAuthGuard, RolesGuard], // ✅ EXPORTADOS
+  exports: [
+    AuthService,
+    JwtStrategy,
+    PassportModule,
+    JwtAuthGuard,
+    RolesGuard,
+    PermisosGuard,
+  ], // ✅ EXPORTADOS
 })
 export class AuthModule {}

@@ -1,11 +1,14 @@
 import {
-    IsBoolean,
-    IsEnum,
-    IsInt,
-    IsOptional,
-    IsString,
-    MaxLength,
-    MinLength,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
 } from 'class-validator';
 import {
     AplicabilidadEnum,
@@ -53,6 +56,17 @@ export class UpdateTiposComponenteDto {
   })
   @IsOptional()
   aplica_a?: AplicabilidadEnum;
+
+  @IsBoolean()
+  @IsOptional()
+  aplica_todos_tipos?: boolean;
+
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @IsOptional()
+  tipos_equipo_ids?: number[];
 
   @IsString()
   @IsOptional()

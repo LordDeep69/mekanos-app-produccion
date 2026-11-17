@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { getNextTableId } from '../common/utils/next-id.helper';
 import { PrismaService } from '../database/prisma.service';
 import { CreateRolesDto } from './dto/create-roles.dto';
 import { UpdateRolesDto } from './dto/update-roles.dto';
@@ -18,12 +17,9 @@ export class RolesService {
       throw new Error(`Rol con código ${createDto.codigo_rol} ya existe`);
     }
 
-    const nextId = await getNextTableId(this.prisma, 'roles', 'id_rol');
-
     return this.prisma.roles.create({
       data: {
         ...createDto,
-        id_rol: nextId,
         creado_por: userId,
         fecha_creacion: new Date(),
       },

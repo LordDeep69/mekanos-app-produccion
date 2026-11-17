@@ -203,6 +203,9 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
   Map<String, dynamic> _extraerInfoDePayload(String payloadJson) {
     try {
       final payload = jsonDecode(payloadJson) as Map<String, dynamic>;
+      final evList =
+          (payload['evidencias'] as List?) ??
+          (payload['evidenciasRefs'] as List?);
       return {
         'observaciones': payload['observaciones'] ?? '',
         'horaEntrada': payload['horaEntrada'] ?? '',
@@ -210,7 +213,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
         'esMultiEquipo': payload['esMultiEquipo'] ?? false,
         'totalActividades': (payload['actividades'] as List?)?.length ?? 0,
         'totalMediciones': (payload['mediciones'] as List?)?.length ?? 0,
-        'totalEvidencias': (payload['evidencias'] as List?)?.length ?? 0,
+        'totalEvidencias': evList?.length ?? 0,
       };
     } catch (e) {
       return {};
@@ -219,6 +222,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
 
   Widget _buildOrdenCard(OrdenesPendientesSyncData orden, bool isOnline) {
     final isError = orden.estadoSync == 'ERROR';
+    final isConflicto = orden.estadoSync == 'CONFLICTO_ELIMINADA';
     final isEnProceso = orden.estadoSync == 'EN_PROCESO';
     final isSyncingThis = _syncingOrders.contains(orden.idOrdenLocal);
     final info = _extraerInfoDePayload(orden.payloadJson);
@@ -227,7 +231,11 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
     IconData statusIcon;
     String statusText;
 
-    if (isSyncingThis || isEnProceso) {
+    if (isConflicto) {
+      statusColor = Colors.deepOrange;
+      statusIcon = Icons.warning_amber_rounded;
+      statusText = 'Conflicto: eliminada en servidor (datos resguardados)';
+    } else if (isSyncingThis || isEnProceso) {
       statusColor = Colors.blue;
       statusIcon = Icons.cloud_sync;
       statusText = 'Subiendo...';
@@ -389,7 +397,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                             ],
                           ),
 
-                          if (isError && orden.ultimoError != null) ...[
+                          if ((isError || isConflicto) && orden.ultimoError != null) ...[
                             const SizedBox(height: 12),
                             Container(
                               padding: const EdgeInsets.all(10),
@@ -432,6 +440,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                       child: ElevatedButton.icon(
                         onPressed:
                             (isOnline &&
+                                !isConflicto &&
                                 !isSyncingThis &&
                                 !isEnProceso &&
                                 _syncingOrders.isEmpty &&

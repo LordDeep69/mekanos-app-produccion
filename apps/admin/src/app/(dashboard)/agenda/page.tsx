@@ -32,6 +32,7 @@ import {
     useServiciosVencidos,
 } from '@/features/agenda';
 import { formatDateSafe } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import type { AgendaView, NivelUrgencia, ServicioProgramado } from '@/types/agenda';
 import {
     AlertTriangle,
@@ -573,6 +574,7 @@ export default function AgendaPage() {
         }
     };
 
+    const { formatDate } = useOrgFormatters();
     const activeData = getActiveData();
 
     return (
@@ -586,7 +588,7 @@ export default function AgendaPage() {
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Agenda de Servicios</h1>
                         <p className="text-muted-foreground text-sm">
-                            Centro de programación inteligente - {new Date().toLocaleDateString('es-CO', {
+                            Centro de programación inteligente - {formatDate(new Date(), {
                                 weekday: 'long',
                                 year: 'numeric',
                                 month: 'long',

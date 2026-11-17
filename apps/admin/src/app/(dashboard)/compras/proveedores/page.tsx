@@ -1185,7 +1185,7 @@ export default function ProveedoresPage() {
                     </Label>
                     <Input
                       id="prov_dir"
-                      placeholder="Ej. Zona Industrial Mamonal Km 3, Cartagena"
+                      placeholder="Ej. Zona Industrial, Bodega Principal"
                       value={formData.direccion_principal}
                       onChange={(e) =>
                         setFormData({ ...formData, direccion_principal: e.target.value })

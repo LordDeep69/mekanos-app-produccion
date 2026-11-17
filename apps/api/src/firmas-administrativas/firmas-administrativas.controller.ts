@@ -11,20 +11,25 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermisosGuard } from '../auth/guards/permisos.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateFirmasAdministrativasDto } from './dto/create-firmas-administrativas.dto';
 import { UpdateFirmasAdministrativasDto } from './dto/update-firmas-administrativas.dto';
 import { FirmasAdministrativasService } from './firmas-administrativas.service';
 
 @Controller('firmas-administrativas')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 export class FirmasAdministrativasController {
   constructor(
     private readonly firmasAdministrativasService: FirmasAdministrativasService,
   ) {}
 
   @Post()
+  @Roles('ADMIN')
+  @Permisos('CONFIG_SYSTEM')
   create(
     @Body() createDto: CreateFirmasAdministrativasDto,
     @CurrentUser('id') userId: number,
@@ -51,6 +56,8 @@ export class FirmasAdministrativasController {
   }
 
   @Put(':id')
+  @Roles('ADMIN')
+  @Permisos('CONFIG_SYSTEM')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateFirmasAdministrativasDto,
@@ -60,6 +67,8 @@ export class FirmasAdministrativasController {
   }
 
   @Delete(':id')
+  @Roles('ADMIN')
+  @Permisos('CONFIG_SYSTEM')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.firmasAdministrativasService.remove(id);
   }

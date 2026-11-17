@@ -1,80 +1,94 @@
 /**
- * MEKANOS PDF Templates - Paleta de Colores Oficial
- *
- * #F2F2F2 - Blanco (fondo)
- * #244673 - Azul Oscuro (encabezados)
- * #3290A6 - Azul Claro (acentos)
- * #56A672 - Verde (estados OK)
- * #9EC23D - Verde Claro (destacados)
+ * Plantilla Base White-Label para Documentos PDF EAM
+ * Paleta CSS reactiva alimentada dinámicamente por ConfiguracionOrganizacion.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import {
+  DEFAULT_BRAND_PALETTE,
+  DEFAULT_ORG_BRANDING,
+  OrgBrandingContext,
+  escapeBrandHtml,
+  formatCurrencyOrg,
+  formatDateOrg,
+  formatNumberOrg,
+  generarFooterCorporativoHtml,
+  renderOrgLogoHtml,
+  resolveOrgBranding,
+} from '../org-branding.types';
+
+export {
+  DEFAULT_BRAND_PALETTE,
+  DEFAULT_ORG_BRANDING,
+  OrgBrandingContext,
+  escapeBrandHtml,
+  formatCurrencyOrg,
+  formatDateOrg,
+  formatNumberOrg,
+  generarFooterCorporativoHtml,
+  renderOrgLogoHtml,
+  resolveOrgBranding,
+};
 
 export const MEKANOS_COLORS = {
-  background: '#F2F2F2',
-  primary: '#244673', // Azul oscuro - encabezados
-  secondary: '#3290A6', // Azul claro - acentos
-  success: '#56A672', // Verde - estados OK
-  highlight: '#9EC23D', // Verde claro - destacados
-  white: '#FFFFFF',
-  text: '#333333',
-  border: '#CCCCCC',
-  warning: '#F59E0B',
-  danger: '#DC2626',
+  background: `var(--brand-background, ${DEFAULT_BRAND_PALETTE.background})`,
+  primary: `var(--brand-primary, ${DEFAULT_BRAND_PALETTE.primary})`,
+  secondary: `var(--brand-secondary, ${DEFAULT_BRAND_PALETTE.secondary})`,
+  success: `var(--brand-success, ${DEFAULT_BRAND_PALETTE.success})`,
+  highlight: `var(--brand-highlight, ${DEFAULT_BRAND_PALETTE.highlight})`,
+  white: `var(--brand-white, ${DEFAULT_BRAND_PALETTE.white})`,
+  text: `var(--brand-text, ${DEFAULT_BRAND_PALETTE.text})`,
+  border: `var(--brand-border, ${DEFAULT_BRAND_PALETTE.border})`,
+  warning: `var(--brand-warning, ${DEFAULT_BRAND_PALETTE.warning})`,
+  danger: `var(--brand-danger, ${DEFAULT_BRAND_PALETTE.danger})`,
 };
 
-/**
- * ✅ LOGO MEKANOS OFICIAL - PNG embebido en base64
- * Logo original de MEKANOS S.A.S embebido directamente en el PDF
- * No depende de URLs externas - garantiza renderizado perfecto
- */
-
-export const getLogoBase64 = (): string => {
-  try {
-    // En producción compilada con webpack, todo está en dist/main.js
-    // Los assets se copian a dist/pdf/assets/
-    const possiblePaths = [
-      // ✅ Rutas correctas para nest build con webpack (assets copiados a dist/pdf/assets/)
-      path.join(process.cwd(), 'dist/pdf/assets/logo-mekanos.png'), // desde api cwd
-      path.join(process.cwd(), 'apps/api/dist/pdf/assets/logo-mekanos.png'), // desde monorepo root
-      // Fallback a rutas antiguas por compatibilidad
-      path.join(__dirname, 'assets/logo-mekanos.png'),
-      path.join(__dirname, '../assets/logo-mekanos.png'),
-      path.join(__dirname, '../../assets/logo-mekanos.png'),
-      path.join(process.cwd(), 'apps/api/dist/assets/logo-mekanos.png'),
-      path.join(process.cwd(), 'dist/assets/logo-mekanos.png'),
-    ];
-
-    for (const logoPath of possiblePaths) {
-      if (fs.existsSync(logoPath)) {
-        console.log(`[PDF] ✅ Logo encontrado en: ${logoPath}`);
-        const logoBuffer = fs.readFileSync(logoPath);
-        return logoBuffer.toString('base64');
-      }
-    }
-
-    console.error('[PDF] ❌ Logo no encontrado en ninguna ruta:', possiblePaths);
-    return '';
-  } catch (error) {
-    console.error('[PDF] Error cargando logo:', error);
-    return '';
+export const buildBrandCssVars = (branding?: Partial<OrgBrandingContext> | null): string => {
+  const b = resolveOrgBranding(branding);
+  return `
+  :root {
+    --brand-background: ${b.colores.background};
+    --brand-primary: ${b.colores.primary};
+    --brand-secondary: ${b.colores.secondary};
+    --brand-accent: ${b.colores.accent};
+    --brand-success: ${b.colores.success};
+    --brand-highlight: ${b.colores.highlight};
+    --brand-warning: ${b.colores.warning};
+    --brand-danger: ${b.colores.danger};
+    --brand-white: ${b.colores.white};
+    --brand-text: ${b.colores.text};
+    --brand-muted: ${b.colores.mutedText};
+    --brand-border: ${b.colores.border};
   }
+  `;
 };
 
 /**
- * ✅ Genera header profesional con logo MEKANOS OFICIAL para todos los PDFs
+ * Obtiene el logo configurado desde OrgBrandingContext (sin lectura de assets fijos en disco).
+ */
+export const getLogoBase64 = (branding?: Partial<OrgBrandingContext> | null): string => {
+  const url = branding?.logoUrl?.trim();
+  if (!url) return '';
+  if (url.startsWith('data:image/')) {
+    const idx = url.indexOf('base64,');
+    return idx >= 0 ? url.slice(idx + 7) : '';
+  }
+  return '';
+};
+
+/**
+ * Genera header corporativo parametrizado para todos los PDFs.
  */
 export const generarHeaderConLogo = (
   titulo: string,
   subtitulo: string,
   numeroOrden: string,
+  branding?: Partial<OrgBrandingContext> | null,
 ): string => {
-  const logoBase64 = getLogoBase64();
+  const brand = resolveOrgBranding(branding);
   return `
   <div class="header">
     <div class="logo-container">
-      <img src="data:image/png;base64,${logoBase64}" alt="MEKANOS S.A.S" style="height: 50px; width: auto;" />
+      ${renderOrgLogoHtml(brand, 48, 'light')}
     </div>
     <div class="header-title">
       <h1>${titulo}</h1>
@@ -267,6 +281,7 @@ export interface DatosOrdenPDF {
     velocidad?: string; // RPM
     vibracion?: string; // mm/s
   };
+  branding?: OrgBrandingContext;
 }
 
 // ✅ MULTI-EQUIPOS: Datos de un equipo en la orden
@@ -1938,13 +1953,18 @@ export const generarDatosClienteConFichaTecnica = (
       ? `${eq.frecuencia}`
       : '';
   if (!tension && placa?.kpis) {
-    const kpiTension = placa.kpis.find(
+    const kpiTensiones = placa.kpis.filter(
       (k: any) =>
         k.etiqueta?.toLowerCase().includes('voltaje') ||
         k.etiqueta?.toLowerCase().includes('tensión') ||
         k.etiqueta?.toLowerCase().includes('tension'),
     );
-    if (kpiTension) tension = kpiTension.valorTexto;
+    if (kpiTensiones.length > 0) {
+      tension = kpiTensiones
+        .map((k: any) => k.valorTexto)
+        .filter(Boolean)
+        .join(' / ');
+    }
   }
   let rpm = eq?.rpm ? `${eq.rpm}` : '';
   if (!rpm && placa?.kpis) {
@@ -1955,23 +1975,29 @@ export const generarDatosClienteConFichaTecnica = (
     );
     if (kpiRpm) rpm = kpiRpm.valorTexto;
   }
-  // Metrología del contador de uso (Horómetro / Ciclos / Odómetro / Calendario)
-  const unidadUso = eq?.unidadUso || placa?.unidadUso || 'HORAS';
-  const etiquetaRaw = eq?.etiquetaContador || placa?.etiquetaContador;
+  // Metrología del contador de uso (Horómetro / Ciclos / Odómetro / Calendario / Personalizado)
+  const unidadUsoRaw = String(eq?.unidadUso || placa?.unidadUso || 'HORAS').trim();
+  const unidadUso = unidadUsoRaw.toUpperCase();
+  const etiquetaRaw = (eq?.etiquetaContador || placa?.etiquetaContador || '').trim();
   const requiereContador =
-    (eq?.requiereHorometro ?? placa?.requiereHorometro ?? true) && unidadUso !== 'CAL';
+    (eq?.requiereHorometro ?? placa?.requiereHorometro ?? true) &&
+    unidadUso !== 'CAL' &&
+    etiquetaRaw.toUpperCase() !== 'N/A';
 
   let sufijoUso = 'h';
-  let labelInterv = '⏱️ Horómetro Intervención';
-  let labelAcum = '📊 Horómetro Acumulado (Hoja de Vida)';
+  let labelInterv = `⏱️ ${etiquetaRaw || 'Horómetro'} Intervención`;
+  let labelAcum = `📊 ${etiquetaRaw || 'Horómetro'} Acumulado (Hoja de Vida)`;
   let badgeControl = etiquetaRaw ? `Control por ${etiquetaRaw}` : 'Control por Horómetro';
 
-  if (unidadUso === 'CICLOS') {
+  if (!requiereContador || unidadUso === 'CAL') {
+    sufijoUso = '';
+    badgeControl = 'Control Exclusivo por Calendario';
+  } else if (unidadUso === 'CICLOS') {
     sufijoUso = 'ciclos';
     labelInterv = `🔄 ${etiquetaRaw || 'Ciclos'} Intervención`;
     labelAcum = `📊 ${etiquetaRaw || 'Ciclos'} Acumulados (Hoja de Vida)`;
     badgeControl = etiquetaRaw ? `Control por ${etiquetaRaw}` : 'Control por Ciclos de Viaje';
-  } else if (unidadUso === 'KM_ODO') {
+  } else if (unidadUso === 'KM_ODO' || unidadUso === 'KM') {
     sufijoUso = 'km';
     labelInterv = `🚗 ${etiquetaRaw || 'Kilometraje'} Intervención`;
     labelAcum = `📊 ${etiquetaRaw || 'Kilometraje'} Acumulado`;
@@ -1983,8 +2009,12 @@ export const generarDatosClienteConFichaTecnica = (
     badgeControl = etiquetaRaw
       ? `Control por ${etiquetaRaw}`
       : 'Control por Unidades de Producción';
-  } else if (unidadUso === 'CAL') {
-    badgeControl = 'Mantenimiento por Calendario';
+  } else if (unidadUso !== 'HORAS' && unidadUso !== 'HRS' && unidadUso !== 'H') {
+    sufijoUso = unidadUsoRaw.toLowerCase();
+    const etqCustom = etiquetaRaw || unidadUsoRaw;
+    labelInterv = `🔢 ${etqCustom} Intervención`;
+    labelAcum = `📊 ${etqCustom} Acumulado (Hoja de Vida)`;
+    badgeControl = `Control por ${etqCustom}`;
   }
 
   const formatContadorValor = (val: unknown): string => {
@@ -2036,15 +2066,15 @@ export const generarDatosClienteConFichaTecnica = (
       <div class="info-item">
         <span class="info-label">Cliente / Razón Social</span>
         <span class="info-value" style="font-weight: 600;">
-          ${clienteNombre}
-          ${clienteNit ? `<span style="font-size: 8.5px; color: #64748b; font-weight: normal; margin-left: 4px;">(${clienteNit})</span>` : ''}
+          ${escapeBrandHtml(clienteNombre)}
+          ${clienteNit ? `<span style="font-size: 8.5px; color: #64748b; font-weight: normal; margin-left: 4px;">(${escapeBrandHtml(clienteNit)})</span>` : ''}
         </span>
       </div>
       <div class="info-item">
         <span class="info-label">Sede / Ubicación Física</span>
         <span class="info-value">
-          ${sede ? `<strong>${sede}</strong> &bull; ` : ''}${direccion}
-          ${ubicacion ? `<div style="font-size: 8px; color: #475569; margin-top: 1px;">📍 ${ubicacion}</div>` : ''}
+          ${sede ? `<strong>${escapeBrandHtml(sede)}</strong> &bull; ` : ''}${escapeBrandHtml(direccion)}
+          ${ubicacion ? `<div style="font-size: 8px; color: #475569; margin-top: 1px;">📍 ${escapeBrandHtml(ubicacion)}</div>` : ''}
         </span>
       </div>
     </div>
@@ -2053,19 +2083,19 @@ export const generarDatosClienteConFichaTecnica = (
     <div class="info-grid info-grid-4" style="margin-top: 6px;">
       <div class="info-item">
         <span class="info-label">Fecha</span>
-        <span class="info-value">${formatearFechaServicio(datos)}</span>
+        <span class="info-value">${escapeBrandHtml(formatearFechaServicio(datos))}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Técnico de Servicio</span>
-        <span class="info-value">${datos.tecnico || 'N/A'}</span>
+        <span class="info-value">${escapeBrandHtml(datos.tecnico || 'N/A')}</span>
       </div>
       <div class="info-item">
         <span class="info-label">H. Entrada</span>
-        <span class="info-value">${datos.horaEntrada || '-'}</span>
+        <span class="info-value">${escapeBrandHtml(datos.horaEntrada || '-')}</span>
       </div>
       <div class="info-item">
         <span class="info-label">H. Salida</span>
-        <span class="info-value">${datos.horaSalida || '-'}</span>
+        <span class="info-value">${escapeBrandHtml(datos.horaSalida || '-')}</span>
       </div>
     </div>
 
@@ -2073,14 +2103,14 @@ export const generarDatosClienteConFichaTecnica = (
     <div style="margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 4px; background: #ffffff; overflow: hidden;">
       <div style="background: #f1f5f9; padding: 4px 8px; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          ${codigoEquipo ? `<span style="background: #244673; color: #ffffff; font-family: monospace; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px;">TAG: ${codigoEquipo}</span>` : ''}
+          ${codigoEquipo ? `<span style="background: var(--brand-primary, #1E40AF); color: #ffffff; font-family: monospace; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px;">TAG: ${escapeBrandHtml(codigoEquipo)}</span>` : ''}
           <span style="font-weight: 700; font-size: 10px; color: #1e293b;">
-            ${nombreEquipo || `${tipoEquipo} ${marca}`}
+            ${escapeBrandHtml(nombreEquipo || `${tipoEquipo} ${marca}`)}
           </span>
         </div>
         <div style="display: flex; align-items: center; gap: 6px;">
-          <span style="font-size: 8px; font-weight: 700; color: #3290A6; text-transform: uppercase;">
-            ${tipoEquipo}
+          <span style="font-size: 8px; font-weight: 700; color: var(--brand-secondary, #0F172A); text-transform: uppercase;">
+            ${escapeBrandHtml(tipoEquipo)}
           </span>
           ${
             requiereContador
@@ -2089,10 +2119,10 @@ export const generarDatosClienteConFichaTecnica = (
             ${badgeControl}
           </span>
           `
-              : unidadUso === 'CAL'
+              : !requiereContador
                 ? `
           <span style="font-size: 7.5px; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px; padding: 1px 5px;">
-            Por Calendario
+            ${badgeControl}
           </span>
           `
                 : ''
@@ -2182,19 +2212,35 @@ export const generarDatosClienteConFichaTecnica = (
 
           const kpisVisibles = (placa?.kpis || []).filter((kpi: any) => {
             const cod = String(kpi?.codigo || '').toLowerCase();
+            const etq = String(kpi?.etiqueta || '').toLowerCase();
             if (cod === 'horas_actuales') {
-              return !tieneCajasContador && unidadUso === 'HORAS';
+              return !tieneCajasContador && requiereContador;
             }
             if (cod === 'capacidad_principal') {
               return false;
             }
             const valNorm = norm(kpi?.valorTexto || kpi?.valor || kpi?.valor_texto);
             if (!valNorm) return false;
-            if (cod === 'capacidad_de_carga_nominal' && capNorm && valNorm === capNorm) {
+            if (
+              (cod.includes('capacidad') ||
+                cod.includes('potencia') ||
+                etq.includes('capacidad') ||
+                etq.includes('potencia')) &&
+              capNorm &&
+              valNorm === capNorm
+            ) {
               return false;
             }
             if (
-              (cod.includes('velocidad') || cod.includes('voltaje') || cod === 'rpm') &&
+              (cod.includes('velocidad') ||
+                cod.includes('voltaje') ||
+                cod.includes('tension') ||
+                cod.includes('tensión') ||
+                etq.includes('velocidad') ||
+                etq.includes('voltaje') ||
+                etq.includes('tensión') ||
+                etq.includes('tension') ||
+                cod === 'rpm') &&
               tvNorm &&
               tvNorm.includes(valNorm)
             ) {
@@ -2235,7 +2281,15 @@ export const generarSeccionRepuestosSegregados = (
   repuestosDetallados?: RepuestoUtilizadoPDF[],
   repuestosWms?: string[],
   tipoServicio?: string,
+  branding?: Partial<OrgBrandingContext> | null,
 ): string => {
+  const brand = resolveOrgBranding(branding);
+  const empresaNombre = escapeBrandHtml(brand.nombreComercial);
+  const empresaLegal = escapeBrandHtml(brand.razonSocial || brand.nombreComercial);
+  const disclaimerExterno = brand.textoDisclaimerRepuestosCliente
+    ? escapeBrandHtml(brand.textoDisclaimerRepuestosCliente)
+    : `Los materiales y/o fluidos detallados en esta tabla fueron provistos directamente por el cliente a su solicitud para trazabilidad técnica en la hoja de vida del equipo. ${empresaLegal} certifica la correcta ejecución técnica de su montaje o aplicación, pero no otorga garantía sobre la procedencia, calidad, idoneidad ni fallas mecánicas derivadas de piezas o fluidos no provistos por nuestro almacén.`;
+
   const tieneDetallados = Boolean(repuestosDetallados && repuestosDetallados.length > 0);
   const tieneLegacy = Boolean(repuestosWms && repuestosWms.length > 0);
 
@@ -2271,7 +2325,7 @@ export const generarSeccionRepuestosSegregados = (
         <div class="section-title">REPUESTOS, INSUMOS Y FLUIDOS REGISTRADOS</div>
         <table class="repuestos-tabla" style="width: 100%; border-collapse: collapse;">
           <thead>
-            <tr style="background: #244673; color: #ffffff;">
+            <tr style="background: var(--brand-primary, #1E40AF); color: #ffffff;">
               <th style="width: 6%; text-align: center;">#</th>
               <th>Descripción del Repuesto / Fluido / Suministro</th>
             </tr>
@@ -2295,7 +2349,7 @@ export const generarSeccionRepuestosSegregados = (
       <div class="section-title">TRAZABILIDAD DE REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO</div>
   `;
 
-  // TABLA A: BODEGA MEKANOS (GARANTÍA WMS)
+  // TABLA A: BODEGA ALMACÉN CENTRAL (GARANTÍA WMS)
   if (itemsBodega.length > 0) {
     const rowsBodega = itemsBodega
       .map(
@@ -2322,8 +2376,8 @@ export const generarSeccionRepuestosSegregados = (
 
     html += `
       <div class="repuestos-bloque" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 10px;">
-        <div style="background: #244673; color: #ffffff; padding: 4px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
-          <span>📦 A. SUMINISTRO MEKANOS S.A.S. — ALMACÉN CENTRAL (GARANTÍA OFICIAL WMS)</span>
+        <div style="background: var(--brand-primary, #1E40AF); color: #ffffff; padding: 4px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+          <span>📦 A. SUMINISTRO ${empresaNombre.toUpperCase()} — ALMACÉN CENTRAL (GARANTÍA OFICIAL WMS)</span>
           <span style="background: rgba(255,255,255,0.2); padding: 1px 6px; border-radius: 2px; font-size: 7.5px;">GARANTÍA OFICIAL</span>
         </div>
         <table class="repuestos-tabla" style="width: 100%; border-collapse: collapse;">
@@ -2341,7 +2395,7 @@ export const generarSeccionRepuestosSegregados = (
           </tbody>
         </table>
         <div class="repuestos-garantia-nota">
-          ✓ Componentes originales y fluidos de alta especificación suministrados desde almacén central Mekanos S.A.S. bajo control de lote y con garantía oficial de servicio.
+          ✓ Componentes originales y fluidos de alta especificación suministrados desde almacén central de ${empresaLegal} bajo control de lote y con garantía oficial de servicio.
         </div>
       </div>
     `;
@@ -2390,7 +2444,7 @@ export const generarSeccionRepuestosSegregados = (
           </tbody>
         </table>
         <div class="repuestos-disclaimer-legal">
-          <strong>DECLARACIÓN DE SUMINISTRO EXTERNO:</strong> Los materiales y/o fluidos detallados en esta tabla fueron provistos directamente por el cliente a su solicitud para trazabilidad técnica en la hoja de vida del equipo. Mekanos S.A.S. certifica la correcta ejecución técnica de su montaje o aplicación, pero no otorga garantía sobre la procedencia, calidad, idoneidad ni fallas mecánicas derivadas de piezas o fluidos no provistos por nuestro almacén.
+          <strong>DECLARACIÓN DE SUMINISTRO EXTERNO:</strong> ${disclaimerExterno}
         </div>
       </div>
     `;

@@ -1,6 +1,5 @@
 import { PrismaService } from '@mekanos/database';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { getNextTableId } from '../../../common/utils/next-id.helper';
 import { IDevolucionesProveedorRepository } from '../../domain/devoluciones-proveedor.repository';
 
 /**
@@ -46,15 +45,13 @@ export class PrismaDevolucionesProveedorRepository implements IDevolucionesProve
         }
       }
 
-      // 3. Generar numero_devolucion único y PK
+      // 3. Generar numero_devolucion único y PK vía secuencia DB
       const count = await tx.devoluciones_proveedor.count();
       const numero_devolucion = `DEV-${Date.now()}-${count + 1}`;
-      const nextId = await getNextTableId(tx, 'devoluciones_proveedor', 'id_devolucion');
 
       // 4. Crear la devolución (estado inicial: SOLICITADA)
       const devolucion = await tx.devoluciones_proveedor.create({
         data: {
-          id_devolucion: nextId,
           numero_devolucion,
           id_orden_compra: data.id_orden_compra,
           id_lote: data.id_lote,

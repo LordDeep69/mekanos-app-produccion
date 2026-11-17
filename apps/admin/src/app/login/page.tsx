@@ -1,13 +1,9 @@
 /**
- * MEKANOS S.A.S - Portal Admin
- * Página de Login
- * 
- * Diseño centrado con branding MEKANOS
- * Componentes: Card, Input, Button, Form de shadcn/ui
- * 
+ * Página de Login White-Label - Portal Admin
  * ZERO TRUST: Suspense boundary requerido para useSearchParams en Next.js 16
  */
 
+import { LoginBrandShell } from '@/features/auth/components/login-brand-shell';
 import { LoginForm } from '@/features/auth/components/login-form';
 import { Suspense } from 'react';
 
@@ -27,27 +23,10 @@ function LoginFormFallback() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-mekanos-primary to-mekanos-accent p-4">
-      <div className="w-full max-w-md">
-        {/* Logo y Título */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-full shadow-lg mb-4">
-            <span className="text-3xl font-bold text-mekanos-primary">M</span>
-          </div>
-          <h1 className="text-3xl font-bold text-white">MEKANOS S.A.S</h1>
-          <p className="text-mekanos-white/80 mt-2">Portal de Administración</p>
-        </div>
-
-        {/* Formulario de Login - Suspense para useSearchParams */}
-        <Suspense fallback={<LoginFormFallback />}>
-          <LoginForm />
-        </Suspense>
-
-        {/* Footer */}
-        <p className="text-center text-mekanos-white/60 text-sm mt-6">
-          © 2025 MEKANOS S.A.S. Todos los derechos reservados.
-        </p>
-      </div>
-    </div>
+    <LoginBrandShell>
+      <Suspense fallback={<LoginFormFallback />}>
+        <LoginForm />
+      </Suspense>
+    </LoginBrandShell>
   );
 }

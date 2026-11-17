@@ -188,7 +188,7 @@ final backgroundSyncWorkerProvider = Provider<BackgroundSyncWorker>((ref) {
   });
 
   // ✅ ENTERPRISE: Escuchar cambios de conectividad para notificar
-  connectivity.statusStream.listen((status) {
+  final connectivitySub = connectivity.statusStream.listen((status) {
     if (status == ConnectivityStatus.online) {
       notificationService.notifyConnectionRestored();
     } else if (status == ConnectivityStatus.offline) {
@@ -203,7 +203,10 @@ final backgroundSyncWorkerProvider = Provider<BackgroundSyncWorker>((ref) {
   // worker.start(); // <-- COMENTADO: Sync automático deshabilitado
 
   // Cleanup al disponer
-  ref.onDispose(() => worker.dispose());
+  ref.onDispose(() {
+    connectivitySub.cancel();
+    worker.dispose();
+  });
 
   return worker;
 });

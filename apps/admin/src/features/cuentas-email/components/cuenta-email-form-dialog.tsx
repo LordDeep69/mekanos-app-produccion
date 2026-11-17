@@ -167,7 +167,7 @@ export function CuentaEmailFormDialog({ open, onOpenChange, cuenta }: CuentaEmai
                 <FormItem>
                   <FormLabel>Nombre</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ej: Cuenta Principal Mekanos" {...field} />
+                    <Input placeholder="Ej: Cuenta Principal Corporativa" {...field} />
                   </FormControl>
                   <FormDescription>Nombre descriptivo para identificar la cuenta</FormDescription>
                   <FormMessage />

@@ -129,6 +129,6 @@ describe('RolesGuard', () => {
     } as unknown as ExecutionContext;
 
     // Act & Assert
-    expect(() => guard.canActivate(mockExecutionContext)).toThrow(TypeError);
+    expect(() => guard.canActivate(mockExecutionContext)).toThrow(ForbiddenException);
   });
 });

@@ -13,6 +13,7 @@
 
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
 
@@ -34,6 +35,7 @@ export class DashboardController {
   @ApiQuery({ name: 'mes', required: false, type: Number, description: 'Mes (1-12), default: mes actual' })
   @ApiQuery({ name: 'anio', required: false, type: Number, description: 'Año, default: año actual' })
   async getDashboard(
+    @CurrentUser() user: any,
     @Query('mes') mesStr?: string,
     @Query('anio') anioStr?: string,
   ) {
@@ -41,7 +43,7 @@ export class DashboardController {
     const mes = mesStr ? parseInt(mesStr) : now.getMonth() + 1;
     const anio = anioStr ? parseInt(anioStr) : now.getFullYear();
 
-    return this.dashboardService.getDashboardCompleto(mes, anio);
+    return this.dashboardService.getDashboardCompleto(mes, anio, user?.id);
   }
 
   /**
@@ -67,8 +69,8 @@ export class DashboardController {
    */
   @Get('alertas')
   @ApiOperation({ summary: 'Alertas y próximos eventos críticos' })
-  async getAlertas() {
-    return this.dashboardService.getAlertasActivas();
+  async getAlertas(@CurrentUser() user: any) {
+    return this.dashboardService.getAlertasActivas(user?.id);
   }
 
   /**

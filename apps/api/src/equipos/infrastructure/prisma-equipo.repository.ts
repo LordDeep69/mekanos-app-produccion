@@ -47,6 +47,11 @@ export class PrismaEquipoRepository {
     observaciones_generales?: string | null;
     configuracion_especial?: string | null;
     config_parametros?: Record<string, any>;
+    id_modelo_equipo?: number | null;
+    horas_actuales?: number | null;
+    lectura_uso_actual?: number | null;
+    fecha_ultima_lectura_uso?: Date | null;
+    especificaciones?: Record<string, any>;
     creado_por: number;
     modificado_por?: number | null;
   }) {
@@ -96,10 +101,15 @@ export class PrismaEquipoRepository {
           id_tipo_equipo: data.id_tipo_equipo,
           ubicacion_texto: data.ubicacion_texto,
           id_sede: data.id_sede,
+          id_modelo_equipo: data.id_modelo_equipo ?? undefined,
           nombre_equipo: data.nombre_equipo,
           numero_serie_equipo: data.numero_serie_equipo,
           estado_equipo: (data.estado_equipo as any) || 'OPERATIVO',
           criticidad: (data.criticidad as any) || 'MEDIA',
+          horas_actuales: data.horas_actuales ?? undefined,
+          lectura_uso_actual: data.lectura_uso_actual ?? undefined,
+          fecha_ultima_lectura_uso: data.fecha_ultima_lectura_uso ?? undefined,
+          especificaciones: (data.especificaciones as any) ?? undefined,
           creado_por: data.creado_por,
         },
         include: {

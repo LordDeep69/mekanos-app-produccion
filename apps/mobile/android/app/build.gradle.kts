@@ -19,6 +19,13 @@ if (hasReleaseKeystore) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+val whiteLabelAppId: String =
+    (project.findProperty("APP_APPLICATION_ID") as String?)?.trim()?.takeIf { it.isNotEmpty }
+        ?: "com.mekanos.mekanos_mobile"
+val whiteLabelAppName: String =
+    (project.findProperty("APP_NAME") as String?)?.trim()?.takeIf { it.isNotEmpty }
+        ?: "EAM Técnicos"
+
 android {
     namespace = "com.mekanos.mekanos_mobile"
     compileSdk = flutter.compileSdkVersion
@@ -34,10 +41,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.mekanos.mekanos_mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = whiteLabelAppId
+        manifestPlaceholders["appName"] = whiteLabelAppName
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

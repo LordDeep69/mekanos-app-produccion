@@ -2,6 +2,7 @@
 
 import { useServiciosComerciales } from '@/features/ordenes';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   Activity,
   AlertCircle,
@@ -387,6 +388,7 @@ function SistemaAccordion({
 }
 
 function ServiciosEspecificosSection({ tipoServicioId }: { tipoServicioId: number }) {
+  const { formatCurrency } = useOrgFormatters();
   const { data: servicios, isLoading } = useServiciosComerciales({
     idTipoServicio: tipoServicioId,
     limit: 100,
@@ -442,7 +444,7 @@ function ServiciosEspecificosSection({ tipoServicioId }: { tipoServicioId: numbe
             </div>
             {s.precio_base ? (
               <p className="text-[10px] font-bold text-green-700 mt-1">
-                Base: ${Number(s.precio_base).toLocaleString('es-CO')} COP
+                Base: {formatCurrency(s.precio_base)}
               </p>
             ) : null}
           </div>

@@ -1217,7 +1217,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem>
                     <FormLabel>Ciudad</FormLabel>
                     <FormControl>
-                      <Input placeholder="Cartagena" {...field} />
+                      <Input placeholder="Ciudad" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

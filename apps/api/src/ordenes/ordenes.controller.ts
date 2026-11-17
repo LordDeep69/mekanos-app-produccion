@@ -11,6 +11,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
   Param,
   ParseIntPipe,
   Patch,
@@ -58,6 +59,7 @@ import {
   extraerConfigEquipoDeOrden,
   resolverParametroConConfig,
 } from '../config-parametros/parametros-override.helper';
+import { ConfiguracionOrganizacionService } from '../configuracion-organizacion/configuracion-organizacion.service';
 import { DespacharComponenteOrdenDto, InventarioService } from '../inventario/inventario.service';
 import { extractR2KeyFromUrl } from '../pdf/pdf-naming.helper';
 import { R2StorageService } from '../storage/r2-storage.service';
@@ -95,6 +97,7 @@ import { VALIDACIONES_POR_ESTADO } from './domain/workflow-estados';
  */
 @ApiTags('FASE 3 - Órdenes de Servicio')
 @ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard)
 @Controller('ordenes')
 export class OrdenesController {
   private readonly logger = new Logger(OrdenesController.name);
@@ -107,6 +110,7 @@ export class OrdenesController {
     private readonly r2Service: R2StorageService,
     private readonly progresoService: ProgresoRegistroService,
     private readonly inventarioService: InventarioService,
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
   ) {}
 
   /**
@@ -1644,25 +1648,30 @@ export class OrdenesController {
         select: {
           id_cuenta_email: true,
           nombre: true,
+          nombre_remitente: true,
           email: true,
+          tipo_proveedor: true,
           activa: true,
           gmail_client_id: true,
           gmail_client_secret: true,
           gmail_refresh_token: true,
+          smtp_host: true,
+          smtp_user: true,
+          smtp_password_enc: true,
         },
       });
 
       const operativa =
         !!cuenta &&
         cuenta.activa === true &&
-        !!cuenta.gmail_client_id &&
-        !!cuenta.gmail_client_secret &&
-        !!cuenta.gmail_refresh_token;
+        (cuenta.tipo_proveedor === 'SMTP'
+          ? !!(cuenta.smtp_host && cuenta.smtp_user && cuenta.smtp_password_enc)
+          : !!(cuenta.gmail_client_id && cuenta.gmail_client_secret && cuenta.gmail_refresh_token));
 
       if (operativa && cuenta) {
         return {
           email: cuenta.email,
-          nombre: cuenta.nombre || 'MEKANOS S.A.S',
+          nombre: cuenta.nombre_remitente || cuenta.nombre || 'Notificaciones',
           origen: 'CLIENTE',
           idCuentaEmail: cuenta.id_cuenta_email,
           advertencia: undefined as string | undefined,
@@ -1674,7 +1683,7 @@ export class OrdenesController {
         ? `La cuenta asignada al cliente (ID ${idCuentaCliente}) no existe. Se usará la cuenta por defecto.`
         : cuenta.activa === false
           ? `La cuenta asignada al cliente (${cuenta.email}) está INACTIVA. Se usará la cuenta por defecto.`
-          : `La cuenta asignada al cliente (${cuenta.email}) no tiene credenciales Gmail API completas. Se usará la cuenta por defecto.`;
+          : `La cuenta asignada al cliente (${cuenta.email}) no tiene credenciales completas. Se usará la cuenta por defecto.`;
 
       const defecto = await this.resolverCuentaPorDefecto();
       return { ...defecto, advertencia };
@@ -1694,6 +1703,10 @@ export class OrdenesController {
     origen: 'CUENTA_PRINCIPAL' | 'DEFAULT_ENV';
     idCuentaEmail?: number;
   }> {
+    const orgCtx = await this.configOrgService?.getContext().catch(() => null);
+    const nombreOrgDefecto =
+      orgCtx?.nombre_comercial || process.env.EMAIL_FROM_NAME || 'Sistema EAM';
+
     const principal = await this.prisma.cuentas_email.findFirst({
       where: { es_cuenta_principal: true, activa: true },
       select: { id_cuenta_email: true, nombre: true, email: true },
@@ -1702,7 +1715,7 @@ export class OrdenesController {
     if (principal) {
       return {
         email: principal.email,
-        nombre: principal.nombre || 'MEKANOS S.A.S',
+        nombre: principal.nombre || nombreOrgDefecto,
         origen: 'CUENTA_PRINCIPAL',
         idCuentaEmail: principal.id_cuenta_email,
       };
@@ -1717,15 +1730,19 @@ export class OrdenesController {
     if (fallback) {
       return {
         email: fallback.email,
-        nombre: fallback.nombre || 'MEKANOS S.A.S',
+        nombre: fallback.nombre || nombreOrgDefecto,
         origen: 'CUENTA_PRINCIPAL',
         idCuentaEmail: fallback.id_cuenta_email,
       };
     }
 
     return {
-      email: process.env.EMAIL_FROM || process.env.EMAIL_FROM_ADDRESS || 'mekanossas4@gmail.com',
-      nombre: process.env.EMAIL_FROM_NAME || 'MEKANOS S.A.S',
+      email:
+        process.env.EMAIL_FROM ||
+        process.env.EMAIL_FROM_ADDRESS ||
+        orgCtx?.email_contacto ||
+        '',
+      nombre: nombreOrgDefecto,
       origen: 'DEFAULT_ENV',
     };
   }

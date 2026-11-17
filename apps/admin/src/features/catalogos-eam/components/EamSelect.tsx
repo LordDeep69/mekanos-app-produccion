@@ -93,7 +93,7 @@ export function EamSelect({
   title,
   minDropdownWidth = 340,
   dropdownWidth,
-  usePortal = false,
+  usePortal = true,
   align = 'left',
   dropUp = false,
   searchPlaceholder = 'Buscar opción...',
@@ -162,10 +162,11 @@ export function EamSelect({
       const estimatedHeight = Math.min(340, optionCount * 44 + (shouldShowSearch ? 52 : 16));
       const openUpward = dropUp
         ? spaceAbove >= Math.min(260, estimatedHeight) + 12 || spaceAbove > spaceBelow
-        : spaceBelow < estimatedHeight && spaceAbove >= estimatedHeight + 10;
+        : spaceBelow < estimatedHeight &&
+          (spaceAbove >= estimatedHeight + 10 || spaceAbove > spaceBelow);
 
       const availableSpace = openUpward ? spaceAbove - 16 : spaceBelow - 16;
-      const maxHeight = Math.max(180, Math.min(360, availableSpace));
+      const maxHeight = Math.max(140, Math.min(360, availableSpace));
 
       const preferRight =
         align === 'right' ||
@@ -379,7 +380,11 @@ export function EamSelect({
       )}
 
       {/* Lista de Opciones */}
-      <div className="flex-1 min-h-0 max-h-64 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
+      <div
+        className={`flex-1 min-h-0 ${
+          usePortal ? '' : 'max-h-64'
+        } overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar`}
+      >
         {filteredOptions.length === 0 ? (
           <div className="py-6 px-3 text-center text-xs text-slate-400 font-medium">
             No se encontraron opciones para «{searchTerm}»
@@ -573,6 +578,106 @@ export function EamSelect({
   );
 }
 
+const CUSTOM_OPTION_TOKEN = '__EAM_OTRO_CUSTOM__';
+
+/**
+ * Extrae de forma segura si un atributo SELECTOR admite valores manuales ("Otro...").
+ */
+export function permiteValorPersonalizado(
+  validacionJson?: Record<string, unknown> | null,
+): boolean {
+  if (!validacionJson || typeof validacionJson !== 'object') return false;
+  return Boolean((validacionJson as { permitir_otro?: unknown }).permitir_otro);
+}
+
+export interface EamSelectWithCustomProps extends EamSelectProps {
+  allowCustom?: boolean;
+  customPlaceholder?: string;
+}
+
+/**
+ * Selector EAM con soporte opcional de modo híbrido ("Otro (especificar manualmente)...").
+ * Si `allowCustom=true`, añade una opción final que habilita un campo de texto libre para
+ * placas o escenarios atípicos sin sacrificar la estandarización de la lista principal.
+ */
+export function EamSelectWithCustom({
+  allowCustom = false,
+  customPlaceholder = 'Escribe el valor específico...',
+  value,
+  onChange,
+  options: rawOptions,
+  ...rest
+}: EamSelectWithCustomProps) {
+  const [customInputOpen, setCustomInputOpen] = useState(false);
+  const customInputRef = useRef<HTMLInputElement>(null);
+
+  const normalized = useMemo(() => normalizeOptions(rawOptions), [rawOptions]);
+  const strVal = String(value ?? '').trim();
+
+  const matchesKnownOption = useMemo(() => {
+    if (!strVal) return false;
+    return normalized.some((op) => String(op.value).trim().toLowerCase() === strVal.toLowerCase());
+  }, [normalized, strVal]);
+
+  const isCustomActive = allowCustom && (customInputOpen || (strVal !== '' && !matchesKnownOption));
+
+  const enhancedOptions = useMemo(() => {
+    if (!allowCustom) return rawOptions;
+    return [
+      ...normalized,
+      {
+        value: CUSTOM_OPTION_TOKEN,
+        label: 'Otro (especificar manualmente)...',
+        badge: 'Manual',
+      },
+    ];
+  }, [allowCustom, normalized, rawOptions]);
+
+  const handleSelectChange = (selected: string) => {
+    if (selected === CUSTOM_OPTION_TOKEN) {
+      setCustomInputOpen(true);
+      if (matchesKnownOption || !strVal) {
+        onChange('');
+      }
+      setTimeout(() => customInputRef.current?.focus(), 30);
+      return;
+    }
+    setCustomInputOpen(false);
+    onChange(selected);
+  };
+
+  if (!allowCustom) {
+    return <EamSelect value={value} onChange={onChange} options={rawOptions} {...rest} />;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <EamSelect
+        value={isCustomActive ? CUSTOM_OPTION_TOKEN : value}
+        onChange={handleSelectChange}
+        options={enhancedOptions}
+        {...rest}
+      />
+      {isCustomActive && (
+        <div className="flex items-center gap-1.5 animate-in fade-in duration-150">
+          <input
+            ref={customInputRef}
+            type="text"
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={rest.disabled}
+            placeholder={customPlaceholder}
+            className="flex-1 min-w-0 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50/40 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-500"
+          />
+          <span className="px-2 py-1 rounded-lg bg-amber-100/80 text-amber-800 border border-amber-200 text-[10px] font-bold shrink-0">
+            Manual
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export interface EamUomUnit {
   codigo: string;
   simbolo?: string;
@@ -602,7 +707,7 @@ export function EamUomSelect({
   onChange,
   disabled = false,
   className = '',
-  usePortal = false,
+  usePortal = true,
 }: EamUomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const mounted = useSyncExternalStore(subscribeNoop, getClientMounted, getServerMounted);

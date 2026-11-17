@@ -14,5 +14,7 @@ export class ActualizarTipoComponenteCommand {
     public readonly descripcion?: string,
     public readonly activo?: boolean,
     public readonly modificado_por?: number,
+    public readonly aplica_todos_tipos?: boolean,
+    public readonly tipos_equipo_ids?: number[],
   ) {}
 }

@@ -1,12 +1,16 @@
 import { PrismaService } from '@mekanos/database';
+import { Prisma } from '@prisma/client';
 import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfiguracionOrganizacionService } from '../configuracion-organizacion/configuracion-organizacion.service';
 import { EmailService } from '../email/email.service';
+import { buildOrgBranding, escapeBrandHtml } from '../pdf/org-branding.types';
 import { CreateBitacorasDto } from './dto/create-bitacoras.dto';
 import { UpdateBitacorasDto } from './dto/update-bitacoras.dto';
 
@@ -83,6 +87,7 @@ export class BitacorasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
   ) { }
 
   // ═══════════════════════════════════════════════════════════════
@@ -268,30 +273,18 @@ export class BitacorasService {
       fechaFin = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
     }
 
-    // 4. Query SQL directo: documentos_generados → ordenes_servicio → equipos → clientes
-    const conditions: string[] = [
-      `dg.tipo_documento = 'INFORME_SERVICIO'`,
-      `os.fecha_programada >= '${fechaInicio}'::date`,
-      `os.fecha_programada <= '${fechaFin}'::date`,
-    ];
+    // 4. Query SQL parametrizado (cero interpolación SQL): documentos_generados → ordenes_servicio → equipos → clientes
+    const categoriaSql = categoria
+      ? Prisma.sql`AND te.categoria = ${categoria}::categoria_equipo_enum`
+      : Prisma.empty;
+    const tipoServicioSql = tipoServicio
+      ? Prisma.sql`AND ts.codigo_tipo = ${tipoServicio}`
+      : Prisma.empty;
 
-    // Filtro por cliente IDs (placeholders)
-    const placeholders = clienteIds.map((_, i) => `$${i + 1}`).join(',');
-    conditions.push(`os.id_cliente IN (${placeholders})`);
-
-    // Filtro por categoría de equipo
-    if (categoria) {
-      conditions.push(`te.categoria = '${categoria}'::categoria_equipo_enum`);
-    }
-
-    // Filtro por tipo de servicio
-    if (tipoServicio) {
-      conditions.push(`ts.codigo_tipo = '${tipoServicio}'`);
-    }
-
-    const whereClause = conditions.join(' AND ');
-
-    const sql = `
+    const rows: any[] =
+      clienteIds.length === 0
+        ? []
+        : await this.prisma.$queryRaw`
       SELECT
         dg.id_documento,
         dg.numero_documento,
@@ -322,11 +315,14 @@ export class BitacorasService {
       LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
       LEFT JOIN tipos_servicio ts ON ts.id_tipo_servicio = os.id_tipo_servicio
       LEFT JOIN sedes_cliente sc ON sc.id_sede = os.id_sede
-      WHERE ${whereClause}
+      WHERE dg.tipo_documento = 'INFORME_SERVICIO'
+        AND os.fecha_programada >= ${fechaInicio}::date
+        AND os.fecha_programada <= ${fechaFin}::date
+        AND os.id_cliente IN (${Prisma.join(clienteIds)})
+        ${categoriaSql}
+        ${tipoServicioSql}
       ORDER BY os.id_cliente ASC, os.fecha_programada ASC
     `;
-
-    const rows: any[] = await this.prisma.$queryRawUnsafe(sql, ...clienteIds);
 
     this.logger.log(`[BITACORA PREVIEW] Encontrados ${rows.length} documentos/informes PDF`);
 
@@ -487,9 +483,11 @@ export class BitacorasService {
       throw new BadRequestException('Cliente principal inválido');
     }
 
-    // 2. Obtener documentos con sus datos (SQL directo por coherencia)
-    const docPlaceholders = documentos_ids.map((_, i) => `$${i + 1}`).join(',');
-    const docsSql = `
+    // 2. Obtener documentos con sus datos (SQL parametrizado)
+    const docs: any[] =
+      !documentos_ids || documentos_ids.length === 0
+        ? []
+        : await this.prisma.$queryRaw`
       SELECT
         dg.id_documento,
         dg.numero_documento,
@@ -507,11 +505,9 @@ export class BitacorasService {
       LEFT JOIN equipos e ON e.id_equipo = os.id_equipo
       LEFT JOIN tipos_servicio ts ON ts.id_tipo_servicio = os.id_tipo_servicio
       LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
-      WHERE dg.id_documento IN (${docPlaceholders})
+      WHERE dg.id_documento IN (${Prisma.join(documentos_ids)})
         AND dg.tipo_documento = 'INFORME_SERVICIO'
     `;
-
-    const docs: any[] = await this.prisma.$queryRawUnsafe(docsSql, ...documentos_ids);
     this.logger.log(`[BITACORA ENVIAR] ${docs.length} documentos encontrados de ${documentos_ids.length} solicitados`);
 
     // 3. Descargar PDFs
@@ -746,6 +742,12 @@ export class BitacorasService {
     let emailsFallidos = 0;
     const erroresEmails: string[] = [];
 
+    const orgCtx = await this.configOrgService?.getContext().catch(() => null);
+    const brand = buildOrgBranding(orgCtx);
+    const orgNombreHtml = escapeBrandHtml(brand.nombreComercial);
+    const orgEsloganHtml = escapeBrandHtml(brand.eslogan || 'Gestión Técnica de Mantenimiento');
+    const safeCliente = escapeBrandHtml(nombreCliente);
+
     for (const batch of emailBatches) {
       const { attachments: batchAttachments, batchNumber, totalBatches } = batch;
 
@@ -756,24 +758,24 @@ export class BitacorasService {
       // Construir HTML para este batch
       const htmlBatch = `
       <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:650px;margin:0 auto;background:#ffffff;">
-        <div style="background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);padding:32px 24px;text-align:center;">
-          <h1 style="color:#ffffff;margin:0;font-size:22px;">MEKANOS S.A.S</h1>
-          <p style="color:#93c5fd;margin:8px 0 0;font-size:14px;">Informes de Mantenimiento${totalBatches > 1 ? ` - Parte ${batchNumber}/${totalBatches}` : ''}</p>
+        <div style="background:linear-gradient(135deg,${brand.colores.primary} 0%,${brand.colores.secondary} 100%);padding:32px 24px;text-align:center;">
+          <h1 style="color:#ffffff;margin:0;font-size:22px;">${orgNombreHtml}</h1>
+          <p style="color:${brand.colores.accent};margin:8px 0 0;font-size:14px;">Informes de Mantenimiento${totalBatches > 1 ? ` - Parte ${batchNumber}/${totalBatches}` : ''}</p>
         </div>
         <div style="padding:24px;">
-          <p style="font-size:16px;color:#111827;margin:0 0 8px;">Estimado(a) <strong>${nombreCliente}</strong>,</p>
+          <p style="font-size:16px;color:#111827;margin:0 0 8px;">Estimado(a) <strong>${safeCliente}</strong>,</p>
           <p style="color:#374151;margin:0 0 16px;">
-            Adjunto encontrará los informes de mantenimiento de <strong>${categoriaLabel}</strong>
-            correspondientes al periodo <strong>${periodoLabel}</strong>${totalBatches > 1 ? ` (parte ${batchNumber} de ${totalBatches})` : ''}.
+            Adjunto encontrará los informes de mantenimiento de <strong>${escapeBrandHtml(categoriaLabel)}</strong>
+            correspondientes al periodo <strong>${escapeBrandHtml(periodoLabel)}</strong>${totalBatches > 1 ? ` (parte ${batchNumber} de ${totalBatches})` : ''}.
           </p>
-          ${dto.mensaje_personalizado ? `<p style="margin:16px 0;color:#374151;">${dto.mensaje_personalizado}</p>` : ''}
-          <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin:16px 0;">
-            <h3 style="margin:0 0 12px;color:#0369a1;font-size:15px;">Resumen por Sede</h3>
+          ${dto.mensaje_personalizado ? `<p style="margin:16px 0;color:#374151;">${escapeBrandHtml(dto.mensaje_personalizado)}</p>` : ''}
+          <div style="background:${brand.colores.background};border:1px solid ${brand.colores.border};border-radius:8px;padding:16px;margin:16px 0;">
+            <h3 style="margin:0 0 12px;color:${brand.colores.primary};font-size:15px;">Resumen por Sede</h3>
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
               <thead>
-                <tr style="background:#e0f2fe;">
-                  <th style="padding:8px 12px;border:1px solid #bae6fd;text-align:left;">Sede</th>
-                  <th style="padding:8px 12px;border:1px solid #bae6fd;text-align:left;">Informes</th>
+                <tr style="background:${brand.colores.background};">
+                  <th style="padding:8px 12px;border:1px solid ${brand.colores.border};text-align:left;">Sede</th>
+                  <th style="padding:8px 12px;border:1px solid ${brand.colores.border};text-align:left;">Informes</th>
                 </tr>
               </thead>
               <tbody>${sedesResumen.join('')}</tbody>
@@ -788,7 +790,7 @@ export class BitacorasService {
           </p>
         </div>
         <div style="background:#f9fafb;padding:16px 24px;text-align:center;border-top:1px solid #e5e7eb;">
-          <p style="color:#9ca3af;font-size:12px;margin:0;">MEKANOS S.A.S - Soluciones en Energía e Hidroneumática</p>
+          <p style="color:#9ca3af;font-size:12px;margin:0;">${orgNombreHtml} - ${orgEsloganHtml}</p>
         </div>
       </div>`;
 
@@ -893,27 +895,18 @@ export class BitacorasService {
 
     this.logger.log(`[BITACORA MESES] Principal=${idClientePrincipal} | Sedes=${principal.sedes.length} | Cat: ${categoria || 'TODAS'}`);
 
-    // 2. Query SQL directo: documentos_generados → ordenes_servicio, agrupado por mes/año
-    const conditions: string[] = [
-      `dg.tipo_documento = 'INFORME_SERVICIO'`,
-      `os.fecha_programada IS NOT NULL`,
-    ];
+    // 2. Query SQL parametrizado (cero interpolación SQL): documentos_generados → ordenes_servicio, agrupado por mes/año
+    const categoriaSql = categoria
+      ? Prisma.sql`AND te.categoria = ${categoria}::categoria_equipo_enum`
+      : Prisma.empty;
+    const tipoServicioSql = tipoServicio
+      ? Prisma.sql`AND ts.codigo_tipo = ${tipoServicio}`
+      : Prisma.empty;
 
-    const placeholders = clienteIds.map((_, i) => `$${i + 1}`).join(',');
-    conditions.push(`os.id_cliente IN (${placeholders})`);
-
-    if (categoria) {
-      conditions.push(`te.categoria = '${categoria}'::categoria_equipo_enum`);
-    }
-
-    // Filtro por tipo de servicio
-    if (tipoServicio) {
-      conditions.push(`ts.codigo_tipo = '${tipoServicio}'`);
-    }
-
-    const whereClause = conditions.join(' AND ');
-
-    const sql = `
+    const meses: any[] =
+      clienteIds.length === 0
+        ? []
+        : await this.prisma.$queryRaw`
       SELECT
         EXTRACT(MONTH FROM os.fecha_programada)::int AS mes,
         EXTRACT(YEAR FROM os.fecha_programada)::int AS anio,
@@ -923,12 +916,14 @@ export class BitacorasService {
       LEFT JOIN equipos e ON e.id_equipo = os.id_equipo
       LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
       LEFT JOIN tipos_servicio ts ON ts.id_tipo_servicio = os.id_tipo_servicio
-      WHERE ${whereClause}
+      WHERE dg.tipo_documento = 'INFORME_SERVICIO'
+        AND os.fecha_programada IS NOT NULL
+        AND os.id_cliente IN (${Prisma.join(clienteIds)})
+        ${categoriaSql}
+        ${tipoServicioSql}
       GROUP BY anio, mes
       ORDER BY anio DESC, mes DESC
     `;
-
-    const meses: any[] = await this.prisma.$queryRawUnsafe(sql, ...clienteIds);
 
     const totalDocs = meses.reduce((sum, m) => sum + m.count, 0);
     this.logger.log(`[BITACORA MESES] Meses con datos=${meses.length} | Total docs=${totalDocs}`);

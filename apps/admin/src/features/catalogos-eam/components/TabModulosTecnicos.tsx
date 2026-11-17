@@ -29,7 +29,10 @@ import {
   EamSelect,
   ModuloAtributoItem,
   ModuloTecnico,
+  SelectorOptionsBuilder,
   TIPOS_CONTROL_HUMANOS,
+  buildOpcionesJson,
+  formatUnidadSimboloHumano,
   getTipoControlHumano,
   useAsignarAtributoModuloEam,
   useAtributosEam,
@@ -202,7 +205,8 @@ export function TabModulosTecnicos() {
     tipo_control: 'NUMERICO_MAGNITUD',
     id_magnitud: '',
     unidad_defecto_codigo: '',
-    opciones_csv: '',
+    opciones: [] as string[],
+    permitir_otro: false,
     grupo_visual: 'Identificación',
     orden_visual: '20',
     obligatorio: false,
@@ -622,17 +626,7 @@ export function TabModulosTecnicos() {
       inPlaceForm.tipo_control === 'SELECTOR' || inPlaceForm.tipo_control === 'SELECT';
     const isNumMag = inPlaceForm.tipo_control === 'NUMERICO_MAGNITUD';
 
-    const opciones_json =
-      isSelect && inPlaceForm.opciones_csv.trim()
-        ? inPlaceForm.opciones_csv
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .map((item) => ({
-              valor: item.toUpperCase().replace(/\s+/g, '_'),
-              etiqueta: item,
-            }))
-        : undefined;
+    const opciones_json = isSelect ? buildOpcionesJson(inPlaceForm.opciones) : undefined;
 
     // 1. Crear el campo técnico en el Catálogo General
     const nuevoAtributo = await createAttrMut.mutateAsync({
@@ -646,6 +640,7 @@ export function TabModulosTecnicos() {
           ? inPlaceForm.unidad_defecto_codigo
           : undefined,
       opciones_json,
+      validacion_json: isSelect ? { permitir_otro: inPlaceForm.permitir_otro } : undefined,
     });
 
     // 2. Asignar inmediatamente a la Parte / Subsistema activo con orden auto-calculado
@@ -940,7 +935,7 @@ export function TabModulosTecnicos() {
                       tipo_control: 'NUMERICO_MAGNITUD',
                       id_magnitud: '',
                       unidad_defecto_codigo: '',
-                      opciones_csv: '',
+                      opciones: [], permitir_otro: false,
                       grupo_visual: gruposVisualesMap[0]?.[0] || 'Especificaciones Técnicas',
                       orden_visual: '20',
                       obligatorio: false,
@@ -990,7 +985,7 @@ export function TabModulosTecnicos() {
                           tipo_control: 'NUMERICO_MAGNITUD',
                           id_magnitud: '',
                           unidad_defecto_codigo: '',
-                          opciones_csv: '',
+                          opciones: [], permitir_otro: false,
                           grupo_visual: 'Especificaciones Técnicas',
                           orden_visual: '20',
                           obligatorio: false,
@@ -1117,7 +1112,12 @@ export function TabModulosTecnicos() {
                                     </span>
                                     {attr.unidad_defecto_codigo && (
                                       <span className="text-[11px] text-blue-700 font-semibold">
-                                        Unidad: {attr.unidad_defecto_codigo}
+                                        Unidad:{' '}
+                                        {formatUnidadSimboloHumano(
+                                          attr.unidad_defecto_codigo,
+                                          attr.unidad_defecto,
+                                          magnitudes,
+                                        )}
                                       </span>
                                     )}
                                   </div>
@@ -1446,7 +1446,12 @@ export function TabModulosTecnicos() {
                           {selectedAtributoParaAsignar.magnitud && (
                             <span>
                               • {selectedAtributoParaAsignar.magnitud.nombre_magnitud} (
-                              {selectedAtributoParaAsignar.unidad_defecto_codigo || 'Estándar'})
+                              {formatUnidadSimboloHumano(
+                                selectedAtributoParaAsignar.unidad_defecto_codigo,
+                                selectedAtributoParaAsignar.unidad_defecto,
+                                magnitudes,
+                              ) || 'Estándar'}
+                              )
                             </span>
                           )}
                         </div>
@@ -1561,7 +1566,7 @@ export function TabModulosTecnicos() {
                                 tipo_control: 'NUMERICO_MAGNITUD',
                                 id_magnitud: '',
                                 unidad_defecto_codigo: '',
-                                opciones_csv: '',
+                                opciones: [], permitir_otro: false,
                                 grupo_visual:
                                   assignForm.grupo_visual || 'Especificaciones Técnicas',
                                 orden_visual: '20',
@@ -1630,7 +1635,13 @@ export function TabModulosTecnicos() {
                                 {a.magnitud && (
                                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                                     {a.magnitud.nombre_magnitud}
-                                    {a.unidad_defecto_codigo ? ` (${a.unidad_defecto_codigo})` : ''}
+                                    {a.unidad_defecto_codigo
+                                      ? ` (${formatUnidadSimboloHumano(
+                                          a.unidad_defecto_codigo,
+                                          a.unidad_defecto,
+                                          magnitudes,
+                                        )})`
+                                      : ''}
                                   </span>
                                 )}
                                 {opts.length > 0 && (
@@ -2140,21 +2151,16 @@ export function TabModulosTecnicos() {
 
               {(inPlaceForm.tipo_control === 'SELECTOR' ||
                 inPlaceForm.tipo_control === 'SELECT') && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Opciones de la Lista (separadas por coma) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej: IP23, IP54, IP55, IP68"
-                    value={inPlaceForm.opciones_csv}
-                    onChange={(e) =>
-                      setInPlaceForm({ ...inPlaceForm, opciones_csv: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs"
-                  />
-                </div>
+                <SelectorOptionsBuilder
+                  compact
+                  options={inPlaceForm.opciones}
+                  onChange={(next) => setInPlaceForm({ ...inPlaceForm, opciones: next })}
+                  allowCustom={inPlaceForm.permitir_otro}
+                  onAllowCustomChange={(allow) =>
+                    setInPlaceForm({ ...inPlaceForm, permitir_otro: allow })
+                  }
+                  placeholder="Ej: IP54"
+                />
               )}
 
               <div className="pt-2 border-t border-slate-100 space-y-2">
@@ -2230,7 +2236,10 @@ export function TabModulosTecnicos() {
                     asignarMut.isPending ||
                     isCodigoAtributoDuplicado ||
                     !inPlaceForm.nombre_atributo.trim() ||
-                    !inPlaceForm.codigo_atributo.trim()
+                    !inPlaceForm.codigo_atributo.trim() ||
+                    ((inPlaceForm.tipo_control === 'SELECTOR' ||
+                      inPlaceForm.tipo_control === 'SELECT') &&
+                      inPlaceForm.opciones.length === 0)
                   }
                   className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >

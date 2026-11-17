@@ -1,9 +1,7 @@
 import { PartialType } from '@nestjs/swagger';
-import { CreateProveedoresDto } from './create-proveedores.dto';
+import { CrearProveedorDto } from './create-proveedor.dto';
 
 /**
- * DTO para actualizar proveedores
- * 
- * Hereda de Create DTO haciendo todos los campos opcionales
+ * DTO para actualizar proveedores con validación estricta.
  */
-export class UpdateProveedoresDto extends PartialType(CreateProveedoresDto) {}
+export class UpdateProveedoresDto extends PartialType(CrearProveedorDto) {}

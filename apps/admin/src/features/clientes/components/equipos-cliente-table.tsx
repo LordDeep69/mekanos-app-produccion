@@ -221,13 +221,13 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
                       <TableCell className="font-medium">{equipo.codigo_equipo}</TableCell>
                       <TableCell>{equipo.nombre_equipo || '-'}</TableCell>
                       <TableCell>
-                        {equipo.tipo === 'GENERADOR'
-                          ? 'Generador'
-                          : equipo.tipo === 'BOMBA'
-                            ? 'Bomba'
-                            : equipo.tipo === 'MOTOR'
-                              ? 'Motor'
-                              : '-'}
+                        {tiposEquipo?.find(
+                          (t) =>
+                            t.id_tipo_equipo === equipo.id_tipo_equipo ||
+                            t.codigo_tipo === equipo.tipo,
+                        )?.nombre_tipo ||
+                          equipo.tipo ||
+                          '-'}
                       </TableCell>
                       <TableCell>
                         <Badge variant={ESTADO_EQUIPO_COLORS[equipo.estado_equipo as EstadoEquipo]}>

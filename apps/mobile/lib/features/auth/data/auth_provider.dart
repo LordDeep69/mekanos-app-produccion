@@ -17,6 +17,11 @@ final authStateProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(authService);
 });
 
+/// Identificador reactivo del usuario autenticado para aislar SQLite, media y prefs.
+final activeUserIdProvider = Provider<int?>((ref) {
+  return ref.watch(authStateProvider.select((s) => s.user?.id));
+});
+
 /// Notifier que maneja el estado de autenticación
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;

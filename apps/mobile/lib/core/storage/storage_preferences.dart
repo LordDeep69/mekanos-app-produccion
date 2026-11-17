@@ -1,18 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Provider para las preferencias de almacenamiento
+import '../../features/auth/data/auth_provider.dart';
+import 'account_scope.dart';
+
+/// Provider aislado por cuenta para las preferencias de almacenamiento.
 final storagePreferencesProvider = Provider<StoragePreferences>((ref) {
-  return StoragePreferences();
+  final userId = ref.watch(activeUserIdProvider);
+  return StoragePreferences(userId: userId);
 });
 
 /// Provider asíncrono para inicializar las preferencias
-final storagePreferencesAsyncProvider = FutureProvider<StoragePreferencesData>((
-  ref,
-) async {
-  final prefs = ref.watch(storagePreferencesProvider);
-  return await prefs.cargarPreferencias();
-});
+final storagePreferencesAsyncProvider =
+    FutureProvider.autoDispose<StoragePreferencesData>((ref) async {
+      final prefs = ref.watch(storagePreferencesProvider);
+      return await prefs.cargarPreferencias();
+    });
 
 /// ============================================================================
 /// UNIDAD DE TIEMPO PARA POLÍTICA DE RETENCIÓN
@@ -95,39 +98,28 @@ enum UnidadRetencion {
 /// automáticamente (datos, fotos, firmas, TODO).
 
 class StoragePreferences {
-  // ✅ FIX 26-FEB-2026: Política unificada valor + unidad
-  static const String _keyValorRetencion = 'storage_valor_retencion';
-  static const String _keyUnidadRetencion = 'storage_unidad_retencion';
-  static const String _keyLimpiezaAutomatica = 'storage_limpieza_automatica';
+  final int? userId;
 
-  // Legacy key (para migración automática desde versión anterior)
-  static const String _keyDiasRetencionCompletadas =
-      'storage_dias_retencion_completadas';
+  StoragePreferences({this.userId});
+
+  String get _keyValorRetencion =>
+      AccountScope.prefsKey(userId, 'storage_valor_retencion');
+  String get _keyUnidadRetencion =>
+      AccountScope.prefsKey(userId, 'storage_unidad_retencion');
+  String get _keyLimpiezaAutomatica =>
+      AccountScope.prefsKey(userId, 'storage_limpieza_automatica');
 
   // Valores por defecto: 7 días
   static const int defaultValorRetencion = 7;
   static const UnidadRetencion defaultUnidadRetencion = UnidadRetencion.dias;
   static const bool defaultLimpiezaAutomatica = true;
 
-  /// Carga todas las preferencias (con migración automática de legacy)
+  /// Carga preferencias aisladas para la cuenta actual (sin fugas de otras cuentas).
   Future<StoragePreferencesData> cargarPreferencias() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Intentar cargar nuevas keys
-    int? valor = prefs.getInt(_keyValorRetencion);
-    String? unidad = prefs.getString(_keyUnidadRetencion);
-
-    // Migración: si no existen nuevas keys pero sí las legacy, migrar
-    if (valor == null && unidad == null) {
-      final diasLegacy = prefs.getInt(_keyDiasRetencionCompletadas);
-      if (diasLegacy != null) {
-        valor = diasLegacy;
-        unidad = 'DIAS';
-        // Guardar migración
-        await prefs.setInt(_keyValorRetencion, valor);
-        await prefs.setString(_keyUnidadRetencion, unidad);
-      }
-    }
+    final int? valor = prefs.getInt(_keyValorRetencion);
+    final String? unidad = prefs.getString(_keyUnidadRetencion);
 
     return StoragePreferencesData(
       valorRetencion: valor ?? defaultValorRetencion,

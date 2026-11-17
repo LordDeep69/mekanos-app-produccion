@@ -72,17 +72,21 @@ const nextConfig: NextConfig = {
 
   // Variables de entorno públicas
   env: {
-    NEXT_PUBLIC_APP_NAME: 'MEKANOS Admin',
-    NEXT_PUBLIC_APP_VERSION: '0.1.0',
+    NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'EAM / CMMS Admin',
+    NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
   },
 
-  // ✅ PROXY REWRITES: Permite que solicitudes al puerto 3001 bajo /api/... se redirijan
-  // transparentemente al backend NestJS en el puerto 3000
+  // Proxy rewrites hacia backend NestJS (resuelve INTERNAL_API_URL para Docker Compose o dev local)
   async rewrites() {
+    const rawBackend =
+      process.env.INTERNAL_API_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://localhost:3000/api';
+    const backendOrigin = rawBackend.replace(/\/api\/?$/, '');
     return [
       {
         source: '/api/:path((?!auth).*)',
-        destination: 'http://localhost:3000/api/:path*',
+        destination: `${backendOrigin}/api/:path*`,
       },
     ];
   },

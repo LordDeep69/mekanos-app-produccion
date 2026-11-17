@@ -16,6 +16,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { useFirmaAdministrativa } from '@/features/firmas-administrativas';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { ArrowLeft, Building2, Edit, Loader2, Mail, Phone, User, Users } from 'lucide-react';
 import Link from 'next/link';
 import { use } from 'react';
@@ -27,6 +28,7 @@ interface PageProps {
 export default function FirmaAdministrativaDetallePage({ params }: PageProps) {
     const resolvedParams = use(params);
     const id = parseInt(resolvedParams.id, 10);
+    const { formatDate } = useOrgFormatters();
 
     const { data: firma, isLoading, error } = useFirmaAdministrativa(id);
 
@@ -97,7 +99,7 @@ export default function FirmaAdministrativaDetallePage({ params }: PageProps) {
                         <div>
                             <p className="text-sm text-muted-foreground">Fecha de creación</p>
                             <p className="font-medium">
-                                {new Date(firma.fecha_creacion).toLocaleDateString('es-CO')}
+                                {formatDate(firma.fecha_creacion)}
                             </p>
                         </div>
                         {firma.observaciones && (

@@ -162,10 +162,10 @@ export class EquiposGestionService {
 
     let datosMotor = datosMotorExplicito ? { ...datosMotorExplicito } : undefined;
     if (!datosMotor && (mComb || mElec)) {
-      if (mComb && Object.keys(mComb).length > 0) {
+      if (mComb && Object.keys(mComb).length > 0 && mComb.marca_motor) {
         datosMotor = {
           tipo_motor: TipoMotorEnum.COMBUSTION,
-          marca_motor: mComb.marca_motor || 'GENERICO',
+          marca_motor: mComb.marca_motor,
           modelo_motor: mComb.modelo_motor,
           numero_serie_motor: mComb.numero_serie_motor,
           potencia_hp:
@@ -180,14 +180,14 @@ export class EquiposGestionService {
                 : undefined,
           velocidad_nominal_rpm:
             mComb.velocidad_rpm !== undefined ? Number(mComb.velocidad_rpm) : undefined,
-          tipo_combustible: mComb.tipo_combustible || 'DIESEL',
+          tipo_combustible: mComb.tipo_combustible,
           numero_cilindros:
             mComb.numero_cilindros !== undefined ? Number(mComb.numero_cilindros) : undefined,
           cilindrada_cc:
             mComb.cilindrada_cc !== undefined ? Number(mComb.cilindrada_cc) : undefined,
           tiene_turbocargador:
             typeof mComb.tiene_turbocargador === 'boolean' ? mComb.tiene_turbocargador : undefined,
-          tipo_arranque: mComb.tipo_arranque || 'ELECTRICO',
+          tipo_arranque: mComb.tipo_arranque,
           voltaje_arranque_vdc:
             mComb.voltaje_arranque_vdc !== undefined
               ? Number(mComb.voltaje_arranque_vdc)
@@ -234,13 +234,13 @@ export class EquiposGestionService {
               ? Number(mComb.ano_fabricacion_motor)
               : undefined,
         };
-      } else if (mElec && Object.keys(mElec).length > 0) {
+      } else if (mElec && Object.keys(mElec).length > 0 && (mElec.marca_motor_electrico || mElec.marca_motor)) {
         const fasesRaw = String(mElec.numero_fases_motor || mElec.numero_fases || '').toUpperCase();
         const numeroFases =
-          fasesRaw === '1' || fasesRaw.includes('MONO') ? 'MONOFASICO' : 'TRIFASICO';
+          fasesRaw ? (fasesRaw === '1' || fasesRaw.includes('MONO') ? 'MONOFASICO' : 'TRIFASICO') : undefined;
         datosMotor = {
           tipo_motor: TipoMotorEnum.ELECTRICO,
-          marca_motor: mElec.marca_motor_electrico || mElec.marca_motor || 'GENERICO',
+          marca_motor: mElec.marca_motor_electrico || mElec.marca_motor,
           modelo_motor: mElec.modelo_motor_electrico || mElec.modelo_motor,
           numero_serie_motor: mElec.numero_serie_motor_electrico || mElec.numero_serie_motor,
           potencia_hp:
@@ -259,10 +259,10 @@ export class EquiposGestionService {
             mElec.velocidad_rpm !== undefined ? Number(mElec.velocidad_rpm) : undefined,
           voltaje_operacion_vac: mElec.voltaje_operacion_vac
             ? String(mElec.voltaje_operacion_vac)
-            : '220V',
+            : undefined,
           numero_fases: numeroFases,
           frecuencia_hz:
-            mElec.frecuencia_hz_motor !== undefined ? Number(mElec.frecuencia_hz_motor) : 60,
+            mElec.frecuencia_hz_motor !== undefined ? Number(mElec.frecuencia_hz_motor) : undefined,
           amperaje_nominal:
             mElec.amperaje_nominal_motor !== undefined
               ? Number(mElec.amperaje_nominal_motor)
@@ -271,8 +271,10 @@ export class EquiposGestionService {
             mElec.factor_potencia_motor !== undefined
               ? Number(mElec.factor_potencia_motor)
               : undefined,
-          clase_aislamiento: parseClaseAislamientoSegura(mElec.clase_aislamiento_motor),
-          grado_proteccion_ip: mElec.grado_proteccion_ip_motor || 'IP55',
+          clase_aislamiento: mElec.clase_aislamiento_motor
+            ? parseClaseAislamientoSegura(mElec.clase_aislamiento_motor)
+            : undefined,
+          grado_proteccion_ip: mElec.grado_proteccion_ip_motor,
           anio_fabricacion:
             mElec.ano_fabricacion_motor_electrico !== undefined
               ? Number(mElec.ano_fabricacion_motor_electrico)
@@ -282,10 +284,11 @@ export class EquiposGestionService {
     }
 
     let datosGenerador = datosGeneradorExplicito ? { ...datosGeneradorExplicito } : undefined;
-    if (!datosGenerador && mGen && Object.keys(mGen).length > 0) {
-      const fasesGen = Number(mGen.numero_fases);
+    if (!datosGenerador && mGen && Object.keys(mGen).length > 0 && (mGen.marca_generador || mGen.marca_alternador)) {
+      const fasesGen = mGen.numero_fases !== undefined ? Number(mGen.numero_fases) : undefined;
+      const voltajeSalida = mGen.voltaje_salida ?? mGen.voltaje_salida_vac;
       datosGenerador = {
-        marca_generador: mGen.marca_generador || mGen.marca_alternador || 'GENERICO',
+        marca_generador: mGen.marca_generador || mGen.marca_alternador,
         modelo_generador: mGen.modelo_generador,
         numero_serie_generador: mGen.numero_serie_generador,
         marca_alternador: mGen.marca_alternador,
@@ -293,10 +296,11 @@ export class EquiposGestionService {
         numero_serie_alternador: mGen.numero_serie_alternador,
         potencia_kva: mGen.potencia_kva !== undefined ? Number(mGen.potencia_kva) : undefined,
         potencia_kw: mGen.potencia_kw !== undefined ? Number(mGen.potencia_kw) : undefined,
-        factor_potencia: mGen.factor_potencia !== undefined ? Number(mGen.factor_potencia) : 0.8,
-        voltaje_salida: mGen.voltaje_salida ? String(mGen.voltaje_salida) : '220/127V',
-        numero_fases: fasesGen === 1 ? 1 : 3,
-        frecuencia_hz: Number(mGen.frecuencia_hz) === 50 ? 50 : 60,
+        factor_potencia: mGen.factor_potencia !== undefined ? Number(mGen.factor_potencia) : undefined,
+        voltaje_salida: voltajeSalida !== undefined ? String(voltajeSalida) : undefined,
+        numero_fases: fasesGen !== undefined ? (fasesGen === 1 ? 1 : 3) : undefined,
+        frecuencia_hz:
+          mGen.frecuencia_hz !== undefined ? (Number(mGen.frecuencia_hz) === 50 ? 50 : 60) : undefined,
         amperaje_nominal_salida:
           mGen.amperaje_nominal_salida !== undefined
             ? Number(mGen.amperaje_nominal_salida)
@@ -334,13 +338,13 @@ export class EquiposGestionService {
     }
 
     let datosBomba = datosBombaExplicito ? { ...datosBombaExplicito } : undefined;
-    if (!datosBomba && mBom && Object.keys(mBom).length > 0) {
+    if (!datosBomba && mBom && Object.keys(mBom).length > 0 && mBom.marca_bomba) {
       datosBomba = {
-        marca_bomba: mBom.marca_bomba || 'GENERICO',
+        marca_bomba: mBom.marca_bomba,
         modelo_bomba: mBom.modelo_bomba,
         numero_serie_bomba: mBom.numero_serie_bomba,
-        tipo_bomba: mBom.tipo_bomba || 'CENTRIFUGA',
-        aplicacion_bomba: mBom.aplicacion_bomba || 'AGUA_POTABLE',
+        tipo_bomba: mBom.tipo_bomba,
+        aplicacion_bomba: mBom.aplicacion_bomba,
         diametro_aspiracion: mBom.diametro_succion || mBom.diametro_aspiracion,
         diametro_descarga: mBom.diametro_descarga,
         caudal_maximo_m3h:
@@ -788,8 +792,16 @@ export class EquiposGestionService {
         if (dto.especificaciones) {
           createData.especificaciones = dto.especificaciones as unknown as Prisma.InputJsonValue;
         }
-        if (dto.datosEquipo.horas_actuales !== undefined) {
-          createData.horas_actuales = Number(dto.datosEquipo.horas_actuales);
+        const lecturaInicial =
+          dto.datosEquipo.lectura_uso_actual ??
+          dto.datosEquipo.horas_actuales ??
+          (datosGenerador as any)?.horometro_actual;
+        if (lecturaInicial !== undefined && lecturaInicial !== null) {
+          const valUso = Number(lecturaInicial);
+          createData.horas_actuales = valUso;
+          createData.lectura_uso_actual = valUso;
+          createData.fecha_ultima_lectura_uso = new Date();
+          createData.fecha_ultima_lectura_horas = new Date();
         }
         if (dto.datosEquipo.observaciones_generales !== undefined) {
           createData.observaciones_generales = dto.datosEquipo.observaciones_generales;
@@ -827,26 +839,16 @@ export class EquiposGestionService {
           data: createData,
         });
 
-        // 4.2. Crear registro en tabla EQUIPOS_MOTOR (si se proporciona o se extrajo de especificaciones)
-        if (datosMotor) {
-          const marcaMotor = (datosMotor.marca_motor || 'GENERICO').trim().toUpperCase();
-          const modeloMotor = (datosMotor.modelo_motor || 'N/A').trim().toUpperCase();
-          const serialMotor = (datosMotor.numero_serie_motor || `SN-TEMP-${Date.now()}`)
-            .trim()
-            .toUpperCase();
+        // 4.2. Dual-Write opcional a tabla EQUIPOS_MOTOR (solo con datos reales sin valores inventados)
+        if (datosMotor && datosMotor.marca_motor) {
+          const marcaMotor = datosMotor.marca_motor.trim().toUpperCase();
+          const modeloMotor = datosMotor.modelo_motor?.trim().toUpperCase() || null;
+          const serialMotor = datosMotor.numero_serie_motor?.trim().toUpperCase() || null;
 
-          const potenciaHp = datosMotor.potencia_hp;
-          let potenciaKw = datosMotor.potencia_kw;
-
-          if (!potenciaHp && !potenciaKw) {
-            if (
-              (tipoNorm === TipoEquipoDiscriminator.GENERADOR || tipoNorm === 'GEN') &&
-              datosGenerador?.potencia_kw
-            ) {
-              potenciaKw = datosGenerador.potencia_kw;
-            } else {
-              potenciaKw = 1.0;
-            }
+          const potenciaHp = datosMotor.potencia_hp ?? null;
+          let potenciaKw = datosMotor.potencia_kw ?? null;
+          if (!potenciaHp && !potenciaKw && datosGenerador?.potencia_kw) {
+            potenciaKw = datosGenerador.potencia_kw;
           }
 
           const datosMotorFinal: any = {
@@ -855,42 +857,42 @@ export class EquiposGestionService {
             marca_motor: marcaMotor,
             modelo_motor: modeloMotor,
             numero_serie_motor: serialMotor,
-            potencia_hp: potenciaHp || null,
-            potencia_kw: potenciaKw || null,
-            velocidad_nominal_rpm: datosMotor.velocidad_nominal_rpm || 1800,
-            a_o_fabricacion: datosMotor.anio_fabricacion || null,
+            potencia_hp: potenciaHp,
+            potencia_kw: potenciaKw,
+            velocidad_nominal_rpm: datosMotor.velocidad_nominal_rpm ?? null,
+            a_o_fabricacion: datosMotor.anio_fabricacion ?? null,
             creado_por: userId,
           };
 
           if (datosMotor.tipo_motor === TipoMotorEnum.COMBUSTION) {
-            datosMotorFinal.tipo_combustible = parseTipoCombustibleSeguro(
-              datosMotor.tipo_combustible,
-            );
-            datosMotorFinal.numero_cilindros = datosMotor.numero_cilindros || null;
-            datosMotorFinal.voltaje_arranque_vdc = [12, 24, 48].includes(
-              Number(datosMotor.voltaje_arranque_vdc),
-            )
+            datosMotorFinal.tipo_combustible = datosMotor.tipo_combustible
+              ? parseTipoCombustibleSeguro(datosMotor.tipo_combustible)
+              : null;
+            datosMotorFinal.numero_cilindros = datosMotor.numero_cilindros ?? null;
+            datosMotorFinal.voltaje_arranque_vdc = datosMotor.voltaje_arranque_vdc
               ? Number(datosMotor.voltaje_arranque_vdc)
-              : 12;
-            datosMotorFinal.capacidad_aceite_litros = datosMotor.capacidad_aceite_litros || null;
+              : null;
+            datosMotorFinal.capacidad_aceite_litros = datosMotor.capacidad_aceite_litros ?? null;
             datosMotorFinal.capacidad_refrigerante_litros =
-              datosMotor.capacidad_refrigerante_litros || null;
-            datosMotorFinal.tiene_turbocargador = datosMotor.tiene_turbocargador ?? false;
-            datosMotorFinal.tipo_arranque = parseTipoArranqueSeguro(datosMotor.tipo_arranque);
-            datosMotorFinal.amperaje_arranque = datosMotor.amperaje_arranque || null;
-            datosMotorFinal.numero_baterias = datosMotor.numero_baterias || 1;
-            datosMotorFinal.referencia_bateria = datosMotor.referencia_bateria || 'N/A';
-            datosMotorFinal.capacidad_bateria_ah = datosMotor.capacidad_bateria_ah || null;
-            datosMotorFinal.tiene_radiador = datosMotor.tiene_radiador ?? true;
-            datosMotorFinal.radiador_alto_cm = datosMotor.radiador_alto_cm || null;
-            datosMotorFinal.radiador_ancho_cm = datosMotor.radiador_ancho_cm || null;
-            datosMotorFinal.radiador_espesor_cm = datosMotor.radiador_espesor_cm || null;
-            datosMotorFinal.tiene_cargador_bateria = datosMotor.tiene_cargador_bateria ?? false;
-            datosMotorFinal.marca_cargador = datosMotor.marca_cargador || null;
-            datosMotorFinal.modelo_cargador = datosMotor.modelo_cargador || null;
-            datosMotorFinal.amperaje_cargador = datosMotor.amperaje_cargador || null;
-            datosMotorFinal.tipo_aceite = datosMotor.tipo_aceite || '15W40';
-            datosMotorFinal.tipo_refrigerante = datosMotor.tipo_refrigerante || '50/50';
+              datosMotor.capacidad_refrigerante_litros ?? null;
+            datosMotorFinal.tiene_turbocargador = datosMotor.tiene_turbocargador ?? null;
+            datosMotorFinal.tipo_arranque = datosMotor.tipo_arranque
+              ? parseTipoArranqueSeguro(datosMotor.tipo_arranque)
+              : null;
+            datosMotorFinal.amperaje_arranque = datosMotor.amperaje_arranque ?? null;
+            datosMotorFinal.numero_baterias = datosMotor.numero_baterias ?? null;
+            datosMotorFinal.referencia_bateria = datosMotor.referencia_bateria ?? null;
+            datosMotorFinal.capacidad_bateria_ah = datosMotor.capacidad_bateria_ah ?? null;
+            datosMotorFinal.tiene_radiador = datosMotor.tiene_radiador ?? null;
+            datosMotorFinal.radiador_alto_cm = datosMotor.radiador_alto_cm ?? null;
+            datosMotorFinal.radiador_ancho_cm = datosMotor.radiador_ancho_cm ?? null;
+            datosMotorFinal.radiador_espesor_cm = datosMotor.radiador_espesor_cm ?? null;
+            datosMotorFinal.tiene_cargador_bateria = datosMotor.tiene_cargador_bateria ?? null;
+            datosMotorFinal.marca_cargador = datosMotor.marca_cargador ?? null;
+            datosMotorFinal.modelo_cargador = datosMotor.modelo_cargador ?? null;
+            datosMotorFinal.amperaje_cargador = datosMotor.amperaje_cargador ?? null;
+            datosMotorFinal.tipo_aceite = datosMotor.tipo_aceite ?? null;
+            datosMotorFinal.tipo_refrigerante = datosMotor.tipo_refrigerante ?? null;
 
             datosMotorFinal.voltaje_operacion_vac = null;
             datosMotorFinal.numero_fases = null;
@@ -900,15 +902,17 @@ export class EquiposGestionService {
             datosMotorFinal.amperaje_nominal = null;
             datosMotorFinal.factor_potencia = null;
           } else {
-            datosMotorFinal.voltaje_operacion_vac = datosMotor.voltaje_operacion_vac || '220V';
-            datosMotorFinal.numero_fases = parseNumeroFasesSeguro(datosMotor.numero_fases);
-            datosMotorFinal.frecuencia_hz = datosMotor.frecuencia_hz || 60;
-            datosMotorFinal.clase_aislamiento = parseClaseAislamientoSegura(
-              datosMotor.clase_aislamiento,
-            );
-            datosMotorFinal.grado_proteccion_ip = datosMotor.grado_proteccion_ip || 'IP55';
-            datosMotorFinal.amperaje_nominal = datosMotor.amperaje_nominal || null;
-            datosMotorFinal.factor_potencia = datosMotor.factor_potencia || 0.85;
+            datosMotorFinal.voltaje_operacion_vac = datosMotor.voltaje_operacion_vac ?? null;
+            datosMotorFinal.numero_fases = datosMotor.numero_fases
+              ? parseNumeroFasesSeguro(datosMotor.numero_fases)
+              : null;
+            datosMotorFinal.frecuencia_hz = datosMotor.frecuencia_hz ?? null;
+            datosMotorFinal.clase_aislamiento = datosMotor.clase_aislamiento
+              ? parseClaseAislamientoSegura(datosMotor.clase_aislamiento)
+              : null;
+            datosMotorFinal.grado_proteccion_ip = datosMotor.grado_proteccion_ip ?? null;
+            datosMotorFinal.amperaje_nominal = datosMotor.amperaje_nominal ?? null;
+            datosMotorFinal.factor_potencia = datosMotor.factor_potencia ?? null;
 
             datosMotorFinal.tipo_combustible = null;
             datosMotorFinal.capacidad_aceite_litros = null;
@@ -925,71 +929,57 @@ export class EquiposGestionService {
 
         let datosEspecificos: Record<string, any> = {};
 
-        // 4.3. Crear registro en tabla hija según discriminador (Dual-Write)
-        if (tipoNorm === TipoEquipoDiscriminator.GENERADOR || tipoNorm === 'GEN') {
-          if (!datosGenerador && !dto.especificaciones) {
-            throw new ConflictException('datosGenerador es requerido para tipo GENERADOR');
-          }
-          const dg = datosGenerador || { marca_generador: 'GENERICO', voltaje_salida: '220/127V' };
-
-          const kva = dg.potencia_kva || (dg.potencia_kw ? dg.potencia_kw / 0.8 : 0);
-          const kw = dg.potencia_kw || (dg.potencia_kva ? dg.potencia_kva * 0.8 : 0);
+        // 4.3. Dual-Write opcional a tabla satélite solo cuando existan datos reales (sin valores inventados)
+        if ((tipoNorm === TipoEquipoDiscriminator.GENERADOR || tipoNorm === 'GEN') && datosGenerador && datosGenerador.marca_generador) {
+          const dg = datosGenerador;
+          const pf = dg.factor_potencia ? Number(dg.factor_potencia) : null;
+          const kva =
+            dg.potencia_kva ?? (dg.potencia_kw && pf ? Number((dg.potencia_kw / pf).toFixed(2)) : null);
+          const kw =
+            dg.potencia_kw ?? (dg.potencia_kva && pf ? Number((dg.potencia_kva * pf).toFixed(2)) : null);
 
           const generador = await tx.equipos_generador.create({
             data: {
               id_equipo: equipoCreado.id_equipo,
-              marca_generador: (dg.marca_generador || 'GENERICO').trim().toUpperCase(),
-              modelo_generador: (dg.modelo_generador || 'N/A').trim().toUpperCase(),
-              numero_serie_generador: (dg.numero_serie_generador || `SN-GEN-${Date.now()}`)
-                .trim()
-                .toUpperCase(),
-              marca_alternador: (dg.marca_alternador || 'N/A').trim().toUpperCase(),
-              modelo_alternador: (dg.modelo_alternador || 'N/A').trim().toUpperCase(),
-              numero_serie_alternador: (dg.numero_serie_alternador || 'N/A').trim().toUpperCase(),
-              potencia_kw: kw || 0,
-              potencia_kva: kva || 0,
-              factor_potencia: dg.factor_potencia || 0.8,
-              voltaje_salida: dg.voltaje_salida || '220/127V',
-              numero_fases: dg.numero_fases || 3,
-              frecuencia_hz: dg.frecuencia_hz || 60,
-              amperaje_nominal_salida: dg.amperaje_nominal_salida || null,
-              configuracion_salida: dg.configuracion_salida || 'ESTRELLA',
-              tiene_avr: dg.tiene_avr ?? true,
-              marca_avr: dg.marca_avr || 'N/A',
-              modelo_avr: dg.modelo_avr || 'N/A',
-              referencia_avr: dg.referencia_avr || 'N/A',
-              tiene_modulo_control: dg.tiene_modulo_control ?? true,
-              marca_modulo_control: dg.marca_modulo_control || 'N/A',
-              modelo_modulo_control: dg.modelo_modulo_control || 'N/A',
-              tiene_arranque_automatico: dg.tiene_arranque_automatico ?? true,
-              capacidad_tanque_principal_litros: dg.capacidad_tanque_principal_litros || null,
-              tiene_tanque_auxiliar: dg.tiene_tanque_auxiliar ?? false,
-              capacidad_tanque_auxiliar_litros: dg.capacidad_tanque_auxiliar_litros || null,
-              clase_aislamiento: dg.clase_aislamiento || 'H',
-              grado_proteccion_ip: dg.grado_proteccion_ip || 'IP23',
-              a_o_fabricacion: dg.anio_fabricacion || null,
-              observaciones: dg.observaciones || null,
+              marca_generador: dg.marca_generador.trim().toUpperCase(),
+              modelo_generador: dg.modelo_generador?.trim().toUpperCase() || null,
+              numero_serie_generador: dg.numero_serie_generador?.trim().toUpperCase() || null,
+              marca_alternador: dg.marca_alternador?.trim().toUpperCase() || null,
+              modelo_alternador: dg.modelo_alternador?.trim().toUpperCase() || null,
+              numero_serie_alternador: dg.numero_serie_alternador?.trim().toUpperCase() || null,
+              potencia_kw: kw,
+              potencia_kva: kva,
+              factor_potencia: pf,
+              voltaje_salida: dg.voltaje_salida ? String(dg.voltaje_salida) : '',
+              numero_fases: dg.numero_fases ?? null,
+              frecuencia_hz: dg.frecuencia_hz ?? null,
+              amperaje_nominal_salida: dg.amperaje_nominal_salida ?? null,
+              configuracion_salida: dg.configuracion_salida ?? null,
+              tiene_avr: dg.tiene_avr ?? null,
+              marca_avr: dg.marca_avr ?? null,
+              modelo_avr: dg.modelo_avr ?? null,
+              referencia_avr: dg.referencia_avr ?? null,
+              tiene_modulo_control: dg.tiene_modulo_control ?? null,
+              marca_modulo_control: dg.marca_modulo_control ?? null,
+              modelo_modulo_control: dg.modelo_modulo_control ?? null,
+              tiene_arranque_automatico: dg.tiene_arranque_automatico ?? null,
+              capacidad_tanque_principal_litros: dg.capacidad_tanque_principal_litros ?? null,
+              tiene_tanque_auxiliar: dg.tiene_tanque_auxiliar ?? null,
+              capacidad_tanque_auxiliar_litros: dg.capacidad_tanque_auxiliar_litros ?? null,
+              clase_aislamiento: dg.clase_aislamiento ?? null,
+              grado_proteccion_ip: dg.grado_proteccion_ip ?? null,
+              a_o_fabricacion: dg.anio_fabricacion ?? null,
+              observaciones: dg.observaciones ?? null,
               creado_por: userId,
             },
           });
-
-          if ((dg as any).horometro_actual !== undefined) {
-            await tx.equipos.update({
-              where: { id_equipo: equipoCreado.id_equipo },
-              data: { horas_actuales: (dg as any).horometro_actual },
-            });
-          }
 
           datosEspecificos = {
             tabla: 'equipos_generador',
             ...generador,
           };
-        } else if (tipoNorm === TipoEquipoDiscriminator.BOMBA || tipoNorm === 'BOM') {
-          if (!datosBomba && !dto.especificaciones) {
-            throw new ConflictException('datosBomba es requerido para tipo BOMBA');
-          }
-          const db = datosBomba || { marca_bomba: 'GENERICO', tipo_bomba: 'CENTRIFUGA' };
-
+        } else if ((tipoNorm === TipoEquipoDiscriminator.BOMBA || tipoNorm === 'BOM') && datosBomba && datosBomba.marca_bomba) {
+          const db = datosBomba;
           const tiposBombaValidos = [
             'CENTRIFUGA',
             'TURBINA_VERTICAL_POZO',
@@ -1009,53 +999,53 @@ export class EquiposGestionService {
           const bomba = await tx.equipos_bomba.create({
             data: {
               id_equipo: equipoCreado.id_equipo,
-              marca_bomba: (db.marca_bomba || 'GENERICO').trim().toUpperCase(),
+              marca_bomba: db.marca_bomba.trim().toUpperCase(),
               tipo_bomba: tipoBombaSeguro,
-              modelo_bomba: (db.modelo_bomba || 'N/A').trim().toUpperCase(),
-              numero_serie_bomba: (db.numero_serie_bomba || `SN-BOM-${Date.now()}`)
-                .trim()
-                .toUpperCase(),
-              aplicacion_bomba: parseAplicacionBombaSegura(db.aplicacion_bomba),
-              diametro_aspiracion: db.diametro_aspiracion || 'N/A',
-              diametro_descarga: db.diametro_descarga || 'N/A',
-              caudal_maximo_m3h: db.caudal_maximo_m3h || 0,
-              altura_manometrica_maxima_m: db.altura_manometrica_maxima_m || 0,
-              altura_presion_trabajo_m: db.altura_presion_trabajo_m || 0,
-              potencia_hidraulica_kw: db.potencia_hidraulica_kw || 0,
-              eficiencia_porcentaje: db.eficiencia_porcentaje || 0,
-              numero_total_bombas_sistema: db.numero_total_bombas_sistema || 1,
-              numero_bomba_en_sistema: db.numero_bomba_en_sistema || 1,
-              tiene_panel_control: db.tiene_panel_control ?? false,
-              marca_panel_control: db.marca_panel_control || 'N/A',
-              modelo_panel_control: db.modelo_panel_control || 'N/A',
-              tiene_presostato: db.tiene_presostato ?? false,
-              marca_presostato: db.marca_presostato || 'N/A',
-              modelo_presostato: db.modelo_presostato || 'N/A',
-              presion_encendido_psi: db.presion_encendido_psi || null,
-              presion_apagado_psi: db.presion_apagado_psi || null,
-              tiene_contactor_externo: db.tiene_contactor_externo ?? false,
-              marca_contactor: db.marca_contactor || 'N/A',
-              amperaje_contactor: db.amperaje_contactor || null,
-              tiene_arrancador_suave: db.tiene_arrancador_suave ?? false,
-              tiene_variador_frecuencia: db.tiene_variador_frecuencia ?? false,
-              marca_variador: db.marca_variador || 'N/A',
-              modelo_variador: db.modelo_variador || 'N/A',
-              tiene_tanques_hidroneumaticos: db.tiene_tanques_hidroneumaticos ?? false,
-              cantidad_tanques: db.cantidad_tanques || null,
-              capacidad_tanques_litros: db.capacidad_tanques_litros || null,
-              presion_tanques_psi: db.presion_tanques_psi || null,
-              tiene_manometro: db.tiene_manometro ?? false,
-              rango_manometro_min_psi: db.rango_manometro_min_psi || 0,
-              rango_manometro_max_psi: db.rango_manometro_max_psi || null,
-              tiene_proteccion_nivel: db.tiene_proteccion_nivel ?? false,
-              tipo_proteccion_nivel: db.tipo_proteccion_nivel || 'N/A',
-              tiene_valvula_purga: db.tiene_valvula_purga ?? false,
-              tiene_valvula_cebado: db.tiene_valvula_cebado ?? false,
-              tiene_valvula_cheque: db.tiene_valvula_cheque ?? false,
-              tiene_valvula_pie: db.tiene_valvula_pie ?? false,
-              referencia_sello_mecanico: db.referencia_sello_mecanico || 'N/A',
-              a_o_fabricacion: db.anio_fabricacion || null,
-              observaciones: db.observaciones || null,
+              modelo_bomba: db.modelo_bomba?.trim().toUpperCase() || null,
+              numero_serie_bomba: db.numero_serie_bomba?.trim().toUpperCase() || null,
+              aplicacion_bomba: db.aplicacion_bomba
+                ? parseAplicacionBombaSegura(db.aplicacion_bomba)
+                : null,
+              diametro_aspiracion: db.diametro_aspiracion ?? null,
+              diametro_descarga: db.diametro_descarga ?? null,
+              caudal_maximo_m3h: db.caudal_maximo_m3h ?? null,
+              altura_manometrica_maxima_m: db.altura_manometrica_maxima_m ?? null,
+              altura_presion_trabajo_m: db.altura_presion_trabajo_m ?? null,
+              potencia_hidraulica_kw: db.potencia_hidraulica_kw ?? null,
+              eficiencia_porcentaje: db.eficiencia_porcentaje ?? null,
+              numero_total_bombas_sistema: db.numero_total_bombas_sistema ?? null,
+              numero_bomba_en_sistema: db.numero_bomba_en_sistema ?? null,
+              tiene_panel_control: db.tiene_panel_control ?? null,
+              marca_panel_control: db.marca_panel_control ?? null,
+              modelo_panel_control: db.modelo_panel_control ?? null,
+              tiene_presostato: db.tiene_presostato ?? null,
+              marca_presostato: db.marca_presostato ?? null,
+              modelo_presostato: db.modelo_presostato ?? null,
+              presion_encendido_psi: db.presion_encendido_psi ?? null,
+              presion_apagado_psi: db.presion_apagado_psi ?? null,
+              tiene_contactor_externo: db.tiene_contactor_externo ?? null,
+              marca_contactor: db.marca_contactor ?? null,
+              amperaje_contactor: db.amperaje_contactor ?? null,
+              tiene_arrancador_suave: db.tiene_arrancador_suave ?? null,
+              tiene_variador_frecuencia: db.tiene_variador_frecuencia ?? null,
+              marca_variador: db.marca_variador ?? null,
+              modelo_variador: db.modelo_variador ?? null,
+              tiene_tanques_hidroneumaticos: db.tiene_tanques_hidroneumaticos ?? null,
+              cantidad_tanques: db.cantidad_tanques ?? null,
+              capacidad_tanques_litros: db.capacidad_tanques_litros ?? null,
+              presion_tanques_psi: db.presion_tanques_psi ?? null,
+              tiene_manometro: db.tiene_manometro ?? null,
+              rango_manometro_min_psi: db.rango_manometro_min_psi ?? null,
+              rango_manometro_max_psi: db.rango_manometro_max_psi ?? null,
+              tiene_proteccion_nivel: db.tiene_proteccion_nivel ?? null,
+              tipo_proteccion_nivel: db.tipo_proteccion_nivel ?? null,
+              tiene_valvula_purga: db.tiene_valvula_purga ?? null,
+              tiene_valvula_cebado: db.tiene_valvula_cebado ?? null,
+              tiene_valvula_cheque: db.tiene_valvula_cheque ?? null,
+              tiene_valvula_pie: db.tiene_valvula_pie ?? null,
+              referencia_sello_mecanico: db.referencia_sello_mecanico ?? null,
+              a_o_fabricacion: db.anio_fabricacion ?? null,
+              observaciones: db.observaciones ?? null,
               creado_por: userId,
             },
           });
@@ -1065,7 +1055,7 @@ export class EquiposGestionService {
             ...bomba,
           };
         } else {
-          // MOTOR, COMPRESOR o cualquier nuevo arquetipo del Hub EAM Universal
+          // Cualquier arquetipo EAM Universal (JSONB + B-Tree sin dependencia satélite)
           datosEspecificos = {
             tabla: datosMotor ? 'equipos_motor' : 'especificaciones_jsonb',
             ...(dto.especificaciones?.modulos || {}),
@@ -1344,7 +1334,7 @@ export class EquiposGestionService {
           .trim()
           .toUpperCase();
 
-        if (!unidadEntrada) {
+        if (!unidadEntrada && typeof this.prisma.atributos_tecnicos?.findUnique === 'function') {
           const attrDb = await this.prisma.atributos_tecnicos.findUnique({
             where: { codigo_atributo: attrCode },
             select: { unidad_defecto_codigo: true },
@@ -1449,6 +1439,8 @@ export class EquiposGestionService {
         totalEnReparacion,
         totalFueraServicio,
         totalCriticidadAlta,
+        conteosPorTipo,
+        tiposEquipoCat,
       ] = await Promise.all([
         this.prisma.equipos.findMany({
           where,
@@ -1499,7 +1491,46 @@ export class EquiposGestionService {
         this.prisma.equipos.count({
           where: { ...baseParkWhere, criticidad: { in: ['ALTA', 'CRITICA'] } },
         }),
+        typeof this.prisma.equipos.groupBy === 'function'
+          ? this.prisma.equipos.groupBy({
+              by: ['id_tipo_equipo'],
+              where: baseParkWhere,
+              _count: { _all: true },
+            })
+          : Promise.resolve([]),
+        typeof this.prisma.tipos_equipo?.findMany === 'function'
+          ? this.prisma.tipos_equipo.findMany({
+              where: { activo: true },
+              select: {
+                id_tipo_equipo: true,
+                codigo_tipo: true,
+                nombre_tipo: true,
+                color_hex: true,
+                icono_ui: true,
+              },
+            })
+          : Promise.resolve([]),
       ]);
+
+      const tiposById = new Map<number, any>(
+        (tiposEquipoCat as any[]).map((t) => [t.id_tipo_equipo, t]),
+      );
+      const por_tipo = (conteosPorTipo as any[])
+        .map((grp) => {
+          const meta = tiposById.get(grp.id_tipo_equipo);
+          const cnt = Number(grp._count?._all ?? 0);
+          if (!meta || cnt <= 0) return null;
+          return {
+            id_tipo_equipo: meta.id_tipo_equipo,
+            codigo_tipo: meta.codigo_tipo,
+            nombre_tipo: meta.nombre_tipo,
+            color_hex: meta.color_hex ?? null,
+            icono_ui: meta.icono_ui ?? null,
+            cantidad: cnt,
+          };
+        })
+        .filter(Boolean)
+        .sort((a: any, b: any) => b.cantidad - a.cantidad);
 
       const data = equipos.map((eq) => {
         const persona = eq.clientes?.persona;
@@ -1545,6 +1576,7 @@ export class EquiposGestionService {
           generadores: totalGeneradores,
           bombas: totalBombas,
           otros: Math.max(0, totalParque - totalGeneradores - totalBombas),
+          por_tipo,
           operativos: totalOperativos,
           en_reparacion: totalEnReparacion,
           fuera_servicio: totalFueraServicio,
@@ -1840,7 +1872,9 @@ export class EquiposGestionService {
         id_equipo: true,
         codigo_equipo: true,
         horas_actuales: true,
+        lectura_uso_actual: true,
         fecha_ultima_lectura_horas: true,
+        fecha_ultima_lectura_uso: true,
       },
     });
 
@@ -1848,12 +1882,13 @@ export class EquiposGestionService {
       throw new NotFoundException(`No se encontró el equipo con ID ${idEquipo}`);
     }
 
-    const horasActuales = equipo.horas_actuales ? Number(equipo.horas_actuales) : 0;
+    const rawActual = equipo.lectura_uso_actual ?? equipo.horas_actuales;
+    const horasActuales = rawActual ? Number(rawActual) : 0;
     const nuevasHoras = dto.horas_lectura;
 
     if (nuevasHoras < horasActuales) {
       throw new BadRequestException(
-        `La lectura (${nuevasHoras} hrs) no puede ser menor a las horas actuales (${horasActuales} hrs)`,
+        `La lectura (${nuevasHoras}) no puede ser menor al uso actual (${horasActuales})`,
       );
     }
 
@@ -1861,8 +1896,9 @@ export class EquiposGestionService {
     let diasTranscurridos: number | null = null;
     let horasPromedioDia: number | null = null;
 
-    if (equipo.fecha_ultima_lectura_horas) {
-      const fechaAnterior = new Date(equipo.fecha_ultima_lectura_horas);
+    const fechaUltima = equipo.fecha_ultima_lectura_uso ?? equipo.fecha_ultima_lectura_horas;
+    if (fechaUltima) {
+      const fechaAnterior = new Date(fechaUltima);
       const fechaActual = new Date();
       const diffMs = fechaActual.getTime() - fechaAnterior.getTime();
       diasTranscurridos = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -1871,12 +1907,13 @@ export class EquiposGestionService {
       }
     }
 
+    const ahora = new Date();
     const resultado = await this.prisma.$transaction(async (tx) => {
       const lectura = await tx.lecturas_horometro.create({
         data: {
           id_equipo: idEquipo,
           horas_lectura: nuevasHoras,
-          fecha_lectura: new Date(),
+          fecha_lectura: ahora,
           tipo_lectura: (dto.tipo_lectura as any) || 'MANUAL',
           horas_transcurridas: horasTranscurridas,
           dias_transcurridos: diasTranscurridos,
@@ -1890,9 +1927,11 @@ export class EquiposGestionService {
         where: { id_equipo: idEquipo },
         data: {
           horas_actuales: nuevasHoras,
-          fecha_ultima_lectura_horas: new Date(),
+          lectura_uso_actual: nuevasHoras,
+          fecha_ultima_lectura_horas: ahora,
+          fecha_ultima_lectura_uso: ahora,
           modificado_por: userId,
-          fecha_modificacion: new Date(),
+          fecha_modificacion: ahora,
         },
       });
 
@@ -2985,38 +3024,244 @@ export class EquiposGestionService {
   async obtenerFacetasDinamicas(tipo?: string) {
     let tipoDb: any = null;
     if (tipo && tipo.trim() !== '') {
+      const term = tipo.trim();
+      const asId = /^\d+$/.test(term) ? Number(term) : undefined;
       tipoDb = await this.prisma.tipos_equipo.findFirst({
-        where: {
-          OR: [
-            { codigo_tipo: { equals: tipo.trim().toUpperCase(), mode: 'insensitive' } },
-            { nombre_tipo: { contains: tipo.trim(), mode: 'insensitive' } },
-          ],
+        where: asId
+          ? { id_tipo_equipo: asId }
+          : {
+              OR: [
+                { codigo_tipo: { equals: term.toUpperCase(), mode: 'insensitive' } },
+                { nombre_tipo: { contains: term, mode: 'insensitive' } },
+              ],
+            },
+        include: {
+          tipo_equipo_modulos: {
+            include: {
+              modulo: {
+                include: {
+                  modulo_atributos: {
+                    where: { es_filtrable: true },
+                    include: {
+                      atributo: {
+                        include: {
+                          magnitud: { include: { unidades_medida: true } },
+                          unidad_defecto: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       });
     }
 
     const bloquesActivos = resolverBloquesActivos(tipo, tipoDb);
+    const idTipoFiltro = tipoDb?.id_tipo_equipo as number | undefined;
 
-    const marcasFiltradas = FACETAS_MARCA_REGISTRO.filter((m) => bloquesActivos.includes(m.bloque));
-    const valoresTrabajoFiltrados = FACETAS_VALOR_TRABAJO_REGISTRO.filter((v) =>
+    // 1. Marcas desde Modelos OEM configurados en el Hub EAM (agnóstico de arquetipo)
+    const marcasOem: string[] = [];
+    if (typeof (this.prisma.modelos_equipo as any)?.findMany === 'function') {
+      const modelos = await this.prisma.modelos_equipo.findMany({
+        where: {
+          activo: true,
+          ...(idTipoFiltro ? { id_tipo_equipo: idTipoFiltro } : {}),
+        },
+        select: { marca: true },
+        distinct: ['marca'],
+      });
+      for (const m of modelos) {
+        const clean = m.marca?.trim();
+        if (clean && !['N/A', 'NULL', 'GENERICO'].includes(clean.toUpperCase())) {
+          marcasOem.push(clean);
+        }
+      }
+    }
+
+    // 2. Facetas dinámicas universales desde proyección B-Tree (equipos_atributos_filtro) + atributos_tecnicos
+    const filasFiltro: Array<{
+      codigo_atributo: string;
+      valor_texto: string | null;
+      valor_num_base: any;
+      unidad_base_codigo: string | null;
+    }> =
+      typeof (this.prisma.equipos_atributos_filtro as any)?.findMany === 'function'
+        ? await this.prisma.equipos_atributos_filtro.findMany({
+            where: {
+              equipo: {
+                activo: true,
+                ...(idTipoFiltro ? { id_tipo_equipo: idTipoFiltro } : {}),
+              },
+            },
+            select: {
+              codigo_atributo: true,
+              valor_texto: true,
+              valor_num_base: true,
+              unidad_base_codigo: true,
+            },
+          })
+        : [];
+
+    const atributosMetaMap = new Map<string, any>();
+    if (tipoDb?.tipo_equipo_modulos) {
+      for (const tem of tipoDb.tipo_equipo_modulos) {
+        for (const ma of tem.modulo?.modulo_atributos || []) {
+          if (ma.atributo?.codigo_atributo) {
+            atributosMetaMap.set(ma.atributo.codigo_atributo, {
+              ...ma.atributo,
+              moduloCodigo: tem.modulo.codigo_modulo,
+            });
+          }
+        }
+      }
+    } else if (typeof (this.prisma.atributos_tecnicos as any)?.findMany === 'function') {
+      const attrs = await this.prisma.atributos_tecnicos.findMany({
+        where: { activo: true },
+        include: { magnitud: true, unidad_defecto: true },
+      });
+      for (const a of attrs) {
+        atributosMetaMap.set(a.codigo_atributo, a);
+      }
+    }
+
+    const statsPorCodigo = new Map<
+      string,
+      { textos: Set<string>; nums: number[]; unidad: string | null }
+    >();
+    for (const f of filasFiltro) {
+      if (!statsPorCodigo.has(f.codigo_atributo)) {
+        statsPorCodigo.set(f.codigo_atributo, {
+          textos: new Set<string>(),
+          nums: [],
+          unidad: f.unidad_base_codigo || null,
+        });
+      }
+      const st = statsPorCodigo.get(f.codigo_atributo)!;
+      if (f.valor_texto && !['N/A', 'NULL', 'GENERICO'].includes(f.valor_texto.trim().toUpperCase())) {
+        st.textos.add(f.valor_texto.trim());
+      }
+      if (f.valor_num_base !== null && f.valor_num_base !== undefined) {
+        const n = Number(f.valor_num_base);
+        if (!Number.isNaN(n)) st.nums.push(n);
+      }
+      if (!st.unidad && f.unidad_base_codigo) {
+        st.unidad = f.unidad_base_codigo;
+      }
+    }
+
+    const codigosRelevantes = Array.from(
+      new Set([...atributosMetaMap.keys(), ...statsPorCodigo.keys()]),
+    );
+
+    const marcasDinamicas: Array<{
+      campo: string;
+      etiqueta: string;
+      bloque: string;
+      tabla: string;
+      valoresSugeridos: string[];
+    }> = [];
+
+    if (marcasOem.length > 0) {
+      marcasDinamicas.push({
+        campo: 'marca_modelo',
+        etiqueta: 'Marca / Fabricante (OEM)',
+        bloque: tipoDb?.codigo_tipo || tipo || 'EAM',
+        tabla: 'modelos_equipo',
+        valoresSugeridos: Array.from(new Set(marcasOem)).sort((a, b) => a.localeCompare(b)),
+      });
+    }
+
+    const valoresDinamicos: Array<{
+      campo: string;
+      etiqueta: string;
+      bloque: string;
+      tabla: string;
+      unidad: string;
+      tipoDato: 'numero';
+      minSugerido?: number;
+      maxSugerido?: number;
+    }> = [];
+
+    const atributosDinamicos: Array<{
+      codigo_atributo: string;
+      nombre_atributo: string;
+      tipo_control: string;
+      unidad: string | null;
+      valoresSugeridos: string[];
+      minSugerido?: number;
+      maxSugerido?: number;
+    }> = [];
+
+    for (const codigo of codigosRelevantes) {
+      const meta = atributosMetaMap.get(codigo);
+      const st = statsPorCodigo.get(codigo);
+      const tipoCtrl = (meta?.tipo_control || 'TEXTO').toUpperCase();
+      const etiqueta = meta?.nombre_atributo || codigo;
+      const unidad = st?.unidad || meta?.unidad_defecto_codigo || null;
+      const textos = st ? Array.from(st.textos).sort((a, b) => a.localeCompare(b)) : [];
+      const minVal = st && st.nums.length > 0 ? Math.min(...st.nums) : undefined;
+      const maxVal = st && st.nums.length > 0 ? Math.max(...st.nums) : undefined;
+
+      atributosDinamicos.push({
+        codigo_atributo: codigo,
+        nombre_atributo: etiqueta,
+        tipo_control: tipoCtrl,
+        unidad,
+        valoresSugeridos: textos,
+        ...(minVal !== undefined ? { minSugerido: minVal } : {}),
+        ...(maxVal !== undefined ? { maxSugerido: maxVal } : {}),
+      });
+
+      if (codigo.startsWith('marca') || (textos.length > 0 && tipoCtrl !== 'NUMERICO' && tipoCtrl !== 'DECIMAL')) {
+        if (textos.length > 0) {
+          marcasDinamicas.push({
+            campo: codigo,
+            etiqueta,
+            bloque: tipoDb?.codigo_tipo || meta?.moduloCodigo || 'EAM',
+            tabla: 'equipos_atributos_filtro',
+            valoresSugeridos: textos,
+          });
+        }
+      }
+
+      if (tipoCtrl === 'NUMERICO' || tipoCtrl === 'DECIMAL' || (st && st.nums.length > 0)) {
+        valoresDinamicos.push({
+          campo: codigo,
+          etiqueta,
+          bloque: tipoDb?.codigo_tipo || meta?.moduloCodigo || 'EAM',
+          tabla: 'equipos_atributos_filtro',
+          unidad: unidad || '',
+          tipoDato: 'numero',
+          ...(minVal !== undefined ? { minSugerido: minVal } : {}),
+          ...(maxVal !== undefined ? { maxSugerido: maxVal } : {}),
+        });
+      }
+    }
+
+    // 3. Compatibilidad incremental con tablas satélite legacy (si el bloque activo corresponde)
+    const marcasLegacy = FACETAS_MARCA_REGISTRO.filter((m) => bloquesActivos.includes(m.bloque));
+    const valoresLegacy = FACETAS_VALOR_TRABAJO_REGISTRO.filter((v) =>
       bloquesActivos.includes(v.bloque),
     );
 
-    const marcasConValores = await Promise.all(
-      marcasFiltradas.map(async (def) => {
+    const marcasLegacyConValores = await Promise.all(
+      marcasLegacy.map(async (def) => {
         try {
           let rows: any[] = [];
-          if (def.tabla === 'equipos_motor') {
+          if (def.tabla === 'equipos_motor' && this.prisma.equipos_motor?.findMany) {
             rows = await this.prisma.equipos_motor.findMany({
               select: { [def.campo]: true },
               distinct: [def.campo as any],
             });
-          } else if (def.tabla === 'equipos_generador') {
+          } else if (def.tabla === 'equipos_generador' && this.prisma.equipos_generador?.findMany) {
             rows = await this.prisma.equipos_generador.findMany({
               select: { [def.campo]: true },
               distinct: [def.campo as any],
             });
-          } else if (def.tabla === 'equipos_bomba') {
+          } else if (def.tabla === 'equipos_bomba' && this.prisma.equipos_bomba?.findMany) {
             rows = await this.prisma.equipos_bomba.findMany({
               select: { [def.campo]: true },
               distinct: [def.campo as any],
@@ -3032,6 +3277,7 @@ export class EquiposGestionService {
                     !!val &&
                     val.toUpperCase() !== 'N/A' &&
                     val.toUpperCase() !== 'NULL' &&
+                    val.toUpperCase() !== 'GENERICO' &&
                     val !== '0',
                 ),
             ),
@@ -3050,11 +3296,29 @@ export class EquiposGestionService {
       }),
     );
 
+    // Deduplicar facetas combinando dinámicas EAM (prioridad) + legacy no vacías
+    const seenMarcas = new Set(marcasDinamicas.map((m) => m.campo));
+    const marcasCombinadas = [...marcasDinamicas];
+    for (const ml of marcasLegacyConValores) {
+      if (!seenMarcas.has(ml.campo)) {
+        marcasCombinadas.push(ml);
+      }
+    }
+
+    const seenValores = new Set(valoresDinamicos.map((v) => v.campo));
+    const valoresCombinados = [...valoresDinamicos];
+    for (const vl of valoresLegacy) {
+      if (!seenValores.has(vl.campo)) {
+        valoresCombinados.push(vl);
+      }
+    }
+
     return {
       tipo: tipo || null,
       bloquesActivos,
-      marcas: marcasConValores,
-      valoresTrabajo: valoresTrabajoFiltrados,
+      marcas: marcasCombinadas,
+      valoresTrabajo: valoresCombinados,
+      atributosDinamicos,
     };
   }
 }

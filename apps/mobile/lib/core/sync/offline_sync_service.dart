@@ -11,6 +11,7 @@ import '../database/app_database.dart';
 import '../database/database_service.dart';
 import '../errors/user_friendly_error.dart';
 import 'connectivity_service.dart';
+import 'media_payload_codec.dart';
 import 'sync_progress.dart';
 import 'sse/sse_event_reader.dart';
 
@@ -140,6 +141,14 @@ class OfflineSyncService {
     for (final orden in pendientes) {
       // Ya marcada como EN_PROCESO por getYMarcarOrdenesPendientesSync()
       try {
+        // ZERO-TRUST OWNERSHIP GUARD: Verificar propietario ANTES de cualquier request HTTP
+        final storedPayload =
+            jsonDecode(orden.payloadJson) as Map<String, dynamic>;
+        MediaPayloadCodec.assertOwnership(
+          storedPayload,
+          expectedOwnerUserId: _db.scopedUserId,
+        );
+
         // PASO 0: VERIFICAR SI LA ORDEN YA FUE COMPLETADA EN EL BACKEND
         // Esto previene duplicación cuando el request anterior llegó pero la respuesta se perdió
         final verificacionInicial = await _verificarOrdenYaCompletada(
@@ -155,20 +164,25 @@ class OfflineSyncService {
           continue; // Saltar al siguiente
         }
 
-        // ✅ FIX 26-FEB-2026: Si el servidor dice 404, la orden fue eliminada
+        // ✅ ZERO-TRUST: Preservar trabajo offline como CONFLICTO_ELIMINADA ante 404
         if (verificacionInicial['eliminada'] == true) {
           debugPrint(
-            '🗑️ [SYNC] Orden ${orden.idOrdenBackend} eliminada del servidor (404). '
-            'Eliminando de cola.',
+            '⚠️ [SYNC] Orden ${orden.idOrdenBackend} eliminada del servidor (404). '
+            'Preservando como CONFLICTO_ELIMINADA.',
           );
-          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          await _marcarColaConflictoEliminada(orden.idOrdenLocal);
           fallidas++;
-          errores.add('Orden ${orden.idOrdenBackend}: Eliminada del servidor');
+          errores.add(
+            'Orden ${orden.idOrdenBackend}: Conflicto (eliminada en servidor, trabajo local resguardado)',
+          );
           continue;
         }
 
-        // Decodificar payload
-        final payload = jsonDecode(orden.payloadJson) as Map<String, dynamic>;
+        // Hidratar media desde disco sin guardar blobs base64 en SQLite
+        final payload = await MediaPayloadCodec.hydratePayloadForUpload(
+          storedPayload,
+          expectedOwnerUserId: _db.scopedUserId,
+        );
 
         // CRÍTICO: Asegurar que la orden esté en EN_PROCESO en el backend
         // Si esto falla, NO continuar con finalizar-completo
@@ -304,12 +318,14 @@ class OfflineSyncService {
         // ✅ FIX 26-FEB-2026: Detectar 404 en respuesta del servidor
         if (statusCode == 404) {
           debugPrint(
-            '🗑️ [SYNC] Orden ${orden.idOrdenBackend} no existe (404 DioException). '
-            'Eliminando de cola.',
+            '⚠️ [SYNC] Orden ${orden.idOrdenBackend} no existe (404 DioException). '
+            'Preservando en cola como CONFLICTO_ELIMINADA.',
           );
-          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          await _marcarColaConflictoEliminada(orden.idOrdenLocal);
           fallidas++;
-          errores.add('Orden ${orden.idOrdenBackend}: Eliminada del servidor');
+          errores.add(
+            'Orden ${orden.idOrdenBackend}: Conflicto (eliminada en servidor)',
+          );
           continue;
         }
         // ✅ 19-OCT-2026: 401/403 son definitivos. No reintentar ni inferir
@@ -399,6 +415,16 @@ class OfflineSyncService {
         await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
         fallidas++;
         errores.add('Orden ${orden.idOrdenBackend}: $errorMsg');
+      } on StateError catch (e) {
+        if (e.message.contains('ORDEN_PROPIETARIO_DISTINTO')) {
+          await (_db.update(_db.ordenesPendientesSync)
+                ..where((o) => o.idOrdenLocal.equals(orden.idOrdenLocal)))
+              .write(const OrdenesPendientesSyncCompanion(estadoSync: Value('PENDIENTE')));
+          fallidas++;
+          errores.add('Orden ${orden.idOrdenBackend}: cuenta activa no autorizada');
+          continue;
+        }
+        rethrow;
       } catch (e) {
         // Error inesperado
         final mensaje = mensajeAmigable(
@@ -647,6 +673,14 @@ class OfflineSyncService {
         return false;
       }
 
+      if (orden.estadoSync == 'CONFLICTO_ELIMINADA') {
+        _progressNotifier.error(
+          'Esta orden fue eliminada o reasignada en el servidor. '
+          'Tus evidencias locales permanecen resguardadas.',
+        );
+        return false;
+      }
+
       // ✅ Marcar como EN_PROCESO inmediatamente (NO PENDIENTE)
       // Esto mantiene la orden visible en la UI con estado "Subiendo..."
       await (_db.update(
@@ -678,6 +712,14 @@ class OfflineSyncService {
         '🔄 [SYNC-INDIVIDUAL] Procesando orden ${orden.idOrdenBackend}',
       );
 
+      // ZERO-TRUST OWNERSHIP GUARD: Verificar propietario antes de cualquier llamada HTTP
+      final storedPayload =
+          jsonDecode(orden.payloadJson) as Map<String, dynamic>;
+      MediaPayloadCodec.assertOwnership(
+        storedPayload,
+        expectedOwnerUserId: _db.scopedUserId,
+      );
+
       // ✅ PROGRESO: Iniciando
       _progressNotifier.iniciar(orden.idOrdenBackend);
       _progressNotifier.avanzar(SyncStep.preparando);
@@ -696,20 +738,23 @@ class OfflineSyncService {
         return true;
       }
 
-      // ✅ FIX 26-FEB-2026: Si el servidor dice 404, la orden fue eliminada
-      // Limpiar la cola y NO reintentar. El smart sync purgará la orden local.
       if (verificacionInicial['eliminada'] == true) {
         debugPrint(
-          '🗑️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} eliminada del servidor. '
-          'Eliminando de cola de retry.',
+          '⚠️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} eliminada del servidor. '
+          'Preservando trabajo local como CONFLICTO_ELIMINADA.',
         );
-        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
-        _progressNotifier.error('La orden fue eliminada del servidor');
+        await _marcarColaConflictoEliminada(orden.idOrdenLocal);
+        _progressNotifier.error(
+          'La orden fue eliminada en el servidor. Tus datos locales siguen resguardados.',
+        );
         return false;
       }
 
-      // Decodificar payload
-      final payload = jsonDecode(orden.payloadJson) as Map<String, dynamic>;
+      // Hidratar media desde disco sin guardar blobs base64 en SQLite
+      final payload = await MediaPayloadCodec.hydratePayloadForUpload(
+        storedPayload,
+        expectedOwnerUserId: _db.scopedUserId,
+      );
 
       // ✅ 20-DIC-2025: NO marcar pasos locales como completados
       // El SSE del servidor marcará los pasos como completados cuando realmente se procesen
@@ -806,13 +851,14 @@ class OfflineSyncService {
           _progressNotifier.completar();
           return true;
         }
-        // ✅ FIX 26-FEB-2026: Si la verificación detectó 404, limpiar cola
         if (verificacion['eliminada'] == true) {
           debugPrint(
-            '🗑️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} eliminada (SSE error + 404 verify)',
+            '⚠️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} eliminada (SSE error + 404 verify)',
           );
-          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
-          _progressNotifier.error('La orden fue eliminada del servidor');
+          await _marcarColaConflictoEliminada(orden.idOrdenLocal);
+          _progressNotifier.error(
+            'La orden fue eliminada en el servidor. Tus datos locales siguen resguardados.',
+          );
           return false;
         }
         // Error real - marcar como error
@@ -825,14 +871,15 @@ class OfflineSyncService {
       debugPrint('❌ [SYNC-INDIVIDUAL] DioException: ${e.type} - ${e.message}');
 
       final statusCode = e.response?.statusCode;
-      // ✅ FIX 26-FEB-2026: Detectar 404 directamente en DioException
       if (statusCode == 404) {
         debugPrint(
-          '🗑️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} no existe (404 DioException). '
-          'Eliminando de cola.',
+          '⚠️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} no existe (404 DioException). '
+          'Preservando como CONFLICTO_ELIMINADA.',
         );
-        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
-        _progressNotifier.error('La orden fue eliminada del servidor');
+        await _marcarColaConflictoEliminada(orden.idOrdenLocal);
+        _progressNotifier.error(
+          'La orden fue eliminada en el servidor. Tus datos locales siguen resguardados.',
+        );
         return false;
       }
 
@@ -1229,6 +1276,34 @@ class OfflineSyncService {
         ),
       );
     });
+  }
+  Future<void> _marcarColaConflictoEliminada(int idOrdenLocal) async {
+    await _db.asegurarEstadoLocal(
+      id: -2,
+      codigo: 'CONFLICTO_ELIMINADA',
+      nombre: 'Conflicto (Eliminada en Servidor)',
+      esEstadoFinal: false,
+    );
+    await (_db.update(_db.ordenes)..where((o) => o.idLocal.equals(idOrdenLocal)))
+        .write(
+      OrdenesCompanion(
+        idEstado: const Value(-2),
+        isDirty: const Value(true),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    await (_db.update(_db.ordenesPendientesSync)
+          ..where((s) => s.idOrdenLocal.equals(idOrdenLocal)))
+        .write(
+      OrdenesPendientesSyncCompanion(
+        estadoSync: const Value('CONFLICTO_ELIMINADA'),
+        ultimoError: const Value(
+          'Orden eliminada o reasignada en el servidor. '
+          'Evidencias y registros locales preservados.',
+        ),
+        fechaUltimoIntento: Value(DateTime.now()),
+      ),
+    );
   }
 }
 

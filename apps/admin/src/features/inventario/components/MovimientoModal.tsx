@@ -17,6 +17,7 @@ import {
 } from '@/features/inventario/api/inventario-motor.service';
 import { getClienteNombre, useOrdenes, type Orden } from '@/features/ordenes';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   AlertCircle,
   ArrowDownCircle,
@@ -50,6 +51,7 @@ export function MovimientoModal({
   componentePreseleccionado,
   onSuccess,
 }: MovimientoModalProps) {
+  const { formatCurrency, formatDate } = useOrgFormatters();
   const { data: session } = useSession();
   const usuarioId = Number((session?.user as { id?: string | number } | undefined)?.id) || 1;
 
@@ -593,8 +595,7 @@ export function MovimientoModal({
                     {componenteSeleccionado.precio_compra &&
                       componenteSeleccionado.precio_compra > 0 && (
                         <span className="text-slate-400 text-[11px]">
-                          • Costo base: $
-                          {Number(componenteSeleccionado.precio_compra).toLocaleString('es-CO')} COP
+                          • Costo base: {formatCurrency(componenteSeleccionado.precio_compra)}
                         </span>
                       )}
                   </div>
@@ -669,7 +670,7 @@ export function MovimientoModal({
                               </span>
                               {comp.precio_compra ? (
                                 <span className="text-[10px] text-slate-400 font-mono">
-                                  ${Number(comp.precio_compra).toLocaleString('es-CO')}
+                                  {formatCurrency(comp.precio_compra)}
                                 </span>
                               ) : null}
                             </div>
@@ -717,7 +718,7 @@ export function MovimientoModal({
                     />
                     {Number(costoUnitario) > 0 && (
                       <p className="text-[11px] text-emerald-700 font-semibold mt-1">
-                        Preview: $ {Number(costoUnitario).toLocaleString('es-CO')} COP
+                        Preview: {formatCurrency(costoUnitario)}
                       </p>
                     )}
                   </div>
@@ -814,8 +815,7 @@ export function MovimientoModal({
                           {componenteSeleccionado?.unidad || 'UND'}
                           {lote.fecha_vencimiento && (
                             <span className="text-[10px] text-slate-400 font-sans">
-                              (Vence: {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}
-                              )
+                              (Vence: {formatDate(lote.fecha_vencimiento)})
                             </span>
                           )}
                         </span>
@@ -909,7 +909,7 @@ export function MovimientoModal({
                             [{lote.codigo_lote}] Disp: {lote.cantidad_actual}{' '}
                             {componenteSeleccionado?.unidad || 'UND'}{' '}
                             {lote.fecha_vencimiento
-                              ? `• Vence: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}`
+                              ? `• Vence: ${formatDate(lote.fecha_vencimiento)}`
                               : ''}
                           </option>
                         ))}

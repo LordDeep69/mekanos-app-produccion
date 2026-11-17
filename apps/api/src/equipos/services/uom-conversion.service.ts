@@ -100,7 +100,7 @@ export class UomConversionService implements OnModuleInit {
       factorB: 0.0,
       esUnidadBase: false,
       permiteDecimales: true,
-      aliases: ['M3', 'M^3', 'METRO_CUBICO', 'METROS_CUBICOS'],
+      aliases: ['M3', 'M³', 'M^3', 'METRO_CUBICO', 'METROS_CUBICOS'],
     },
 
     // --------------------------------------------------------------------------
@@ -233,7 +233,7 @@ export class UomConversionService implements OnModuleInit {
       factorB: 0.0,
       esUnidadBase: true,
       permiteDecimales: true,
-      aliases: ['C', '°C', 'CELSIUS', 'CENTIGRADOS', 'GRADOS_C', 'GRADOS_CELSIUS'],
+      aliases: ['C', '°C', 'ºC', 'CELSIUS', 'CENTIGRADOS', 'GRADOS_C', 'GRADOS_CELSIUS'],
     },
     F: {
       codigo: 'F',
@@ -244,7 +244,7 @@ export class UomConversionService implements OnModuleInit {
       factorB: -160 / 9, // ~-17.77777777777778  => C = (F - 32) * 5/9 = F * (5/9) - 160/9
       esUnidadBase: false,
       permiteDecimales: true,
-      aliases: ['F', '°F', 'FAHRENHEIT', 'GRADOS_F', 'GRADOS_FAHRENHEIT'],
+      aliases: ['F', '°F', 'ºF', 'FAHRENHEIT', 'GRADOS_F', 'GRADOS_FAHRENHEIT'],
     },
     K: {
       codigo: 'K',
@@ -270,7 +270,7 @@ export class UomConversionService implements OnModuleInit {
       factorB: 0.0,
       esUnidadBase: true,
       permiteDecimales: true,
-      aliases: ['M3H', 'M3/H', 'M^3/H', 'M3_H'],
+      aliases: ['M3H', 'M3/H', 'M³/H', 'M^3/H', 'M3_H'],
     },
     GPM: {
       codigo: 'GPM',
@@ -329,7 +329,7 @@ export class UomConversionService implements OnModuleInit {
       factorB: 0.0,
       esUnidadBase: false,
       permiteDecimales: true,
-      aliases: ['KV', 'KILOVOLTIOS'],
+      aliases: ['KV', 'KILOVOLT', 'KILOVOLTIOS'],
     },
 
     // --------------------------------------------------------------------------
@@ -474,17 +474,33 @@ export class UomConversionService implements OnModuleInit {
     },
   };
 
+  /** Instantánea inmutable de respaldo para reconstruir el catálogo limpio en cada recarga */
+  private static readonly BASELINE_UNIDADES_CANONICAS: Record<string, InfoUnidad> = (() => {
+    const copy: Record<string, InfoUnidad> = {};
+    for (const [k, v] of Object.entries(UomConversionService.UNIDADES_CANONICAS)) {
+      copy[k] = { ...v, aliases: [...v.aliases] };
+    }
+    return copy;
+  })();
+
   /** Índice inverso para resolución ultra rápida de alias a código canónico */
-  private static readonly ALIAS_MAP: Map<string, string> = (() => {
+  private static readonly ALIAS_MAP: Map<string, string> = UomConversionService.buildAliasMap(
+    UomConversionService.UNIDADES_CANONICAS,
+  );
+
+  private static buildAliasMap(units: Record<string, InfoUnidad>): Map<string, string> {
     const map = new Map<string, string>();
-    for (const [codigo, info] of Object.entries(UomConversionService.UNIDADES_CANONICAS)) {
+    for (const [codigo, info] of Object.entries(units)) {
       map.set(codigo.toUpperCase().trim(), codigo);
+      if (info.simbolo) {
+        map.set(info.simbolo.toUpperCase().trim(), codigo);
+      }
       for (const alias of info.aliases) {
         map.set(alias.toUpperCase().trim(), codigo);
       }
     }
     return map;
-  })();
+  }
 
   constructor(@Optional() private readonly prisma?: PrismaService) {}
 
@@ -501,32 +517,68 @@ export class UomConversionService implements OnModuleInit {
     if (!this.prisma) return 0;
     try {
       const unidades = await this.prisma.unidades_medida.findMany({
-        where: { activo: true },
         include: { magnitud: true },
       });
 
+      const rebuilt: Record<string, InfoUnidad> = {};
+      for (const [k, v] of Object.entries(UomConversionService.BASELINE_UNIDADES_CANONICAS)) {
+        rebuilt[k] = { ...v, aliases: [...v.aliases] };
+      }
+
+      let activeCount = 0;
       for (const u of unidades) {
         if (!u.codigo) continue;
         const cod = u.codigo.toUpperCase().trim();
-        const factorA = u.factor_a !== null ? Number(u.factor_a) : 1.0;
-        const factorB = u.factor_b !== null ? Number(u.factor_b) : 0.0;
-        const magCodigo = u.magnitud?.codigo_magnitud || 'ADIMENSIONAL';
+        if (u.activo === false) {
+          delete rebuilt[cod];
+          continue;
+        }
+        activeCount++;
 
-        const existing = UomConversionService.UNIDADES_CANONICAS[cod];
-        UomConversionService.UNIDADES_CANONICAS[cod] = {
+        const existing = rebuilt[cod];
+        const factorA = u.factor_a !== null && u.factor_a !== undefined ? Number(u.factor_a) : 1.0;
+        const factorB = u.factor_b !== null && u.factor_b !== undefined ? Number(u.factor_b) : 0.0;
+        const magCodigo =
+          u.magnitud?.codigo_magnitud ||
+          u.tipo_magnitud ||
+          existing?.magnitudCodigo ||
+          'ADIMENSIONAL';
+        const simbolo = u.simbolo || existing?.simbolo || cod;
+        const aliases = Array.from(
+          new Set(
+            [
+              ...(existing?.aliases || []),
+              cod,
+              simbolo.toUpperCase().trim(),
+            ].filter(Boolean),
+          ),
+        );
+
+        rebuilt[cod] = {
           codigo: cod,
           nombre: u.nombre,
-          simbolo: u.simbolo || cod,
+          simbolo,
           magnitudCodigo: magCodigo,
           factorA,
           factorB,
           esUnidadBase: !!u.es_unidad_base,
           permiteDecimales: u.permite_decimales !== false,
-          aliases: existing?.aliases || [cod],
+          aliases,
         };
-        UomConversionService.ALIAS_MAP.set(cod, cod);
       }
-      return unidades.length;
+
+      for (const key of Object.keys(UomConversionService.UNIDADES_CANONICAS)) {
+        delete UomConversionService.UNIDADES_CANONICAS[key];
+      }
+      Object.assign(UomConversionService.UNIDADES_CANONICAS, rebuilt);
+
+      const newAliasMap = UomConversionService.buildAliasMap(UomConversionService.UNIDADES_CANONICAS);
+      UomConversionService.ALIAS_MAP.clear();
+      for (const [alias, canonical] of newAliasMap.entries()) {
+        UomConversionService.ALIAS_MAP.set(alias, canonical);
+      }
+
+      return activeCount;
     } catch {
       return 0;
     }
@@ -538,15 +590,7 @@ export class UomConversionService implements OnModuleInit {
   public static normalizarCodigo(unidad: string): string | null {
     if (!unidad || typeof unidad !== 'string') return null;
     const limpia = unidad.trim().toUpperCase().replace(/[\s_]+/g, '_');
-    // Casos especiales directos
-    if (limpia === '°C' || limpia === 'ºC' || limpia === 'C') return 'C';
-    if (limpia === '°F' || limpia === 'ºF' || limpia === 'F') return 'F';
-    if (limpia === 'M³' || limpia === 'M3') return 'M3_VOL';
-    if (limpia === 'M³/H' || limpia === 'M3/H') return 'M3H';
-    if (limpia === 'KV' || limpia === 'KILOVOLT') return 'KV_VOLT';
-
-    const match = UomConversionService.ALIAS_MAP.get(limpia);
-    return match || null;
+    return UomConversionService.ALIAS_MAP.get(limpia) || null;
   }
 
   /**

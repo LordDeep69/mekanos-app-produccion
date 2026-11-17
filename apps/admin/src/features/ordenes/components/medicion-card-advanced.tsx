@@ -287,7 +287,32 @@ export function MedicionCardAdvanced({
               <div className="flex items-center gap-1 mt-1">
                 <AlertTriangle className={cn('h-3 w-3', colors.icon)} />
                 <span className={cn('text-[10px] font-bold', colors.text)}>
-                  {medicion.mensaje_alerta || 'Fuera de rango'}
+                  {medicion.mensaje_alerta ||
+                    (() => {
+                      const val = medicion.valor_numerico;
+                      const minN = parametro?.valorMinimoNormal ?? parametro?.valor_minimo_normal;
+                      const maxN = parametro?.valorMaximoNormal ?? parametro?.valor_maximo_normal;
+                      const minC =
+                        parametro?.valorMinimoCritico ?? parametro?.valor_minimo_critico;
+                      const maxC =
+                        parametro?.valorMaximoCritico ?? parametro?.valor_maximo_critico;
+                      const u = unidad ? ` ${unidad}` : '';
+                      if (val != null) {
+                        if (minC != null && val < minC) {
+                          return `Valor crítico: ${val}${u} está por debajo del mínimo crítico (${minC}${u})`;
+                        }
+                        if (maxC != null && val > maxC) {
+                          return `Valor crítico: ${val}${u} supera el máximo crítico (${maxC}${u})`;
+                        }
+                        if (minN != null && val < minN) {
+                          return `Advertencia: ${val}${u} está por debajo del mínimo normal (${minN}${u})`;
+                        }
+                        if (maxN != null && val > maxN) {
+                          return `Advertencia: ${val}${u} supera el máximo normal (${maxN}${u})`;
+                        }
+                      }
+                      return 'Fuera de rango';
+                    })()}
                 </span>
               </div>
             )}

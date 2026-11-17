@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/branding_provider.dart';
 import '../../../core/config/environment.dart';
 import '../../../core/database/database_service.dart';
 import '../../../core/errors/user_friendly_error.dart';
@@ -17,6 +18,7 @@ import '../../../core/sync/sync_lifecycle_manager.dart';
 import '../../../core/sync/sync_state.dart';
 import '../../../core/sync/widgets/sync_indicator.dart';
 import '../../auth/data/auth_provider.dart';
+import '../../auth/presentation/logout_guard_dialog.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../historial/presentation/historial_screen.dart';
 import '../../notificaciones/presentation/notificaciones_badge.dart';
@@ -140,6 +142,7 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final branding = ref.watch(brandingProvider);
     final user = authState.user;
     final syncState = ref.watch(syncStateProvider);
     final statsAsync = ref.watch(quickStatsProvider);
@@ -157,7 +160,7 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text('MEKANOS'),
+        title: Text(branding.nombreComercial),
         centerTitle: true,
         elevation: 0,
         actions: [
@@ -183,7 +186,7 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
             ),
             onSelected: (value) async {
               if (value == 'logout') {
-                await ref.read(authStateProvider.notifier).logout();
+                await confirmarYCerrarSesion(context, ref);
               }
             },
             itemBuilder: (context) => [

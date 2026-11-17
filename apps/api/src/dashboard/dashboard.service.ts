@@ -51,21 +51,53 @@ export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * ✅ OPTIMIZADO: Dashboard completo con CACHE
-   * - Primera llamada: ejecuta queries (~1-2s)
-   * - Llamadas siguientes dentro de 60s: retorna cache (~0ms)
+   * Consulta las notificaciones no leídas exclusivamente para el usuario autenticado.
    */
-  async getDashboardCompleto(mes: number, anio: number) {
+  private async getNotificacionesNoLeidasUsuario(userId?: number) {
+    if (!userId) {
+      return [];
+    }
+
+    return this.prisma.notificaciones.findMany({
+      where: {
+        leida: false,
+        id_usuario: userId,
+      },
+      orderBy: [{ prioridad: 'desc' }, { fecha_creacion: 'desc' }],
+      take: 10,
+      select: {
+        id_notificacion: true,
+        tipo_notificacion: true,
+        titulo: true,
+        mensaje: true,
+        prioridad: true,
+        fecha_creacion: true,
+      },
+    });
+  }
+
+  /**
+   * ✅ OPTIMIZADO: Dashboard completo con CACHE agregado y notificaciones aisladas por usuario
+   */
+  async getDashboardCompleto(mes: number, anio: number, userId?: number) {
     const cacheKey = `${mes}-${anio}`;
 
-    // ✅ OPTIMIZACIÓN: Verificar cache válido
+    // ✅ OPTIMIZACIÓN: Verificar cache agregado válido (las notificaciones siempre son por usuario)
     if (
       dashboardCache &&
       Date.now() < dashboardCache.expiresAt &&
       dashboardCache.data?.cacheKey === cacheKey
     ) {
-      this.logger.debug('[Dashboard] ⚡ Retornando desde cache');
-      return dashboardCache.data;
+      this.logger.debug('[Dashboard] ⚡ Retornando agregado desde cache + alertas de usuario');
+      const notificacionesUsuario = await this.getNotificacionesNoLeidasUsuario(userId);
+      return {
+        ...dashboardCache.data,
+        alertas: {
+          ...dashboardCache.data.alertas,
+          notificacionesNoLeidas: notificacionesUsuario.length,
+          ultimasNotificaciones: notificacionesUsuario,
+        },
+      };
     }
 
     this.logger.debug('[Dashboard] 🔄 Ejecutando queries...');
@@ -74,20 +106,25 @@ export class DashboardService {
     // Precargar catálogos de estados (se usa en múltiples métodos)
     await this.ensureEstadosCache();
 
-    const [ordenes, comercial, alertas, resumenMes] = await Promise.all([
+    const [ordenes, comercial, alertasBase, resumenMes, notificacionesUsuario] = await Promise.all([
       this.getMetricasOrdenesOptimizado(),
       this.getMetricasComerciales(),
-      this.getAlertasActivasOptimizado(),
+      this.getAlertasAgregadasOptimizado(),
       this.getResumenMes(mes, anio),
+      this.getNotificacionesNoLeidasUsuario(userId),
     ]);
 
-    const result = {
+    const resultBase = {
       success: true,
       timestamp: new Date().toISOString(),
       periodo: { mes, anio },
       ordenes,
       comercial,
-      alertas,
+      alertas: {
+        ...alertasBase,
+        notificacionesNoLeidas: 0,
+        ultimasNotificaciones: [] as any[],
+      },
       resumenMes,
       cacheKey,
       _meta: {
@@ -96,14 +133,21 @@ export class DashboardService {
       },
     };
 
-    // ✅ Guardar en cache
+    // ✅ Guardar en cache solo datos agregados sin notificaciones personales
     dashboardCache = {
-      data: { ...result, _meta: { ...result._meta, cached: true } },
+      data: { ...resultBase, _meta: { ...resultBase._meta, cached: true } },
       expiresAt: Date.now() + DASHBOARD_CACHE_TTL,
     };
 
-    this.logger.debug(`[Dashboard] ✅ Completado en ${result._meta.queryTimeMs}ms`);
-    return result;
+    this.logger.debug(`[Dashboard] ✅ Completado en ${resultBase._meta.queryTimeMs}ms`);
+    return {
+      ...resultBase,
+      alertas: {
+        ...alertasBase,
+        notificacionesNoLeidas: notificacionesUsuario.length,
+        ultimasNotificaciones: notificacionesUsuario,
+      },
+    };
   }
 
   /**
@@ -182,9 +226,9 @@ export class DashboardService {
   }
 
   /**
-   * ✅ OPTIMIZADO: Alertas activas con queries reducidas
+   * ✅ OPTIMIZADO: Métricas agregadas de alertas sin notificaciones personales
    */
-  private async getAlertasActivasOptimizado() {
+  private async getAlertasAgregadasOptimizado() {
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() + 30);
 
@@ -196,27 +240,13 @@ export class DashboardService {
       ['PROGRAMADA', 'Programada'].includes(nombre),
     )?.[0];
 
-    // ✅ Ejecutar todas las queries de conteo en paralelo
+    // ✅ Ejecutar todas las queries de conteo agregado en paralelo
     const [
-      notificacionesNoLeidas,
       contratosPorVencer,
       ordenesVencidas,
       equiposCriticos,
       alertasStockCriticas,
     ] = await Promise.all([
-      this.prisma.notificaciones.findMany({
-        where: { leida: false },
-        orderBy: [{ prioridad: 'desc' }, { fecha_creacion: 'desc' }],
-        take: 10,
-        select: {
-          id_notificacion: true,
-          tipo_notificacion: true,
-          titulo: true,
-          mensaje: true,
-          prioridad: true,
-          fecha_creacion: true,
-        },
-      }),
       this.prisma.contratos_mantenimiento.count({
         where: {
           estado_contrato: 'ACTIVO',
@@ -240,13 +270,11 @@ export class DashboardService {
     ]);
 
     return {
-      notificacionesNoLeidas: notificacionesNoLeidas.length,
       contratosPorVencer,
       ordenesVencidas,
       equiposCriticos,
       alertasStockCriticas,
       totalAlertas: contratosPorVencer + ordenesVencidas + equiposCriticos + alertasStockCriticas,
-      ultimasNotificaciones: notificacionesNoLeidas,
     };
   }
 
@@ -372,23 +400,10 @@ export class DashboardService {
   }
 
   /**
-   * Alertas activas
+   * Alertas activas (notificaciones filtradas estrictamente por usuario autenticado)
    */
-  async getAlertasActivas() {
-    // Notificaciones no leídas (últimas 10)
-    const notificacionesNoLeidas = await this.prisma.notificaciones.findMany({
-      where: { leida: false },
-      orderBy: [{ prioridad: 'desc' }, { fecha_creacion: 'desc' }],
-      take: 10,
-      select: {
-        id_notificacion: true,
-        tipo_notificacion: true,
-        titulo: true,
-        mensaje: true,
-        prioridad: true,
-        fecha_creacion: true,
-      },
-    });
+  async getAlertasActivas(userId?: number) {
+    const notificacionesNoLeidas = await this.getNotificacionesNoLeidasUsuario(userId);
 
     // Contratos por vencer (30 días)
     const fechaLimite = new Date();

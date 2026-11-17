@@ -28,6 +28,7 @@ import {
   Unlock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { apiClient } from '@/lib/api/client';
 
 export interface HistorialItem {
@@ -190,24 +191,8 @@ function stripPrefijoCierre(text: string): string {
     .trim();
 }
 
-function formatFechaSegura(rawFecha?: string | Date | null): string {
-  if (!rawFecha) return 'Fecha registrada';
-  try {
-    const d = new Date(rawFecha);
-    if (isNaN(d.getTime())) return 'Fecha registrada';
-    return d.toLocaleString('es-CO', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return 'Fecha registrada';
-  }
-}
-
 export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
+  const { formatDateTime } = useOrgFormatters();
   const [historial, setHistorial] = useState<HistorialItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -272,7 +257,7 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
               orden?.fecha_creacion || orden?.fecha_programada || new Date().toISOString(),
             usuario: {
               nombre: 'Administrador del Sistema',
-              email: 'admin@mekanos.com',
+              email: 'sistema@organizacion.local',
             },
           },
         ];
@@ -350,7 +335,7 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
             const isFirst = index === 0;
 
             const rawFecha = item.fecha_cambio || item.fechaCambio;
-            const fechaStr = formatFechaSegura(rawFecha);
+            const fechaStr = rawFecha ? formatDateTime(rawFecha) : 'Fecha registrada';
 
             const motivoTexto =
               item.motivo_cambio ||

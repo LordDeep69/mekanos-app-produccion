@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../database/prisma.module';
 import { EquiposModule } from '../equipos/equipos.module';
 import { CatalogosEamService } from './catalogos-eam.service';
@@ -12,6 +13,7 @@ import { UnidadesController } from './controllers/unidades.controller';
 @Module({
   imports: [
     PrismaModule,
+    AuthModule,
     EquiposModule,
   ],
   controllers: [

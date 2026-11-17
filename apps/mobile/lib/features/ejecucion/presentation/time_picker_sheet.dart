@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 /// - Atajos de minutos (:00, :15, :30, :45)
 /// - Botones rápidos (Ahora, -30m, -1h, -2h, +30m, +1h)
 /// - Opción de abrir el reloj nativo del sistema si el técnico prefiere teclado o dial
-Future<TimeOfDay?> showMekanosTimePicker({
+Future<TimeOfDay?> showEamTimePicker({
   required BuildContext context,
   required TimeOfDay initialTime,
   required String title,
@@ -32,6 +32,17 @@ Future<TimeOfDay?> showMekanosTimePicker({
     ),
   );
 }
+
+@Deprecated('Usar showEamTimePicker en su lugar')
+Future<TimeOfDay?> showMekanosTimePicker({
+  required BuildContext context,
+  required TimeOfDay initialTime,
+  required String title,
+}) => showEamTimePicker(
+  context: context,
+  initialTime: initialTime,
+  title: title,
+);
 
 class TimePickerSheet extends StatefulWidget {
   final TimeOfDay initialTime;

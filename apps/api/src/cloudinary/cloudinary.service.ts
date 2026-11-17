@@ -10,11 +10,17 @@ import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 @Injectable()
 export class CloudinaryService {
   constructor(private readonly configService: ConfigService) {
-    // Configurar Cloudinary con credenciales ENV (cuenta PLANTAS)
+    // Configurar Cloudinary con credenciales ENV canónicas o fallback legado
     cloudinary.config({
-      cloud_name: this.configService.get<string>('CLOUDINARY_CLOUD_NAME_PLANTAS'),
-      api_key: this.configService.get<string>('CLOUDINARY_API_KEY_PLANTAS'),
-      api_secret: this.configService.get<string>('CLOUDINARY_API_SECRET_PLANTAS'),
+      cloud_name:
+        this.configService.get<string>('CLOUDINARY_CLOUD_NAME') ||
+        this.configService.get<string>('CLOUDINARY_CLOUD_NAME_PLANTAS'),
+      api_key:
+        this.configService.get<string>('CLOUDINARY_API_KEY') ||
+        this.configService.get<string>('CLOUDINARY_API_KEY_PLANTAS'),
+      api_secret:
+        this.configService.get<string>('CLOUDINARY_API_SECRET') ||
+        this.configService.get<string>('CLOUDINARY_API_SECRET_PLANTAS'),
     });
   }
 

@@ -20,7 +20,10 @@ import {
   AtributoTecnico,
   EamSelect,
   ROLES_SEMANTICOS_OPTIONS,
+  SelectorOptionsBuilder,
   TIPOS_CONTROL_HUMANOS,
+  buildOpcionesJson,
+  formatUnidadSimboloHumano,
   getModuloBadgeInfo,
   getRolSemanticoHumano,
   getTipoControlHumano,
@@ -86,7 +89,8 @@ export function TabDiccionarioAtributos() {
     id_magnitud: '',
     unidad_defecto_codigo: '',
     rol_semantico: 'ESTANDAR',
-    opciones_csv: '',
+    opciones: [] as string[],
+    permitir_otro: false,
   });
 
   const atributosFiltrados = useMemo(() => {
@@ -139,7 +143,8 @@ export function TabDiccionarioAtributos() {
       id_magnitud: '',
       unidad_defecto_codigo: '',
       rol_semantico: 'ESTANDAR',
-      opciones_csv: '',
+      opciones: [],
+      permitir_otro: false,
     });
     setShowModal(true);
   };
@@ -148,6 +153,10 @@ export function TabDiccionarioAtributos() {
     setEditingAttr(attr);
     setIsAutoCodigo(false);
     const parsedOps = parseOpcionesSeguras(attr.opciones_json);
+    const validacionObj =
+      attr.validacion_json && typeof attr.validacion_json === 'object'
+        ? (attr.validacion_json as Record<string, unknown>)
+        : null;
     setForm({
       codigo_atributo: attr.codigo_atributo,
       nombre_atributo: attr.nombre_atributo,
@@ -156,10 +165,8 @@ export function TabDiccionarioAtributos() {
       id_magnitud: attr.id_magnitud ? String(attr.id_magnitud) : '',
       unidad_defecto_codigo: attr.unidad_defecto_codigo || '',
       rol_semantico: attr.rol_semantico || 'ESTANDAR',
-      opciones_csv: parsedOps
-        .map((o) => o.label)
-        .filter(Boolean)
-        .join(', '),
+      opciones: parsedOps.map((o) => o.label).filter(Boolean),
+      permitir_otro: Boolean(validacionObj?.permitir_otro),
     });
     setShowModal(true);
   };
@@ -169,17 +176,14 @@ export function TabDiccionarioAtributos() {
     const isSelect = form.tipo_control === 'SELECTOR' || form.tipo_control === 'SELECT';
     const isNumMag = form.tipo_control === 'NUMERICO_MAGNITUD' || form.tipo_control === 'NUMERICO';
 
-    const opciones_json =
-      isSelect && form.opciones_csv.trim()
-        ? form.opciones_csv
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .map((item) => ({
-              valor: item.toUpperCase().replace(/\s+/g, '_'),
-              etiqueta: item,
-            }))
-        : undefined;
+    const opciones_json = isSelect ? buildOpcionesJson(form.opciones) : undefined;
+    const prevValidacion =
+      editingAttr?.validacion_json && typeof editingAttr.validacion_json === 'object'
+        ? (editingAttr.validacion_json as Record<string, unknown>)
+        : {};
+    const validacion_json = isSelect
+      ? { ...prevValidacion, permitir_otro: form.permitir_otro }
+      : editingAttr?.validacion_json ?? undefined;
 
     if (editingAttr) {
       await updateAttrMut.mutateAsync({
@@ -193,6 +197,7 @@ export function TabDiccionarioAtributos() {
             isNumMag && form.unidad_defecto_codigo ? form.unidad_defecto_codigo : null,
           rol_semantico: form.rol_semantico,
           opciones_json,
+          validacion_json,
         },
       });
     } else {
@@ -206,6 +211,7 @@ export function TabDiccionarioAtributos() {
           isNumMag && form.unidad_defecto_codigo ? form.unidad_defecto_codigo : undefined,
         rol_semantico: form.rol_semantico,
         opciones_json,
+        validacion_json,
       });
     }
     setShowModal(false);
@@ -394,9 +400,11 @@ export function TabDiccionarioAtributos() {
                             <div className="text-xs text-blue-700 font-semibold">
                               Unidad por defecto:{' '}
                               <strong>
-                                {attr.unidad_defecto_codigo ||
-                                  attr.magnitud.unidad_base_codigo ||
-                                  'Estándar'}
+                                {formatUnidadSimboloHumano(
+                                  attr.unidad_defecto_codigo || attr.magnitud.unidad_base_codigo,
+                                  attr.unidad_defecto,
+                                  magnitudes,
+                                ) || 'Estándar'}
                               </strong>
                             </div>
                           </div>
@@ -471,7 +479,7 @@ export function TabDiccionarioAtributos() {
       {/* MODAL CREAR / EDITAR CAMPO TÉCNICO */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
                 <Database className="h-5 w-5 text-blue-600" />
@@ -490,7 +498,7 @@ export function TabDiccionarioAtributos() {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form onSubmit={handleSave} className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Nombre del Campo Técnico *
@@ -672,19 +680,13 @@ export function TabDiccionarioAtributos() {
               )}
 
               {(form.tipo_control === 'SELECTOR' || form.tipo_control === 'SELECT') && (
-                <div className="bg-purple-50/60 p-4 rounded-xl border border-purple-200">
-                  <label className="block text-xs font-bold text-purple-900 mb-1">
-                    Opciones de la Lista Desplegable (separadas por coma) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej: Diésel (ACPM), Gas Natural, Gasolina, Eléctrico"
-                    value={form.opciones_csv}
-                    onChange={(e) => setForm({ ...form, opciones_csv: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-lg border border-purple-300 text-xs bg-white"
-                  />
-                </div>
+                <SelectorOptionsBuilder
+                  options={form.opciones}
+                  onChange={(next) => setForm({ ...form, opciones: next })}
+                  allowCustom={form.permitir_otro}
+                  onAllowCustomChange={(allow) => setForm({ ...form, permitir_otro: allow })}
+                  placeholder="Ej: 220/127 VAC"
+                />
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -732,7 +734,9 @@ export function TabDiccionarioAtributos() {
                     updateAttrMut.isPending ||
                     isCodigoDuplicado ||
                     !form.nombre_atributo.trim() ||
-                    !form.codigo_atributo.trim()
+                    !form.codigo_atributo.trim() ||
+                    ((form.tipo_control === 'SELECTOR' || form.tipo_control === 'SELECT') &&
+                      form.opciones.length === 0)
                   }
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >

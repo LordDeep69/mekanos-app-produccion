@@ -1,89 +1,91 @@
 @import "tailwindcss";
 
 /* ============================================================
-   MEKANOS S.A.S - Portal Admin - Sistema de Diseño
-   Colores de Identidad Corporativa + shadcn/ui
+   Portal Admin White-Label - Sistema de Diseño Reactivo
+   Tokens CSS alimentados en vivo por BrandingProvider (/api/configuracion/publica)
    ============================================================ */
 
 :root {
-  /* Colores MEKANOS Corporativos */
-  --mekanos-white: #F2F2F2;
-  --mekanos-blue: #244673;
-  --mekanos-blue-light: #3290A6;
-  --mekanos-green: #56A672;
-  --mekanos-green-light: #9EC23D;
+  --brand-background: #F4F6F9;
+  --brand-primary: #1E40AF;
+  --brand-secondary: #0F172A;
+  --brand-accent: #0EA5E9;
+  --brand-success: #16A34A;
+  --brand-warning: #D97706;
+  --brand-danger: #DC2626;
+  --brand-info: #0284C7;
 
-  /* Semánticos */
-  --mekanos-error: #DC2626;
-  --mekanos-warning: #F59E0B;
-  --mekanos-info: #3B82F6;
+  /* Alias de compatibilidad reactivos */
+  --mekanos-white: var(--brand-background);
+  --mekanos-blue: var(--brand-primary);
+  --mekanos-blue-light: var(--brand-accent);
+  --mekanos-green: var(--brand-success);
+  --mekanos-green-light: var(--brand-accent);
+  --mekanos-error: var(--brand-danger);
+  --mekanos-warning: var(--brand-warning);
+  --mekanos-info: var(--brand-info);
 
-  /* Variables shadcn/ui (requeridas por componentes) */
-  --background: 0 0% 95%;
-  /* #F2F2F2 aproximado en HSL */
+  /* Variables shadcn/ui */
+  --background: 210 20% 98%;
   --foreground: 215 28% 17%;
   --card: 0 0% 100%;
   --card-foreground: 215 28% 17%;
   --popover: 0 0% 100%;
   --popover-foreground: 215 28% 17%;
-  --primary: 217 52% 30%;
-  /* #244673 en HSL */
-  --primary-foreground: 0 0% 95%;
-  --secondary: 192 52% 42%;
-  /* #3290A6 en HSL */
-  --secondary-foreground: 0 0% 95%;
+  --primary: 224 71% 40%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 199 89% 48%;
+  --secondary-foreground: 0 0% 98%;
   --muted: 210 40% 96%;
   --muted-foreground: 215 16% 47%;
-  --accent: 145 31% 49%;
-  /* #56A672 en HSL */
-  --accent-foreground: 0 0% 95%;
+  --accent: 142 76% 36%;
+  --accent-foreground: 0 0% 98%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
   --border: 214 32% 91%;
   --input: 214 32% 91%;
-  --ring: 217 52% 30%;
-  /* Mismo que primary */
+  --ring: 224 71% 40%;
   --radius: 0.5rem;
 
-  /* Sidebar específico */
-  --sidebar-background: #244673;
-  --sidebar-foreground: #F2F2F2;
+  --sidebar-background: var(--brand-secondary);
+  --sidebar-foreground: #F8FAFC;
 }
 
 @theme inline {
-  /* Colores base */
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  /* Colores MEKANOS extendidos para uso directo */
-  --color-mekanos-white: #F2F2F2;
-  --color-mekanos-blue: #244673;
-  --color-mekanos-blue-light: #3290A6;
-  --color-mekanos-blue-dark: #1a3456;
-  --color-mekanos-green: #56A672;
-  --color-mekanos-green-light: #9EC23D;
+  /* Tokens reactivos White-Label */
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-success: var(--brand-success);
+  --color-brand-warning: var(--brand-warning);
+  --color-brand-danger: var(--brand-danger);
 
-  /* Alias semánticos */
-  --color-mekanos-primary: #244673;
-  --color-mekanos-accent: #3290A6;
+  /* Alias reactivos para utilidades existentes */
+  --color-mekanos-white: var(--brand-background);
+  --color-mekanos-blue: var(--brand-primary);
+  --color-mekanos-blue-light: var(--brand-accent);
+  --color-mekanos-blue-dark: var(--brand-secondary);
+  --color-mekanos-green: var(--brand-success);
+  --color-mekanos-green-light: var(--brand-accent);
+  --color-mekanos-primary: var(--brand-primary);
+  --color-mekanos-accent: var(--brand-accent);
+  --color-mekanos-error: var(--brand-danger);
+  --color-mekanos-warning: var(--brand-warning);
+  --color-mekanos-info: var(--brand-info);
+  --color-mekanos-success: var(--brand-success);
 
-  /* Estados */
-  --color-mekanos-error: #DC2626;
-  --color-mekanos-warning: #F59E0B;
-  --color-mekanos-info: #3B82F6;
-  --color-mekanos-success: #56A672;
-
-  /* Superficies */
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-sidebar: #244673;
-  --color-sidebar-foreground: #F2F2F2;
+  --color-sidebar: var(--brand-secondary);
+  --color-sidebar-foreground: #F8FAFC;
 
-  /* shadcn variables como colores Tailwind */
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
   --color-secondary: hsl(var(--secondary));
@@ -105,26 +107,24 @@ body {
   min-height: 100vh;
 }
 
-/* Scrollbar personalizada */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #244673;
+  background: var(--brand-primary);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3290A6;
+  background: var(--brand-accent);
 }
 
-/* Scrollbar sutil y minimalista para popovers, selectores y paneles */
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.55) transparent;

@@ -98,30 +98,33 @@ async function bootstrap(): Promise<void> {
 
     // 🔧 SWAGGER/OPENAPI - Documentación interactiva
     console.log('🔧 [DEBUG 5.1] Configurando Swagger/OpenAPI...');
+    const appName = process.env.APP_NAME || 'EAM Platform API';
+    const appWebsite = process.env.APP_WEBSITE || 'https://example.com';
+    const appContactEmail = process.env.APP_CONTACT_EMAIL || 'soporte@example.com';
+
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('MEKANOS API')
+      .setTitle(appName)
       .setDescription(`
-        ## Sistema Digital Integrado Mekanos S.A.S
+        ## Plataforma Enterprise Asset Management (EAM / CMMS) White-Label
         
         ### API de Backend para:
-        - 📱 App Móvil (Técnicos)
-        - 🖥️ Portal Admin (Asesoras/Gerencia)
-        - 🌐 Portal Cliente (Autoservicio)
+        - App Móvil Offline-First (Técnicos)
+        - Portal Web Administrativo (Asesoras/Gerencia)
+        - Portal Cliente (Autoservicio)
         
-        ### Módulos disponibles:
-        - **FASE 1:** Equipos (8 tablas)
-        - **FASE 2:** Usuarios (16 tablas)
-        - **FASE 3:** Órdenes de Servicio (18 tablas)
-        - **FASE 4:** Cotizaciones (8 tablas)
-        - **FASE 5:** Inventario (8 tablas)
-        - **FASE 6:** Informes (6 tablas)
-        - **FASE 7:** Cronogramas (5 tablas)
+        ### Módulos principales:
+        - Equipos, Catálogos EAM y Configuraciones Dinámicas
+        - Usuarios, Roles y Permisos Granulares (RBAC)
+        - Órdenes de Servicio, Mediciones, Evidencias y Firmas
+        - Comercial (Cotizaciones, Propuestas, Contratos y Cronogramas)
+        - Inventario, Remisiones y Órdenes de Compra
+        - Informes PDF y Notificaciones Transaccionales
         
         ### Autenticación:
         Usar Bearer Token JWT obtenido en \`/api/auth/login\`
       `)
       .setVersion('1.0.0')
-      .setContact('Mekanos S.A.S', 'https://mekanos.com', 'info@mekanos.com')
+      .setContact(appName, appWebsite, appContactEmail)
       .addBearerAuth(
         {
           type: 'http',
@@ -152,7 +155,7 @@ async function bootstrap(): Promise<void> {
 
     const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api/docs', app, swaggerDocument, {
-      customSiteTitle: 'MEKANOS API Docs',
+      customSiteTitle: `${appName} Docs`,
       customCss: '.swagger-ui .topbar { display: none }',
       swaggerOptions: {
         persistAuthorization: true,
@@ -164,13 +167,11 @@ async function bootstrap(): Promise<void> {
     console.log('✅ [DEBUG 5.2] Swagger configurado en /api/docs');
 
     console.log('🔧 [DEBUG 6/10] Configurando CORS...');
-    // ✅ FIX 04-FEB-2026: Lista de dominios permitidos por defecto
+    // Orígenes locales por defecto para desarrollo y compose; en producción definir CORS_ORIGIN
     const defaultOrigins = [
-      'https://mekanos-admin-portal.vercel.app',
-      'https://mekanos-admin-portal-git-main-lorddeep69s-projects.vercel.app',
-      'https://mekanos-admin-portal-ll0loftrq-lorddeep69s-projects.vercel.app',
       'http://localhost:3001',
       'http://localhost:3000',
+      'http://127.0.0.1:3001',
     ];
 
     // Convertir CORS_ORIGIN en array si contiene múltiples orígenes
@@ -201,8 +202,8 @@ async function bootstrap(): Promise<void> {
     console.log('🔧 [DEBUG 8/10] Configurando ValidationPipe...');
     app.useGlobalPipes(
       new ValidationPipe({
-        whitelist: false, // ← TEMPORAL: Permitir campos no decorados para MVP/Bootstrapping
-        forbidNonWhitelisted: false, // ← TEMPORAL: No rechazar campos extras
+        whitelist: true,
+        forbidNonWhitelisted: true,
         transform: true,
         transformOptions: {
           enableImplicitConversion: true,
@@ -245,7 +246,7 @@ async function bootstrap(): Promise<void> {
     console.log('✅ [BOOTSTRAP COMPLETO] Server address:', JSON.stringify(address));
     console.log('✅ [BOOTSTRAP COMPLETO] Proceso Node PID:', process.pid);
 
-    logger.log(`🚀 Mekanos API running on: http://localhost:${port}/api`);
+    logger.log(`🚀 ${appName} running on: http://localhost:${port}/api`);
     logger.log(`📚 Swagger Docs: http://localhost:${port}/api/docs`);
     logger.log(`📊 GraphQL Playground: http://localhost:${port}/graphql`);
     logger.log(`❤️  Health check: http://localhost:${port}/api/health`);

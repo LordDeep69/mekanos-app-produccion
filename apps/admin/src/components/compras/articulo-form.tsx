@@ -1072,7 +1072,7 @@ export function ArticuloForm({
                   Es Activo Fijo
                 </Label>
                 <p className="text-[11px] text-gray-500">
-                  Herramienta o equipo patrimonial de Mekanos
+                  Herramienta o equipo patrimonial de la organización
                 </p>
               </div>
               <Switch

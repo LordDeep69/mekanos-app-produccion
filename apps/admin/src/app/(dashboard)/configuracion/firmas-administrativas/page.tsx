@@ -7,7 +7,7 @@ import { FirmasAdministrativasTable } from '@/features/firmas-administrativas';
 import { Building2 } from 'lucide-react';
 
 export const metadata = {
-    title: 'Firmas Administrativas | MEKANOS Admin',
+    title: 'Firmas Administrativas | EAM Admin',
     description: 'Gestión de firmas administrativas',
 };
 

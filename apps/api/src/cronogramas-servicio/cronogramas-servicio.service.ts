@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
+import { Prisma } from '@prisma/client';
 import { CreateCronogramasServicioDto } from './dto/create-cronogramas-servicio.dto';
 import { UpdateCronogramasServicioDto } from './dto/update-cronogramas-servicio.dto';
 
@@ -14,7 +15,7 @@ export class CronogramasServicioService {
   async create(createDto: CreateCronogramasServicioDto) {
     try {
       return await this.prisma.cronogramas_servicio.create({
-        data: createDto as any,
+        data: createDto as unknown as Prisma.cronogramas_servicioUncheckedCreateInput,
       });
     } catch (error: unknown) {
       throw new InternalServerErrorException(
@@ -79,7 +80,7 @@ export class CronogramasServicioService {
 
       return await this.prisma.cronogramas_servicio.update({
         where: { id_cronograma: id },
-        data: updateDto as any,
+        data: updateDto as unknown as Prisma.cronogramas_servicioUncheckedUpdateInput,
       });
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {

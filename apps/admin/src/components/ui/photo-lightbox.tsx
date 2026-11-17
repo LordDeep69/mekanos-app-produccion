@@ -42,6 +42,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { toast } from 'sonner';
 
 export interface LightboxImageItem {
@@ -136,6 +137,7 @@ export function PhotoLightbox({
   canEdit = false,
   canDelete = false,
 }: PhotoLightboxProps) {
+  const { formatDateTime } = useOrgFormatters();
   const [index, setIndex] = useState(initialIndex);
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -925,10 +927,7 @@ export function PhotoLightbox({
               {currentImage.date && (
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3 text-white/50" />
-                  {new Date(currentImage.date).toLocaleString('es-CO', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}
+                  {formatDateTime(currentImage.date)}
                 </span>
               )}
 

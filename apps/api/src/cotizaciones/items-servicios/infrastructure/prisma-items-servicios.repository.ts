@@ -2,7 +2,6 @@
 
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
-import { getNextTableId } from '../../../common/utils/next-id.helper';
 import { ItemsCotizacionServiciosRepository } from '../domain/items-cotizacion-servicios.repository.interface';
 import { ItemCotizacionServicio } from '../domain/item-cotizacion-servicio.entity';
 
@@ -40,15 +39,9 @@ export class PrismaItemsServiciosRepository implements ItemsCotizacionServiciosR
     // Calcular subtotal antes de guardar
     const itemTemp = new ItemCotizacionServicio(data);
     const subtotalCalculado = itemTemp.calcularSubtotal();
-    const idItemServicio = await getNextTableId(
-      this.prisma,
-      'items_cotizacion_servicios',
-      'id_item_servicio',
-    );
 
     const itemCreado = await this.prisma.items_cotizacion_servicios.create({
       data: {
-        id_item_servicio: idItemServicio,
         id_cotizacion: data.id_cotizacion!,
         id_servicio: data.id_servicio!,
         cantidad: data.cantidad ?? 1,

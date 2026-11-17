@@ -2,7 +2,6 @@
 
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
-import { getNextTableId } from '../../../common/utils/next-id.helper';
 import { ItemsCotizacionComponentesRepository } from '../domain/items-cotizacion-componentes.repository.interface';
 import { ItemCotizacionComponente } from '../domain/item-cotizacion-componente.entity';
 
@@ -40,15 +39,9 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
   async save(data: Partial<ItemCotizacionComponente>): Promise<ItemCotizacionComponente> {
     const itemTemp = new ItemCotizacionComponente(data);
     const subtotalCalculado = itemTemp.calcularSubtotal();
-    const idItemComponente = await getNextTableId(
-      this.prisma,
-      'items_cotizacion_componentes',
-      'id_item_componente',
-    );
 
     const itemCreado = await this.prisma.items_cotizacion_componentes.create({
       data: {
-        id_item_componente: idItemComponente,
         id_cotizacion: data.id_cotizacion!,
         id_componente: data.id_componente,
         id_tipo_componente: data.id_tipo_componente!,

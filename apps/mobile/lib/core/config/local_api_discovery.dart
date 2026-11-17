@@ -1,11 +1,10 @@
-/// Descubrimiento y verificación Zero-Trust de servidores Mekanos API.
+/// Descubrimiento y verificación Zero-Trust de servidores EAM API.
 ///
-/// Garantiza que la opción "Local" conecte al backend Mekanos real
-/// independientemente de la IP DHCP actual de la PC servidora, probando:
+/// Conecta al backend EAM/CMMS real en red local independientemente de DHCP:
 /// 1. Rutas IP-independientes (USB `adb reverse` 127.0.0.1, Emulador 10.0.2.2,
 ///    mDNS `<hostname>.local`, y caché de la última sesión local exitosa).
-/// 2. Escaneo paralelo TCP en puerto 3000 sobre las subredes Wi-Fi / LAN reales
-///    del dispositivo, validando identidad mediante `GET /api/health`.
+/// 2. Escaneo paralelo TCP en `Environment.localPort` sobre subredes Wi-Fi / LAN
+///    validando identidad mediante `GET /api/health`.
 library;
 
 import 'dart:async';
@@ -13,26 +12,28 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kReleaseMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_config.dart';
 import 'environment.dart';
 
-/// Hash SHA-256 UTF-8 de la contraseña por defecto (`mekanos#qa`) para evitar
-/// exponer credenciales en texto claro dentro del binario.
-const String _defaultQaUnlockSha256 =
+/// Hash SHA-256 solo disponible en debug/test cuando no se inyecta por --dart-define.
+/// En builds `--release` jamás se embeben credenciales QA por defecto.
+const String _debugOnlyQaUnlockSha256 =
     'a7917ff099c2196829b89bb84d8bcb4a7a6944a8489038e1d235d2c39c3219d4';
 
-const String _configuredQaUnlockSha256 = String.fromEnvironment(
-  'MEKANOS_QA_PASS_SHA256',
-  defaultValue: _defaultQaUnlockSha256,
-);
-
 /// Valida la contraseña de desbloqueo QA comparando su digest SHA-256
-/// en tiempo constante.
+/// en tiempo constante. En builds release sin `QA_PASS_SHA256` retorna `false`.
 bool verifyQaUnlockPassword(String password) {
+  if (!AppConfig.enableQaServerSwitcher) return false;
+  final configured = AppConfig.qaPassSha256.trim().toLowerCase();
+  final expected = configured.isNotEmpty
+      ? configured
+      : (kReleaseMode ? '' : _debugOnlyQaUnlockSha256);
+  if (expected.isEmpty || password.isEmpty) return false;
+
   final actual = sha256Hex(password);
-  final expected = _configuredQaUnlockSha256.toLowerCase();
   if (actual.length != expected.length) return false;
   var diff = 0;
   for (var i = 0; i < actual.length; i++) {
@@ -125,8 +126,11 @@ String sha256Hex(String input) {
   return buffer.toString();
 }
 
-/// Servidor Mekanos API verificado mediante respuesta auténtica de `/api/health`.
-class VerifiedMekanosServer {
+/// Alias temporal para retrocompatibilidad con suites existentes.
+typedef VerifiedMekanosServer = VerifiedApiServer;
+
+/// Servidor EAM/CMMS API verificado mediante respuesta auténtica de `/api/health`.
+class VerifiedApiServer {
   final String baseUrl;
   final String originLabel;
   final String? hostname;
@@ -135,7 +139,7 @@ class VerifiedMekanosServer {
   final String? version;
   final int latencyMs;
 
-  const VerifiedMekanosServer({
+  const VerifiedApiServer({
     required this.baseUrl,
     required this.originLabel,
     required this.latencyMs,
@@ -145,8 +149,8 @@ class VerifiedMekanosServer {
     this.version,
   });
 
-  /// Valida que el payload JSON corresponda inequívocamente a Mekanos API.
-  static VerifiedMekanosServer? tryFromHealthJson(
+  /// Valida que el payload JSON corresponda a una instancia auténtica del backend EAM.
+  static VerifiedApiServer? tryFromHealthJson(
     dynamic data, {
     required String baseUrl,
     required String originLabel,
@@ -158,16 +162,20 @@ class VerifiedMekanosServer {
     if (status != 'ok' && status != 'healthy') return null;
 
     final service = (data['service']?.toString() ?? '').trim();
-    final app = (data['app']?.toString() ?? '').trim();
+    final app = (data['app']?.toString() ?? '').trim().toLowerCase();
     final hasExplicitIdentity = service.isNotEmpty || app.isNotEmpty;
 
     if (hasExplicitIdentity) {
-      if (service != 'Mekanos API' && app != 'mekanos-api') {
+      final validApp = app == 'eam-api' || app == 'mekanos-api' || app.endsWith('-eam-api');
+      final validService =
+          service == 'EAM API' ||
+          service == 'Mekanos API' ||
+          service.toUpperCase().contains('EAM');
+      if (!validApp && !validService) {
         return null;
       }
     } else {
-      // Compatibilidad con deploys anteriores de Producción que solo exponían
-      // el contrato de AppService.getHealth (database + commit + environment).
+      // Compatibilidad con respuestas /health que exponen database + commit + environment.
       final db = (data['database']?.toString() ?? '').trim().toLowerCase();
       final commit = _nonEmpty(data['commit']);
       final env = _nonEmpty(data['environment']);
@@ -178,7 +186,7 @@ class VerifiedMekanosServer {
       }
     }
 
-    return VerifiedMekanosServer(
+    return VerifiedApiServer(
       baseUrl: baseUrl,
       originLabel: originLabel,
       hostname: _nonEmpty(data['hostname']),
@@ -353,7 +361,7 @@ class LocalApiDiscovery {
       }
 
       if (openIps.isNotEmpty) {
-        onProgress?.call('Verificando identidad Mekanos API (${openIps.length})...');
+        onProgress?.call('Verificando identidad API (${openIps.length})...');
         final verified = await Future.wait(
           openIps.map(
             (ip) => verifyHealth(
@@ -371,7 +379,7 @@ class LocalApiDiscovery {
 
     final list = found.values.toList();
     list.sort((a, b) => a.latencyMs.compareTo(b.latencyMs));
-    debugPrint('🔎 [Discovery] Encontrados ${list.length} servidor(es) Mekanos local(es)');
+    debugPrint('🔎 [Discovery] Encontrados ${list.length} servidor(es) local(es)');
     return list;
   }
 

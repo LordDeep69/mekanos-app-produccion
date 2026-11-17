@@ -81,6 +81,9 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useArquetiposEam } from '@/features/catalogos-eam/hooks/use-catalogos-eam';
+import { resolveEquipoLucideIcon } from '@/lib/equipo-icon';
+import { useBranding } from '@/providers/branding-provider';
 import { getClientes } from '../api/clientes.service';
 import { useClientes, useDeleteCliente, useRefreshClientes } from '../hooks/use-clientes';
 import { EquiposClienteTable } from './equipos-cliente-table';
@@ -90,13 +93,13 @@ type SortField = 'codigo' | 'nombre' | 'nit' | 'tipo' | 'estado';
 
 export function ClientesTable() {
   const router = useRouter();
+  const { branding } = useBranding();
+  const { data: arquetiposCatalog } = useArquetiposEam();
   const [page, setPage] = useState(0);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<TipoClienteEnum | 'TODOS'>('TODOS');
-  const [tipoEquipoFilter, setTipoEquipoFilter] = useState<
-    'TODOS' | 'PLANTAS' | 'BOMBAS' | 'AMBOS' | 'SIN_EQUIPOS'
-  >('TODOS');
+  const [tipoEquipoFilter, setTipoEquipoFilter] = useState<string>('TODOS');
   const [estructuraFilter, setEstructuraFilter] = useState<
     'TODOS' | 'PRINCIPALES' | 'SEDES' | 'INDEPENDIENTES'
   >('TODOS');
@@ -154,7 +157,7 @@ export function ClientesTable() {
   };
 
   const handleTipoEquipoChange = (value: string) => {
-    setTipoEquipoFilter(value as 'TODOS' | 'PLANTAS' | 'BOMBAS' | 'AMBOS' | 'SIN_EQUIPOS');
+    setTipoEquipoFilter(value);
     setPage(0);
   };
 
@@ -249,10 +252,8 @@ export function ClientesTable() {
         'Ciudad',
         'Dirección',
         'Google Maps URL',
-        'Tiene Plantas',
-        'Total Plantas',
-        'Tiene Bombas',
-        'Total Bombas',
+        'Total Equipos',
+        'Desglose por Tipo',
         'Estado',
       ];
 
@@ -276,10 +277,10 @@ export function ClientesTable() {
         const ciudad = c.persona?.ciudad || '';
         const dir = c.persona?.direccion_principal || '';
         const mapsUrl = c.persona?.url_ubicacion || '';
-        const tienePlantas = c.tiene_plantas ? 'SÍ' : 'NO';
-        const totalPlantas = c.total_equipos_plantas || 0;
-        const tieneBombas = c.tiene_bombas ? 'SÍ' : 'NO';
-        const totalBombas = c.total_equipos_bombas || 0;
+        const totalEquipos = c.total_equipos || 0;
+        const desgloseTipos = (c.resumen_equipos_por_tipo || [])
+          .map((t) => `${t.nombre_tipo}: ${t.cantidad}`)
+          .join(', ');
         const estado = c.cliente_activo ? 'Activo' : 'Inactivo';
 
         return [
@@ -296,10 +297,8 @@ export function ClientesTable() {
           `"${ciudad.replace(/"/g, '""')}"`,
           `"${dir.replace(/"/g, '""')}"`,
           `"${mapsUrl.replace(/"/g, '""')}"`,
-          `"${tienePlantas}"`,
-          totalPlantas,
-          `"${tieneBombas}"`,
-          totalBombas,
+          totalEquipos,
+          `"${desgloseTipos.replace(/"/g, '""')}"`,
           `"${estado}"`,
         ].join(';');
       });
@@ -309,8 +308,13 @@ export function ClientesTable() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       const dateStr = new Date().toISOString().split('T')[0];
+      const orgSlug =
+        (branding?.nombre_comercial || 'empresa')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_|_$/g, '') || 'empresa';
       link.setAttribute('href', url);
-      link.setAttribute('download', `clientes_mekanos_${dateStr}.csv`);
+      link.setAttribute('download', `clientes_${orgSlug}_${dateStr}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -428,80 +432,99 @@ export function ClientesTable() {
           </CardContent>
         </Card>
 
-        {/* Card 2: Clientes con Plantas */}
-        <Card
-          onClick={() => {
-            setTipoEquipoFilter((prev) => (prev === 'PLANTAS' ? 'TODOS' : 'PLANTAS'));
-            setPage(0);
-          }}
-          className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
-            tipoEquipoFilter === 'PLANTAS'
-              ? 'ring-2 ring-amber-500 bg-amber-50/70 border-amber-300'
-              : 'border-border/80 hover:border-amber-400/60'
-          }`}
-        >
-          <CardContent className="p-3 sm:p-4 flex items-center justify-between gap-1.5">
-            <div className="space-y-0.5 min-w-0">
-              <p className="text-[10px] sm:text-xs font-semibold text-amber-700 uppercase tracking-wider truncate">
-                Con Plantas
-              </p>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="text-lg sm:text-2xl font-bold tracking-tight text-amber-950">
-                  {summary?.con_plantas ?? 0}
-                </span>
-                <span className="text-[10px] sm:text-xs text-amber-700/80">clientes</span>
-              </div>
-              <p className="text-[10px] sm:text-xs text-amber-600/90 truncate hidden sm:block">
-                {tipoEquipoFilter === 'PLANTAS' ? '✓ Filtro activo' : 'Clic para filtrar'}
-              </p>
-            </div>
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-              <Zap className="h-4 w-4 sm:h-5 sm:w-5 fill-amber-500 text-amber-500" />
-            </div>
-          </CardContent>
-        </Card>
+        {/* Cards 2 y 3: Principales tipos de activo atendidos (dinámico desde API) */}
+        {(summary?.por_tipo_equipo || []).slice(0, 2).map((tipoStat, idx) => {
+          const isSelected = tipoEquipoFilter === tipoStat.codigo_tipo;
+          const arqMatch = arquetiposCatalog?.find(
+            (a) =>
+              a.id_tipo_equipo === tipoStat.id_tipo_equipo ||
+              a.codigo_tipo?.toUpperCase() === tipoStat.codigo_tipo?.toUpperCase(),
+          );
+          const TipoIcon = resolveEquipoLucideIcon(arqMatch?.icono_ui ?? arqMatch?.icono, tipoStat.codigo_tipo);
+          const accentColor = arqMatch?.color_hex ?? arqMatch?.color ?? (idx === 0 ? '#D97706' : '#2563EB');
+          return (
+            <Card
+              key={`${tipoStat.codigo_tipo}-${tipoStat.id_tipo_equipo ?? idx}`}
+              onClick={() => {
+                setTipoEquipoFilter((prev) =>
+                  prev === tipoStat.codigo_tipo ? 'TODOS' : tipoStat.codigo_tipo,
+                );
+                setPage(0);
+              }}
+              className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+                isSelected ? 'ring-2 ring-primary bg-primary/5 border-primary/40' : 'border-border/80'
+              }`}
+            >
+              <CardContent className="p-3 sm:p-4 flex items-center justify-between gap-1.5">
+                <div className="space-y-0.5 min-w-0">
+                  <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate text-slate-700">
+                    Con {tipoStat.nombre_tipo}
+                  </p>
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <span className="text-lg sm:text-2xl font-bold tracking-tight text-slate-900">
+                      {tipoStat.total_clientes}
+                    </span>
+                    <span className="text-[10px] sm:text-xs text-muted-foreground">
+                      ({tipoStat.total_equipos} eq.)
+                    </span>
+                  </div>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground truncate hidden sm:block">
+                    {isSelected ? '✓ Filtro activo' : 'Clic para filtrar'}
+                  </p>
+                </div>
+                <div
+                  className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: `${accentColor}1A`, color: accentColor }}
+                >
+                  <TipoIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
 
-        {/* Card 3: Clientes con Bombas */}
-        <Card
-          onClick={() => {
-            setTipoEquipoFilter((prev) => (prev === 'BOMBAS' ? 'TODOS' : 'BOMBAS'));
-            setPage(0);
-          }}
-          className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
-            tipoEquipoFilter === 'BOMBAS'
-              ? 'ring-2 ring-blue-500 bg-blue-50/70 border-blue-300'
-              : 'border-border/80 hover:border-blue-400/60'
-          }`}
-        >
-          <CardContent className="p-3 sm:p-4 flex items-center justify-between gap-1.5">
-            <div className="space-y-0.5 min-w-0">
-              <p className="text-[10px] sm:text-xs font-semibold text-blue-700 uppercase tracking-wider truncate">
-                Con Bombas
-              </p>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="text-lg sm:text-2xl font-bold tracking-tight text-blue-950">
-                  {summary?.con_bombas ?? 0}
-                </span>
-                <span className="text-[10px] sm:text-xs text-blue-700/80">clientes</span>
+        {(summary?.por_tipo_equipo?.length ?? 0) < 2 && (
+          <Card
+            onClick={() => {
+              setTipoEquipoFilter((prev) => (prev === 'SIN_EQUIPOS' ? 'TODOS' : 'SIN_EQUIPOS'));
+              setPage(0);
+            }}
+            className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+              tipoEquipoFilter === 'SIN_EQUIPOS'
+                ? 'ring-2 ring-primary bg-primary/5 border-primary/40'
+                : 'border-border/80'
+            }`}
+          >
+            <CardContent className="p-3 sm:p-4 flex items-center justify-between gap-1.5">
+              <div className="space-y-0.5 min-w-0">
+                <p className="text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wider truncate">
+                  Sin Activos
+                </p>
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-lg sm:text-2xl font-bold tracking-tight text-slate-900">
+                    {summary?.sin_equipos ?? 0}
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-muted-foreground">clientes</span>
+                </div>
+                <p className="text-[10px] sm:text-xs text-muted-foreground truncate hidden sm:block">
+                  {tipoEquipoFilter === 'SIN_EQUIPOS' ? '✓ Filtro activo' : 'Clic para filtrar'}
+                </p>
               </div>
-              <p className="text-[10px] sm:text-xs text-blue-600/90 truncate hidden sm:block">
-                {tipoEquipoFilter === 'BOMBAS' ? '✓ Filtro activo' : 'Clic para filtrar'}
-              </p>
-            </div>
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-              <Droplets className="h-4 w-4 sm:h-5 sm:w-5 fill-blue-500 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
+              <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                <Wrench className="h-4 w-4 sm:h-5 sm:w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Card 4: Plantas y Bombas / Estructura */}
+        {/* Card 4: Estructura Corporativa (Matrices / Sedes) */}
         <Card
           onClick={() => {
-            setTipoEquipoFilter((prev) => (prev === 'AMBOS' ? 'TODOS' : 'AMBOS'));
+            setEstructuraFilter((prev) => (prev === 'PRINCIPALES' ? 'TODOS' : 'PRINCIPALES'));
             setPage(0);
           }}
           className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
-            tipoEquipoFilter === 'AMBOS'
+            estructuraFilter !== 'TODOS'
               ? 'ring-2 ring-purple-500 bg-purple-50/70 border-purple-300'
               : 'border-border/80 hover:border-purple-400/60'
           }`}
@@ -509,13 +532,13 @@ export function ClientesTable() {
           <CardContent className="p-3 sm:p-4 flex items-center justify-between gap-1.5">
             <div className="space-y-0.5 min-w-0">
               <p className="text-[10px] sm:text-xs font-semibold text-purple-700 uppercase tracking-wider truncate">
-                Ambos Equipos
+                Estructura Sedes
               </p>
               <div className="flex items-baseline gap-1.5 flex-wrap">
                 <span className="text-lg sm:text-2xl font-bold tracking-tight text-purple-950">
-                  {summary?.con_ambos ?? 0}
+                  {(summary?.corporativos ?? 0) + (summary?.sedes ?? 0)}
                 </span>
-                <span className="text-[10px] sm:text-xs text-purple-700/80">mixtos</span>
+                <span className="text-[10px] sm:text-xs text-purple-700/80">vínculos</span>
               </div>
               <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground truncate hidden sm:flex">
                 <button
@@ -632,34 +655,40 @@ export function ClientesTable() {
             </SelectContent>
           </Select>
 
-          {/* Filtro por tipo de equipo (Plantas / Bombas) */}
+          {/* Filtro dinámico por arquetipo de equipo */}
           <Select value={tipoEquipoFilter} onValueChange={handleTipoEquipoChange}>
-            <SelectTrigger className="w-full sm:w-[190px] h-9 text-xs sm:text-sm">
+            <SelectTrigger className="w-full sm:w-[200px] h-9 text-xs sm:text-sm">
               <SelectValue placeholder="Equipos" />
             </SelectTrigger>
             <SelectContent className="bg-white border border-slate-200 shadow-xl z-50">
               <SelectItem value="TODOS">Todos los equipos</SelectItem>
-              <SelectItem value="PLANTAS">
-                <span className="flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-                  <span>Con Plantas</span>
-                </span>
-              </SelectItem>
-              <SelectItem value="BOMBAS">
-                <span className="flex items-center gap-1.5">
-                  <Droplets className="h-3.5 w-3.5 text-blue-500 fill-blue-500" />
-                  <span>Con Bombas</span>
-                </span>
-              </SelectItem>
-              <SelectItem value="AMBOS">
-                <span className="flex items-center gap-1.5">
-                  <span className="flex -space-x-1">
-                    <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-                    <Droplets className="h-3.5 w-3.5 text-blue-500 fill-blue-500" />
-                  </span>
-                  <span>Plantas y Bombas</span>
-                </span>
-              </SelectItem>
+              {(arquetiposCatalog?.length
+                ? arquetiposCatalog.map((a) => ({
+                    codigo: a.codigo_tipo,
+                    nombre: a.nombre_tipo,
+                    icono: a.icono_ui ?? a.icono,
+                    color: a.color_hex ?? a.color,
+                  }))
+                : (summary?.por_tipo_equipo || []).map((t) => ({
+                    codigo: t.codigo_tipo,
+                    nombre: t.nombre_tipo,
+                    icono: undefined,
+                    color: undefined,
+                  }))
+              ).map((item) => {
+                const ItemIcon = resolveEquipoLucideIcon(item.icono, item.codigo);
+                return (
+                  <SelectItem key={item.codigo} value={item.codigo}>
+                    <span className="flex items-center gap-1.5">
+                      <ItemIcon
+                        className="h-3.5 w-3.5"
+                        style={item.color ? { color: item.color } : undefined}
+                      />
+                      <span>Con {item.nombre}</span>
+                    </span>
+                  </SelectItem>
+                );
+              })}
               <SelectItem value="SIN_EQUIPOS">
                 <span className="text-muted-foreground">Sin equipos</span>
               </SelectItem>
@@ -821,7 +850,7 @@ export function ClientesTable() {
                 <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   No se encontraron clientes{' '}
                   {tipoEquipoFilter !== 'TODOS'
-                    ? `con filtro: ${tipoEquipoFilter === 'PLANTAS' ? 'Plantas' : tipoEquipoFilter === 'BOMBAS' ? 'Bombas' : tipoEquipoFilter.toLowerCase()}`
+                    ? `con filtro: ${arquetiposCatalog?.find((a) => a.codigo_tipo === tipoEquipoFilter)?.nombre_tipo || tipoEquipoFilter.toLowerCase()}`
                     : ''}
                 </TableCell>
               </TableRow>
@@ -879,52 +908,45 @@ export function ClientesTable() {
                         </p>
                       )}
 
-                      {(cliente.tiene_plantas || cliente.tiene_bombas) && (
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {cliente.tiene_plantas && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedClienteEquipos({
-                                  id: cliente.id_cliente,
-                                  nombre: getClienteName(cliente),
-                                });
-                              }}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-colors cursor-pointer"
-                              title={`Ver ${cliente.total_equipos_plantas || 1} planta(s) eléctrica(s) instalada(s)`}
-                            >
-                              <Zap className="h-3 w-3 text-amber-500 fill-amber-500" />
-                              <span>
-                                Planta
-                                {cliente.total_equipos_plantas
-                                  ? ` (${cliente.total_equipos_plantas})`
-                                  : ''}
-                              </span>
-                            </button>
-                          )}
-                          {cliente.tiene_bombas && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedClienteEquipos({
-                                  id: cliente.id_cliente,
-                                  nombre: getClienteName(cliente),
-                                });
-                              }}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer"
-                              title={`Ver ${cliente.total_equipos_bombas || 1} bomba(s) hidráulica(s) instalada(s)`}
-                            >
-                              <Droplets className="h-3 w-3 text-blue-500 fill-blue-500" />
-                              <span>
-                                Bomba
-                                {cliente.total_equipos_bombas
-                                  ? ` (${cliente.total_equipos_bombas})`
-                                  : ''}
-                              </span>
-                            </button>
-                          )}
+                      {(cliente.resumen_equipos_por_tipo?.length ?? 0) > 0 && (
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          {cliente.resumen_equipos_por_tipo!.map((eqStat) => {
+                            const arqMatch = arquetiposCatalog?.find(
+                              (a) =>
+                                a.id_tipo_equipo === eqStat.id_tipo_equipo ||
+                                a.codigo_tipo?.toUpperCase() === eqStat.codigo_tipo?.toUpperCase(),
+                            );
+                            const StatIcon = resolveEquipoLucideIcon(
+                              arqMatch?.icono_ui ?? arqMatch?.icono,
+                              eqStat.codigo_tipo,
+                            );
+                            const colorHex = arqMatch?.color_hex ?? arqMatch?.color ?? '#2563EB';
+                            return (
+                              <button
+                                key={`${eqStat.codigo_tipo}-${eqStat.id_tipo_equipo ?? 'x'}`}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedClienteEquipos({
+                                    id: cliente.id_cliente,
+                                    nombre: getClienteName(cliente),
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium border hover:opacity-90 transition-colors cursor-pointer"
+                                style={{
+                                  backgroundColor: `${colorHex}12`,
+                                  color: colorHex,
+                                  borderColor: `${colorHex}40`,
+                                }}
+                                title={`Ver ${eqStat.cantidad} ${eqStat.nombre_tipo} asociado(s)`}
+                              >
+                                <StatIcon className="h-3 w-3" />
+                                <span>
+                                  {eqStat.nombre_tipo} ({eqStat.cantidad})
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -1167,7 +1189,7 @@ export function ClientesTable() {
                   Equipos de {selectedClienteEquipos?.nombre}
                 </DialogTitle>
                 <DialogDescription className="text-xs">
-                  Parque de maquinaria, generadores y bombas asociadas a este cliente y sus sedes.
+                  Parque de activos y equipos asociados a este cliente y sus sedes.
                 </DialogDescription>
               </div>
             </div>

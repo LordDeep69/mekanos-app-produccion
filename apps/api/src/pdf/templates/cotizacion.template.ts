@@ -11,9 +11,20 @@
  * - Pie de página con datos de contacto
  */
 
-import { baseStyles, MEKANOS_COLORS } from './mekanos-base.template';
+import {
+  baseStyles,
+  buildBrandCssVars,
+  escapeBrandHtml,
+  formatCurrencyOrg,
+  generarFooterCorporativoHtml,
+  MEKANOS_COLORS,
+  OrgBrandingContext,
+  renderOrgLogoHtml,
+  resolveOrgBranding,
+} from './mekanos-base.template';
 
 export interface DatosCotizacionPDF {
+  branding?: OrgBrandingContext;
   // Identificación
   numeroCotizacion: string;
   fechaCotizacion: string;
@@ -99,6 +110,7 @@ export interface ItemComponentePDF {
 }
 
 export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
+  const brand = resolveOrgBranding(datos.branding);
   return `
 <!DOCTYPE html>
 <html lang="es">
@@ -107,6 +119,7 @@ export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cotización ${datos.numeroCotizacion}</title>
   <style>
+    ${buildBrandCssVars(brand)}
     ${baseStyles}
     ${cotizacionStyles}
   </style>
@@ -114,7 +127,7 @@ export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
 <body>
   <div class="page">
     <!-- HEADER -->
-    ${generarHeader(datos)}
+    ${generarHeader(datos, brand)}
     
     <!-- DATOS DEL CLIENTE -->
     ${generarDatosCliente(datos)}
@@ -126,27 +139,27 @@ export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
     ${generarDescripcion(datos)}
     
     <!-- TABLA DE SERVICIOS -->
-    ${datos.itemsServicios.length > 0 ? generarTablaServicios(datos.itemsServicios) : ''}
+    ${datos.itemsServicios.length > 0 ? generarTablaServicios(datos.itemsServicios, brand) : ''}
     
     <!-- TABLA DE COMPONENTES -->
-    ${datos.itemsComponentes.length > 0 ? generarTablaComponentes(datos.itemsComponentes) : ''}
+    ${datos.itemsComponentes.length > 0 ? generarTablaComponentes(datos.itemsComponentes, brand) : ''}
   </div>
   
   <div class="page page-break">
     <!-- RESUMEN DE TOTALES -->
-    ${generarResumenTotales(datos.totales)}
+    ${generarResumenTotales(datos.totales, brand)}
     
     <!-- CONDICIONES COMERCIALES -->
     ${generarCondicionesComerciales(datos)}
     
     <!-- TÉRMINOS Y CONDICIONES -->
-    ${generarTerminosCondiciones(datos.terminosCondiciones)}
+    ${generarTerminosCondiciones(datos.terminosCondiciones, brand)}
     
     <!-- FIRMAS -->
-    ${generarFirmas(datos)}
+    ${generarFirmas(datos, brand)}
     
     <!-- FOOTER -->
-    ${generarFooter()}
+    ${generarFooterCorporativoHtml(brand)}
   </div>
 </body>
 </html>
@@ -316,14 +329,10 @@ const cotizacionStyles = `
   }
 `;
 
-const generarHeader = (datos: DatosCotizacionPDF): string => `
+const generarHeader = (datos: DatosCotizacionPDF, brand = resolveOrgBranding(datos.branding)): string => `
   <div class="header">
-    <div class="logo-container">
-      <svg class="logo" viewBox="0 0 120 50">
-        <rect width="120" height="50" fill="${MEKANOS_COLORS.primary}"/>
-        <text x="60" y="25" fill="white" font-size="16" font-weight="bold" text-anchor="middle">MEKANOS</text>
-        <text x="60" y="40" fill="${MEKANOS_COLORS.highlight}" font-size="8" text-anchor="middle">S.A.S</text>
-      </svg>
+    <div class="logo-container" style="flex: 0 0 180px;">
+      ${renderOrgLogoHtml(brand, 48, 'light')}
     </div>
     <div class="header-title">
       <h1>COTIZACIÓN COMERCIAL</h1>
@@ -471,7 +480,10 @@ const generarDescripcion = (datos: DatosCotizacionPDF): string => `
   </div>
 `;
 
-const generarTablaServicios = (items: ItemServicioPDF[]): string => `
+const generarTablaServicios = (
+  items: ItemServicioPDF[],
+  brand = resolveOrgBranding(),
+): string => `
   <div class="section">
     <div class="section-title">🔧 SERVICIOS</div>
     <table class="items-table">
@@ -493,9 +505,9 @@ const generarTablaServicios = (items: ItemServicioPDF[]): string => `
           <td class="numero">${item.orden}</td>
           <td>${item.descripcion}</td>
           <td class="cantidad">${item.cantidad} ${item.unidad}</td>
-          <td class="precio">$${formatNumber(item.precioUnitario)}</td>
+          <td class="precio">${formatCurrencyOrg(item.precioUnitario, brand)}</td>
           <td class="desc">${item.descuentoPorcentaje > 0 ? `${item.descuentoPorcentaje}%` : '-'}</td>
-          <td class="subtotal">$${formatNumber(item.subtotal)}</td>
+          <td class="subtotal">${formatCurrencyOrg(item.subtotal, brand)}</td>
         </tr>
         `,
           )
@@ -504,14 +516,17 @@ const generarTablaServicios = (items: ItemServicioPDF[]): string => `
       <tfoot>
         <tr class="table-footer">
           <td colspan="5" style="text-align: right;">SUBTOTAL SERVICIOS:</td>
-          <td class="subtotal">$${formatNumber(items.reduce((sum, i) => sum + i.subtotal, 0))}</td>
+          <td class="subtotal">${formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand)}</td>
         </tr>
       </tfoot>
     </table>
   </div>
 `;
 
-const generarTablaComponentes = (items: ItemComponentePDF[]): string => `
+const generarTablaComponentes = (
+  items: ItemComponentePDF[],
+  brand = resolveOrgBranding(),
+): string => `
   <div class="section">
     <div class="section-title">📦 COMPONENTES / REPUESTOS</div>
     <table class="items-table">
@@ -536,9 +551,9 @@ const generarTablaComponentes = (items: ItemComponentePDF[]): string => `
             ${item.referencia ? `<br/><small style="color: ${MEKANOS_COLORS.secondary};">Ref: ${item.referencia}</small>` : ''}
           </td>
           <td class="cantidad">${item.cantidad} ${item.unidad}</td>
-          <td class="precio">$${formatNumber(item.precioUnitario)}</td>
+          <td class="precio">${formatCurrencyOrg(item.precioUnitario, brand)}</td>
           <td class="desc">${item.descuentoPorcentaje > 0 ? `${item.descuentoPorcentaje}%` : '-'}</td>
-          <td class="subtotal">$${formatNumber(item.subtotal)}</td>
+          <td class="subtotal">${formatCurrencyOrg(item.subtotal, brand)}</td>
         </tr>
         `,
           )
@@ -547,50 +562,53 @@ const generarTablaComponentes = (items: ItemComponentePDF[]): string => `
       <tfoot>
         <tr class="table-footer">
           <td colspan="5" style="text-align: right;">SUBTOTAL COMPONENTES:</td>
-          <td class="subtotal">$${formatNumber(items.reduce((sum, i) => sum + i.subtotal, 0))}</td>
+          <td class="subtotal">${formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand)}</td>
         </tr>
       </tfoot>
     </table>
   </div>
 `;
 
-const generarResumenTotales = (totales: DatosCotizacionPDF['totales']): string => `
+const generarResumenTotales = (
+  totales: DatosCotizacionPDF['totales'],
+  brand = resolveOrgBranding(),
+): string => `
   <div class="section">
     <div class="section-title">💰 RESUMEN DE COSTOS</div>
     <div class="totales-box">
       <div class="total-row subtotal">
         <span class="total-label">Subtotal Servicios</span>
-        <span class="total-value">$${formatNumber(totales.subtotalServicios)}</span>
+        <span class="total-value">${formatCurrencyOrg(totales.subtotalServicios, brand)}</span>
       </div>
       <div class="total-row subtotal">
         <span class="total-label">Subtotal Componentes</span>
-        <span class="total-value">$${formatNumber(totales.subtotalComponentes)}</span>
+        <span class="total-value">${formatCurrencyOrg(totales.subtotalComponentes, brand)}</span>
       </div>
       <div class="total-row subtotal" style="border-bottom: 2px solid ${MEKANOS_COLORS.primary};">
         <span class="total-label" style="font-weight: bold;">SUBTOTAL GENERAL</span>
-        <span class="total-value">$${formatNumber(totales.subtotalGeneral)}</span>
+        <span class="total-value">${formatCurrencyOrg(totales.subtotalGeneral, brand)}</span>
       </div>
       ${
         totales.descuentoPorcentaje > 0
           ? `
       <div class="total-row descuento">
         <span class="total-label">Descuento (${totales.descuentoPorcentaje}%)</span>
-        <span class="total-value">-$${formatNumber(totales.descuentoValor)}</span>
+        <span class="total-value">-${formatCurrencyOrg(totales.descuentoValor, brand)}</span>
       </div>
       <div class="total-row subtotal">
         <span class="total-label">Subtotal con Descuento</span>
-        <span class="total-value">$${formatNumber(totales.subtotalConDescuento)}</span>
+        <span class="total-value">${formatCurrencyOrg(totales.subtotalConDescuento, brand)}</span>
       </div>
       `
           : ''
       }
       <div class="total-row iva">
-        <span class="total-label">IVA (${totales.ivaPorcentaje}%)</span>
-        <span class="total-value">$${formatNumber(totales.ivaValor)}</span>
+        <span class="total-label">${escapeBrandHtml(brand.etiquetaImpuesto)} (${totales.ivaPorcentaje}%)</span>
+        <span class="total-value">${formatCurrencyOrg(totales.ivaValor, brand)}</span>
       </div>
       <div class="total-row final">
         <span class="total-label">TOTAL COTIZACIÓN</span>
-        <span class="total-value" style="font-size: 16px;">$${formatNumber(totales.totalCotizacion)}</span>
+        <span class="total-value" style="font-size: 16px;">${formatCurrencyOrg(totales.totalCotizacion, brand)}</span>
       </div>
     </div>
   </div>
@@ -638,9 +656,12 @@ const generarCondicionesComerciales = (datos: DatosCotizacionPDF): string => `
   </div>
 `;
 
-const generarTerminosCondiciones = (terminos?: string): string => {
+const generarTerminosCondiciones = (
+  terminos?: string,
+  brand = resolveOrgBranding(),
+): string => {
   const terminosDefault = `
-1. Los precios incluyen IVA según se indica en el resumen de costos.
+1. Los precios incluyen ${escapeBrandHtml(brand.etiquetaImpuesto)} según se indica en el resumen de costos.
 2. El tiempo de entrega comienza a partir de la aprobación de la cotización y el recibo del anticipo acordado.
 3. La garantía cubre defectos de fabricación y mano de obra, no incluye daños por mal uso o negligencia.
 4. Los trabajos adicionales no contemplados en esta cotización serán facturados por separado.
@@ -658,14 +679,17 @@ const generarTerminosCondiciones = (terminos?: string): string => {
 `;
 };
 
-const generarFirmas = (datos: DatosCotizacionPDF): string => `
+const generarFirmas = (
+  datos: DatosCotizacionPDF,
+  brand = resolveOrgBranding(datos.branding),
+): string => `
   <div class="firmas-container" style="margin-top: 30px;">
     <div class="firma-box">
       <div class="firma-line"></div>
       <div class="firma-label">
         ${datos.elaboradoPor}<br/>
         <small>${datos.cargoElaborador || 'Asesor Comercial'}</small><br/>
-        <small>MEKANOS S.A.S</small>
+        <small>${escapeBrandHtml(brand.nombreComercial)}</small>
       </div>
     </div>
     <div class="firma-box">
@@ -677,21 +701,5 @@ const generarFirmas = (datos: DatosCotizacionPDF): string => `
     </div>
   </div>
 `;
-
-const generarFooter = (): string => `
-  <div class="footer">
-    <strong>MEKANOS S.A.S</strong> - NIT: 900.123.456-7<br/>
-    BARRIO LIBANO CRA 49C #31-35 DIAG. AL SENA - Cartagena, Colombia<br/>
-    TEL: 6359384 | CEL: 315-7083350 | E-MAIL: mekanossas2@gmail.com
-  </div>
-`;
-
-// Utility: Formatear números con separadores de miles
-const formatNumber = (num: number): string => {
-  return num.toLocaleString('es-CO', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-};
 
 export default generarCotizacionHTML;

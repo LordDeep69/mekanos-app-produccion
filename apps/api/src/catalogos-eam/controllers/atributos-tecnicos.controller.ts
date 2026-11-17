@@ -1,13 +1,17 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Permisos } from '../../auth/decorators/permisos.decorator';
+import { Roles } from '../../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PermisosGuard } from '../../auth/guards/permisos.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
 import { CreateAtributoTecnicoDto, UpdateAtributoTecnicoDto } from '../dto/catalogos-eam.dto';
 
 @ApiTags('EAM - Diccionario de Atributos Técnicos')
 @ApiBearerAuth()
 @Controller('catalogos/atributos-tecnicos')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 export class AtributosTecnicosController {
   constructor(private readonly eamService: CatalogosEamService) {}
 
@@ -35,12 +39,16 @@ export class AtributosTecnicosController {
   }
 
   @Post()
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Crear un nuevo atributo técnico (soporta alta rápida In-Place)' })
   async create(@Body() dto: CreateAtributoTecnicoDto) {
     return this.eamService.createAtributo(dto);
   }
 
   @Put(':codigo')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar propiedades de un atributo técnico (PUT)' })
   async update(
     @Param('codigo') codigo: string,
@@ -50,6 +58,8 @@ export class AtributosTecnicosController {
   }
 
   @Patch(':codigo')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar propiedades de un atributo técnico (PATCH)' })
   async updatePatch(
     @Param('codigo') codigo: string,
@@ -59,6 +69,8 @@ export class AtributosTecnicosController {
   }
 
   @Delete(':codigo')
+  @Roles('ADMIN')
+  @Permisos('CONFIG_SYSTEM')
   @ApiOperation({ summary: 'Eliminar un atributo técnico del catálogo' })
   async delete(@Param('codigo') codigo: string) {
     return this.eamService.deleteAtributo(codigo);

@@ -11,6 +11,7 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from '@mekanos/database';
+import { CommonServicesModule } from '../common/services/common-services.module';
 import { NotificacionesController } from './notificaciones.controller';
 import { NotificacionesService } from './notificaciones.service';
 import { TareasProgramadasService } from './tareas-programadas.service';
@@ -18,6 +19,7 @@ import { TareasProgramadasService } from './tareas-programadas.service';
 @Module({
   imports: [
     DatabaseModule,
+    CommonServicesModule,
     ScheduleModule.forRoot(), // Habilitar tareas programadas
   ],
   controllers: [NotificacionesController],

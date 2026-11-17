@@ -8,6 +8,7 @@ import {
   HttpStatus,
   InternalServerErrorException,
   Logger,
+  Optional,
   Param,
   ParseIntPipe,
   Post,
@@ -24,6 +25,7 @@ import {
 } from '@nestjs/swagger';
 import { createHash } from 'crypto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ConfiguracionOrganizacionService } from '../configuracion-organizacion/configuracion-organizacion.service';
 import { PrismaService } from '../database/prisma.service';
 import { UserId } from '../mediciones-servicio/decorators/user-id.decorator';
 import { CloudinaryService } from '../storage/cloudinary.service';
@@ -54,6 +56,7 @@ export class EvidenciasController {
     private readonly queryBus: QueryBus,
     private readonly cloudinaryService: CloudinaryService,
     private readonly prisma: PrismaService,
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
   ) { }
 
   /**
@@ -247,8 +250,10 @@ export class EvidenciasController {
     // 4. Calcular hash SHA256
     const hash = createHash('sha256').update(buffer).digest('hex');
 
-    // 5. Subir a Cloudinary
-    const folder = `mekanos/evidencias/${ordenNumero}`;
+    // 5. Subir a Cloudinary con prefijo de almacenamiento del tenant
+    const orgCtx = await this.configOrgService?.getContext().catch(() => null);
+    const storagePrefix = (orgCtx?.storage_prefijo_raiz || 'eam-media').replace(/^\/+|\/+$/g, '');
+    const folder = `${storagePrefix}/evidencias/${ordenNumero}`;
     const cloudinaryResult = await this.cloudinaryService.uploadImage(buffer, {
       folder,
       tags: [dto.tipoEvidencia, ordenNumero, 'admin-upload'],

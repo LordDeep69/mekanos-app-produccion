@@ -34,6 +34,8 @@ import {
   type TipoServicioDetalleCompleto,
 } from '@/features/catalogos';
 import { cn } from '@/lib/utils';
+import { useConfiguracionEmpresa } from '@/features/configuracion/hooks/use-configuracion-empresa';
+import { useBranding } from '@/providers/branding-provider';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDown,
@@ -178,6 +180,8 @@ export function FastProtocolBuilder({
   onBack,
   onSelectServicio,
 }: FastProtocolBuilderProps) {
+  const { branding } = useBranding();
+  const { data: empresa } = useConfiguracionEmpresa();
   const queryClient = useQueryClient();
 
   // 1. Consulta del Detalle Completo del Protocolo
@@ -2159,7 +2163,7 @@ export function FastProtocolBuilder({
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-300 truncate">
-                        Vista fiel de la hoja corporativa MEKANOS S.A.S. · Subsistemas Zona A +
+                        Vista fiel de la hoja corporativa {branding.nombre_comercial} · Subsistemas Zona A +
                         Telemetría UoM Zona B
                       </p>
                     </div>
@@ -2177,20 +2181,29 @@ export function FastProtocolBuilder({
                 {/* Lienzo A4 */}
                 <div className="flex-1 overflow-y-auto p-4 sm:p-7 bg-slate-200/80">
                   <div className="max-w-[820px] mx-auto bg-white rounded-xl shadow-[0_22px_55px_-15px_rgba(15,23,42,0.3)] border border-slate-300/90 overflow-hidden">
-                    {/* 1. BANNER CORPORATIVO MEKANOS S.A.S */}
-                    <div className="bg-gradient-to-r from-[#1A365D] via-[#244673] to-[#2B548A] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b-4 border-[#0284C7]">
+                    {/* 1. BANNER CORPORATIVO WHITE-LABEL */}
+                    <div
+                      className="text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b-4"
+                      style={{
+                        background: `linear-gradient(90deg, ${branding.color_primario || '#1E40AF'}, ${branding.color_secundario || '#2563EB'})`,
+                        borderBottomColor: branding.color_acento || '#0284C7',
+                      }}
+                    >
                       <div className="flex items-center gap-3.5">
-                        <div className="w-11 h-11 rounded-lg bg-white text-[#1A365D] flex flex-col items-center justify-center shadow-sm shrink-0">
+                        <div
+                          className="w-11 h-11 rounded-lg bg-white flex flex-col items-center justify-center shadow-sm shrink-0"
+                          style={{ color: branding.color_primario || '#1E40AF' }}
+                        >
                           <span className="text-sm font-black tracking-tighter leading-none">
-                            MK
+                            {(branding.nombre_comercial || 'EA').slice(0, 2).toUpperCase()}
                           </span>
-                          <span className="text-[7px] font-extrabold tracking-widest mt-0.5 text-sky-700">
-                            S.A.S
+                          <span className="text-[7px] font-extrabold tracking-widest mt-0.5 opacity-80">
+                            EAM
                           </span>
                         </div>
                         <div>
-                          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-sky-200">
-                            MEKANOS S.A.S · GESTIÓN DE ACTIVOS INDUSTRIALES EAM
+                          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/80">
+                            {(empresa?.razon_social || branding.nombre_comercial).toUpperCase()} · GESTIÓN DE ACTIVOS INDUSTRIALES
                           </div>
                           <h4 className="text-base sm:text-lg font-black tracking-tight leading-tight mt-0.5">
                             INFORME TÉCNICO DE MANTENIMIENTO
@@ -2486,7 +2499,7 @@ export function FastProtocolBuilder({
                           </div>
                           <p className="text-[11px] text-slate-600 italic">
                             {detalle.plantilla_observacion ||
-                              'Servicio ejecutado a satisfacción siguiendo el protocolo oficial MEKANOS S.A.S.'}
+                              `Servicio ejecutado a satisfacción siguiendo el protocolo técnico oficial de ${branding.nombre_comercial}.`}
                           </p>
                         </div>
 
@@ -2496,7 +2509,7 @@ export function FastProtocolBuilder({
                               Técnico de Servicio Asignado
                             </div>
                             <div className="text-[10px] text-slate-500">
-                              MEKANOS S.A.S · Departamento Técnico
+                              {branding.nombre_comercial} · Departamento Técnico
                             </div>
                           </div>
                           <div className="text-center pt-5 border-t border-slate-300">
@@ -2510,11 +2523,32 @@ export function FastProtocolBuilder({
                         </div>
 
                         <div className="border-t border-slate-200 pt-2.5 text-center text-[10px] text-slate-500 leading-relaxed">
-                          <strong className="text-slate-700">MEKANOS S.A.S</strong> · NIT:
-                          900.542.123-1 · CRA 49C # 31-35 DIAG. AL SENA, CARTAGENA DE INDIAS
-                          <br />
-                          Línea PBX: (605) 635-9384 · WhatsApp Soporte 24/7: 315-708-3350 ·
-                          info@mekanos.com.co
+                          <strong className="text-slate-700">
+                            {empresa?.razon_social || branding.nombre_comercial}
+                          </strong>
+                          {[
+                            empresa?.numero_id_fiscal
+                              ? `${empresa?.tipo_id_fiscal || 'ID'}: ${empresa.numero_id_fiscal}`
+                              : null,
+                            empresa?.direccion_linea1,
+                            branding.ciudad_defecto,
+                          ]
+                            .filter(Boolean)
+                            .map((part) => ` · ${part}`)
+                            .join('')}
+                          {(empresa?.telefono_principal || branding.telefono_soporte || branding.email_contacto) && (
+                            <>
+                              <br />
+                              {[
+                                empresa?.telefono_principal || branding.telefono_soporte
+                                  ? `Tel: ${empresa?.telefono_principal || branding.telefono_soporte}`
+                                  : null,
+                                branding.email_contacto,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

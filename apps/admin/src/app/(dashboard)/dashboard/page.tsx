@@ -16,8 +16,38 @@ import {
     RefreshButton
 } from '@/features/dashboard/components';
 import { useRefreshDashboard } from '@/features/dashboard/hooks/use-dashboard';
-import { Activity } from 'lucide-react';
-import { useState } from 'react';
+import { Activity, ShieldAlert, X } from 'lucide-react';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+
+function DeniedAccessBanner() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const deniedRoute = searchParams.get('denied');
+
+  if (!deniedRoute) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-2xs">
+      <div className="flex items-center gap-2.5">
+        <ShieldAlert className="h-5 w-5 text-amber-700 shrink-0" />
+        <div>
+          <span className="font-semibold">Acceso restringido:</span>{' '}
+          No cuentas con permisos suficientes para abrir{' '}
+          <code className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-mono">{deniedRoute}</code>.
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => router.replace('/dashboard')}
+        className="rounded-lg p-1 text-amber-700 hover:bg-amber-100"
+        title="Cerrar aviso"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { refresh } = useRefreshDashboard();
@@ -32,6 +62,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <Suspense fallback={null}>
+        <DeniedAccessBanner />
+      </Suspense>
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -52,8 +85,8 @@ export default function DashboardPage() {
       {/* Alertas Panel - Datos reales desde /api/dashboard/alertas */}
       <AlertsPanel />
 
-      {/* Grid de 2 columnas para Órdenes y Comercial */}
-      <div className="grid md:grid-cols-2 gap-6">
+      {/* Grid responsivo: 1 columna hasta lg, 2 columnas en xl (>=1280px) para evitar compresión de KPIs */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Estadísticas de Órdenes - /api/dashboard/ordenes */}
         <OrdersStatsPanel />
 

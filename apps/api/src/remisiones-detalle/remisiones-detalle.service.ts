@@ -6,7 +6,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
-import { getNextTableId } from '../common/utils/next-id.helper';
 import { CreateRemisionesDetalleDto } from './dto/create-remisiones-detalle.dto';
 import { UpdateRemisionesDetalleDto } from './dto/update-remisiones-detalle.dto';
 
@@ -34,11 +33,8 @@ export class RemisionesDetalleService {
         }
       }
 
-      const nextId = await getNextTableId(this.prisma, 'remisiones_detalle', 'id_detalle_remision');
-
       return await this.prisma.remisiones_detalle.create({
         data: {
-          id_detalle_remision: nextId,
           id_remision: createDto.id_remision,
           tipo_item: createDto.tipo_item,
           id_componente: createDto.id_componente,

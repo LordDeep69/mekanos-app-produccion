@@ -9,6 +9,26 @@ import { PrismaService } from '../database/prisma.service';
 import { CreateUsuariosDto } from './dto/create-usuarios.dto';
 import { UpdateUsuariosDto } from './dto/update-usuarios.dto';
 
+const USUARIO_SAFE_SELECT = {
+  id_usuario: true,
+  id_persona: true,
+  username: true,
+  email: true,
+  estado: true,
+  fecha_ultimo_login: true,
+  intentos_fallidos: true,
+  bloqueado_hasta: true,
+  fecha_creacion: true,
+  fecha_modificacion: true,
+  fecha_activacion: true,
+  fecha_desactivacion: true,
+  fecha_ultimo_cambio_password: true,
+  debe_cambiar_password: true,
+  requiere_2fa: true,
+  email_verificado: true,
+  fecha_verificacion_email: true,
+} as const;
+
 @Injectable()
 export class UsuariosService {
   constructor(private readonly prisma: PrismaService) {}
@@ -47,6 +67,7 @@ export class UsuariosService {
           password_hash,
           fecha_creacion: new Date(),
         },
+        select: USUARIO_SAFE_SELECT,
       });
     } catch (error: unknown) {
       if (error instanceof NotFoundException || error instanceof ConflictException) {
@@ -67,6 +88,7 @@ export class UsuariosService {
           skip,
           take: limit,
           orderBy: { id_usuario: 'desc' },
+          select: USUARIO_SAFE_SELECT,
         }),
         this.prisma.usuarios.count(),
       ]);
@@ -91,6 +113,7 @@ export class UsuariosService {
     try {
       const record = await this.prisma.usuarios.findUnique({
         where: { id_usuario: id },
+        select: USUARIO_SAFE_SELECT,
       });
 
       if (!record) {
@@ -123,6 +146,7 @@ export class UsuariosService {
       return await this.prisma.usuarios.update({
         where: { id_usuario: id },
         data: dataToUpdate,
+        select: USUARIO_SAFE_SELECT,
       });
     } catch (error: any) {
       if (error instanceof NotFoundException || error instanceof ConflictException) {
@@ -152,6 +176,7 @@ export class UsuariosService {
 
       return await this.prisma.usuarios.delete({
         where: { id_usuario: id },
+        select: USUARIO_SAFE_SELECT,
       });
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {
@@ -177,6 +202,7 @@ export class UsuariosService {
           fecha_ultimo_cambio_password: new Date(),
           debe_cambiar_password: false,
         },
+        select: USUARIO_SAFE_SELECT,
       });
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {

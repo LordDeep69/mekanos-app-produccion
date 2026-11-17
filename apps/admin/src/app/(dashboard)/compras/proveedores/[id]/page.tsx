@@ -51,6 +51,7 @@ import {
 
 import { comprasService } from '@/lib/api/compras.service';
 import { getApiErrorMessage } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   ModalHomologacionSourcing,
   type ModalHomologacionSourcingProps,
@@ -123,15 +124,6 @@ const getInitials = (nombre: string) => {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 };
 
-const formatMonedaCOP = (monto: number | string | null | undefined): string => {
-  const num = Number(monto) || 0;
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    maximumFractionDigits: 0,
-  }).format(num);
-};
-
 const extractWebUrl = (prov?: ProveedorCompleto | null): string => {
   if (!prov) return '';
   const obs = prov.observaciones || '';
@@ -181,6 +173,9 @@ export default function FichaProveedor360Page() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const idProveedor = Number(params?.id);
+  const { formatCurrency, formatDate } = useOrgFormatters();
+  const formatMonedaCOP = (monto: number | string | null | undefined): string =>
+    formatCurrency(Number(monto) || 0);
 
   // Sincronización de pestaña activa mediante URL (?tab=catalogo | ordenes | fiscal)
   const tabParam = searchParams.get('tab');
@@ -881,10 +876,10 @@ export default function FichaProveedor360Page() {
                 <table className="w-full text-left text-sm text-slate-600">
                   <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
                     <tr>
-                      <th className="px-4 py-3.5">SKU Mekanos</th>
+                      <th className="px-4 py-3.5">SKU Interno</th>
                       <th className="px-4 py-3.5">Descripción & Marca</th>
                       <th className="px-3.5 py-3.5">Ref. Homóloga Suplidor</th>
-                      <th className="px-4 py-3.5 text-right">Costo Pactado ($ COP)</th>
+                      <th className="px-4 py-3.5 text-right">Costo Pactado</th>
                       <th className="px-3 py-3.5 text-center">Días Entrega</th>
                       <th className="px-3 py-3.5 text-center">Preferente</th>
                       <th className="px-4 py-3.5 text-right">Acciones</th>
@@ -1165,7 +1160,7 @@ export default function FichaProveedor360Page() {
                             oc.id_orden_compra,
                           ).padStart(4, '0')}`;
                         const fecha = oc.fecha_solicitud
-                          ? new Date(oc.fecha_solicitud).toLocaleDateString('es-CO')
+                          ? formatDate(oc.fecha_solicitud)
                           : '--';
                         const estado = (oc.estado as string) || 'PENDIENTE';
                         const itemsCount = oc.ordenes_compra_detalle?.length || 0;
@@ -1896,7 +1891,7 @@ export default function FichaProveedor360Page() {
                   </Label>
                   <Input
                     id="edit_prov_dir"
-                    placeholder="Ej. Zona Industrial Mamonal Km 3, Cartagena"
+                    placeholder="Ej. Zona Industrial, Bodega Principal"
                     value={editProveedorData.direccion_principal}
                     onChange={(e) =>
                       setEditProveedorData((prev) => ({

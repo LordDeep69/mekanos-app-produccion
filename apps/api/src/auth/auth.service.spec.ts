@@ -1,14 +1,23 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../database/prisma.service';
 import { AuthService } from './auth.service';
-import { MockPrismaService } from '../common/mocks/mock-prisma.service';
 
 describe('AuthService', () => {
   let service: AuthService;
-  let mockPrisma: MockPrismaService;
+  let adminHash: string;
+
+  const prismaMock = {
+    usuarios: {
+      findUnique: jest.fn(),
+    },
+    empleados: {
+      findFirst: jest.fn(),
+    },
+  };
 
   const mockJwtService = {
     signAsync: jest.fn(),
@@ -17,28 +26,61 @@ describe('AuthService', () => {
 
   const mockConfigService = {
     get: jest.fn((key: string) => {
-      if (key === 'JWT_SECRET') return 'test-secret';
-      if (key === 'JWT_REFRESH_SECRET') return 'test-refresh-secret';
+      if (key === 'JWT_SECRET') return 'unit-test-jwt-secret-key-min-32-chars-2026';
+      if (key === 'JWT_REFRESH_SECRET') return 'unit-test-refresh-secret-key-min-32-chars-2026';
+      if (key === 'JWT_EXPIRATION') return '15m';
+      if (key === 'JWT_REFRESH_EXPIRATION') return '7d';
       return null;
     }),
   };
 
+  const buildActiveAdminRecord = () => ({
+    id_usuario: 1,
+    id_persona: 10,
+    email: 'admin@empresa.test',
+    username: 'admin.test',
+    password_hash: adminHash,
+    estado: 'ACTIVO',
+    persona: {
+      nombre_completo: 'Admin Plataforma',
+      primer_nombre: 'Admin',
+      primer_apellido: 'Plataforma',
+    },
+    usuarios_roles: [
+      {
+        roles: {
+          id_rol: 1,
+          codigo_rol: 'ADMIN',
+          nombre_rol: 'Administrador',
+          roles_permisos: [
+            { permisos: { codigo_permiso: 'CONFIG_SYSTEM' } },
+            { permisos: { codigo_permiso: 'ORDENES_READ' } },
+          ],
+        },
+      },
+    ],
+  });
+
+  beforeAll(async () => {
+    adminHash = await bcrypt.hash('Admin123!', 10);
+  });
+
   beforeEach(async () => {
+    jest.clearAllMocks();
+    prismaMock.usuarios.findUnique.mockResolvedValue(buildActiveAdminRecord());
+    prismaMock.empleados.findFirst.mockResolvedValue({ id_empleado: 100, es_asesor: false });
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        MockPrismaService,
+        { provide: PrismaService, useValue: prismaMock },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    mockPrisma = module.get<MockPrismaService>(MockPrismaService);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
+    service.clearAllValidationCache();
   });
 
   it('should be defined', () => {
@@ -46,242 +88,127 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('should return tokens and user info for valid credentials', async () => {
-      // Arrange
-      const loginDto = {
-        email: 'admin@mekanos.com',
+    it('should return tokens, real roles and permissions for valid credentials', async () => {
+      mockJwtService.signAsync
+        .mockResolvedValueOnce('mock-access-token')
+        .mockResolvedValueOnce('mock-refresh-token');
+
+      const result = await service.login({
+        email: 'admin@empresa.test',
         password: 'Admin123!',
-      };
+      });
 
-      mockJwtService.signAsync.mockResolvedValueOnce('mock-access-token');
-      mockJwtService.signAsync.mockResolvedValueOnce('mock-refresh-token');
-
-      // Act
-      const result = await service.login(loginDto);
-
-      // Assert
       expect(result).toHaveProperty('access_token', 'mock-access-token');
       expect(result).toHaveProperty('refresh_token', 'mock-refresh-token');
       expect(result.user).toMatchObject({
-        email: 'admin@mekanos.com',
+        id: 1,
+        email: 'admin@empresa.test',
         rol: 'ADMIN',
+        roles: ['ADMIN'],
+        permisos: ['CONFIG_SYSTEM', 'ORDENES_READ'],
+        idEmpleado: 100,
       });
       expect(result.user.nombre).toContain('Admin');
       expect(mockJwtService.signAsync).toHaveBeenCalledTimes(2);
     });
 
     it('should throw UnauthorizedException for invalid email', async () => {
-      // Arrange
-      const loginDto = {
-        email: 'invalid@example.com',
-        password: 'WrongPassword',
-      };
+      prismaMock.usuarios.findUnique.mockResolvedValue(null);
 
-      // Act & Assert
-      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
-      await expect(service.login(loginDto)).rejects.toThrow('Credenciales inválidas');
+      await expect(
+        service.login({ email: 'missing@empresa.test', password: 'WrongPassword' }),
+      ).rejects.toThrow(new UnauthorizedException('Credenciales inválidas'));
     });
 
     it('should throw UnauthorizedException for invalid password', async () => {
-      // Arrange
-      const loginDto = {
-        email: 'admin@mekanos.com',
-        password: 'WrongPassword123!',
-      };
-
-      // Act & Assert
-      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
-      await expect(service.login(loginDto)).rejects.toThrow('Credenciales inválidas');
+      await expect(
+        service.login({ email: 'admin@empresa.test', password: 'WrongPassword123!' }),
+      ).rejects.toThrow(new UnauthorizedException('Credenciales inválidas'));
     });
 
     it('should throw UnauthorizedException for inactive user', async () => {
-      // Arrange
-      const inactiveUser = {
-        id: 999,
-        email: 'inactive@mekanos.com',
-        passwordHash: await bcrypt.hash('Test123!', 10),
-        activo: false,
-        rol: 'CLIENTE' as const,
-        personaId: 999,
-        fechaCreacion: new Date(),
-        ultimaActualizacion: new Date(),
-        persona: {
-          id: 999,
-          nombre: 'Usuario',
-          apellido: 'Inactivo',
-          tipoDocumento: 'CC' as const,
-          numeroDocumento: '999999999',
-          telefono: '',
-          email: 'inactive@mekanos.com',
-          activo: true,
-          direccion: null,
-          ciudad: null,
-          departamento: null,
-          fechaCreacion: new Date(),
-          ultimaActualizacion: new Date(),
-        },
-      };
+      prismaMock.usuarios.findUnique.mockResolvedValue({
+        ...buildActiveAdminRecord(),
+        id_usuario: 999,
+        estado: 'INACTIVO',
+      });
 
-      // Mock findUnique to return inactive user (need two calls since we call login twice)
-      jest.spyOn(mockPrisma.usuarios, 'findUnique')
-        .mockResolvedValueOnce(inactiveUser as any)
-        .mockResolvedValueOnce(inactiveUser as any);
-
-      const loginDto = {
-        email: 'inactive@mekanos.com',
-        password: 'Test123!',
-      };
-
-      // Act & Assert
-      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
-      await expect(service.login(loginDto)).rejects.toThrow('Usuario inactivo');
+      await expect(
+        service.login({ email: 'admin@empresa.test', password: 'Admin123!' }),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
   describe('validateUser', () => {
-    it('should return user data for valid userId', async () => {
-      // Arrange
-      const userId = 1; // Admin user
+    it('should return hydrated user context for valid userId', async () => {
+      const result = await service.validateUser(1);
 
-      // Act
-      const result = await service.validateUser(userId);
-
-      // Assert
-      expect(result).toHaveProperty('id', 1);
-      expect(result).toHaveProperty('email', 'admin@mekanos.com');
-      expect(result).toHaveProperty('rol', 'ADMIN');
+      expect(result).toMatchObject({
+        id: 1,
+        email: 'admin@empresa.test',
+        rol: 'ADMIN',
+        esAdmin: true,
+        permisos: ['CONFIG_SYSTEM', 'ORDENES_READ'],
+      });
       expect(result.nombre).toContain('Admin');
     });
 
-    it('should throw UnauthorizedException for invalid userId', async () => {
-      // Arrange
-      const invalidUserId = 9999;
+    it('should throw UnauthorizedException for missing userId', async () => {
+      prismaMock.usuarios.findUnique.mockResolvedValue(null);
 
-      // Act & Assert
-      await expect(service.validateUser(invalidUserId)).rejects.toThrow(UnauthorizedException);
-      await expect(service.validateUser(invalidUserId)).rejects.toThrow('Usuario no encontrado o inactivo');
+      await expect(service.validateUser(9999)).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw UnauthorizedException for inactive user', async () => {
-      // Arrange
-      const inactiveUser = {
-        id: 888,
-        email: 'inactive2@mekanos.com',
-        passwordHash: await bcrypt.hash('Test123!', 10),
-        activo: false,
-        rol: 'TECNICO' as const,
-        personaId: 888,
-        fechaCreacion: new Date(),
-        ultimaActualizacion: new Date(),
-        persona: {
-          id: 888,
-          nombre: 'Tecnico',
-          apellido: 'Inactivo',
-          tipoDocumento: 'CC' as const,
-          numeroDocumento: '888888888',
-          telefono: '',
-          email: 'inactive2@mekanos.com',
-          activo: true,
-          fechaCreacion: new Date(),
-          ultimaActualizacion: new Date(),
-        },
-      };
+      prismaMock.usuarios.findUnique.mockResolvedValueOnce({
+        ...buildActiveAdminRecord(),
+        id_usuario: 888,
+        estado: 'BLOQUEADO',
+      });
 
-      jest.spyOn(mockPrisma.usuarios, 'findUnique').mockResolvedValueOnce(inactiveUser as any);
-
-      // Act & Assert
       await expect(service.validateUser(888)).rejects.toThrow(UnauthorizedException);
     });
   });
 
   describe('refreshTokens', () => {
     it('should return new tokens for valid refresh token', async () => {
-      // Arrange
-      const refreshToken = 'valid-refresh-token';
-      const mockPayload = { sub: 1, email: 'admin@mekanos.com', rol: 'ADMIN' };
+      mockJwtService.verify.mockReturnValueOnce({ sub: 1, email: 'admin@empresa.test' });
+      mockJwtService.signAsync
+        .mockResolvedValueOnce('new-access-token')
+        .mockResolvedValueOnce('new-refresh-token');
 
-      mockJwtService.verify.mockReturnValueOnce(mockPayload);
-      mockJwtService.signAsync.mockResolvedValueOnce('new-access-token');
-      mockJwtService.signAsync.mockResolvedValueOnce('new-refresh-token');
+      const result = await service.refreshTokens('valid-refresh-token');
 
-      // Act
-      const result = await service.refreshTokens(refreshToken);
-
-      // Assert
-      expect(result).toHaveProperty('access_token', 'new-access-token');
-      expect(result).toHaveProperty('refresh_token', 'new-refresh-token');
-      expect(mockJwtService.verify).toHaveBeenCalledWith(refreshToken, {
-        secret: 'test-refresh-secret',
+      expect(result).toEqual({
+        access_token: 'new-access-token',
+        refresh_token: 'new-refresh-token',
       });
-      expect(mockJwtService.signAsync).toHaveBeenCalledTimes(2);
+      expect(mockJwtService.verify).toHaveBeenCalledWith('valid-refresh-token', {
+        secret: 'unit-test-refresh-secret-key-min-32-chars-2026',
+      });
     });
 
     it('should throw UnauthorizedException for invalid refresh token', async () => {
-      // Arrange
-      const invalidToken = 'invalid-token';
       mockJwtService.verify.mockImplementationOnce(() => {
         throw new Error('Invalid token');
       });
 
-      // Act & Assert
-      await expect(service.refreshTokens(invalidToken)).rejects.toThrow(UnauthorizedException);
-      await expect(service.refreshTokens(invalidToken)).rejects.toThrow('Refresh token inválido o expirado');
+      await expect(service.refreshTokens('invalid-token')).rejects.toThrow(
+        new UnauthorizedException('Refresh token inválido o expirado'),
+      );
     });
 
     it('should throw UnauthorizedException for inactive user during refresh', async () => {
-      // Arrange
-      const refreshToken = 'valid-refresh-token';
-      const mockPayload = { sub: 999, email: 'inactive@mekanos.com', rol: 'CLIENTE' };
+      mockJwtService.verify.mockReturnValueOnce({ sub: 999 });
+      prismaMock.usuarios.findUnique.mockResolvedValueOnce({
+        ...buildActiveAdminRecord(),
+        id_usuario: 999,
+        estado: 'INACTIVO',
+      });
 
-      const inactiveUser = {
-        id: 999,
-        email: 'inactive@mekanos.com',
-        passwordHash: await bcrypt.hash('Test123!', 10),
-        activo: false,
-        rol: 'CLIENTE' as const,
-        personaId: 999,
-        fechaCreacion: new Date(),
-        ultimaActualizacion: new Date(),
-        persona: {
-          id: 999,
-          nombre: 'Usuario',
-          apellido: 'Inactivo',
-          tipoDocumento: 'CC' as const,
-          numeroDocumento: '999999999',
-          telefono: '',
-          email: 'inactive@mekanos.com',
-          activo: true,
-          fechaCreacion: new Date(),
-          ultimaActualizacion: new Date(),
-        },
-      };
-
-      mockJwtService.verify.mockReturnValueOnce(mockPayload);
-      jest.spyOn(mockPrisma.usuarios, 'findUnique').mockResolvedValueOnce(inactiveUser as any);
-
-      // Act & Assert
-      await expect(service.refreshTokens(refreshToken)).rejects.toThrow(UnauthorizedException);
-    });
-  });
-
-  describe('getMockUsers', () => {
-    it('should return list of mock users without sensitive data', () => {
-      // Act
-      const users = service.getMockUsers();
-
-      // Assert
-      expect(users).toHaveLength(3);
-      expect(users[0]).toHaveProperty('id');
-      expect(users[0]).toHaveProperty('email');
-      expect(users[0]).toHaveProperty('nombre');
-      expect(users[0]).toHaveProperty('rol');
-      expect(users[0]).not.toHaveProperty('passwordHash');
-      
-      // Verify all roles are present
-      const roles = users.map(u => u.rol);
-      expect(roles).toContain('ADMIN');
-      expect(roles).toContain('TECNICO');
-      expect(roles).toContain('CLIENTE');
+      await expect(service.refreshTokens('valid-refresh-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 });

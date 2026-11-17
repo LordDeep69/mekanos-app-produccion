@@ -1,58 +1,19 @@
 import 'dart:convert';
-import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image/image.dart' as img;
 
 import '../api/api_client.dart';
 import '../database/app_database.dart';
 import '../database/database_service.dart';
 import '../errors/user_friendly_error.dart';
 import 'connectivity_service.dart';
+import 'media_payload_codec.dart';
 import 'offline_sync_service.dart';
 import 'sse/sse_event_reader.dart';
 import 'sync_progress.dart';
-
-/// ✅ 24-OCT-2026: Compresión previa a la subida.
-/// Las fotos se capturan a 1920x1080, pero una orden con 20 evidencias puede
-/// superar 10-15 MB de JSON Base64. Recompimir antes de enviar reduce el
-/// payload ~3x y evita que la subida dependa de la velocidad de carga del
-/// técnico. Las firmas PNG no se tocan para no perder transparencia.
-const int _maxUploadDimension = 1600;
-const int _jpegUploadQuality = 75;
-const int _compressThresholdBytes = 300 * 1024;
-const int _maxConvertidosEnParalelo = 3;
-
-/// Comprime una imagen en un isolate para no bloquear el hilo de UI.
-/// Retorna null si el formato no es decodificable (se envía el original).
-Uint8List? _comprimirImagenParaSubida(Uint8List bytes) {
-  try {
-    final original = img.decodeImage(bytes);
-    if (original == null) return null;
-
-    var imagen = original;
-    final ladoMayor = math.max(original.width, original.height);
-    if (ladoMayor > _maxUploadDimension) {
-      final escala = _maxUploadDimension / ladoMayor;
-      imagen = img.copyResize(
-        original,
-        width: (original.width * escala).round(),
-        height: (original.height * escala).round(),
-        interpolation: img.Interpolation.linear,
-      );
-    }
-
-    return Uint8List.fromList(
-      img.encodeJpg(imagen, quality: _jpegUploadQuality),
-    );
-  } catch (_) {
-    return null;
-  }
-}
 
 /// Serializa observaciones de actividad para backend.
 /// Cuando existe `respuestaJson`, el dato estructurado viaja en `respuestaJson`
@@ -398,27 +359,20 @@ class SyncUploadService {
       );
 
       // Convertir imágenes con concurrencia limitada (memoria controlada)
-      final base64Results = await _convertirEvidencias(
+      final base64Results = await MediaPayloadCodec.encodeBatch(
         evidencias.map((ev) => ev.rutaLocal).toList(),
       );
 
       final evidenciasPayload = <Map<String, dynamic>>[];
+      final evidenciasRefs = <Map<String, dynamic>>[];
       for (int i = 0; i < evidencias.length; i++) {
         final ev = evidencias[i];
         final base64 = base64Results[i];
-        // ✅ FIX: Validar que base64 no esté vacío (archivo corrupto/0 KB)
         if (base64 != null && base64.isNotEmpty) {
-          // ✅ FIX 07-FEB-2026: Clasificar fotos generales vs actividad
-          // Fotos de la galería general (FOTOS GENERALES) tienen idActividadEjecutada=null
-          // Fotos de actividades tienen idActividadEjecutada=<ID>
-          // El backend y portal admin distinguen por tipo_evidencia='GENERAL'
           String tipoEvidencia = ev.tipoEvidencia.toUpperCase();
           String? descripcion = ev.descripcion;
           if (ev.idActividadEjecutada == null) {
-            // Foto general: guardar sub-tipo original como prefijo en descripción
-            // Formato: "ANTES: descripción del usuario" o "DURANTE: Foto general del servicio"
-            // Esto permite ordenar/agrupar generales por sub-tipo en el portal admin
-            final subTipo = tipoEvidencia; // ANTES, DURANTE, DESPUES, etc.
+            final subTipo = tipoEvidencia;
             tipoEvidencia = 'GENERAL';
             if (descripcion != null && descripcion.isNotEmpty) {
               descripcion = '$subTipo: $descripcion';
@@ -430,7 +384,12 @@ class SyncUploadService {
             'tipo': tipoEvidencia,
             'base64': base64,
             'descripcion': descripcion,
-            // ✅ FIX 16-DIC-2025: Incluir idOrdenEquipo para multi-equipos
+            if (ev.idOrdenEquipo != null) 'idOrdenEquipo': ev.idOrdenEquipo,
+          });
+          evidenciasRefs.add({
+            'tipo': tipoEvidencia,
+            'rutaLocal': ev.rutaLocal,
+            'descripcion': descripcion,
             if (ev.idOrdenEquipo != null) 'idOrdenEquipo': ev.idOrdenEquipo,
           });
         }
@@ -453,6 +412,7 @@ class SyncUploadService {
       // ✅ OPTIMIZACIÓN 06-ENE-2026: Conversión PARALELA de firmas
       final firmas = await _db.getFirmasByOrden(idOrdenLocal);
       Map<String, dynamic>? firmasPayload;
+      Map<String, dynamic>? firmasRefs;
 
       final firmaTecnico = firmas
           .where((f) => f.tipoFirma == 'TECNICO')
@@ -467,8 +427,9 @@ class SyncUploadService {
 
         // Convertir AMBAS firmas en paralelo (si existen)
         final firmaFutures = <Future<String?>>[
-          _imageToBase64(firmaTecnico.rutaLocal),
-          if (firmaCliente != null) _imageToBase64(firmaCliente.rutaLocal),
+          MediaPayloadCodec.encodeFileToBase64(firmaTecnico.rutaLocal),
+          if (firmaCliente != null)
+            MediaPayloadCodec.encodeFileToBase64(firmaCliente.rutaLocal),
         ];
         final firmaResults = await Future.wait(firmaFutures);
 
@@ -483,8 +444,17 @@ class SyncUploadService {
             'tecnico': {
               'tipo': 'TECNICO',
               'base64': base64Tecnico,
-              'idPersona': usuarioId, // Usar ID del técnico
-              // ✅ FIX 02-FEB-2026: Incluir nombre y cargo del firmante
+              'idPersona': usuarioId,
+              'nombreFirmante': firmaTecnico.nombreFirmante ?? '',
+              'cargoFirmante':
+                  firmaTecnico.cargoFirmante ?? 'Técnico de Servicio',
+            },
+          };
+          firmasRefs = {
+            'tecnico': {
+              'tipo': 'TECNICO',
+              'rutaLocal': firmaTecnico.rutaLocal,
+              'idPersona': usuarioId,
               'nombreFirmante': firmaTecnico.nombreFirmante ?? '',
               'cargoFirmante':
                   firmaTecnico.cargoFirmante ?? 'Técnico de Servicio',
@@ -495,8 +465,14 @@ class SyncUploadService {
             firmasPayload['cliente'] = {
               'tipo': 'CLIENTE',
               'base64': base64Cliente,
-              'idPersona': 0, // Cliente sin ID específico
-              // ✅ FIX 02-FEB-2026: Incluir nombre y cargo del cliente
+              'idPersona': 0,
+              'nombreFirmante': firmaCliente.nombreFirmante ?? '',
+              'cargoFirmante': firmaCliente.cargoFirmante ?? '',
+            };
+            firmasRefs['cliente'] = {
+              'tipo': 'CLIENTE',
+              'rutaLocal': firmaCliente.rutaLocal,
+              'idPersona': 0,
               'nombreFirmante': firmaCliente.nombreFirmante ?? '',
               'cargoFirmante': firmaCliente.cargoFirmante ?? '',
             };
@@ -779,10 +755,16 @@ class SyncUploadService {
             contexto: 'finalizar la orden',
           );
           _progressNotifier.error(motivoServidor);
+          final queuePayload = MediaPayloadCodec.buildLightweightQueuePayload(
+            basePayload: payload,
+            evidenciasRefs: evidenciasRefs,
+            firmasRefs: firmasRefs,
+            ownerUserId: _db.scopedUserId ?? usuarioId,
+          );
           await _offlineSync.guardarEnCola(
             idOrdenLocal: idOrdenLocal,
             idOrdenBackend: idOrdenBackend,
-            payload: payload,
+            payload: queuePayload,
           );
           return SyncUploadResult(
             success: false,
@@ -881,12 +863,18 @@ class SyncUploadService {
           );
         }
 
-        // Si realmente no se completó, guardar en cola
-        debugPrint('📥 [SYNC] Guardando en cola para retry posterior');
+        // Si realmente no se completó, guardar en cola sin blobs Base64 pesados
+        debugPrint('📥 [SYNC] Guardando en cola liviana para retry posterior');
+        final queuePayload = MediaPayloadCodec.buildLightweightQueuePayload(
+          basePayload: payload,
+          evidenciasRefs: evidenciasRefs,
+          firmasRefs: firmasRefs,
+          ownerUserId: _db.scopedUserId ?? usuarioId,
+        );
         await _offlineSync.guardarEnCola(
           idOrdenLocal: idOrdenLocal,
           idOrdenBackend: idOrdenBackend,
-          payload: payload,
+          payload: queuePayload,
         );
         _progressNotifier.error(
           'No se pudo confirmar la sincronización. '
@@ -935,6 +923,7 @@ class SyncUploadService {
             'horaEntrada': horaEntrada,
             'horaSalida': horaSalida,
             'usuarioId': usuarioId,
+            '_ownerUserId': _db.scopedUserId ?? usuarioId,
             if (razonFalla != null) 'razonFalla': razonFalla,
             'modo': 'SOLO_DATOS',
           },
@@ -997,58 +986,6 @@ class SyncUploadService {
         updatedAt: Value(DateTime.now()),
       ),
     );
-  }
-
-  /// Convierte una imagen local a Base64.
-  ///
-  /// ✅ 24-OCT-2026: Si la foto es grande se redimensiona/recomprime en un
-  /// isolate antes de codificar. Esto reduce drásticamente el tamaño del
-  /// payload y el tiempo total de subida. Las firmas (.png) se envían tal cual.
-  Future<String?> _imageToBase64(String rutaLocal) async {
-    try {
-      final file = File(rutaLocal);
-      if (!await file.exists()) return null;
-
-      var bytes = await file.readAsBytes();
-      if (bytes.isEmpty) return null;
-
-      final esPng = rutaLocal.toLowerCase().endsWith('.png');
-      if (!esPng && bytes.length > _compressThresholdBytes) {
-        final comprimido = await compute(_comprimirImagenParaSubida, bytes);
-        if (comprimido != null && comprimido.isNotEmpty) {
-          debugPrint(
-            '🗜️ [SYNC] Imagen comprimida: '
-            '${(bytes.length / 1024).round()} KB → '
-            '${(comprimido.length / 1024).round()} KB',
-          );
-          bytes = comprimido;
-        }
-      }
-
-      return base64Encode(bytes);
-    } catch (e) {
-      debugPrint('⚠️ [SYNC] Error convirtiendo imagen $rutaLocal: $e');
-      return null;
-    }
-  }
-
-  /// Convierte evidencias a Base64 con concurrencia limitada.
-  /// Evita leer 20+ fotos completas en memoria al mismo tiempo.
-  Future<List<String?>> _convertirEvidencias(List<String> rutas) async {
-    final resultados = List<String?>.filled(rutas.length, null);
-    var siguiente = 0;
-
-    Future<void> worker() async {
-      while (true) {
-        final indice = siguiente++;
-        if (indice >= rutas.length) return;
-        resultados[indice] = await _imageToBase64(rutas[indice]);
-      }
-    }
-
-    final workers = math.min(_maxConvertidosEnParalelo, rutas.length);
-    await Future.wait(List.generate(workers, (_) => worker()));
-    return resultados;
   }
 
   /// Mapea el estado de medición al nivel de alerta del backend

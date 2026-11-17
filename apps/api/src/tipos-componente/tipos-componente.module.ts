@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../database/prisma.module';
 import { PrismaTiposComponenteRepository } from './infrastructure/prisma-tipos-componente.repository';
 import { TIPOS_COMPONENTE_REPOSITORY } from './tipos-componente.constants';
@@ -26,7 +27,7 @@ const queryHandlers = [
 ];
 
 @Module({
-  imports: [CqrsModule, PrismaModule],
+  imports: [CqrsModule, PrismaModule, AuthModule],
   controllers: [TiposComponenteController],
   providers: [
     {

@@ -6,6 +6,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/config/branding_provider.dart';
 import '../../../core/config/environment.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../data/auth_provider.dart';
@@ -53,6 +55,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final branding = ref.watch(brandingProvider);
+    final logoUrl = branding.logoPrincipalUrl ?? branding.isotipoUrl;
 
     return Scaffold(
       body: SafeArea(
@@ -65,24 +69,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo/Título
-                  const Icon(Icons.engineering, size: 80, color: Colors.blue),
+                  // Logo/Título White-Label
+                  if (logoUrl != null && logoUrl.isNotEmpty)
+                    SizedBox(
+                      height: 80,
+                      child: Image.network(
+                        logoUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => Icon(
+                          Icons.engineering,
+                          size: 80,
+                          color: branding.colorPrimario,
+                        ),
+                      ),
+                    )
+                  else
+                    Icon(
+                      Icons.engineering,
+                      size: 80,
+                      color: branding.colorPrimario,
+                    ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'MEKANOS',
+                  Text(
+                    branding.nombreComercial,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 32,
+                      fontSize: 30,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+                      color: branding.colorPrimario,
                     ),
                   ),
-                  const Text(
-                    'Técnicos',
+                  Text(
+                    branding.eslogan ?? 'Portal Móvil de Técnicos',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                    style: const TextStyle(fontSize: 15, color: Colors.grey),
                   ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 44),
 
                   // Campo Email
                   TextFormField(
@@ -165,7 +187,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: ElevatedButton(
                       onPressed: authState.isLoading ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
+                        backgroundColor: branding.colorPrimario,
                         foregroundColor: Colors.white,
                       ),
                       child: authState.isLoading
@@ -191,90 +213,91 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Pie sutil de conexión (Producción permanente; 5 toques + 6º sostenido ≥5s para selector QA)
-                  SecretEnvironmentGesture(
-                    onUnlocked: () =>
-                        showQaPasswordAndServerSelector(context, ref),
-                    child: ValueListenableBuilder<EnvironmentState>(
-                      valueListenable: Environment.stateListenable,
-                      builder: (context, envState, _) {
-                        if (envState.isProduction) {
-                          return Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'Conectando a: Servidor Mekanos (Producción)',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                          );
-                        }
-
-                        final modeLabel =
-                            envState.mode == ApiEnvironmentMode.local
-                                ? 'Modo Local'
-                                : 'URL Directa';
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.amber.shade300),
-                          ),
-                          child: Column(
-                            children: [
-                              Text(
-                                '$modeLabel activo (solo esta sesión)'
-                                '${envState.serverHostname != null ? ' • ${envState.serverHostname}' : ''}',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.amber.shade900,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                envState.baseUrl,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.amber.shade800,
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () async {
-                                  Environment.useProduction();
-                                  await ref
-                                      .read(secureStorageProvider)
-                                      .clearAll();
-                                  ref
-                                      .read(authStateProvider.notifier)
-                                      .clearError();
-                                },
-                                child: const Text(
-                                  'Volver a Producción',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                  // Pie sutil de conexión (Producción permanente; selector QA solo si habilitado en build)
+                  _buildEnvironmentFooter(context, branding),
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildEnvironmentFooter(
+    BuildContext context,
+    OrgBrandingConfig branding,
+  ) {
+    final footerContent = ValueListenableBuilder<EnvironmentState>(
+      valueListenable: Environment.stateListenable,
+      builder: (context, envState, _) {
+        if (envState.isProduction) {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Conectando a: Servidor ${branding.nombreComercial} (Producción)',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          );
+        }
+
+        final modeLabel = envState.mode == ApiEnvironmentMode.local
+            ? 'Modo Local'
+            : 'URL Directa';
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.amber.shade300),
+          ),
+          child: Column(
+            children: [
+              Text(
+                '$modeLabel activo (solo esta sesión)'
+                '${envState.serverHostname != null ? ' • ${envState.serverHostname}' : ''}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.amber.shade900,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                envState.baseUrl,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: Colors.amber.shade800),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Environment.useProduction();
+                  await ref.read(secureStorageProvider).clearAll();
+                  ref.read(authStateProvider.notifier).clearError();
+                },
+                child: const Text(
+                  'Volver a Producción',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!AppConfig.enableQaServerSwitcher) {
+      return footerContent;
+    }
+
+    return SecretEnvironmentGesture(
+      onUnlocked: () => showQaPasswordAndServerSelector(context, ref),
+      child: footerContent,
     );
   }
 }

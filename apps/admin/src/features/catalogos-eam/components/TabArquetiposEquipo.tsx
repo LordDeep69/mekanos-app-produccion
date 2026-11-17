@@ -35,6 +35,7 @@ import {
   Zap,
 } from 'lucide-react';
 import {
+  generarCodigoMetricaUso,
   generarCodigoTipoEquipo,
   generarCodigoCampoTecnico,
   generarCodigoTipoServicio,
@@ -137,8 +138,8 @@ export const PRESETS_MEDIDOR_USO = [
     label: 'Sin Contador / No Aplica',
     titulo: 'Sin Contador Físico',
     subtitulo: 'Mantenimiento preventivo por calendario (días, semanas o meses)',
-    unidad: 'UND',
-    etiqueta: 'N/A',
+    unidad: 'CAL',
+    etiqueta: 'Control por Calendario',
     requiere_horometro: false,
     badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
     icon: CalendarClock,
@@ -445,7 +446,7 @@ function MacroCategoriaSelector({
             autoFocus
           />
           <p className="text-[10px] text-indigo-700/80 font-medium">
-            ✓ Esta categoría se registrará permanentemente en PostgreSQL y quedará disponible para
+            ✓ Esta categoría se registrará en el catálogo corporativo y quedará disponible para
             futuros equipos.
           </p>
         </div>
@@ -460,6 +461,9 @@ function MedidorUsoGrid({
   unidadUso,
   etiquetaContador,
   requiereHorometro,
+  isAutoUnidad,
+  isUnidadDuplicada,
+  onToggleAutoUnidad,
   onChange,
   onCustomEtiquetaChange,
   onCustomUnidadChange,
@@ -468,6 +472,9 @@ function MedidorUsoGrid({
   unidadUso: string;
   etiquetaContador: string;
   requiereHorometro: boolean;
+  isAutoUnidad: boolean;
+  isUnidadDuplicada: boolean;
+  onToggleAutoUnidad: (nextAuto: boolean) => void;
   onChange: (update: {
     medidor_preset: string;
     unidad_uso: string;
@@ -489,7 +496,7 @@ function MedidorUsoGrid({
         </p>
       </div>
 
-      {/* Grid de 6 tarjetas seleccionables */}
+      {/* Grid de 6 tarjetas seleccionables sin superposición ni truncado */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {PRESETS_MEDIDOR_USO.map((p) => {
           const isSelected = presetId === p.id;
@@ -506,7 +513,7 @@ function MedidorUsoGrid({
                   requiere_horometro: p.requiere_horometro,
                 });
               }}
-              className={`relative p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 cursor-pointer ${
+              className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 cursor-pointer ${
                 isSelected
                   ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-500/20 shadow-xs'
                   : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
@@ -518,27 +525,29 @@ function MedidorUsoGrid({
                 <Icon className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-1 mb-0.5">
+                <div className="flex items-start justify-between gap-1.5 mb-0.5">
                   <span
-                    className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}
+                    className={`text-[11.5px] font-bold leading-snug ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}
                   >
                     {p.titulo}
                   </span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold shrink-0 border ${p.badgeClass}`}
-                  >
-                    {p.id === 'CUSTOM' ? 'CUSTOM' : p.id === 'NA' ? 'CAL' : p.unidad}
-                  </span>
+                  <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                    <span
+                      className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${p.badgeClass}`}
+                    >
+                      {p.id === 'CUSTOM' ? 'CUSTOM' : p.id === 'NA' ? 'CAL' : p.unidad}
+                    </span>
+                    {isSelected && (
+                      <span className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-2xs">
+                        <Check className="h-2.5 w-2.5 stroke-[3]" />
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="text-[10px] text-slate-500 leading-tight line-clamp-2">
                   {p.subtitulo}
                 </p>
               </div>
-              {isSelected && (
-                <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-2xs">
-                  <Check className="h-2.5 w-2.5 stroke-[3]" />
-                </div>
-              )}
             </button>
           );
         })}
@@ -546,61 +555,93 @@ function MedidorUsoGrid({
 
       {/* Configuración adicional si seleccionó Personalizado */}
       {presetId === 'CUSTOM' && (
-        <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/70 to-blue-50/70 border border-indigo-200 animate-in fade-in duration-150 space-y-2">
+        <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/70 to-blue-50/70 border border-indigo-200 animate-in fade-in duration-150 space-y-2.5">
           <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">
             <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
             <span>Configuración de Métrica Personalizada</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-start">
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
                 Nombre / Etiqueta del Contador *
               </label>
               <input
                 type="text"
                 required
-                placeholder="Ej: Golpes de Troquel, Disparos..."
+                placeholder="Ej: Maniobras de Conmutación MT..."
                 value={etiquetaContador}
                 onChange={(e) => onCustomEtiquetaChange(e.target.value)}
                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 bg-white"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                Código Corto de Unidad *
-              </label>
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <label className="text-[11px] font-bold text-slate-700">
+                  Código Corto de Unidad *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => onToggleAutoUnidad(!isAutoUnidad)}
+                  className="text-[10.5px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-0.5 cursor-pointer shrink-0"
+                >
+                  {isAutoUnidad ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                  <span>{isAutoUnidad ? 'Personalizar' : 'Auto-generar'}</span>
+                </button>
+              </div>
               <input
                 type="text"
                 required
-                placeholder="Ej: GOLPES, DISP, M3..."
+                disabled={isAutoUnidad}
+                placeholder="Ej: MANIOBRAS, GOLPES..."
                 value={unidadUso}
                 onChange={(e) =>
-                  onCustomUnidadChange(e.target.value.toUpperCase().replace(/\s+/g, '_'))
+                  onCustomUnidadChange(
+                    e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'),
+                  )
                 }
-                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono uppercase font-bold focus:ring-2 focus:ring-indigo-500/20 bg-white"
+                className={`w-full px-2.5 py-1.5 rounded-lg border text-xs font-mono uppercase font-bold transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                  isUnidadDuplicada
+                    ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                    : 'border-slate-300 bg-white focus:ring-2 focus:ring-indigo-500/20'
+                }`}
               />
+              {isUnidadDuplicada ? (
+                <p className="text-[10.5px] text-rose-600 font-bold mt-1">
+                  ✕ Código &ldquo;{unidadUso}&rdquo; ya reservado o en uso.
+                </p>
+              ) : unidadUso ? (
+                <p className="text-[10.5px] text-emerald-600 font-medium mt-1">
+                  ✓ Código único garantizado disponible
+                </p>
+              ) : isAutoUnidad ? (
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Se generará automáticamente al escribir la etiqueta.
+                </p>
+              ) : null}
             </div>
           </div>
           <p className="text-[10px] text-indigo-700 font-medium">
-            ✓ Esta métrica se guardará en PostgreSQL en las columnas `etiqueta_contador` y
-            `unidad_uso`.
+            ✓ Esta métrica personalizada se reflejará automáticamente en órdenes de servicio,
+            reportes PDF, app móvil y alertas de mantenimiento.
           </p>
         </div>
       )}
 
       {/* Resumen del contador seleccionado */}
-      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white border border-slate-200 text-[11px]">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-[11px]">
         <span className="text-slate-500 font-medium">Métrica activa para este tipo de equipo:</span>
-        <span className="font-bold text-slate-800 flex items-center gap-1.5">
+        <span className="font-bold text-slate-800 flex items-center gap-1.5 min-w-0">
           {requiereHorometro ? (
             <>
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>{etiquetaContador || 'Medidor de Uso'}</span>
-              <span className="font-mono text-[10px] text-slate-500">({unidadUso || 'USO'})</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+              <span className="truncate">{etiquetaContador || 'Por definir'}</span>
+              <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                ({unidadUso || 'AUTO'})
+              </span>
             </>
           ) : (
             <>
-              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+              <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
               <span className="text-slate-600">
                 Planificación 100% por Calendario (Sin contador de desgaste)
               </span>
@@ -676,6 +717,8 @@ export function TabArquetiposEquipo() {
 
   // Estados de autogeneración inteligente y universo de tipos de equipo
   const [isAutoCodigoTipo, setIsAutoCodigoTipo] = useState(true);
+  const [isAutoUnidadUso, setIsAutoUnidadUso] = useState(true);
+  const [isAutoEditUnidadUso, setIsAutoEditUnidadUso] = useState(false);
   const [isAutoCodigoAtributo, setIsAutoCodigoAtributo] = useState(true);
   const [isAutoCodigoSrv, setIsAutoCodigoSrv] = useState(true);
 
@@ -685,6 +728,16 @@ export function TabArquetiposEquipo() {
         .map((a) => (a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim())
         .filter(Boolean),
     );
+  }, [arquetipos]);
+
+  const unidadesUsoExistentes = useMemo(() => {
+    const base = new Set<string>(['HORAS', 'CICLOS', 'KM_ODO', 'UPM', 'CAL', 'USO']);
+    for (const a of arquetipos) {
+      if (a.unidad_uso && String(a.unidad_uso).trim()) {
+        base.add(String(a.unidad_uso).toUpperCase().trim());
+      }
+    }
+    return base;
   }, [arquetipos]);
 
   const codigosAtributosExistentes = useMemo(() => {
@@ -744,6 +797,21 @@ export function TabArquetiposEquipo() {
       false,
     );
   }, [editArqForm.codigo_tipo, codigosTiposExistentes, editingArq]);
+
+  const isUnidadCustomDuplicada = useMemo(() => {
+    if (arqForm.medidor_preset !== 'CUSTOM') return false;
+    return verificarCodigoDuplicado(arqForm.unidad_uso, unidadesUsoExistentes, undefined, false);
+  }, [arqForm.medidor_preset, arqForm.unidad_uso, unidadesUsoExistentes]);
+
+  const isEditUnidadCustomDuplicada = useMemo(() => {
+    if (editArqForm.medidor_preset !== 'CUSTOM') return false;
+    return verificarCodigoDuplicado(
+      editArqForm.unidad_uso,
+      unidadesUsoExistentes,
+      (editingArq?.unidad_uso || '').toUpperCase().trim(),
+      false,
+    );
+  }, [editArqForm.medidor_preset, editArqForm.unidad_uso, unidadesUsoExistentes, editingArq]);
 
   // Estados de Búsqueda, Filtro y Estrategia Escalable de Arquetipos
   const [arqSearch, setArqSearch] = useState('');
@@ -974,14 +1042,16 @@ export function TabArquetiposEquipo() {
     const preset = PRESETS_MEDIDOR_USO.find(
       (p) => p.unidad === arq.unidad_uso && p.etiqueta === arq.etiqueta_contador,
     );
-    const presetId = preset
-      ? preset.id
-      : arq.requiere_horometro === false
+    const presetId =
+      arq.requiere_horometro === false || arq.unidad_uso === 'CAL'
         ? 'NA'
-        : arq.unidad_uso || arq.etiqueta_contador
-          ? 'CUSTOM'
-          : 'HORAS';
+        : preset
+          ? preset.id
+          : arq.unidad_uso || arq.etiqueta_contador
+            ? 'CUSTOM'
+            : 'HORAS';
 
+    setIsAutoEditUnidadUso(presetId !== 'CUSTOM');
     setEditArqForm({
       codigo_tipo: arq.codigo_corto || arq.codigo_tipo,
       nombre_tipo: arq.nombre_canonico || arq.nombre_tipo,
@@ -1236,7 +1306,23 @@ export function TabArquetiposEquipo() {
 
             <button
               type="button"
-              onClick={() => setShowNewArqModal(true)}
+              onClick={() => {
+                setIsAutoCodigoTipo(true);
+                setIsAutoUnidadUso(true);
+                setArqForm({
+                  codigo_tipo: '',
+                  nombre_tipo: '',
+                  categoria: 'Transporte Vertical, Elevación y Carga',
+                  categoria_custom: '',
+                  is_custom_categoria: false,
+                  medidor_preset: 'HORAS',
+                  unidad_uso: 'HORAS',
+                  etiqueta_contador: 'Horómetro',
+                  descripcion: '',
+                  requiere_horometro: true,
+                });
+                setShowNewArqModal(true);
+              }}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -1459,12 +1545,20 @@ export function TabArquetiposEquipo() {
                   <div className="pt-2.5 border-t border-slate-200/70 flex items-center justify-between text-xs mt-1">
                     <div>
                       <span className="font-extrabold text-blue-700 text-sm">{activos}</span>{' '}
-                      <span className="text-slate-600 font-medium">equipos activos</span>
+                      <span className="text-slate-600 font-medium">
+                        {activos === 1 ? 'equipo activo' : 'equipos activos'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-500 font-semibold">
-                      <span>{arq.tipo_equipo_modulos.length} partes</span>
+                      <span>
+                        {arq.tipo_equipo_modulos.length}{' '}
+                        {arq.tipo_equipo_modulos.length === 1 ? 'parte' : 'partes'}
+                      </span>
                       <span>•</span>
-                      <span>{arq.tipo_equipo_planes.length} planes</span>
+                      <span>
+                        {arq.tipo_equipo_planes.length}{' '}
+                        {arq.tipo_equipo_planes.length === 1 ? 'plan' : 'planes'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1725,7 +1819,16 @@ export function TabArquetiposEquipo() {
                   <span>Planes de Mantenimiento Preventivo</span>
                 </h4>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Frecuencias recomendadas por calendario (días) y horas de uso
+                  {(() => {
+                    const metaUso = getMetricaUsoMeta({
+                      unidadUso: selectedArquetipo.unidad_uso,
+                      etiquetaContador: selectedArquetipo.etiqueta_contador,
+                      requiereHorometro: selectedArquetipo.requiere_horometro,
+                    });
+                    return metaUso.soloCalendario
+                      ? 'Frecuencias recomendadas por calendario (días)'
+                      : `Frecuencias recomendadas por calendario (días) y ${metaUso.sustantivoUso}`;
+                  })()}
                 </p>
               </div>
               <button
@@ -1804,7 +1907,7 @@ export function TabArquetiposEquipo() {
                         title="Abrir Constructor Rápido de Checklist y Telemetría (Fast-Protocol Builder)"
                       >
                         <Wrench className="h-3.5 w-3.5" />
-                        <span>🛠️ Configurar Checklist y Mediciones</span>
+                        <span>Configurar Checklist y Mediciones</span>
                       </Link>
                       <button
                         type="button"
@@ -1977,9 +2080,34 @@ export function TabArquetiposEquipo() {
                 unidadUso={arqForm.unidad_uso}
                 etiquetaContador={arqForm.etiqueta_contador}
                 requiereHorometro={arqForm.requiere_horometro}
-                onChange={(u) => setArqForm({ ...arqForm, ...u })}
-                onCustomEtiquetaChange={(val) => setArqForm({ ...arqForm, etiqueta_contador: val })}
-                onCustomUnidadChange={(val) => setArqForm({ ...arqForm, unidad_uso: val })}
+                isAutoUnidad={isAutoUnidadUso}
+                isUnidadDuplicada={isUnidadCustomDuplicada}
+                onToggleAutoUnidad={(nextAuto) => {
+                  setIsAutoUnidadUso(nextAuto);
+                  if (nextAuto) {
+                    const autoCod = generarCodigoMetricaUso(
+                      arqForm.etiqueta_contador,
+                      unidadesUsoExistentes,
+                    );
+                    setArqForm((prev) => ({ ...prev, unidad_uso: autoCod }));
+                  }
+                }}
+                onChange={(u) => {
+                  if (u.medidor_preset === 'CUSTOM') {
+                    setIsAutoUnidadUso(true);
+                  }
+                  setArqForm((prev) => ({ ...prev, ...u }));
+                }}
+                onCustomEtiquetaChange={(val) =>
+                  setArqForm((prev) => ({
+                    ...prev,
+                    etiqueta_contador: val,
+                    unidad_uso: isAutoUnidadUso
+                      ? generarCodigoMetricaUso(val, unidadesUsoExistentes)
+                      : prev.unidad_uso,
+                  }))
+                }
+                onCustomUnidadChange={(val) => setArqForm((prev) => ({ ...prev, unidad_uso: val }))}
               />
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
@@ -1995,6 +2123,7 @@ export function TabArquetiposEquipo() {
                   disabled={
                     createArqMut.isPending ||
                     isCodigoTipoDuplicado ||
+                    isUnidadCustomDuplicada ||
                     !arqForm.nombre_tipo.trim() ||
                     !arqForm.codigo_tipo.trim() ||
                     (arqForm.is_custom_categoria && !arqForm.categoria_custom.trim()) ||
@@ -2116,11 +2245,36 @@ export function TabArquetiposEquipo() {
                 unidadUso={editArqForm.unidad_uso}
                 etiquetaContador={editArqForm.etiqueta_contador}
                 requiereHorometro={editArqForm.requiere_horometro}
-                onChange={(u) => setEditArqForm({ ...editArqForm, ...u })}
+                isAutoUnidad={isAutoEditUnidadUso}
+                isUnidadDuplicada={isEditUnidadCustomDuplicada}
+                onToggleAutoUnidad={(nextAuto) => {
+                  setIsAutoEditUnidadUso(nextAuto);
+                  if (nextAuto) {
+                    const autoCod = generarCodigoMetricaUso(
+                      editArqForm.etiqueta_contador,
+                      unidadesUsoExistentes,
+                    );
+                    setEditArqForm((prev) => ({ ...prev, unidad_uso: autoCod }));
+                  }
+                }}
+                onChange={(u) => {
+                  if (u.medidor_preset === 'CUSTOM') {
+                    setIsAutoEditUnidadUso(false);
+                  }
+                  setEditArqForm((prev) => ({ ...prev, ...u }));
+                }}
                 onCustomEtiquetaChange={(val) =>
-                  setEditArqForm({ ...editArqForm, etiqueta_contador: val })
+                  setEditArqForm((prev) => ({
+                    ...prev,
+                    etiqueta_contador: val,
+                    unidad_uso: isAutoEditUnidadUso
+                      ? generarCodigoMetricaUso(val, unidadesUsoExistentes)
+                      : prev.unidad_uso,
+                  }))
                 }
-                onCustomUnidadChange={(val) => setEditArqForm({ ...editArqForm, unidad_uso: val })}
+                onCustomUnidadChange={(val) =>
+                  setEditArqForm((prev) => ({ ...prev, unidad_uso: val }))
+                }
               />
 
               <div>
@@ -2149,6 +2303,7 @@ export function TabArquetiposEquipo() {
                   disabled={
                     updateArqMut.isPending ||
                     isCodigoEditTipoDuplicado ||
+                    isEditUnidadCustomDuplicada ||
                     !editArqForm.nombre_tipo.trim() ||
                     !editArqForm.codigo_tipo.trim() ||
                     (editArqForm.is_custom_categoria && !editArqForm.categoria_custom.trim()) ||
@@ -2219,7 +2374,7 @@ export function TabArquetiposEquipo() {
                       <strong>
                         {deletingArq.equipos_activos ?? deletingArq._count.equipos} equipos activos
                       </strong>{' '}
-                      registrados en Mekanos. Para mantener la trazabilidad de órdenes de servicio e
+                      registrados en la plataforma. Para mantener la trazabilidad de órdenes de servicio e
                       historial de fallas, no puede ser eliminado mientras tenga activos vinculados.
                     </p>
                   </div>

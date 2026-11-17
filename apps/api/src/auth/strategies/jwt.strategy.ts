@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AuthService } from '../auth.service';
+import { resolveRequiredAuthSecret } from '../config/auth-secrets.helper';
 
 /**
  * JwtStrategy valida el access_token JWT en requests protegidos
@@ -21,7 +22,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         ExtractJwt.fromUrlQueryParameter('auth_token'),
       ]),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'fallback-secret',
+      secretOrKey: resolveRequiredAuthSecret(configService, 'JWT_SECRET'),
     });
   }
 

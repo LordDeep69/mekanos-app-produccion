@@ -22,6 +22,7 @@ import {
   TipoOperacionInventario,
 } from '@/features/inventario/components/MovimientoModal';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   AlertCircle,
   ArrowDownCircle,
@@ -127,6 +128,7 @@ export default function DetalleComponentePage() {
   const rawId = params?.id;
   const id = rawId && !isNaN(Number(rawId)) && Number(rawId) > 0 ? Number(rawId) : 0;
   const validId = id > 0 ? id : null;
+  const { formatCurrency, formatDate, formatDateTime } = useOrgFormatters();
 
   // Pestaña activa por defecto: 'lotes' (Lotes & Ubicaciones en Bodega)
   const [activeTab, setActiveTab] = useState<'lotes' | 'kardex' | 'parametros'>('lotes');
@@ -221,15 +223,7 @@ export default function DetalleComponentePage() {
     );
   }, [componente]);
 
-  // Formateador COP
-  const formatCOP = (valor: number | null | undefined) => {
-    if (valor === null || valor === undefined) return '$ 0';
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      maximumFractionDigits: 0,
-    }).format(Number(valor));
-  };
+  const formatCOP = (valor: number | null | undefined) => formatCurrency(valor ?? 0);
 
   if (isLoading) {
     return (
@@ -598,13 +592,13 @@ export default function DetalleComponentePage() {
                         </td>
                         <td className="px-4 py-3 text-slate-600">
                           {lote.fecha_ingreso
-                            ? new Date(lote.fecha_ingreso).toLocaleDateString('es-CO')
+                            ? formatDate(lote.fecha_ingreso)
                             : '--'}
                         </td>
                         <td className="px-4 py-3">
                           {lote.fecha_vencimiento ? (
                             <span className="font-medium text-slate-700">
-                              {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}
+                              {formatDate(lote.fecha_vencimiento)}
                             </span>
                           ) : (
                             <span className="text-slate-400 italic">No aplica</span>
@@ -704,8 +698,7 @@ export default function DetalleComponentePage() {
                     const cantidadValor = esEntrada ? mov.entrada : mov.salida;
                     const responsableLimpio =
                       !mov.realizado_por ||
-                      mov.realizado_por.toLowerCase().includes('admin') ||
-                      mov.realizado_por.toLowerCase().includes('mekanos')
+                      mov.realizado_por.toLowerCase().includes('admin')
                         ? 'Administrador del Sistema'
                         : mov.realizado_por;
 
@@ -715,13 +708,7 @@ export default function DetalleComponentePage() {
                         className="hover:bg-slate-50/80 transition-colors"
                       >
                         <td className="px-4 py-3 text-slate-700 font-medium whitespace-nowrap">
-                          {new Date(mov.fecha).toLocaleString('es-CO', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatDateTime(mov.fecha)}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-0.5">

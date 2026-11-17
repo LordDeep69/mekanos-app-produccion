@@ -35,7 +35,7 @@ export const MODO_RESPUESTA_PRESETS: PresetModoRespuesta[] = [
     value: 'ESCALA_ESTADO',
     label: '🎛️ Evaluación (B / R / M / C / NA)',
     shortLabel: 'B / R / M / C / NA',
-    description: 'Escala estándar MEKANOS con Bueno, Regular, Malo, Corregido y No Aplica',
+    description: 'Escala estándar corporativa con Bueno, Regular, Malo, Corregido y No Aplica',
     previewBadges: ['B Bueno', 'R Regular', 'M Malo', 'C Corregido', 'NA'],
   },
   {

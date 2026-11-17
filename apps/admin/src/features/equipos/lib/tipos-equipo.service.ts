@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api/client';
 
 export interface TipoEquipoOption {
   id_tipo_equipo: number;
+  codigo_tipo?: string;
   nombre_tipo: string;
   descripcion?: string;
 }

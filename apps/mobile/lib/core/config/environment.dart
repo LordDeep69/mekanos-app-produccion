@@ -1,13 +1,15 @@
-/// Configuración de entorno para la app Mekanos
+/// Configuración parametrizable de entorno API.
 ///
 /// Política Zero-Trust de Entornos:
-/// - Todo arranque en frío inicia SIEMPRE en Producción
-///   (`https://api.mekanosapp.dpdns.org/api`) para evitar errores operativos en campo.
+/// - Todo arranque en frío inicia SIEMPRE en Producción (`AppConfig.defaultApiBaseUrl`,
+///   inyectable en build time con `--dart-define=API_BASE_URL=...`).
 /// - El conmutador a API Local o URL Directa vive en memoria de sesión únicamente,
-///   activado explícitamente desde el gesto protegido por contraseña en Login.
+///   activado explícitamente desde el gesto protegido QA cuando está habilitado.
 library;
 
 import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, debugPrint;
+
+import 'app_config.dart';
 
 /// Modos de destino API disponibles en tiempo de ejecución.
 enum ApiEnvironmentMode {
@@ -40,12 +42,11 @@ class EnvironmentState {
 class Environment {
   Environment._();
 
-  /// 🌐 Backend en producción (Cloudflare Tunnel) — permanente por defecto al iniciar
-  static const String _productionApiUrl =
-      'https://api.mekanosapp.dpdns.org/api';
+  /// 🌐 Backend en producción configurable vía `--dart-define=API_BASE_URL`
+  static const String _productionApiUrl = AppConfig.defaultApiBaseUrl;
 
   /// 🔌 Puerto estándar del backend NestJS local
-  static const int localPort = 3000;
+  static const int localPort = AppConfig.localApiPort;
 
   /// Timeout para requests HTTP (en segundos)
   /// Aumentado a 320s porque /finalizar-completo tarda ~25s

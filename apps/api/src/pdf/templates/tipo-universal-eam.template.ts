@@ -18,15 +18,20 @@
 
 import {
   baseStyles,
+  buildBrandCssVars,
   DatosOrdenPDF,
+  escapeBrandHtml,
   EvidenciasPorEquipoPDF,
+  formatNumberOrg,
   generarChecklistMultiEquipo,
   generarDatosClienteConFichaTecnica,
+  generarFooterCorporativoHtml,
   generarHeaderConLogo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
   generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
+  resolveOrgBranding,
 } from './mekanos-base.template';
 import { EquipoSpecsReader, DatosPlacaUniversal } from '../../equipos/services/equipo-specs.reader';
 
@@ -51,91 +56,55 @@ const limpiarPrefijosCaption = (caption: string): string => {
 };
 
 /**
- * Detecta si una actividad representa una medición o parámetro operacional
- * que debe ser segregado del checklist hacia la sección de telemetría/parámetros.
+ * Detecta determinísticamente desde metadatos del catálogo si una actividad
+ * representa una medición o parámetro operacional (sin heurísticas regex sobre texto).
  */
 export const esActividadMedicion = (act: any): boolean => {
-  // Fase 6: discriminador determinista cuando existe metadata explícita del catálogo
   if (act?.idParametroMedicion != null) return true;
-  if (act?.tipoActividad) return act.tipoActividad === 'MEDICION';
-  const desc = (act.descripcion || '').toLowerCase();
-
-  // Excluir ajustes mecánicos de tensión en correas o bandas de transmisión
-  if (desc.includes('banda') || desc.includes('correa')) {
-    return false;
-  }
-
-  // Excluir pruebas funcionales de verificación de switches o presostatos
-  if (
-    desc.includes('presostato') &&
-    (desc.includes('verific') || desc.includes('revis') || desc.includes('prueba'))
-  ) {
-    return false;
-  }
-
-  return (
-    desc.includes('medición') ||
-    desc.includes('medicion') ||
-    desc.includes('presión de') ||
-    desc.includes('presion de') ||
-    desc.includes('voltaje') ||
-    desc.includes('tensión eléctrica') ||
-    desc.includes('tension electrica') ||
-    desc.includes('tensión vac') ||
-    desc.includes('tensión salida') ||
-    desc.includes('amperaje') ||
-    desc.includes('corriente') ||
-    desc.includes('temperatura') ||
-    desc.includes('delta t') ||
-    desc.includes('consumo eléctrico') ||
-    desc.includes('consumo electrico') ||
-    desc.includes('vibración') ||
-    desc.includes('vibracion') ||
-    desc.includes('rpm') ||
-    (desc.includes('medir') && !desc.includes('revisar'))
-  );
+  return act?.tipoActividad === 'MEDICION';
 };
 
-export const deducirUnidadParametro = (descripcion: string): string => {
-  const d = (descripcion || '').toUpperCase();
-  if (d.includes('PSI') || d.includes('PRESIÓN') || d.includes('PRESION')) return 'PSI';
-  if (d.includes('VAC') || d.includes('VOLTIOS') || d.includes('VOLTAJE')) return 'VAC';
-  if (d.includes('AMPERAJE') || d.includes('CORRIENTE') || d.includes('AMP')) return 'A';
-  if (d.includes('TEMPERATURA') || d.includes('DELTA T') || d.includes('°C')) return '°C';
-  if (d.includes('RPM')) return 'RPM';
-  if (d.includes('HZ') || d.includes('FRECUENCIA')) return 'Hz';
-  if (d.includes('CFM')) return 'CFM';
-  if (d.includes('M3/H') || d.includes('M³/H') || d.includes('CAUDAL')) return 'm³/h';
+/**
+ * Lee explícitamente la unidad desde respuestaJson/configInputJson o metadata de actividad.
+ * Nunca adivina unidades mediante expresiones regulares sobre la descripción.
+ */
+export const deducirUnidadParametro = (descripcion: string, act?: any): string => {
+  const fromResp =
+    act?.respuestaJson && typeof act.respuestaJson === 'object'
+      ? act.respuestaJson.unidad
+      : undefined;
+  const fromCfg =
+    act?.configInputJson && typeof act.configInputJson === 'object'
+      ? act.configInputJson.unidad
+      : undefined;
+  const explicita = String(fromResp || fromCfg || act?.unidad || '').trim();
+  if (explicita) return explicita;
+
+  const raw = (descripcion || '').trim();
+  const parenMatch = raw.match(/\(([A-Za-z0-9°%Ωµ/³²·\s-]+)\)\s*$/);
+  if (parenMatch) {
+    const unitCandidate = parenMatch[1].trim();
+    if (
+      unitCandidate.length <= 10 &&
+      !['DELTA T', 'BAJA', 'ALTA', 'SI/NO', 'S/N'].includes(unitCandidate.toUpperCase())
+    ) {
+      return unitCandidate;
+    }
+  }
   return '';
 };
 
 export const formatearLabelParametroUniversal = (descripcion: string): string => {
   const d = (descripcion || '').toUpperCase();
-  if (d.includes('SUCCIÓN') || d.includes('SUCCION') || d.includes('BAJA')) {
+  const esPresion = d.includes('PRESIÓN') || d.includes('PRESION');
+  if (d.includes('SUCCIÓN') || d.includes('SUCCION') || (esPresion && d.includes('BAJA'))) {
     return 'Presión de Succión (Baja)';
   }
-  if (d.includes('DESCARGA') || d.includes('ALTA')) {
+  if (d.includes('DESCARGA') || (esPresion && d.includes('ALTA'))) {
     return 'Presión de Descarga (Alta)';
   }
-  if (d.includes('VOLTAJE') || d.includes('TENSIÓN') || d.includes('TENSION')) {
-    return 'Voltaje de Alimentación';
-  }
-  if (
-    d.includes('AMPERAJE') ||
-    d.includes('CORRIENTE') ||
-    d.includes('CONSUMO ELÉCTRICO') ||
-    d.includes('CONSUMO ELECTRICO')
-  ) {
-    return 'Consumo Eléctrico / Amperaje';
-  }
-  if (d.includes('DELTA T') || d.includes('TEMPERATURA')) {
+  if (d.includes('DELTA T')) {
     return 'Temperatura / Delta T';
-  }
-  if (d.includes('VIBRACIÓN') || d.includes('VIBRACION')) {
-    return 'Nivel de Vibración';
-  }
-  if (d.includes('ACEITE') && d.includes('PRESIÓN')) {
-    return 'Presión de Aceite';
   }
 
   const limpio = (descripcion || '')
@@ -148,6 +117,7 @@ export const formatearLabelParametroUniversal = (descripcion: string): string =>
 };
 
 export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
+  const brand = resolveOrgBranding(datos.branding);
   const esMultiEquipo =
     Boolean(datos.esMultiEquipo) ||
     (Boolean(datos.actividadesPorEquipo) && (datos.actividadesPorEquipo?.length || 0) > 1);
@@ -181,6 +151,7 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Informe Mantenimiento EAM - ${datos.numeroOrden}</title>
   <style>
+    ${buildBrandCssVars(brand)}
     ${baseStyles}
 
     /* Blindaje Anti-Corte en Tablas y Filas */
@@ -238,11 +209,12 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
 </head>
 <body>
   <div class="page">
-    <!-- 1. ENCABEZADO OFICIAL MEKANOS -->
+    <!-- 1. ENCABEZADO CORPORATIVO WHITE-LABEL -->
     ${generarHeaderConLogo(
       'INFORME TÉCNICO DE MANTENIMIENTO',
       subtituloServicio,
       datos.numeroOrden,
+      brand,
     )}
 
     <!-- 2. LEYENDA MULTI-EQUIPOS (SI APLICA) -->
@@ -251,14 +223,14 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
       esMultiEquipo,
     )}
 
-    <!-- 3. DATOS DEL CLIENTE Y FICHA TÉCNICA DEL ACTIVO (ESTÁNDAR UNIFICADO MEKANOS BASE) -->
+    <!-- 3. DATOS DEL CLIENTE Y FICHA TÉCNICA DEL ACTIVO -->
     ${generarDatosClienteConFichaTecnica(datos)}
 
     <!-- 4. CHECKLIST DE INSPECCIÓN DINÁMICO POR SUBSISTEMAS (SIN MEDICIONES CRÍTICAS) -->
     ${
       esMultiEquipo && datos.actividadesPorEquipo
         ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
-        : generarChecklistUniversal(datos.actividades || [])
+        : generarChecklistUniversal(datos.actividades || [], brand)
     }
 
     <!-- 5. REGISTRO DE PARÁMETROS OPERATIVOS Y TELEMETRÍA TÉCNICA -->
@@ -269,7 +241,7 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
     }
 
     <!-- 6. REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO WMS -->
-    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, datos.tipoServicio)}
+    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, datos.tipoServicio, brand)}
 
     <!-- 6B. PENDIENTES TÉCNICOS Y HALLAZGOS -->
     ${generarPendientesUniversal(datos.pendientes)}
@@ -287,10 +259,10 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
       ${generarObservacionesUniversal(datos)}
 
       <!-- 9. FIRMAS DIGITALES Y CIERRE -->
-      ${generarFirmasUniversal(datos)}
+      ${generarFirmasUniversal(datos, brand)}
 
       <!-- 10. PIE DE PÁGINA CORPORATIVO -->
-      ${generarFooterCorporativo()}
+      ${generarFooterCorporativoHtml(brand)}
     </div>
   </div>
 </body>
@@ -302,7 +274,10 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
 // SUB-RENDERIZADORES ATÓMICOS DEL TEMPLATE UNIVERSAL
 // ════════════════════════════════════════════════════════════════════════════
 
-function generarChecklistUniversal(actividades: any[]): string {
+function generarChecklistUniversal(
+  actividades: any[],
+  brand = resolveOrgBranding(),
+): string {
   // Filtrar estrictamente actividades de inspección/mantenimiento (las mediciones van separadas)
   const actividadesInspeccion = (actividades || []).filter((act) => !esActividadMedicion(act));
 
@@ -434,10 +409,15 @@ function generarChecklistUniversal(actividades: any[]): string {
                   : [];
                 const regexPrefijoEstructurado =
                   /^(?:RESPUESTA|CICLOS|HORAS|HOROMETRO|HORÓMETRO|KM|ODOMETRO|CONTADOR|UPM)\s*:\s*(.*)$/i;
+                const regexPrefijoContadorCustom = /^[A-ZÁÉÍÓÚÑ0-9_]{2,25}\s*:\s*[\d.,]+$/i;
 
                 let prefijoLegacy = '';
                 let notaRaw = '';
-                if (partesObs.length > 0 && regexPrefijoEstructurado.test(partesObs[0])) {
+                if (
+                  partesObs.length > 0 &&
+                  (regexPrefijoEstructurado.test(partesObs[0]) ||
+                    (esContadorAct && regexPrefijoContadorCustom.test(partesObs[0])))
+                ) {
                   prefijoLegacy = partesObs[0];
                   notaRaw = partesObs.slice(1).join(' ').trim();
                 } else {
@@ -463,13 +443,16 @@ function generarChecklistUniversal(actividades: any[]): string {
                   return Number(raw);
                 };
 
-                const renderNotaSeguro = (txt: string): string => {
-                  if (/<[a-z][\s\S]*>/i.test(txt)) return txt;
-                  return txt
+                const escapeHtmlTextoPlano = (txt: string): string =>
+                  txt
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;')
-                    .replace(/\r?\n/g, '<br/>');
+                    .replace(/"/g, '&quot;');
+
+                const renderNotaSeguro = (txt: string): string => {
+                  if (/<(?:br|b|i|u|strong|em|div|span|p)\b[^>]*>/i.test(txt)) return txt;
+                  return escapeHtmlTextoPlano(txt).replace(/\r?\n/g, '<br/>');
                 };
 
                 const getSemanticPillTheme = (codigo: string) => {
@@ -501,7 +484,9 @@ function generarChecklistUniversal(actividades: any[]): string {
                 let obsDisplay = '';
                 if (esContadorDetectado) {
                   const matchPref = obsLimpia.match(
-                    /^(CICLOS|HORAS|HOROMETRO|HORÓMETRO|KM|ODOMETRO|CONTADOR|UPM)\s*:\s*([0-9.,]+)/i,
+                    esContadorAct
+                      ? /^([A-ZÁÉÍÓÚÑ0-9_]{2,25})\s*:\s*([0-9.,]+)/i
+                      : /^(CICLOS|HORAS|HOROMETRO|HORÓMETRO|KM|ODOMETRO|CONTADOR|UPM)\s*:\s*([0-9.,]+)/i,
                   );
                   const numRaw =
                     resp?.valor != null && Number.isFinite(parseNumeroContador(String(resp.valor)))
@@ -511,24 +496,31 @@ function generarChecklistUniversal(actividades: any[]): string {
                         : NaN;
                   if (Number.isFinite(numRaw)) {
                     const prefUpper = (matchPref?.[1] || String(resp?.unidad || '')).toUpperCase();
-                    const sufijo = prefUpper.includes('CICLO')
-                      ? 'ciclos'
-                      : prefUpper.includes('KM') || prefUpper.includes('ODO')
-                        ? 'km'
-                        : prefUpper.includes('UPM') || prefUpper === 'UDS'
-                          ? 'und'
-                          : prefUpper.includes('HORA') || prefUpper.startsWith('HR')
-                            ? 'hrs'
-                            : resp?.unidad
-                              ? String(resp.unidad).trim()
-                              : '';
+                    const unitFromResp = resp?.unidad ? String(resp.unidad).trim() : '';
+                    const sufijo =
+                      unitFromResp ||
+                      (prefUpper.includes('CICLO')
+                        ? 'ciclos'
+                        : prefUpper.includes('KM') || prefUpper.includes('ODO')
+                          ? 'km'
+                          : prefUpper.includes('UPM') || prefUpper === 'UDS'
+                            ? 'und'
+                            : prefUpper.includes('HORA') || prefUpper.startsWith('HR')
+                              ? 'hrs'
+                              : prefUpper &&
+                                  prefUpper !== 'CONTADOR' &&
+                                  prefUpper !== 'RESPUESTA'
+                                ? prefUpper.toLowerCase()
+                                : '');
                     const chipPrefix =
                       tipoInputUpper === 'INPUT_NUMERICO' && etiquetaCustom
-                        ? `${renderNotaSeguro(etiquetaCustom)}:`
+                        ? `${escapeHtmlTextoPlano(etiquetaCustom)}:`
                         : 'Lectura:';
-                    const numFormateado = Number.isInteger(numRaw)
-                      ? numRaw.toLocaleString('es-CO')
-                      : String(resp?.valor ?? numRaw);
+                    const numFormateado = formatNumberOrg(
+                      numRaw,
+                      brand,
+                      Number.isInteger(numRaw) ? 0 : 2,
+                    );
                     const lecturaChip = `<span style="display: inline-flex; align-items: center; gap: 4px; background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; border-radius: 4px; padding: 2px 7px; font-size: 7.8px; font-weight: 700; font-style: normal;"><span style="color: #3B82F6; font-weight: 600;">${chipPrefix}</span> ${numFormateado}${sufijo ? ` ${sufijo}` : ''}</span>`;
                     const notaBox = buildNotaBox(true);
                     obsDisplay = notaBox
@@ -551,7 +543,7 @@ function generarChecklistUniversal(actividades: any[]): string {
                   if (etiquetaFinal) {
                     const semaforoResp = String(resp?.semaforo || estRaw).toUpperCase();
                     const theme = getSemanticPillTheme(semaforoResp);
-                    const respChip = `<span style="display: inline-flex; align-items: center; gap: 4px; background: ${theme.bg}; color: ${theme.color}; border: 1px solid ${theme.border}; border-radius: 4px; padding: 2px 7px; font-size: 7.8px; font-weight: 700; font-style: normal;"><span style="display: inline-block; width: 5.5px; height: 5.5px; border-radius: 50%; background: ${theme.dot}; flex-shrink: 0;"></span>${renderNotaSeguro(etiquetaFinal)}</span>`;
+                    const respChip = `<span style="display: inline-flex; align-items: center; gap: 4px; background: ${theme.bg}; color: ${theme.color}; border: 1px solid ${theme.border}; border-radius: 4px; padding: 2px 7px; font-size: 7.8px; font-weight: 700; font-style: normal;"><span style="display: inline-block; width: 5.5px; height: 5.5px; border-radius: 50%; background: ${theme.dot}; flex-shrink: 0;"></span>${escapeHtmlTextoPlano(etiquetaFinal)}</span>`;
                     const notaBox = buildNotaBox(true);
                     obsDisplay = notaBox
                       ? `<div style="display: flex; flex-direction: column; gap: 4px;"><div>${respChip}</div>${notaBox}</div>`
@@ -628,7 +620,7 @@ function generarMedicionesUniversal(
     if (respAct && respAct.valor != null && String(respAct.valor).trim() !== '') {
       const unidadResp =
         (respAct.unidad ? String(respAct.unidad).trim() : '') ||
-        deducirUnidadParametro(act.descripcion);
+        deducirUnidadParametro(act.descripcion, act);
       valorTexto = `${respAct.valor}${unidadResp ? ` ${unidadResp}` : ''}`.trim();
     } else if (respAct && respAct.etiqueta) {
       valorTexto = String(respAct.etiqueta).trim();
@@ -640,7 +632,7 @@ function generarMedicionesUniversal(
           /(?:temp|presion|voltaje|amperaje|amp|corriente)?[:\s]*([\d.,]+)\s*([a-zA-Z°/³]*)/i,
         );
         if (matchNum) {
-          const unidad = matchNum[2] || deducirUnidadParametro(act.descripcion);
+          const unidad = matchNum[2] || deducirUnidadParametro(act.descripcion, act);
           valorTexto = `${matchNum[1]} ${unidad}`.trim();
         } else {
           valorTexto = obs;
@@ -687,25 +679,43 @@ function generarMedicionesUniversal(
   if (modulo) {
     if (
       modulo.horasTrabajo != null &&
+      placaUniversal?.requiereHorometro !== false &&
+      String(placaUniversal?.unidadUso || '').toUpperCase() !== 'CAL' &&
       !itemsCards.some(
         (i) =>
           i.label.toLowerCase().includes('horómetr') ||
           i.label.toLowerCase().includes('horometr') ||
           i.label.toLowerCase().includes('ciclos') ||
           i.label.toLowerCase().includes('odómetr') ||
-          i.label.toLowerCase().includes('odometr'),
+          i.label.toLowerCase().includes('odometr') ||
+          (placaUniversal?.etiquetaContador &&
+            i.label.toLowerCase().includes(placaUniversal.etiquetaContador.toLowerCase())),
       )
     ) {
-      const uUso = placaUniversal?.unidadUso || 'HORAS';
-      const etiqRaw = placaUniversal?.etiquetaContador;
+      const uUsoRaw = String(placaUniversal?.unidadUso || 'HORAS').trim();
+      const uUso = uUsoRaw.toUpperCase();
+      const etiqRaw = placaUniversal?.etiquetaContador?.trim();
       const labelUso =
         etiqRaw ||
         (uUso === 'CICLOS'
           ? 'Ciclos de Operación'
-          : uUso === 'KM_ODO'
+          : uUso === 'KM_ODO' || uUso === 'KM'
             ? 'Odómetro de Operación'
-            : 'Horómetro de Operación');
-      const sufijoUso = uUso === 'CICLOS' ? 'ciclos' : uUso === 'KM_ODO' ? 'km' : 'hrs';
+            : uUso === 'UPM'
+              ? 'Unidades Producidas'
+              : uUso !== 'HORAS' && uUso !== 'HRS' && uUso !== 'H'
+                ? uUsoRaw
+                : 'Horómetro de Operación');
+      const sufijoUso =
+        uUso === 'CICLOS'
+          ? 'ciclos'
+          : uUso === 'KM_ODO' || uUso === 'KM'
+            ? 'km'
+            : uUso === 'UPM'
+              ? 'und'
+              : uUso !== 'HORAS' && uUso !== 'HRS' && uUso !== 'H'
+                ? uUsoRaw.toLowerCase()
+                : 'hrs';
       itemsCards.push({ label: labelUso, value: `${modulo.horasTrabajo} ${sufijoUso}` });
     }
     if (
@@ -905,9 +915,9 @@ function generarEvidenciasUniversal(evidencias: any[], _lotesGaleria?: LoteGaler
               .map(
                 (item) => `
               <div class="evidencia-item" style="flex: 1 1 30%; min-width: 130px; max-width: 32%; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 4px; padding: 4px; text-align: center;">
-                <img src="${item.url}" alt="${item.caption}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 3px;" onerror="this.style.display='none'" />
+                <img src="${escapeBrandHtml(item.url)}" alt="${escapeBrandHtml(item.caption)}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 3px;" onerror="this.style.display='none'" />
                 <div style="font-size: 7.5px; color: #475569; margin-top: 3px; font-weight: 600; line-height: 1.2;">
-                  ${item.caption}
+                  ${escapeBrandHtml(item.caption)}
                 </div>
               </div>
             `,
@@ -936,7 +946,7 @@ function generarEvidenciasMultiEquipo(
         return `
         <div style="margin-bottom: 10px; border: 1.5px solid #CBD5E1; border-radius: 6px; overflow: hidden;">
           <div style="background: #1E293B; color: #FFFFFF; padding: 6px 10px; font-size: 9.5px; font-weight: bold;">
-            ${nom} (${g.equipo.codigoEquipo || 'S/C'})
+            ${escapeBrandHtml(nom)} (${escapeBrandHtml(g.equipo.codigoEquipo || 'S/C')})
           </div>
           ${generarEvidenciasUniversal(g.evidencias, undefined)}
         </div>
@@ -957,13 +967,16 @@ function generarObservacionesUniversal(datos: DatosOrdenPDF): string {
   <div class="section" style="page-break-inside: avoid;">
     <div class="section-title">📝 OBSERVACIONES, RECOMENDACIONES Y DIAGNÓSTICO FINAL</div>
     <div style="padding: 10px 12px; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 9px; line-height: 1.5; color: #1E293B; white-space: pre-wrap;">
-${obs}
+${escapeBrandHtml(obs)}
     </div>
   </div>
   `;
 }
 
-function generarFirmasUniversal(datos: DatosOrdenPDF): string {
+function generarFirmasUniversal(
+  datos: DatosOrdenPDF,
+  brand = resolveOrgBranding(datos.branding),
+): string {
   const nombreClienteRaw = (datos.nombreCliente || '').trim();
   const nombreClienteValido =
     nombreClienteRaw && !['.', '-', '--', '..', '...'].includes(nombreClienteRaw)
@@ -985,18 +998,18 @@ function generarFirmasUniversal(datos: DatosOrdenPDF): string {
             ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" style="max-height: 50px;" /></div>`
             : `<div class="firma-line"></div>`
         }
-        <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || 'Técnico de Servicio'}</div>
-        <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable de Mantenimiento'}</div>
-        <div class="firma-label">MEKANOS S.A.S · Departamento Técnico</div>
+        <div class="firma-nombre">${escapeBrandHtml(datos.nombreTecnico || datos.tecnico || 'Técnico de Servicio')}</div>
+        <div class="firma-cargo">${escapeBrandHtml(datos.cargoTecnico || 'Técnico Responsable de Mantenimiento')}</div>
+        <div class="firma-label">${escapeBrandHtml(brand.nombreComercial)} · Departamento Técnico</div>
       </div>
       <div class="firma-box" style="display: table-cell; width: 50%; vertical-align: top; page-break-inside: avoid !important; break-inside: avoid !important;">
         ${
           datos.firmaCliente
-            ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" style="max-height: 50px;" /></div>`
+            ? `<div class="firma-imagen"><img src="${escapeBrandHtml(datos.firmaCliente)}" alt="Firma Cliente" style="max-height: 50px;" /></div>`
             : `<div class="firma-line"></div>`
         }
-        <div class="firma-nombre">${nombreClienteValido}</div>
-        <div class="firma-cargo">${cargoClienteValido}</div>
+        <div class="firma-nombre">${escapeBrandHtml(nombreClienteValido)}</div>
+        <div class="firma-cargo">${escapeBrandHtml(cargoClienteValido)}</div>
         <div class="firma-label">Firma y Aprobación del Cliente</div>
       </div>
     </div>
@@ -1055,15 +1068,6 @@ function generarPendientesUniversal(pendientes?: DatosOrdenPDF['pendientes']): s
           .join('')}
       </tbody>
     </table>
-  </div>
-  `;
-}
-
-function generarFooterCorporativo(): string {
-  return `
-  <div class="footer" style="margin-top: 14px; text-align: center; font-size: 7.5px; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 6px;">
-    <strong>MEKANOS S.A.S</strong> · NIT: 900.542.123-1 · CRA 49C # 31-35 DIAG. AL SENA, CARTAGENA DE INDIAS<br/>
-    Línea PBX: (605) 635-9384 · WhatsApp Soporte 24/7: 315-708-3350 · info@mekanos.com.co
   </div>
   `;
 }

@@ -17,6 +17,7 @@ export class GetTiposComponenteHandler
     return await this.repository.findAll({
       categoria: query.categoria,
       aplica_a: query.aplica_a,
+      id_tipo_equipo: query.id_tipo_equipo,
       es_consumible: query.es_consumible,
       es_inventariable: query.es_inventariable,
       activo: query.activo,

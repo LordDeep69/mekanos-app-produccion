@@ -14,6 +14,7 @@ import {
   getCategoriaServicioLabel,
 } from '@/features/ordenes/api/catalogos.service';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   AlertCircle,
   Check,
@@ -75,6 +76,7 @@ const CATEGORIAS_COMERCIALES = [
 ];
 
 export default function CatalogoServiciosComercialesPage() {
+  const { formatCurrency } = useOrgFormatters();
   const [busqueda, setBusqueda] = useState('');
   const [filtroTipoServicio, setFiltroTipoServicio] = useState<string>('');
   const [filtroCategoria, setFiltroCategoria] = useState<string>('');
@@ -449,7 +451,7 @@ export default function CatalogoServiciosComercialesPage() {
                         <DollarSign className="h-4 w-4 text-emerald-600 shrink-0" />
                         <span>
                           {servicio.precio_base != null && Number(servicio.precio_base) > 0
-                            ? `$ ${Number(servicio.precio_base).toLocaleString('es-CO')}`
+                            ? formatCurrency(servicio.precio_base)
                             : 'Por cotizar'}
                         </span>
                       </div>

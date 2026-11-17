@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { getNextTableId } from '../../common/utils/next-id.helper';
 import { PrismaService } from '../../database/prisma.service';
 import {
   CreateGastoOrdenData,
@@ -41,11 +40,8 @@ export class PrismaGastosOrdenRepository implements IGastosOrdenRepository {
   };
 
   async create(data: CreateGastoOrdenData): Promise<any> {
-    const nextId = await getNextTableId(this.prisma, 'gastos_orden', 'id_gasto');
-
     return this.prisma.gastos_orden.create({
       data: {
-        id_gasto: nextId,
         id_orden_servicio: data.idOrdenServicio,
         tipo_gasto: data.tipoGasto as any,
         descripcion: data.descripcion,

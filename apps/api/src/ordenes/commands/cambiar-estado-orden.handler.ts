@@ -5,10 +5,20 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { ConfiguracionOrganizacionService } from '../../configuracion-organizacion/configuracion-organizacion.service';
+import { EmailTemplatesService } from '../../email/email-templates.service';
 import { EmailService } from '../../email/email.service';
 import { EquipoSpecsReader } from '../../equipos/services/equipo-specs.reader';
+import {
+  DEFAULT_ORG_BRANDING,
+  OrgBrandingContext,
+  buildOrgBranding,
+  escapeBrandHtml,
+} from '../../pdf/org-branding.types';
+import { PdfAssemblerService } from '../../pdf/pdf-assembler.service';
 import { PdfService } from '../../pdf/pdf.service';
 import { R2StorageService } from '../../storage/r2-storage.service';
 import {
@@ -53,6 +63,9 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
     private readonly pdfService: PdfService,
     private readonly r2StorageService: R2StorageService,
     private readonly emailService: EmailService,
+    @Optional() private readonly pdfAssembler?: PdfAssemblerService,
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
+    @Optional() private readonly emailTemplates?: EmailTemplatesService,
   ) {}
 
   async execute(command: CambiarEstadoOrdenCommand): Promise<CambiarEstadoResult> {
@@ -176,308 +189,206 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
     };
   }
 
+  private async resolveBranding(): Promise<OrgBrandingContext> {
+    if (this.pdfAssembler) {
+      return this.pdfAssembler.resolveBranding();
+    }
+    if (typeof (this.pdfService as any)?.resolveBranding === 'function') {
+      return (this.pdfService as any).resolveBranding();
+    }
+    if (this.configOrgService) {
+      const ctx = await this.configOrgService.getContext().catch(() => null);
+      if (ctx) return buildOrgBranding(ctx);
+    }
+    return DEFAULT_ORG_BRANDING;
+  }
+
   /**
    * Procesa automáticamente una orden completada:
-   * 1. Genera PDF con template correcto (usando PdfController internamente)
+   * 1. Ensambla y genera PDF corporativo con branding White-Label
    * 2. Sube PDF a Cloudflare R2
-   * 3. Guarda URL en documentos_generados
-   * 4. Envía email con PDF adjunto
+   * 3. Registra referencia en documentos_generados
+   * 4. Envía email al cliente si posee destinatarios válidos configurados
    */
   private async procesarOrdenCompletada(ordenId: number): Promise<void> {
     try {
-      // 1. Obtener orden con TODAS las relaciones necesarias (igual que PdfController)
-      const orden = await this.prisma.ordenes_servicio.findUnique({
-        where: { id_orden_servicio: ordenId },
-        include: {
-          // ✅ FIX 29-SEP-2026: nombres de relación reales según schema.prisma.
-          // Antes: equipo / cliente / estado / tecnico / tipo_servicio -> TODOS inválidos
-          // (ordenes_servicio declara `equipos`, `clientes`, `estados_orden`,
-          // `empleados_...id_tecnico_asignadoToempleados` y `tipos_servicio`).
-          // Cualquiera de ellos abortaba con PrismaClientValidationError -> 500.
-          equipos: {
-            include: {
-              tipos_equipo: true,
-              equipos_generador: true,
-              equipos_motor: true,
-              equipos_bomba: true,
-            },
-          },
-          clientes: {
-            include: {
-              persona: true,
-            },
-          },
-          estados_orden: true,
-          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
-            include: {
-              persona: true,
-            },
-          },
-          tipos_servicio: true,
-          actividades_ejecutadas: {
-            include: {
-              catalogo_actividades: {
-                include: {
-                  catalogo_sistemas: true,
-                },
+      let orden: any;
+      let brand: OrgBrandingContext;
+      let resultado: { buffer: Buffer; filename: string };
+      let downloadFilename: string;
+      let clienteEmails: string[] = [];
+      let emailContext:
+        | {
+            clienteNombre: string;
+            clienteDireccion?: string;
+            ciudad: string;
+            marcaEquipo?: string;
+            serieEquipo?: string;
+            fechaServicio: string;
+            tipoServicioNombre: string;
+            tipoServicioDetallado: string;
+            tecnicoNombre?: string;
+          }
+        | undefined;
+
+      if (this.pdfAssembler) {
+        const assembled = await this.pdfAssembler.assembleOrdenPdf(ordenId);
+        orden = assembled.orden;
+        brand = assembled.branding;
+        resultado = await this.pdfService.generarPDF({
+          tipoInforme: assembled.tipoInforme,
+          datos: assembled.datosOrden,
+        });
+        downloadFilename = assembled.downloadFilename;
+        clienteEmails = assembled.emailContext.clienteEmails;
+        emailContext = {
+          ...assembled.emailContext,
+          tecnicoNombre: assembled.datosOrden.tecnico,
+        };
+      } else {
+        brand = await this.resolveBranding();
+        orden = await this.prisma.ordenes_servicio.findUnique({
+          where: { id_orden_servicio: ordenId },
+          include: {
+            equipos: {
+              include: {
+                tipos_equipo: true,
+                equipos_generador: true,
+                equipos_motor: true,
+                equipos_bomba: true,
               },
             },
-          },
-          mediciones_servicio: {
-            include: {
-              parametros_medicion: true,
+            clientes: { include: { persona: true } },
+            estados_orden: true,
+            empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+              include: { persona: true },
             },
+            tipos_servicio: true,
+            actividades_ejecutadas: {
+              include: { catalogo_actividades: { include: { catalogo_sistemas: true } } },
+            },
+            mediciones_servicio: { include: { parametros_medicion: true } },
+            evidencias_fotograficas: true,
+            sedes_cliente: true,
           },
-          evidencias_fotograficas: true,
-          sedes_cliente: true,
-        },
-      });
+        });
+        if (!orden) {
+          throw new Error(`Orden ${ordenId} no encontrada`);
+        }
 
-      if (!orden) {
-        throw new Error(`Orden ${ordenId} no encontrada`);
+        const clientePersona = orden.clientes?.persona;
+        const clienteNombre =
+          clientePersona?.razon_social ||
+          clientePersona?.nombre_comercial ||
+          clientePersona?.nombre_completo ||
+          'N/A';
+        const clienteDireccion =
+          (orden as any).sedes_cliente?.direccion_sede ||
+          clientePersona?.direccion_principal ||
+          'N/A';
+        const marcaEquipo = orden.equipos ? EquipoSpecsReader.getMarca(orden.equipos) : 'N/A';
+        const serieEquipo = orden.equipos ? EquipoSpecsReader.getSerie(orden.equipos) : 'N/A';
+        const tecnicoPersona =
+          orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona;
+        const tecnicoNombre = tecnicoPersona
+          ? `${tecnicoPersona.primer_nombre || ''} ${tecnicoPersona.primer_apellido || ''}`.trim() ||
+            'N/A'
+          : 'N/A';
+        const tipoTemplate =
+          typeof (this.pdfService as any)?.determinarTipoInforme === 'function'
+            ? this.pdfService.determinarTipoInforme(
+                this.mapTipoEquipo(orden.equipos?.tipos_equipo?.nombre_tipo || ''),
+                this.mapTipoServicio(orden.tipos_servicio?.nombre_tipo),
+                {
+                  usaPlantillaUniversal: orden.equipos?.tipos_equipo?.usa_plantilla_universal ?? true,
+                  formatoDocumento: orden.tipos_servicio?.formato_documento ?? null,
+                  categoriaServicio: orden.tipos_servicio?.categoria ?? null,
+                },
+              )
+            : 'UNIVERSAL_EAM';
+
+        resultado = await this.pdfService.generarPDF({
+          tipoInforme: tipoTemplate as any,
+          datos: {
+            branding: brand,
+            cliente: clienteNombre,
+            direccion: clienteDireccion,
+            marcaEquipo,
+            serieEquipo,
+            tipoEquipo: this.mapTipoEquipo(orden.equipos?.tipos_equipo?.nombre_tipo || ''),
+            fecha: new Date(
+              orden.fecha_programada || orden.fecha_inicio_real || new Date(),
+            ).toLocaleDateString(brand.locale || 'es-CO'),
+            tecnico: tecnicoNombre,
+            horaEntrada: orden.fecha_inicio_real
+              ? new Date(orden.fecha_inicio_real).toLocaleTimeString(brand.locale || 'es-CO')
+              : 'N/A',
+            horaSalida: orden.fecha_fin_real
+              ? new Date(orden.fecha_fin_real).toLocaleTimeString(brand.locale || 'es-CO')
+              : 'N/A',
+            tipoServicio: this.mapTipoServicio(orden.tipos_servicio?.nombre_tipo),
+            numeroOrden: orden.numero_orden || `ORD-${ordenId}`,
+            datosModulo: this.extraerDatosModulo(orden.mediciones_servicio),
+            actividades:
+              orden.actividades_ejecutadas?.map((act: any) => ({
+                sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+                descripcion: act.catalogo_actividades?.descripcion_actividad || 'N/A',
+                resultado: act.estado || 'NA',
+                observaciones: act.observaciones || '',
+              })) || [],
+            mediciones:
+              orden.mediciones_servicio?.map((med: any) => ({
+                parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
+                valor: Number(med.valor_numerico ?? 0) || 0,
+                unidad: med.unidad_medida || med.parametros_medicion?.unidad_medida || '',
+                nivelAlerta: (med.nivel_alerta as any) || 'OK',
+              })) || [],
+            evidencias: orden.evidencias_fotograficas?.map((ev: any) => ev.ruta_archivo) || [],
+            observaciones: orden.observaciones_cierre || orden.observaciones_tecnico || '',
+          },
+        });
+        downloadFilename = resultado.filename;
+        if (clientePersona?.email_principal && clientePersona.email_principal.includes('@')) {
+          clienteEmails = [clientePersona.email_principal];
+        }
+        emailContext = {
+          clienteNombre,
+          clienteDireccion: clienteDireccion !== 'N/A' ? clienteDireccion : undefined,
+          ciudad:
+            (orden as any).sedes_cliente?.ciudad_sede ||
+            clientePersona?.ciudad ||
+            brand.ciudadDefecto ||
+            '',
+          marcaEquipo: marcaEquipo !== 'N/A' ? marcaEquipo : undefined,
+          serieEquipo: serieEquipo !== 'N/A' ? serieEquipo : undefined,
+          fechaServicio: new Date(
+            orden.fecha_inicio_real || orden.fecha_programada || new Date(),
+          ).toLocaleDateString(brand.locale || 'es-CO'),
+          tipoServicioNombre: orden.tipos_servicio?.nombre_tipo || 'Mantenimiento',
+          tipoServicioDetallado: orden.tipos_servicio?.nombre_tipo || 'Mantenimiento',
+          tecnicoNombre,
+        };
       }
-
-      // 2. Determinar tipo de template según categoría de servicio y tipo de equipo.
-      const codigoTipoServicio = (orden.tipos_servicio?.codigo_tipo || '').toUpperCase();
-      const categoriaServicio = (orden.tipos_servicio?.categoria || '').toUpperCase();
-      const nombreTipoServicio = (orden.tipos_servicio?.nombre_tipo || '').toUpperCase();
-      const esServicioNarrativo =
-        ['CORRECTIVO', 'EMERGENCIA', 'DIAGNOSTICO'].includes(categoriaServicio) ||
-        codigoTipoServicio.includes('CORR') ||
-        nombreTipoServicio.includes('CORRECTIVO');
-
-      let tipoTemplate = 'UNIVERSAL_EAM';
-      const nombreTipoEquipo = orden.equipos?.tipos_equipo?.nombre_tipo || '';
-      const codigoTipoEquipo = (orden.equipos?.tipos_equipo?.codigo_tipo || '').toUpperCase();
-      if (esServicioNarrativo) {
-        tipoTemplate = 'CORRECTIVO';
-      } else if (nombreTipoEquipo || codigoTipoEquipo) {
-        const tipoEquipo = nombreTipoEquipo.toLowerCase();
-        if (tipoEquipo.includes('bomba') || codigoTipoEquipo === 'BOM') {
-          tipoTemplate = 'BOMBA_A';
-        } else if (
-          tipoEquipo.includes('generador') ||
-          tipoEquipo.includes('electrogeno') ||
-          tipoEquipo.includes('planta') ||
-          codigoTipoEquipo === 'GEN'
-        ) {
-          tipoTemplate =
-            this.mapTipoServicio(orden.tipos_servicio?.nombre_tipo) === 'PREVENTIVO_B'
-              ? 'GENERADOR_B'
-              : 'GENERADOR_A';
-        }
-      }
-
-      this.logger.log(
-        `[ProcesarOrdenCompletada] Generando PDF con template ${tipoTemplate} para orden ${ordenId}`,
-      );
-
-      // 3. Preparar datos para PDF (igual que PdfController)
-      const clientePersona = orden.clientes?.persona;
-      // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
-      const clienteNombreBase =
-        clientePersona?.razon_social ||
-        clientePersona?.nombre_comercial ||
-        clientePersona?.nombre_completo ||
-        'N/A';
-      const clienteNombre = (orden.clientes as any)?.nombre_sede
-        ? `${clienteNombreBase} - ${(orden.clientes as any).nombre_sede}`
-        : clienteNombreBase;
-      // ✅ FIX MULTI-SEDE: Priorizar dirección de sede sobre persona.
-      // `direccion_servicio` no existe en ordenes_servicio; se usa descripcion_inicial
-      // como respaldo para no inventar un campo inexistente.
-      const clienteDireccion =
-        (orden as any).sedes_cliente?.direccion_sede ||
-        clientePersona?.direccion_principal ||
-        'N/A';
-
-      let marcaEquipo = 'N/A';
-      let serieEquipo = 'N/A';
-      if (orden.equipos) {
-        if (orden.equipos.equipos_generador) {
-          marcaEquipo = orden.equipos.equipos_generador.marca_generador || 'N/A';
-          serieEquipo =
-            orden.equipos.equipos_generador.numero_serie_generador ||
-            orden.equipos.numero_serie_equipo ||
-            'N/A';
-        } else if (orden.equipos.equipos_motor) {
-          marcaEquipo = orden.equipos.equipos_motor.marca_motor || 'N/A';
-          serieEquipo =
-            orden.equipos.equipos_motor.numero_serie_motor ||
-            orden.equipos.numero_serie_equipo ||
-            'N/A';
-        } else if (orden.equipos.equipos_bomba) {
-          marcaEquipo = orden.equipos.equipos_bomba.marca_bomba || 'N/A';
-          serieEquipo =
-            orden.equipos.equipos_bomba.numero_serie_bomba ||
-            orden.equipos.numero_serie_equipo ||
-            'N/A';
-        } else {
-          marcaEquipo = orden.equipos.nombre_equipo || 'N/A';
-          serieEquipo = orden.equipos.numero_serie_equipo || 'N/A';
-        }
-      }
-
-      const tecnicoRelacion = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
-
-      const contadorDesdeActividad = (() => {
-        for (const act of orden.actividades_ejecutadas || []) {
-          const esContador =
-            act.catalogo_actividades?.rol_semantico === 'LECTURA_CONTADOR_ACTIVO' ||
-            act.catalogo_actividades?.tipo_control_input === 'LECTURA_CONTADOR';
-          if (esContador && act.respuesta_json && typeof act.respuesta_json === 'object') {
-            const raw = (act.respuesta_json as Record<string, unknown>).valor;
-            if (raw != null) {
-              const n = parseFloat(String(raw).replace(',', '.'));
-              if (!isNaN(n) && n > 0) return n;
-            }
-          }
-          const obs = typeof act.observaciones === 'string' ? act.observaciones : '';
-          const match = obs.match(
-            /(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*([\d.]+)/i,
-          );
-          if (match?.[1]) {
-            const n = parseFloat(match[1]);
-            if (!isNaN(n) && n > 0) return n;
-          }
-        }
-        return undefined;
-      })();
-
-      const contadorDesdeMedicion = (() => {
-        for (const med of orden.mediciones_servicio || []) {
-          const nombre = (med?.parametros_medicion?.nombre_parametro || '').toLowerCase();
-          if (
-            nombre.includes('horometro') ||
-            nombre.includes('horómetro') ||
-            nombre.includes('horas') ||
-            nombre.includes('ciclo') ||
-            nombre.includes('odometr') ||
-            nombre.includes('odómetr') ||
-            nombre.includes('kilometr') ||
-            nombre.includes('contador')
-          ) {
-            const val = Number(med?.valor_numerico);
-            if (!isNaN(val) && val > 0) return val;
-          }
-        }
-        return undefined;
-      })();
-
-      const horometroIntervencion = contadorDesdeActividad ?? contadorDesdeMedicion ?? undefined;
-
-      // 4. Generar PDF usando el servicio directamente
-      const resultado = await this.pdfService.generarPDF({
-        tipoInforme: tipoTemplate as any,
-        datos: {
-          cliente: clienteNombre,
-          direccion: clienteDireccion,
-          marcaEquipo,
-          serieEquipo,
-          tipoEquipo: this.mapTipoEquipo(nombreTipoEquipo),
-          fecha: orden.fecha_programada
-            ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
-            : new Date().toLocaleDateString('es-CO'),
-          tecnico: tecnicoRelacion?.persona
-            ? `${tecnicoRelacion.persona.primer_nombre || ''} ${tecnicoRelacion.persona.primer_apellido || ''}`.trim() ||
-              'N/A'
-            : 'N/A',
-          horaEntrada: orden.fecha_inicio_real
-            ? new Date(orden.fecha_inicio_real).toLocaleTimeString('es-CO')
-            : 'N/A',
-          horaSalida: orden.fecha_fin_real
-            ? new Date(orden.fecha_fin_real).toLocaleTimeString('es-CO')
-            : 'N/A',
-          tipoServicio: this.mapTipoServicio(orden.tipos_servicio?.nombre_tipo),
-          numeroOrden: orden.numero_orden || `ORD-${ordenId}`,
-          datosModulo: this.extraerDatosModulo(orden.mediciones_servicio),
-          equipoDetalle: orden.equipos
-            ? {
-                codigoEquipo: orden.equipos.codigo_equipo || 'S/C',
-                nombreEquipo: orden.equipos.nombre_equipo || undefined,
-                tipoEquipo: nombreTipoEquipo || 'EQUIPO',
-                tipoEquipoNombre: nombreTipoEquipo || 'EQUIPO',
-                marca: EquipoSpecsReader.getMarca(orden.equipos),
-                modelo: EquipoSpecsReader.getModelo(orden.equipos),
-                serie: EquipoSpecsReader.getSerie(orden.equipos),
-                ubicacion: orden.equipos.ubicacion_texto || undefined,
-                sede: (orden as any).sedes_cliente?.nombre_sede || undefined,
-                cliente: clienteNombre,
-                direccion: clienteDireccion,
-                horometroIntervencion:
-                  horometroIntervencion != null ? Number(horometroIntervencion) : undefined,
-                horometroAcumulado: orden.equipos.horas_actuales
-                  ? Number(orden.equipos.horas_actuales)
-                  : undefined,
-                unidadUso: orden.equipos.tipos_equipo?.unidad_uso || undefined,
-                etiquetaContador: orden.equipos.tipos_equipo?.etiqueta_contador || undefined,
-                requiereHorometro: orden.equipos.tipos_equipo?.requiere_horometro ?? undefined,
-              }
-            : undefined,
-          placaUniversal: orden.equipos
-            ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
-            : undefined,
-          actividades:
-            orden.actividades_ejecutadas?.map((act) => ({
-              // ✅ FIX: nombres reales -> catalogo_sistemas.nombre_sistema,
-              // catalogo_actividades.descripcion_actividad, actividades_ejecutadas.estado
-              sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
-              descripcion: act.catalogo_actividades?.descripcion_actividad || 'N/A',
-              resultado: act.estado || 'NA',
-              observaciones: act.observaciones || '',
-              tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
-              tipoControlInput: act.catalogo_actividades?.tipo_control_input || undefined,
-              configInputJson: act.catalogo_actividades?.config_input_json || undefined,
-              rolSemantico: act.catalogo_actividades?.rol_semantico || undefined,
-              naturalezaPersonalizada:
-                act.catalogo_actividades?.naturaleza_personalizada || undefined,
-              respuestaJson: act.respuesta_json || undefined,
-            })) || [],
-          mediciones:
-            orden.mediciones_servicio?.map((med) => ({
-              // ✅ FIX: mediciones_servicio usa valor_numerico y su propia unidad_medida
-              parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
-              valor: Number(med.valor_numerico ?? 0) || 0,
-              unidad: med.unidad_medida || med.parametros_medicion?.unidad_medida || '',
-              nivelAlerta: (med.nivel_alerta as any) || 'OK',
-            })) || [],
-          evidencias: orden.evidencias_fotograficas?.map((ev) => ev.ruta_archivo) || [],
-          observaciones: orden.observaciones_cierre || orden.observaciones_tecnico || '',
-        },
-      });
 
       const pdfBuffer = resultado.buffer;
-      this.logger.log(`[ProcesarOrdenCompletada] PDF generado: ${pdfBuffer.length} bytes`);
-
-      // 5. Subir PDF a Cloudflare R2.
-      //    ✅ FIX: el método real es `uploadPDF(buffer, filename, options?)` y devuelve
-      //    un string (URL), no un objeto `{success,url}`. La llamada a `uploadFile`
-      //    lanzaba TypeError y abortaba el cierre de la orden.
       const nombreArchivo =
         resultado.filename ||
-        `MEKANOS_${orden.numero_orden}_${new Date().toISOString().split('T')[0]}.pdf`;
+        `${orden.numero_orden || `ORD-${ordenId}`}_${new Date().toISOString().split('T')[0]}.pdf`;
       const r2Url = await this.r2StorageService.uploadPDF(pdfBuffer, nombreArchivo, {
-        downloadFilename: nombreArchivo,
+        downloadFilename: downloadFilename || nombreArchivo,
       });
 
       if (!r2Url) {
         throw new Error(`Error subiendo PDF a R2: no se obtuvo URL para ${nombreArchivo}`);
       }
 
-      this.logger.log(`[ProcesarOrdenCompletada] PDF subido a R2: ${r2Url}`);
-
-      // 6. Guardar referencia en documentos_generados.
-      //    ✅ FIX: la tabla NO tiene `id_orden_servicio` ni `nombre_archivo`; el vínculo
-      //    polimórfico es `id_referencia`, y `hash_sha256` es obligatorio.
       const hashSha256 = createHash('sha256').update(pdfBuffer).digest('hex');
       await this.prisma.documentos_generados.create({
         data: {
-          // ✅ FIX: 'INFORME_TECNICO' no existe en tipo_documento_enum (INFORME_SERVICIO, BITACORA_MENSUAL, COTIZACION, PROPUESTA)
           tipo_documento: 'INFORME_SERVICIO',
           id_referencia: ordenId,
           ruta_archivo: r2Url,
           hash_sha256: hashSha256,
-          // ✅ El campo en Prisma es `tama_o_bytes` (la columna física usa @map)
           tama_o_bytes: BigInt(pdfBuffer.length),
           mime_type: 'application/pdf',
           fecha_generacion: new Date(),
@@ -485,32 +396,61 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
         },
       });
 
-      this.logger.log(`[ProcesarOrdenCompletada] URL guardada en documentos_generados`);
+      if (clienteEmails.length === 0) {
+        this.logger.warn(
+          `[ProcesarOrdenCompletada] Orden ${orden.numero_orden}: cliente sin email configurado; se omite envío automático.`,
+        );
+        return;
+      }
 
-      // 7. Obtener email del cliente
-      const emailCliente = clientePersona?.email_principal || 'lorddeep3@gmail.com';
-
-      // 8. Enviar email con PDF adjunto
-      await this.emailService.sendEmail({
-        to: emailCliente,
-        subject: `Informe Técnico - Orden ${orden.numero_orden}`,
-        html: `
-          <h2>Informe Técnico de Servicio</h2>
+      const orgNombreHtml = escapeBrandHtml(brand.nombreComercial);
+      const emailHtml = this.emailTemplates
+        ? this.emailTemplates.generateInformeMantenimientoTemplate({
+            branding: brand,
+            ordenNumero: orden.numero_orden,
+            tipoServicio: emailContext?.tipoServicioNombre || 'Mantenimiento',
+            tipoServicioDetallado: emailContext?.tipoServicioDetallado,
+            clienteNombre: emailContext?.clienteNombre || 'Cliente',
+            clienteDireccion: emailContext?.clienteDireccion,
+            clienteCiudad: emailContext?.ciudad || brand.ciudadDefecto || undefined,
+            equipoNombre: emailContext?.marcaEquipo,
+            equipoMarca: emailContext?.marcaEquipo,
+            equipoSerie: emailContext?.serieEquipo,
+            equipoUbicacion: emailContext?.clienteDireccion,
+            fechaServicio: emailContext?.fechaServicio || new Date().toLocaleDateString(brand.locale || 'es-CO'),
+            tecnicoNombre: emailContext?.tecnicoNombre || 'Técnico Especializado',
+            estadoServicio: 'COMPLETADO',
+          })
+        : `
+          <h2>Informe Técnico de Servicio - ${orgNombreHtml}</h2>
           <p>Estimado cliente,</p>
-          <p>Adjunto encontrará el informe técnico de la orden de servicio <strong>${orden.numero_orden}</strong>.</p>
-          <p>El documento también está disponible en: <a href="${r2Url}">${r2Url}</a></p>
-          <p>Saludos,<br>Equipo MEKANOS S.A.S</p>
-        `,
-        attachments: [
-          {
-            filename: nombreArchivo,
-            content: pdfBuffer,
-            contentType: 'application/pdf',
-          },
-        ],
-      });
+          <p>Adjunto encontrará el informe técnico de la orden de servicio <strong>${escapeBrandHtml(orden.numero_orden)}</strong>.</p>
+          <p>El documento también está disponible en: <a href="${escapeBrandHtml(r2Url)}">${escapeBrandHtml(r2Url)}</a></p>
+          <p>Saludos,<br>Equipo ${orgNombreHtml}</p>
+        `;
 
-      this.logger.log(`[ProcesarOrdenCompletada] ✅ Email enviado a ${emailCliente}`);
+      const idCuentaEmail =
+        orden.clientes?.id_cuenta_email_remitente ||
+        orden.clientes?.cliente_principal?.id_cuenta_email_remitente ||
+        undefined;
+
+      await this.emailService.sendEmailFromAccount(
+        {
+          to: clienteEmails,
+          subject: `Informe Técnico - Orden ${orden.numero_orden} | ${brand.nombreComercial}`,
+          html: emailHtml,
+          attachments: [
+            {
+              filename: downloadFilename || nombreArchivo,
+              content: pdfBuffer,
+              contentType: 'application/pdf',
+            },
+          ],
+        },
+        idCuentaEmail,
+      );
+
+      this.logger.log(`[ProcesarOrdenCompletada] ✅ Email enviado a ${clienteEmails.join(', ')}`);
     } catch (error) {
       const err = error as { message?: string; stack?: string };
       this.logger.error(

@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../features/auth/data/auth_provider.dart';
 import '../errors/user_friendly_error.dart';
 import '../lifecycle/app_lifecycle_observer.dart';
+import '../storage/account_scope.dart';
 import 'smart_sync_service.dart';
 import 'sync_service.dart';
 
@@ -91,15 +93,17 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   final SyncService _syncService;
   final SmartSyncService _smartSyncService;
   final AppLifecycleObserver _lifecycleObserver;
+  final int? _userId;
   Timer? _autoSyncTimer;
 
   // Intervalo de sincronización automática (5 minutos)
   static const _autoSyncInterval = Duration(minutes: 5);
 
-  // Key para guardar última sync en SharedPreferences
-  static const _lastSyncKey = 'last_sync_at';
-  static const _initialSyncDoneKey = 'initial_sync_done';
-  static const _lastCatalogsSyncKey = 'last_catalogs_sync_at';
+  String get _lastSyncKey => AccountScope.prefsKey(_userId, 'last_sync_at');
+  String get _initialSyncDoneKey =>
+      AccountScope.prefsKey(_userId, 'initial_sync_done');
+  String get _lastCatalogsSyncKey =>
+      AccountScope.prefsKey(_userId, 'last_catalogs_sync_at');
 
   /// ✅ 26-OCT-2026: red de seguridad global. El Smart Sync tiene su propio
   /// plazo de 120 s; este techo de 150 s garantiza que la UI nunca quede
@@ -109,8 +113,10 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   SyncStateNotifier(
     this._syncService,
     this._smartSyncService,
-    this._lifecycleObserver,
-  ) : super(const SyncState()) {
+    this._lifecycleObserver, {
+    int? userId,
+  }) : _userId = userId,
+       super(const SyncState()) {
     _loadLastSync();
   }
 
@@ -433,14 +439,21 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   }
 }
 
-/// Provider del estado de sincronización
+/// Provider aislado por cuenta para el estado de sincronización.
+/// Se reconstruye desde cero cuando cambia el usuario autenticado.
 final syncStateProvider = StateNotifierProvider<SyncStateNotifier, SyncState>((
   ref,
 ) {
+  final userId = ref.watch(activeUserIdProvider);
   final syncService = ref.watch(syncServiceProvider);
   final smartSyncService = ref.watch(smartSyncServiceProvider);
   final lifecycleObserver = ref.watch(appLifecycleObserverProvider);
-  return SyncStateNotifier(syncService, smartSyncService, lifecycleObserver);
+  return SyncStateNotifier(
+    syncService,
+    smartSyncService,
+    lifecycleObserver,
+    userId: userId,
+  );
 });
 
 /// Provider para verificar si hay sync en progreso

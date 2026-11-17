@@ -25,50 +25,11 @@ class RangosParametroResueltos {
 
 /// Motor puro Zero-Trust para resolver overrides de parámetros en `equipos.config_parametros`.
 ///
-/// Prioridad de resolución (idéntica al backend NestJS):
+/// Prioridad de resolución (agnóstica a verticales, idéntica al backend NestJS):
 /// 1. `por_parametro[idParametro.toString()]` o `por_parametro[codigoParametro]` (key o campo interno)
 /// 2. `parametros_adicionales[]` por `id_parametro_medicion` o `codigo_parametro`
 /// 3. `rangos[codigoParametro]` directo (case-insensitive)
-/// 4. Fallback retrocompatible legacy: `rangos[claveLegacy]` + `unidades[magnitudLegacy]`
 class ParametroOverrideResolver {
-  static const Map<String, String> _legacyCodigoARangoKey = {
-    // Generadores
-    'GEN_RPM': 'velocidad_motor',
-    'GEN_PRESION_ACEITE': 'presion_aceite',
-    'GEN_TEMP_REFRIGERANTE': 'temperatura_refrigerante',
-    'GEN_VOLTAJE_BATERIA': 'carga_bateria',
-    'GEN_HOROMETRO': 'horas_trabajo',
-    'GEN_VOLTAJE_SALIDA': 'voltaje_generador',
-    'GEN_FRECUENCIA': 'frecuencia_generador',
-    'GEN_AMPERAJE': 'corriente_generador',
-    'GEN_VOLTAJE': 'voltaje_generador',
-    'GEN_CORRIENTE': 'corriente_generador',
-    // Bombas
-    'BOM_VIBRACION': 'vibracion',
-    'BOM_PRESION_DESCARGA': 'presion_descarga',
-    'BOM_PRESION_SUCCION': 'presion_succion',
-    'BOM_VOLTAJE': 'voltaje_motor',
-    'BOM_AMPERAJE': 'corriente_motor',
-    'BOM_TEMPERATURA': 'temperatura_motor',
-    'BOM_CAUDAL': 'caudal',
-    'BOM_RPM': 'velocidad_bomba',
-  };
-
-  static const Map<String, String> _legacyCodigoAMagnitud = {
-    'GEN_TEMP_REFRIGERANTE': 'temperatura',
-    'GEN_PRESION_ACEITE': 'presion',
-    'GEN_VOLTAJE_SALIDA': 'voltaje',
-    'GEN_VOLTAJE_BATERIA': 'voltaje',
-    'GEN_VOLTAJE': 'voltaje',
-    'GEN_FRECUENCIA': 'frecuencia',
-    'GEN_AMPERAJE': 'corriente',
-    'GEN_CORRIENTE': 'corriente',
-    'BOM_PRESION_DESCARGA': 'presion',
-    'BOM_PRESION_SUCCION': 'presion',
-    'BOM_VOLTAJE': 'voltaje',
-    'BOM_AMPERAJE': 'corriente',
-    'BOM_TEMPERATURA': 'temperatura',
-  };
 
   static double? toFiniteDouble(dynamic raw) {
     if (raw == null) return null;
@@ -199,12 +160,6 @@ class ParametroOverrideResolver {
           if (found != null) return found;
         }
       }
-
-      final legacyKey = _legacyCodigoARangoKey[codigoUpper];
-      if (legacyKey != null) {
-        final legacyMap = _asStringMap(rangos[legacyKey]);
-        if (legacyMap != null) return legacyMap;
-      }
     }
 
     return null;
@@ -225,15 +180,14 @@ class ParametroOverrideResolver {
       codigoParametro: codigoParametro,
       idParametro: idParametro,
     );
+    if (match == null) return null;
 
-    final minNormal = match != null ? toFiniteDouble(match['min_normal']) : null;
-    final maxNormal = match != null ? toFiniteDouble(match['max_normal']) : null;
-    final minCritico = match != null ? toFiniteDouble(match['min_critico']) : null;
-    final maxCritico = match != null ? toFiniteDouble(match['max_critico']) : null;
-    final valorIdeal = match != null ? toFiniteDouble(match['valor_ideal']) : null;
-    final unidad =
-        (match != null ? _toNonEmptyString(match['unidad_medida']) : null) ??
-        _resolverUnidadLegacy(config, codigoParametro);
+    final minNormal = toFiniteDouble(match['min_normal']);
+    final maxNormal = toFiniteDouble(match['max_normal']);
+    final minCritico = toFiniteDouble(match['min_critico']);
+    final maxCritico = toFiniteDouble(match['max_critico']);
+    final valorIdeal = toFiniteDouble(match['valor_ideal']);
+    final unidad = _toNonEmptyString(match['unidad_medida']);
 
     final tieneAlgunValor =
         minNormal != null ||
@@ -256,41 +210,6 @@ class ParametroOverrideResolver {
     );
   }
 
-  static String? _resolverUnidadLegacy(
-    Map<String, dynamic> config,
-    String codigoParametro,
-  ) {
-    final unidades = _asStringMap(config['unidades']);
-    if (unidades == null || unidades.isEmpty) return null;
-
-    final codigoUpper = codigoParametro.trim().toUpperCase();
-    final magnitudExacta = _legacyCodigoAMagnitud[codigoUpper];
-    if (magnitudExacta != null) {
-      return _toNonEmptyString(unidades[magnitudExacta]);
-    }
-
-    // Fallback seguro solo para magnitudes térmicas/eléctricas/presión sin colisionar velocidad m/s vs RPM
-    if (codigoUpper.contains('TEMP')) {
-      return _toNonEmptyString(unidades['temperatura']);
-    }
-    if (codigoUpper.contains('PRES')) {
-      return _toNonEmptyString(unidades['presion']);
-    }
-    if (codigoUpper.contains('VOLT') || codigoUpper.contains('TENSION')) {
-      return _toNonEmptyString(unidades['voltaje']);
-    }
-    if (codigoUpper.contains('FREC')) {
-      return _toNonEmptyString(unidades['frecuencia']);
-    }
-    if (codigoUpper.contains('AMPER') || codigoUpper.contains('CORR')) {
-      return _toNonEmptyString(unidades['corriente']);
-    }
-    if (codigoUpper.contains('RPM')) {
-      return _toNonEmptyString(unidades['velocidad']);
-    }
-    return null;
-  }
-
   /// Resuelve la unidad personalizada del equipo para un parámetro o null para usar catálogo.
   static String? resolverUnidadPersonalizada({
     required String? configParametrosJson,
@@ -305,10 +224,6 @@ class ParametroOverrideResolver {
       codigoParametro: codigoParametro,
       idParametro: idParametro,
     );
-    final unitOverride =
-        match != null ? _toNonEmptyString(match['unidad_medida']) : null;
-    if (unitOverride != null) return unitOverride;
-
-    return _resolverUnidadLegacy(config, codigoParametro);
+    return match != null ? _toNonEmptyString(match['unidad_medida']) : null;
   }
 }

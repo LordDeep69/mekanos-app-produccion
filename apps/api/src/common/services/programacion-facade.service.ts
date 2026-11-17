@@ -18,7 +18,6 @@
 import { PrismaService } from '@mekanos/database';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { criterio_intervalo_enum, estado_contrato_enum, periodicidad_enum } from '@prisma/client';
-import { getNextTableId } from '../utils/next-id.helper';
 import { DocumentType, NumeracionService } from './numeracion.service';
 
 // ==================== TIPOS DE ENTRADA ====================
@@ -245,10 +244,8 @@ export class ProgramacionFacadeService {
       });
 
       // Registrar en historial
-      const idHistorial = await getNextTableId(this.prisma, 'historial_contrato', 'id_historial');
       await this.prisma.historial_contrato.create({
         data: {
-          id_historial: idHistorial,
           id_contrato: idContrato,
           campo_modificado: 'estado_contrato',
           valor_anterior: estadoActual,
@@ -392,14 +389,8 @@ export class ProgramacionFacadeService {
       }
 
       // Crear relación equipo-contrato
-      const idEquipoContrato = await getNextTableId(
-        this.prisma,
-        'equipos_contrato',
-        'id_equipo_contrato',
-      );
       const equipoContrato = await this.prisma.equipos_contrato.create({
         data: {
-          id_equipo_contrato: idEquipoContrato,
           id_contrato: input.idContrato,
           id_equipo: input.idEquipo,
           tipo_servicio_default: input.idTipoServicioDefault,

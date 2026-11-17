@@ -1,18 +1,20 @@
 /**
- * Template MEKANOS - Informe Ejecutivo de Trazabilidad y Mantenimiento de Servicios
- * 
- * Diseño corporativo de alto nivel para comités técnicos, juntas directivas y gerencias.
- * Colores oficiales MEKANOS S.A.S:
- * #244673 - Azul Marino Corporativo (Header y títulos)
- * #3290A6 - Azul Técnico (Acentos y bordes)
- * #56A672 - Verde Éxito / Preventivo
- * #D97706 - Ámbar / Correctivo
- * #DC2626 - Rojo / Emergencia
+ * Template White-Label - Informe Ejecutivo de Trazabilidad y Mantenimiento de Servicios
  */
 
-import { MEKANOS_COLORS, getLogoBase64 } from './mekanos-base.template';
+import {
+  MEKANOS_COLORS,
+  OrgBrandingContext,
+  buildBrandCssVars,
+  escapeBrandHtml,
+  generarFooterCorporativoHtml,
+  renderOrgLogoHtml,
+  resolveOrgBranding,
+} from './mekanos-base.template';
 
 export interface DatosTrazabilidadClientePDF {
+  branding?: OrgBrandingContext;
+  docBadge?: string;
   cliente: {
     nombre: string;
     nit?: string;
@@ -68,7 +70,7 @@ export interface DatosTrazabilidadClientePDF {
 }
 
 export function generarTrazabilidadClienteHTML(datos: DatosTrazabilidadClientePDF): string {
-  const logoBase64 = getLogoBase64();
+  const brand = resolveOrgBranding(datos.branding);
   const periodoTexto = datos.periodo.desde && datos.periodo.hasta
     ? `${datos.periodo.desde} al ${datos.periodo.hasta}`
     : datos.periodo.desde
@@ -83,8 +85,9 @@ export function generarTrazabilidadClienteHTML(datos: DatosTrazabilidadClientePD
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <title>Informe Ejecutivo de Trazabilidad - ${datos.cliente.nombre}</title>
+  <title>Informe Ejecutivo de Trazabilidad - ${escapeBrandHtml(datos.cliente.nombre)}</title>
   <style>
+    ${buildBrandCssVars(brand)}
     @page {
       size: A4 portrait;
       margin: 12mm 12mm 15mm 12mm;
@@ -401,16 +404,16 @@ export function generarTrazabilidadClienteHTML(datos: DatosTrazabilidadClientePD
   <table class="header-table">
     <tr>
       <td class="logo-cell">
-        <img src="data:image/png;base64,${logoBase64}" alt="MEKANOS S.A.S" style="height: 48px; width: auto;" />
+        ${renderOrgLogoHtml(brand, 48, 'light')}
       </td>
       <td class="title-cell">
         <h1>Informe Ejecutivo de Trazabilidad</h1>
         <h2>Historial Integral de Mantenimiento y Confiabilidad</h2>
       </td>
       <td class="meta-cell">
-        <div class="doc-badge">MEK-TRZ-360</div>
+        <div class="doc-badge">${escapeBrandHtml(datos.docBadge || 'TRZ-360')}</div>
         <div><strong>Emisión:</strong> ${datos.periodo.fechaGeneracion}</div>
-        <div>Cartagena de Indias, Col.</div>
+        ${[brand.ciudadDefecto, brand.paisDefecto].filter(Boolean).length > 0 ? `<div>${escapeBrandHtml([brand.ciudadDefecto, brand.paisDefecto].filter(Boolean).join(', '))}</div>` : ''}
       </td>
     </tr>
   </table>
@@ -563,11 +566,7 @@ export function generarTrazabilidadClienteHTML(datos: DatosTrazabilidadClientePD
   </table>
 
   <!-- PIE DE PÁGINA CORPORATIVO -->
-  <div class="footer-box">
-    <p style="font-weight: bold; color: ${MEKANOS_COLORS.primary};">MEKANOS S.A.S — Mantenimiento Técnico Especializado</p>
-    <p>Documento oficial emitido por el Sistema de Gestión Operativa MEKANOS. Prohibida su alteración o reproducción no autorizada.</p>
-    <p style="font-size: 7pt; margin-top: 2px;">Cartagena de Indias: Barrio, Líbano Cra 49C #31-35 Diag. Al Sena | TEL: 315-7083350 | Email: mekanossas4@gmail.com | 
-  </div>
+  ${generarFooterCorporativoHtml(brand, 'Documento oficial emitido por el Sistema de Gestión Operativa.')}
 
 </body>
 </html>

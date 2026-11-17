@@ -156,7 +156,9 @@ export interface ArquetipoEquipo {
   unidad_uso?: string | null;
   etiqueta_contador?: string | null;
   icono?: string | null;
+  icono_ui?: string | null;
   color?: string | null;
+  color_hex?: string | null;
   orden?: number | null;
   activo: boolean;
   ids_sincronizados?: number[];
@@ -224,8 +226,11 @@ export interface ArquetipoEsquemaResponse {
           nombre: string;
           simbolo: string;
           es_base: boolean;
+          factor_a?: number;
+          factor_b?: number;
         }>;
         opciones: OpcionJsonItem[];
+        validacion_json?: Record<string, unknown> | null;
       }>;
     }>;
   }>;

@@ -235,14 +235,22 @@ export interface MetricaUsoEquipoMeta {
  * Fuente única de verdad para Wizard de Equipos, /equipos, Expediente 360°, Hub EAM y Órdenes.
  */
 export function getMetricaUsoMeta(input?: MetricaUsoEquipoInput | null): MetricaUsoEquipoMeta {
-  const rawUnit = (input?.unidadUso || '').toUpperCase().trim();
+  const rawUnitOriginal = (input?.unidadUso || '').trim();
+  const rawUnit = rawUnitOriginal.toUpperCase();
   const rawEtiqueta = (input?.etiquetaContador || '').trim();
   const etiqLower = rawEtiqueta.toLowerCase();
 
-  if (rawUnit === 'CAL' || input?.requiereHorometro === false) {
+  if (
+    rawUnit === 'CAL' ||
+    input?.requiereHorometro === false ||
+    rawEtiqueta.toUpperCase() === 'N/A'
+  ) {
     return {
       unidadUso: rawUnit || 'CAL',
-      etiquetaContador: rawEtiqueta || 'Control por Calendario',
+      etiquetaContador:
+        rawEtiqueta && rawEtiqueta.toUpperCase() !== 'N/A'
+          ? rawEtiqueta
+          : 'Control por Calendario',
       sustantivoUso: 'Días',
       sufijoCorto: 'días',
       icono: '📅',
@@ -330,6 +338,29 @@ export function getMetricaUsoMeta(input?: MetricaUsoEquipoInput | null): Metrica
       tituloHistorialLecturas: `Últimas Lecturas de ${etiqueta}`,
       labelEjecucionOrden: `Lectura de ${etiqueta} (uds)`,
       prefijoObservacion: 'UPM',
+    };
+  }
+
+  if (rawUnit !== '' && rawUnit !== 'HORAS' && rawUnit !== 'HRS' && rawUnit !== 'H') {
+    const sufijo = rawUnitOriginal.toLowerCase() || rawUnit.toLowerCase();
+    const etiqueta = rawEtiqueta || rawUnitOriginal || rawUnit;
+    const prefijo = rawUnit.replace(/[^A-Z0-9_]/g, '') || 'CONTADOR';
+    return {
+      unidadUso: rawUnit,
+      etiquetaContador: etiqueta,
+      sustantivoUso: etiqueta,
+      sufijoCorto: sufijo,
+      icono: '🔢',
+      soloCalendario: false,
+      labelInputInicial: `${etiqueta} Actual (${sufijo})`,
+      placeholderInputInicial: 'Ej: 1500',
+      labelCadaUso: `Cada (${sufijo})`,
+      tituloKpi360: `${etiqueta} Acumulado`,
+      botonActualizar: `Actualizar ${etiqueta}`,
+      tituloModalLectura: `Registrar Lectura de ${etiqueta}`,
+      tituloHistorialLecturas: `Últimas Lecturas de ${etiqueta}`,
+      labelEjecucionOrden: `Lectura de ${etiqueta} (${sufijo})`,
+      prefijoObservacion: prefijo,
     };
   }
 
@@ -493,4 +524,50 @@ export function humanizeFallbackKey(key: string): string {
     .replace(/\bHz\b/g, 'Hz')
     .replace(/\bIp\b/g, 'IP')
     .replace(/\bAvr\b/g, 'AVR');
+}
+
+const FALLBACK_UNIT_SYMBOL_MAP: Record<string, string> = {
+  KVA_APA: 'kVA',
+  VA_APA: 'VA',
+  MVA_APA: 'MVA',
+  KV_VOLT: 'kV',
+  MV_VOLT: 'mV',
+  MEOHM: 'MΩ',
+  GOHM: 'GΩ',
+  KOHM: 'kΩ',
+  MOHM: 'mΩ',
+  UOHM: 'µΩ',
+  OHM: 'Ω',
+  DBA: 'dBA',
+  C: '°C',
+  F: '°F',
+  DELTA_C: 'Δ°C',
+  MS: 'm/s',
+};
+
+/**
+ * Resuelve el símbolo físico limpio de una unidad (`kVA`, `kV`, `MΩ`, `°C`, etc.)
+ * a partir de su objeto unidad, del catálogo de magnitudes o del mapa de respaldo,
+ * evitando mostrar códigos internos de BD como `KVA_APA` o `KV_VOLT`.
+ */
+export function formatUnidadSimboloHumano(
+  codigo?: string | null,
+  unidadObj?: { simbolo?: string | null; codigo?: string | null } | null,
+  magnitudes?: Array<{
+    unidades_medida?: Array<{ codigo: string; simbolo: string }>;
+  }>,
+): string {
+  if (unidadObj?.simbolo) return unidadObj.simbolo;
+  const raw = String(codigo || unidadObj?.codigo || '').trim();
+  if (!raw) return '';
+
+  const upper = raw.toUpperCase();
+  if (magnitudes && magnitudes.length > 0) {
+    for (const mag of magnitudes) {
+      const found = mag.unidades_medida?.find((u) => u.codigo.toUpperCase() === upper);
+      if (found?.simbolo) return found.simbolo;
+    }
+  }
+
+  return FALLBACK_UNIT_SYMBOL_MAP[upper] || raw;
 }

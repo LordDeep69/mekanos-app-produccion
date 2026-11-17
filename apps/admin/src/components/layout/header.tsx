@@ -1,46 +1,43 @@
-/**
- * MEKANOS S.A.S - Portal Admin
- * Header Component
- * 
- * Barra superior con información del usuario y logout
- */
-
 'use client';
 
+/**
+ * Header Component - Portal Admin White-Label
+ */
+
+import { useSidebar } from '@/components/layout/sidebar-context';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useSidebar } from '@/components/layout/sidebar-context';
 import { cn } from '@/lib/utils';
-import { Bell, LogOut, PanelLeftClose, PanelLeftOpen, Settings, User } from 'lucide-react';
+import { useBranding } from '@/providers/branding-provider';
+import { LogOut, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react';
 import { signOut, useSession } from 'next-auth/react';
+import Link from 'next/link';
 
 export function Header() {
   const { data: session } = useSession();
   const { isCollapsed, toggle } = useSidebar();
+  const { branding } = useBranding();
 
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/login' });
   };
 
-  // Sanitizar nombre de usuario para portal white-label
   const sanitizeUserName = (nombre?: string | null) => {
-    if (!nombre) return 'Administrador del Sistema';
-    if (nombre.toLowerCase().includes('admin mekanos')) return 'Administrador del Sistema';
-    return nombre;
+    const trimmed = nombre?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : 'Usuario';
   };
 
-  // Obtener iniciales del nombre
   const getInitials = (nombre?: string) => {
     const sName = sanitizeUserName(nombre);
-    const parts = sName.split(' ');
+    const parts = sName.split(' ').filter(Boolean);
     if (parts.length >= 2) {
       return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     }
@@ -51,12 +48,11 @@ export function Header() {
     <header
       className={cn(
         'fixed right-0 top-0 z-30 h-16 border-b bg-white/95 backdrop-blur-sm transition-all duration-300 ease-in-out',
-        isCollapsed ? 'left-[72px]' : 'left-64'
+        isCollapsed ? 'left-[72px]' : 'left-64',
       )}
     >
       <div className="flex h-full items-center justify-between px-6">
-        {/* Toggle Sidebar (móvil) & Título */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <Button
             variant="ghost"
             size="icon"
@@ -70,37 +66,46 @@ export function Header() {
               <PanelLeftClose className="h-5 w-5" />
             )}
           </Button>
-          <div>
-            <h2 className="text-base font-bold text-gray-800 tracking-tight">
-              Portal de Administración
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-slate-800 tracking-tight truncate">
+              {branding.nombre_comercial} · Portal Admin
             </h2>
+            {branding.eslogan && (
+              <p className="text-[11px] text-slate-500 truncate hidden sm:block">
+                {branding.eslogan}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-4">
-          {/* Notifications */}
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5 text-gray-600" />
-            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">
-              3
-            </span>
-          </Button>
+        <div className="flex items-center gap-3">
+          <span
+            className="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border"
+            style={{
+              backgroundColor: `${branding.color_primario}10`,
+              borderColor: `${branding.color_primario}30`,
+              color: branding.color_primario,
+            }}
+          >
+            {branding.codigo_moneda} · {branding.zona_horaria}
+          </span>
 
-          {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 px-2">
                 <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-mekanos-primary text-white text-sm">
+                  <AvatarFallback
+                    className="text-white text-sm font-semibold"
+                    style={{ backgroundColor: branding.color_primario }}
+                  >
                     {getInitials(session?.user?.nombre)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden flex-col items-start md:flex">
-                  <span className="text-sm font-medium">
+                  <span className="text-sm font-medium text-slate-800">
                     {sanitizeUserName(session?.user?.nombre)}
                   </span>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-slate-500">
                     {session?.user?.rol || 'Sin rol'}
                   </span>
                 </div>
@@ -109,18 +114,22 @@ export function Header() {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <User className="mr-2 h-4 w-4" />
-                Perfil
+              <DropdownMenuItem asChild>
+                <Link href="/configuracion/empresa" className="flex items-center">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Configuración de Empresa
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                Configuración
+              <DropdownMenuItem asChild>
+                <Link href="/configuracion" className="flex items-center">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Centro de Configuración
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={handleLogout}
-                className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                className="text-red-600 focus:bg-red-50 focus:text-red-600 cursor-pointer"
               >
                 <LogOut className="mr-2 h-4 w-4" />
                 Cerrar Sesión

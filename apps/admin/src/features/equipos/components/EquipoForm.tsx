@@ -155,7 +155,7 @@ function getTipoVisualConfig(codigoTipo: string) {
       bg: 'bg-amber-50 border-amber-200',
       ring: 'border-amber-500 bg-amber-50/30 ring-4 ring-amber-100/70',
       prefijo: 'GEN',
-      ubicacionDefecto: 'CUARTO DE PLANTAS ELÉCTRICAS / SUBESTACIÓN',
+      ubicacionDefecto: 'INSTALACIONES DEL CLIENTE',
     };
   }
   if (norm.includes('BOM')) {
@@ -165,7 +165,7 @@ function getTipoVisualConfig(codigoTipo: string) {
       bg: 'bg-blue-50 border-blue-200',
       ring: 'border-blue-600 bg-blue-50/30 ring-4 ring-blue-100/70',
       prefijo: 'BOM',
-      ubicacionDefecto: 'CUARTO DE BOMBAS HIDRÁULICAS',
+      ubicacionDefecto: 'INSTALACIONES DEL CLIENTE',
     };
   }
   if (norm.includes('COMP')) {
@@ -175,7 +175,7 @@ function getTipoVisualConfig(codigoTipo: string) {
       bg: 'bg-cyan-50 border-cyan-200',
       ring: 'border-cyan-600 bg-cyan-50/30 ring-4 ring-cyan-100/70',
       prefijo: 'COMP',
-      ubicacionDefecto: 'CUARTO DE COMPRESORES / ÁREA INDUSTRIAL',
+      ubicacionDefecto: 'INSTALACIONES DEL CLIENTE',
     };
   }
   if (norm.includes('MOT')) {
@@ -185,7 +185,7 @@ function getTipoVisualConfig(codigoTipo: string) {
       bg: 'bg-violet-50 border-violet-200',
       ring: 'border-violet-600 bg-violet-50/30 ring-4 ring-violet-100/70',
       prefijo: 'MOT',
-      ubicacionDefecto: 'ÁREA DE PRODUCCIÓN / MÁQUINAS',
+      ubicacionDefecto: 'INSTALACIONES DEL CLIENTE',
     };
   }
   return {
@@ -209,7 +209,7 @@ export function EquipoForm({
 }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedArquetipoId, setSelectedArquetipoId] = useState<number | null>(null);
-  const [tipoSeleccionado, setTipoSeleccionado] = useState<string>('GENERADOR');
+  const [tipoSeleccionado, setTipoSeleccionado] = useState<string>('');
 
   // Estado de Plantilla OEM y Kit BOM (Paso 1)
   const [selectedModeloOemId, setSelectedModeloOemId] = useState<number | null>(null);
@@ -254,72 +254,16 @@ export function EquipoForm({
   const { data: tiposEquipoLegacy } = useTiposEquipoSelector();
   const { data: clientesOptions } = useClientesSelector();
 
-  // Lista de Tipos de Equipo del Hub (con respaldo si aún carga)
+  // Lista dinámica de Tipos de Equipo del Hub (100% catálogo en BD)
   const arquetiposDisponibles = useMemo<ArquetipoEquipo[]>(() => {
     if (arquetiposHub && arquetiposHub.length > 0) {
       return arquetiposHub.filter((a) => a.activo !== false);
     }
-    return [
-      {
-        id_tipo_equipo: 1,
-        codigo_tipo: 'GENERADOR',
-        codigo_corto: 'GEN',
-        nombre_tipo: 'Generador Eléctrico / Planta de Emergencia',
-        nombre_canonico: 'Generador Eléctrico / Planta de Emergencia',
-        descripcion: 'Grupos electrógenos con motor de combustión y alternador síncrono.',
-        requiere_horometro: true,
-        activo: true,
-        tipo_equipo_modulos: [],
-        tipo_equipo_planes: [],
-        _count: { equipos: 0, modelos_equipo: 0 },
-      },
-      {
-        id_tipo_equipo: 2,
-        codigo_tipo: 'BOMBA',
-        codigo_corto: 'BOM',
-        nombre_tipo: 'Bomba Hidráulica / Sistema de Bombeo',
-        nombre_canonico: 'Bomba Hidráulica / Sistema de Bombeo',
-        descripcion: 'Sistemas hidroneumáticos, presión constante, achique y RCI.',
-        requiere_horometro: false,
-        activo: true,
-        tipo_equipo_modulos: [],
-        tipo_equipo_planes: [],
-        _count: { equipos: 0, modelos_equipo: 0 },
-      },
-      {
-        id_tipo_equipo: 3,
-        codigo_tipo: 'MOTOR',
-        codigo_corto: 'MOT',
-        nombre_tipo: 'Motor Industrial (Combustión / Eléctrico)',
-        nombre_canonico: 'Motor Industrial (Combustión / Eléctrico)',
-        descripcion: 'Motores diésel o eléctricos de accionamiento independiente.',
-        requiere_horometro: true,
-        activo: true,
-        tipo_equipo_modulos: [],
-        tipo_equipo_planes: [],
-        _count: { equipos: 0, modelos_equipo: 0 },
-      },
-      {
-        id_tipo_equipo: 11,
-        codigo_tipo: 'COMPRESOR',
-        codigo_corto: 'COMP',
-        nombre_tipo: 'Compresor de Aire Industrial',
-        nombre_canonico: 'Compresor de Aire Industrial',
-        descripcion: 'Compresores de pistón o tornillo con motor eléctrico y tanque.',
-        requiere_horometro: true,
-        activo: true,
-        tipo_equipo_modulos: [],
-        tipo_equipo_planes: [],
-        _count: { equipos: 0, modelos_equipo: 0 },
-      },
-    ];
+    return [];
   }, [arquetiposHub]);
 
   const defaultArquetipo = useMemo(
-    () =>
-      arquetiposDisponibles.find((a) => a.codigo_tipo.toUpperCase().includes('GEN')) ||
-      arquetiposDisponibles[0] ||
-      null,
+    () => arquetiposDisponibles[0] || null,
     [arquetiposDisponibles],
   );
 
@@ -359,15 +303,15 @@ export function EquipoForm({
     // @ts-expect-error - Resolver complex preprocess types
     resolver: zodResolver(equipoFormSchema),
     defaultValues: {
-      tipo: 'GENERADOR',
+      tipo: '',
       datosEquipo: {
         codigo_equipo: '',
         id_cliente: clientePreseleccionado || 0,
-        id_tipo_equipo: 1,
+        id_tipo_equipo: 0,
         id_sede: undefined,
         nombre_equipo: '',
         numero_serie_equipo: '',
-        ubicacion_texto: 'CUARTO DE PLANTAS ELÉCTRICAS / SUBESTACIÓN',
+        ubicacion_texto: '',
         estado_equipo: 'OPERATIVO',
         criticidad: 'MEDIA',
         en_garantia: false,
@@ -401,7 +345,7 @@ export function EquipoForm({
   useEffect(() => {
     if (!selectedArquetipo) return;
 
-    const codeNorm = (selectedArquetipo.codigo_tipo || 'GENERADOR').toUpperCase();
+    const codeNorm = (selectedArquetipo.codigo_tipo || '').toUpperCase();
     setValue('tipo', codeNorm);
 
     // Resolver id_tipo_equipo compatible con tabla tipos_equipo
@@ -746,7 +690,7 @@ export function EquipoForm({
     };
 
     const payload: CreateEquipoPayload = {
-      tipo: (selectedArquetipo?.codigo_tipo || tipoSeleccionado || 'GENERADOR').toUpperCase(),
+      tipo: (selectedArquetipo?.codigo_tipo || tipoSeleccionado || '').toUpperCase(),
       datosEquipo: datosEquipoFinal,
       especificaciones: {
         _version: 1,
@@ -916,6 +860,10 @@ export function EquipoForm({
               <div className="py-8 flex items-center justify-center gap-2 text-slate-500 text-xs">
                 <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
                 Cargando Tipos de Equipo del Hub EAM...
+              </div>
+            ) : arquetiposDisponibles.length === 0 ? (
+              <div className="py-8 text-center rounded-xl border border-dashed border-slate-200 text-xs text-slate-500">
+                No hay arquetipos o tipos de equipo activos configurados en Catálogos EAM.
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">

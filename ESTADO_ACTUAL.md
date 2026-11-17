@@ -1,4 +1,16 @@
-# 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
+# 📊 ESTADO ACTUAL DEL PROYECTO - EAM WHITE-LABEL SUITE (NOVIEMBRE 2026)
+
+## 🚀 HITO ACTUAL (`feat/eam-universal-activos-maestros` — 17 DE NOVIEMBRE DE 2026)
+
+### Implementación Completa Fases 0–6 (`reset-universal-system/`) + Blindaje de Convivencia con Producción (`main`)
+
+- **Estado de código y pruebas:** Completadas las **Fases 0 a 6** de transformación hacia **EAM Comercial Single-Tenant White-Label Instalable** (seguridad P0, RBAC real de 46 permisos, `configuracion_organizacion`, DDL multi-activo/UoM/secuencias, API desacoplada sin lógica `Plantas vs Bombas`, motor PDF/Email parametrizado con Chromium pooling + protección XSS, Portal Admin con `BrandingProvider` + `/configuracion/empresa` + `/comercial/*` + `/contratos` + `/cronogramas` + `/inventario/remisiones`, Mobile offline multi-cuenta por `userId` + motor declarativo `ESCALA_ESTADO`, Dockerfiles, `INSTALL_GUIDE.md` y seeds neutros).
+- **Fixes en vivo aplicados:** Asignación de rol `ADMIN` real a `admin@mekanos.com`, `invalidateUserCache` al inicio de `AuthService.login()`, `placeholderData` en `BrandingProvider`, diseño responsive `xl:grid-cols-2` en KPIs del Dashboard, y blindaje de compatibilidad binaria en BD compartida con `origin/main` (restauración de `usuarios.password_plain` nullable `DEFAULT NULL`, defaults `'OTRO'` / `'AMBOS'` y verificación de 0 registros `NULL` incompatibles).
+- **Documento de Handoff, Compatibilidad `main` y Guía de Validación E2E (Bloques 1–6 + Reanudación `SUBEST` Fase B.2):** Ver [reset-universal-system/11-ESTADO-ACTUAL-Y-GUIA-VALIDACION-E2E.md](./reset-universal-system/11-ESTADO-ACTUAL-Y-GUIA-VALIDACION-E2E.md).
+
+---
+
+# 📊 HISTÓRICO PREVIO - MEKANOS S.A.S (OCTUBRE 2026)
 
 ## 🚀 ÚLTIMOS COMMITS Y RESOLUCIONES ARQUITECTÓNICAS (26 DE OCTUBRE DE 2026)
 

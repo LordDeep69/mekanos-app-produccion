@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import * as os from 'os';
+import { Public } from '../auth/decorators/public.decorator';
 import { GIT_COMMIT } from '../common/git-commit';
 import { PrismaService } from '../database/prisma.service';
 
@@ -28,14 +29,15 @@ export class HealthController {
    * GET /api/health
    * Response: { status: 'ok', timestamp: '2025-11-13T...' }
    */
+  @Public()
   @Get()
   check() {
     return {
       status: 'ok',
       commit: GIT_COMMIT,
       timestamp: new Date().toISOString(),
-      service: 'Mekanos API',
-      app: 'mekanos-api',
+      service: process.env.APP_NAME || 'EAM Platform API',
+      app: process.env.APP_SLUG || 'eam-api',
       environment: SERVER_ENVIRONMENT,
       hostname: SERVER_HOSTNAME,
       version: '0.1.0',
@@ -74,18 +76,14 @@ export class HealthController {
         status: 'healthy',
         database: 'connected',
         timestamp: new Date().toISOString(),
-        service: 'Mekanos API',
+        service: process.env.APP_NAME || 'EAM Platform API',
         version: '0.1.0',
         tables: {
           usuarios: usuariosCount,
           equipos: equiposCount,
           ordenes_servicio: ordenesCount,
         },
-        supabase: {
-          host: 'aws-1-sa-east-1.pooler.supabase.com',
-          port: 6543,
-          pooler: 'PgBouncer Transaction Mode',
-        },
+        databaseEndpoint: this.resolveSafeDatabaseMetadata(),
       };
     } catch (error) {
       return {
@@ -94,6 +92,30 @@ export class HealthController {
         timestamp: new Date().toISOString(),
         error: error instanceof Error ? error.message : 'Unknown error',
       };
+    }
+  }
+
+  private resolveSafeDatabaseMetadata(): {
+    host: string;
+    port: number;
+    pooler: string;
+  } {
+    const rawUrl = process.env.DATABASE_URL;
+    if (!rawUrl) {
+      return { host: 'unconfigured', port: 5432, pooler: 'Direct Connection' };
+    }
+    try {
+      const parsed = new URL(rawUrl);
+      const port = parsed.port ? parseInt(parsed.port, 10) : 5432;
+      const isPgBouncer =
+        parsed.searchParams.get('pgbouncer') === 'true' || port === 6543;
+      return {
+        host: parsed.hostname || 'localhost',
+        port,
+        pooler: isPgBouncer ? 'PgBouncer Transaction Mode' : 'Direct PostgreSQL',
+      };
+    } catch {
+      return { host: 'configured', port: 5432, pooler: 'PostgreSQL' };
     }
   }
 }

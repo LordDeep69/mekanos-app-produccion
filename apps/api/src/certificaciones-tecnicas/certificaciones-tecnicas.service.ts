@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { tipo_certificacion_enum } from '@prisma/client';
-import { getNextTableId } from '../common/utils/next-id.helper';
 import { PrismaService } from '../database/prisma.service';
 import { CreateCertificacionesTecnicasDto } from './dto/create-certificaciones-tecnicas.dto';
 import { UpdateCertificacionesTecnicasDto } from './dto/update-certificaciones-tecnicas.dto';
@@ -32,16 +31,9 @@ export class CertificacionesTecnicasService {
       }
     }
 
-    const nextId = await getNextTableId(
-      this.prisma,
-      'certificaciones_tecnicas',
-      'id_certificacion',
-    );
-
     return this.prisma.certificaciones_tecnicas.create({
       data: {
         ...createDto,
-        id_certificacion: nextId,
         tipo_certificacion: createDto.tipo_certificacion as unknown as tipo_certificacion_enum,
         registrado_por: userId,
         fecha_registro: new Date(),

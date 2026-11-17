@@ -22,6 +22,8 @@ export class ActualizarTipoComponenteHandler
       es_consumible: command.es_consumible,
       es_inventariable: command.es_inventariable,
       aplica_a: command.aplica_a,
+      aplica_todos_tipos: command.aplica_todos_tipos,
+      tipos_equipo_ids: command.tipos_equipo_ids,
       descripcion: command.descripcion,
       activo: command.activo,
       modificado_por: command.modificado_por,

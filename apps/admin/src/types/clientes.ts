@@ -170,10 +170,22 @@ export interface ClienteConPersona extends Cliente {
   tiene_bombas?: boolean;
   total_equipos_plantas?: number;
   total_equipos_bombas?: number;
+  total_equipos?: number;
+  resumen_equipos_por_tipo?: Array<{
+    id_tipo_equipo: number | null;
+    codigo_tipo: string;
+    nombre_tipo: string;
+    cantidad: number;
+  }>;
   equipos?: Array<{
     id_equipo?: number;
     tipo?: string;
     id_tipo_equipo?: number;
+    tipos_equipo?: {
+      id_tipo_equipo?: number;
+      codigo_tipo?: string;
+      nombre_tipo?: string;
+    } | null;
     [key: string]: unknown;
   }>;
 }
@@ -201,6 +213,13 @@ export interface ClientesSummary {
   con_plantas: number;
   con_bombas: number;
   con_ambos: number;
+  por_tipo_equipo?: Array<{
+    id_tipo_equipo: number | null;
+    codigo_tipo: string;
+    nombre_tipo: string;
+    total_clientes: number;
+    total_equipos: number;
+  }>;
   sin_equipos: number;
   corporativos: number;
   sedes: number;

@@ -1,0 +1,40 @@
+# Git / OS / Editor
+.git
+.gitignore
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+# Dependencies & Build Caches
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+apps/api/uploads
+
+# Environment Secrets (NUNCA empaquetar .env reales en imágenes)
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Apps no requeridas en builds API/Admin Docker
+apps/mobile
+reset-universal-system
+docs
+scratch
+
+# Logs, binarios temporales y scripts históricos ad-hoc
+**/*.log
+**/*.pdf
+**/*.apk
+**/*.sha1
+**/*.bak
+test-*.ps1
+test-*.js
+*-result*.txt
+resultado-*.json

@@ -1,13 +1,42 @@
-import { Prisma } from '@prisma/client';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsDateString, IsInt, IsOptional, IsString } from 'class-validator';
 
 /**
- * DTO para crear historial_contrato
- * 
- * ⚠️ TEMPORAL: Usando tipos de Prisma directamente para MVP
- * TODO: Agregar validaciones con class-validator en fase de refinamiento
- * TODO: Documentar campos con @ApiProperty cuando se definan validaciones
+ * DTO estrictamente validado para creación en historial_contrato.
  */
-export class CreateHistorialContratoDto implements Partial<Prisma.historial_contratoCreateInput> {
-  // Permisivo para MVP - Prisma valida tipos en runtime
-  [key: string]: any;
+export class CreateHistorialContratoDto {
+  @ApiProperty()
+  @Type(() => Number)
+  @IsInt()
+  id_contrato!: number;
+
+  @ApiProperty()
+  @IsString()
+  campo_modificado!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  valor_anterior?: string;
+
+  @ApiProperty()
+  @IsString()
+  valor_nuevo!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  motivo_cambio?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  fecha_cambio?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  modificado_por?: number;
 }

@@ -525,7 +525,7 @@ export default function EmpleadoDetallePage() {
                       type="email"
                       value={nuevoEmail}
                       onChange={(e) => setNuevoEmail(e.target.value)}
-                      placeholder="nuevo.correo@mekanos.com"
+                      placeholder="nuevo.correo@empresa.com"
                       className="bg-white"
                     />
                   </div>

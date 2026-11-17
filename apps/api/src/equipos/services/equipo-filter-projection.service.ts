@@ -148,14 +148,17 @@ export class EquipoFilterProjectionService {
 
     // Consultar catálogo dinámico de atributos en BD para conocer unidades por defecto y tipo_control
     const codigosAconsultar = Object.values(doc.modulos).flatMap((m) => Object.keys(m || {}));
-    const attrsDb = codigosAconsultar.length > 0 ? await client.atributos_tecnicos.findMany({
-      where: { codigo_atributo: { in: codigosAconsultar } },
-      select: {
-        codigo_atributo: true,
-        tipo_control: true,
-        unidad_defecto_codigo: true,
-      },
-    }) : [];
+    const attrsDb =
+      codigosAconsultar.length > 0 && typeof client.atributos_tecnicos?.findMany === 'function'
+        ? await client.atributos_tecnicos.findMany({
+            where: { codigo_atributo: { in: codigosAconsultar } },
+            select: {
+              codigo_atributo: true,
+              tipo_control: true,
+              unidad_defecto_codigo: true,
+            },
+          })
+        : [];
     const mapaAttrsDb = new Map(attrsDb.map((a) => [a.codigo_atributo, a]));
 
     for (const [_, modData] of Object.entries(doc.modulos)) {

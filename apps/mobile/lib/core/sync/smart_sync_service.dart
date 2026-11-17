@@ -454,8 +454,12 @@ class SmartSyncService {
             continue;
           }
 
-          // TODAS las demás órdenes activas que no están en el servidor
-          // deben ser verificadas, sin importar isDirty o enCola
+          // ✅ SYNC RESILIENTE: No re-verificar ni purgar órdenes ya marcadas en conflicto
+          if (orden.idEstado == -2 ||
+              codigoEstado.toUpperCase() == 'CONFLICTO_ELIMINADA') {
+            continue;
+          }
+
           final enCola = await _db.existeOrdenEnColaPendiente(orden.idLocal);
           debugPrint(
             '   🔍 ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
@@ -492,21 +496,29 @@ class SmartSyncService {
                 tecnicoId,
               );
               if (!sigueAsignada) {
-                // Servidor confirmó 404 (orden eliminada) O la orden ya no está
-                // asignada a este técnico (reasignada).
-                await (_db.delete(
-                  _db.ordenesPendientesSync,
-                )..where((o) => o.idOrdenLocal.equals(orden.idLocal))).go();
+                final enCola = await _db.existeOrdenEnColaPendiente(orden.idLocal);
+                final codigoActual = estadoIdACodigo[orden.idEstado]?.toUpperCase();
+                final tieneTrabajoOffline =
+                    orden.isDirty || enCola || codigoActual == 'POR_SUBIR';
 
-                await _purgarOrdenLocalCompleta(
-                  orden.idLocal,
-                  orden.idBackend,
-                );
-                ordenesEliminadasCount++;
-                debugPrint(
-                  '   🗑️ ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
-                  'purgada localmente (eliminada o reasignada a otro técnico)',
-                );
+                if (tieneTrabajoOffline) {
+                  // ✅ ZERO-TRUST SYNC GUARD: No purgar trabajo offline capturado en campo
+                  await _marcarOrdenConflictoEliminada(orden);
+                  debugPrint(
+                    '   ⚠️ ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
+                    'marcada como CONFLICTO_ELIMINADA (trabajo offline preservado)',
+                  );
+                } else {
+                  await _purgarOrdenLocalCompleta(
+                    orden.idLocal,
+                    orden.idBackend,
+                  );
+                  ordenesEliminadasCount++;
+                  debugPrint(
+                    '   🗑️ ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
+                    'purgada localmente (eliminada o reasignada sin trabajo pendiente)',
+                  );
+                }
               }
             } catch (e) {
               debugPrint('   ❌ Error verificando ${orden.numeroOrden}: $e');
@@ -1130,6 +1142,39 @@ class SmartSyncService {
 
     debugPrint(
       '✅ [SMART SYNC] Orden local $idOrdenLocal purgada completamente',
+    );
+  }
+
+  /// Preserva una orden con trabajo offline cuyo respaldo remoto fue eliminado/reasignado
+  /// marcándola en estado `CONFLICTO_ELIMINADA` en lugar de destruir evidencias locales.
+  Future<void> _marcarOrdenConflictoEliminada(Ordene orden) async {
+    await _db.asegurarEstadoLocal(
+      id: -2,
+      codigo: 'CONFLICTO_ELIMINADA',
+      nombre: 'Conflicto (Eliminada en Servidor)',
+      esEstadoFinal: false,
+    );
+
+    await (_db.update(_db.ordenes)..where((o) => o.idLocal.equals(orden.idLocal)))
+        .write(
+      OrdenesCompanion(
+        idEstado: const Value(-2),
+        isDirty: const Value(true),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+
+    await (_db.update(_db.ordenesPendientesSync)
+          ..where((s) => s.idOrdenLocal.equals(orden.idLocal)))
+        .write(
+      OrdenesPendientesSyncCompanion(
+        estadoSync: const Value('CONFLICTO_ELIMINADA'),
+        ultimoError: const Value(
+          'Esta orden fue eliminada o reasignada en el servidor. '
+          'Tus evidencias y mediciones locales permanecen resguardadas.',
+        ),
+        fechaUltimoIntento: Value(DateTime.now()),
+      ),
     );
   }
 

@@ -11,8 +11,10 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermisosGuard } from '../auth/guards/permisos.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import {
   BuscarPersonaDto,
@@ -24,8 +26,9 @@ import { UsuariosGestionService } from './usuarios-gestion.service';
 import { UsuariosService } from './usuarios.service';
 
 @Controller('usuarios')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 @Roles('ADMIN')
+@Permisos('CONFIG_USERS')
 export class UsuariosController {
   constructor(
     private readonly usuariosService: UsuariosService,

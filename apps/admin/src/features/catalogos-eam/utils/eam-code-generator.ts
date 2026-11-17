@@ -470,6 +470,68 @@ export function generarCodigoTipoEquipo(
 }
 
 /**
+ * 4.5. Métrica / Unidad de Uso Personalizada (VarChar 20-30, MAYÚSCULAS)
+ * Genera un código corto, diciente y garantizado único frente a presets y otros tipos de equipo.
+ * Ej: "Maniobras de Conmutación MT" -> "MANIOBRAS" (o "MANIOBRAS_CMT" / "MANIOBRAS_2" si colisiona).
+ */
+export function generarCodigoMetricaUso(
+  etiquetaContador: string,
+  unidadesExistentes: Set<string>,
+  maxLen = 20,
+): string {
+  if (!etiquetaContador || !etiquetaContador.trim()) return '';
+
+  const norm = normalizarTexto(etiquetaContador).toUpperCase();
+  const palabras = norm
+    .split(/[^A-Z0-9]+/)
+    .filter((p) => p.length > 0 && !STOPWORDS_ES.has(p.toLowerCase()));
+
+  if (palabras.length === 0) {
+    return resolverColisionDeterminista('MEDIDOR', unidadesExistentes, {
+      maxLen,
+      separator: '_',
+      caseSensitive: false,
+    });
+  }
+
+  const lookup = new Set(
+    Array.from(unidadesExistentes || []).map((c) => (c || '').toUpperCase().trim()),
+  );
+
+  // 1. Raíz principal: primera palabra significativa (o combinación si es muy corta, ej: "M 3")
+  let candidatoBase =
+    palabras[0].length >= 4
+      ? palabras[0].slice(0, maxLen)
+      : palabras.slice(0, 2).join('_').slice(0, maxLen);
+
+  if (!lookup.has(candidatoBase)) {
+    return candidatoBase;
+  }
+
+  // 2. Si ya existe (ej: CICLOS o MANIOBRAS previo), combinar estratégicamente con la 2ª palabra/siglas
+  if (palabras.length >= 2) {
+    const sufijoSiglas = palabras
+      .slice(1)
+      .map((p) => (p.length <= 3 ? p : p.slice(0, 4)))
+      .join('_');
+    const candidatoCompuesto = `${palabras[0].slice(0, Math.max(4, maxLen - sufijoSiglas.length - 1))}_${sufijoSiglas}`.slice(
+      0,
+      maxLen,
+    );
+    if (!lookup.has(candidatoCompuesto)) {
+      return candidatoCompuesto;
+    }
+    candidatoBase = candidatoCompuesto;
+  }
+
+  return resolverColisionDeterminista(candidatoBase, lookup, {
+    maxLen,
+    separator: '_',
+    caseSensitive: false,
+  });
+}
+
+/**
  * 5. Magnitudes Físicas (VarChar 50, mayúsculas con guiones bajos)
  */
 export function generarCodigoMagnitudInteligente(

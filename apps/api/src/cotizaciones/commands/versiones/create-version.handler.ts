@@ -1,7 +1,6 @@
 import { PrismaService } from '@mekanos/database';
 import { NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { getNextTableId } from '../../../common/utils/next-id.helper';
 import { CreateVersionCommand } from './create-version.command';
 
 /**
@@ -142,10 +141,8 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
     // ========================================
     // 8. CREAR VERSIÓN
     // ========================================
-    const idVersion = await getNextTableId(this.prisma, 'versiones_cotizacion', 'id_version');
     const version = await this.prisma.versiones_cotizacion.create({
       data: {
-        id_version: idVersion,
         id_cotizacion: idCotizacion,
         numero_version: numeroVersion,
         datos_cotizacion: datosCotizacion as any, // JSONB

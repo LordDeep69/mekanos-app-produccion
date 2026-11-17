@@ -52,7 +52,9 @@ export interface CrearTipoComponenteData {
   subcategoria?: string;
   es_consumible?: boolean;
   es_inventariable?: boolean;
-  aplica_a: string;
+  aplica_a?: string;
+  aplica_todos_tipos?: boolean;
+  tipos_equipo_ids?: number[];
   descripcion?: string;
   creado_por?: number;
 }
@@ -68,6 +70,8 @@ export interface ActualizarTipoComponenteData {
   es_consumible?: boolean;
   es_inventariable?: boolean;
   aplica_a?: string;
+  aplica_todos_tipos?: boolean;
+  tipos_equipo_ids?: number[];
   descripcion?: string;
   activo?: boolean;
   modificado_por?: number;
@@ -79,11 +83,18 @@ export interface ActualizarTipoComponenteData {
 export interface TiposComponenteFilters {
   categoria?: string;
   aplica_a?: string;
+  id_tipo_equipo?: number;
   es_consumible?: boolean;
   es_inventariable?: boolean;
   activo?: boolean;
   page?: number;
   limit?: number;
+}
+
+export interface TipoEquipoAplicableRef {
+  id_tipo_equipo: number;
+  codigo_tipo: string;
+  nombre_tipo: string;
 }
 
 /**
@@ -97,7 +108,10 @@ export interface TipoComponenteEntity {
   subcategoria?: string;
   es_consumible: boolean;
   es_inventariable: boolean;
-  aplica_a: string;
+  aplica_a?: string | null;
+  aplica_todos_tipos: boolean;
+  tipos_equipo_ids: number[];
+  tipos_equipo?: TipoEquipoAplicableRef[];
   descripcion?: string;
   activo: boolean;
   creado_por?: number;

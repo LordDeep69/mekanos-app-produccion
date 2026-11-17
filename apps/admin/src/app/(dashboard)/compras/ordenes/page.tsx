@@ -56,6 +56,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { FiltrosOrdenesCompra, ordenesCompraService } from '@/lib/api/ordenes-compra.service';
 import { recepcionesCompraService } from '@/lib/api/recepciones-compra.service';
 import { comprasService } from '@/lib/api/compras.service';
+import { useConfiguracionEmpresa } from '@/features/configuracion/hooks/use-configuracion-empresa';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   EstadoOrdenCompra,
   OrdenCompra,
@@ -67,14 +69,15 @@ import { ProveedorCompleto } from '@/types/compras.types';
 
 export default function OrdenesCompraPage() {
   useSession();
+  const { formatCurrency, formatDate, branding, taxLabel, taxRate } = useOrgFormatters();
+  const { data: empresa } = useConfiguracionEmpresa();
 
-  // Helper para sanitizar nombres de usuario y erradicar textos quemados (White-label institucional)
+  // Helper para sanitizar nombres de usuario (White-label institucional)
   const sanitizarNombreUsuario = (nombre: string | null | undefined): string => {
     if (!nombre) return 'Administrador del Sistema';
     const trimmed = nombre.trim();
     const lower = trimmed.toLowerCase();
     if (
-      lower === 'admin mekanos' ||
       lower === 'admin' ||
       lower === 'administrador' ||
       lower.includes('admin')
@@ -147,32 +150,16 @@ export default function OrdenesCompraPage() {
     }>
   >([]);
 
-  // Formateador de moneda colombiana COP con precisión determinista
-  const formatCOP = (valor: number | null | undefined, forceDecimals = false) => {
-    if (valor === null || valor === undefined) return '$ 0';
-    const num = Number(valor);
-    const hasDecimals = !Number.isInteger(num);
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: forceDecimals || hasDecimals ? 2 : 0,
-      maximumFractionDigits: forceDecimals || hasDecimals ? 2 : 0,
-    }).format(num);
+  // Formateador de moneda institucional
+  const formatCOP = (valor: number | null | undefined) => {
+    if (valor === null || valor === undefined) return formatCurrency(0);
+    return formatCurrency(valor);
   };
 
-  // Formateador de fecha
+  // Formateador de fecha institucional
   const formatFecha = (fechaStr: string | null | undefined) => {
     if (!fechaStr) return '—';
-    try {
-      const d = new Date(fechaStr);
-      return d.toLocaleDateString('es-CO', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-    } catch {
-      return fechaStr;
-    }
+    return formatDate(fechaStr);
   };
 
   // Sanitizador y reparador UTF-8 para notas y observaciones (evita mojibake y omisiones legacy)
@@ -624,7 +611,7 @@ export default function OrdenesCompraPage() {
       <html lang="es">
       <head>
         <meta charset="UTF-8">
-        <title>Orden de Compra ${orden.numero_orden_compra} - MEKANOS S.A.S.</title>
+        <title>Orden de Compra ${orden.numero_orden_compra} - ${(branding.nombre_comercial || 'EAM').replace(/[<>&"]/g, '')}</title>
         <style>
           @page {
             size: letter portrait;
@@ -642,14 +629,14 @@ export default function OrdenesCompraPage() {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            border-bottom: 2px solid #2563eb;
+            border-bottom: 2px solid ${branding.color_primario || '#1E40AF'};
             padding-bottom: 16px;
             margin-bottom: 20px;
           }
           .company-title {
             font-size: 24px;
             font-weight: 900;
-            color: #1e3a8a;
+            color: ${branding.color_primario || '#1E40AF'};
             letter-spacing: -0.5px;
           }
           .company-sub {
@@ -669,7 +656,7 @@ export default function OrdenesCompraPage() {
             font-family: monospace;
             font-size: 16px;
             font-weight: 700;
-            color: #2563eb;
+            color: ${branding.color_primario || '#1E40AF'};
             margin-top: 2px;
           }
           .info-grid {
@@ -762,9 +749,17 @@ export default function OrdenesCompraPage() {
       <body>
         <div class="header">
           <div>
-            <div class="company-title">MEKANOS S.A.S.</div>
-            <div class="company-sub">Mantenimiento Electromecánico, Plantas Diésel e Ingeniería Industrial</div>
-            <div class="company-sub">NIT: 900.489.584-1 • Bucaramanga, Colombia</div>
+            <div class="company-title">${(empresa?.razon_social || branding.nombre_comercial).replace(/[<>&"]/g, '')}</div>
+            ${branding.eslogan ? `<div class="company-sub">${branding.eslogan.replace(/[<>&"]/g, '')}</div>` : ''}
+            <div class="company-sub">${[
+              empresa?.numero_id_fiscal
+                ? `${empresa?.tipo_id_fiscal || 'ID'}: ${empresa.numero_id_fiscal}`
+                : '',
+              [branding.ciudad_defecto, branding.pais_defecto].filter(Boolean).join(', '),
+            ]
+              .filter(Boolean)
+              .join(' • ')
+              .replace(/[<>&"]/g, '')}</div>
           </div>
           <div class="doc-badge">
             <div class="doc-type">ORDEN DE COMPRA</div>
@@ -824,7 +819,7 @@ export default function OrdenesCompraPage() {
               <span>${formatCOP(orden.subtotal)}</span>
             </div>
             <div class="totals-row">
-              <span>IVA (${orden.porcentaje_iva || 19}%):</span>
+              <span>${taxLabel} (${orden.porcentaje_iva ?? taxRate}%):</span>
               <span>${formatCOP(orden.iva)}</span>
             </div>
             <div class="totals-total">

@@ -10,7 +10,17 @@
  * - Tiempos de entrega
  */
 
-import { baseStyles, MEKANOS_COLORS } from './mekanos-base.template';
+import {
+    baseStyles,
+    buildBrandCssVars,
+    escapeBrandHtml,
+    formatCurrencyOrg,
+    generarFooterCorporativoHtml,
+    MEKANOS_COLORS,
+    OrgBrandingContext,
+    renderOrgLogoHtml,
+    resolveOrgBranding,
+} from './mekanos-base.template';
 
 // Extender colores
 const COLORS = {
@@ -19,6 +29,7 @@ const COLORS = {
 };
 
 export interface DatosOrdenCompraPDF {
+    branding?: OrgBrandingContext;
     // Identificación
     numeroOrdenCompra: string;
     fechaEmision: string;
@@ -82,7 +93,8 @@ export interface ItemOrdenCompraPDF {
  * Genera el HTML de la orden de compra
  */
 export function generarOrdenCompraHTML(datos: DatosOrdenCompraPDF): string {
-    const formatNumber = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const brand = resolveOrgBranding(datos.branding);
+    const formatMoney = (n: number) => formatCurrencyOrg(n, brand);
 
     const getEstadoStyle = (estado: string) => {
         switch (estado) {
@@ -103,6 +115,7 @@ export function generarOrdenCompraHTML(datos: DatosOrdenCompraPDF): string {
     <meta charset="UTF-8">
     <title>Orden de Compra ${datos.numeroOrdenCompra}</title>
     <style>
+        ${buildBrandCssVars(brand)}
         ${baseStyles}
         
         .oc-header {
@@ -291,11 +304,10 @@ export function generarOrdenCompraHTML(datos: DatosOrdenCompraPDF): string {
         <!-- HEADER -->
         <div class="oc-header">
             <div>
-                <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                    <div style="width: 50px; height: 50px; background: ${MEKANOS_COLORS.primary}; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: bold; margin-right: 12px;">MK</div>
-                    <div>
-                        <div style="font-size: 16px; font-weight: bold; color: ${MEKANOS_COLORS.primary};">MEKANOS S.A.S</div>
-                        <div style="font-size: 8px; color: ${COLORS.textLight};">NIT: 900.123.456-7</div>
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                    ${renderOrgLogoHtml(brand, 48, 'light')}
+                    <div style="font-size: 8px; color: ${COLORS.textLight};">
+                        ${brand.numeroIdFiscal ? `${escapeBrandHtml(brand.tipoIdFiscal)}: ${escapeBrandHtml(brand.numeroIdFiscal)}` : ''}
                     </div>
                 </div>
                 <div class="oc-title">ORDEN DE COMPRA</div>
@@ -398,9 +410,9 @@ export function generarOrdenCompraHTML(datos: DatosOrdenCompraPDF): string {
                     </td>
                     <td class="text-center">${item.cantidad}</td>
                     <td>${item.unidad}</td>
-                    <td class="text-right">$ ${formatNumber(item.precioUnitario)}</td>
+                    <td class="text-right">${formatMoney(item.precioUnitario)}</td>
                     <td class="text-center">${item.descuentoPorcentaje > 0 ? item.descuentoPorcentaje + '%' : '-'}</td>
-                    <td class="text-right">$ ${formatNumber(item.subtotal)}</td>
+                    <td class="text-right">${formatMoney(item.subtotal)}</td>
                 </tr>
                 `).join('')}
             </tbody>
@@ -411,21 +423,21 @@ export function generarOrdenCompraHTML(datos: DatosOrdenCompraPDF): string {
             <div class="totales-box">
                 <div class="total-row">
                     <span>Subtotal:</span>
-                    <span>$ ${formatNumber(datos.totales.subtotal)}</span>
+                    <span>${formatMoney(datos.totales.subtotal)}</span>
                 </div>
                 ${datos.totales.descuentoValor > 0 ? `
                 <div class="total-row" style="color: ${MEKANOS_COLORS.success};">
                     <span>Descuento (${datos.totales.descuentoPorcentaje}%):</span>
-                    <span>- $ ${formatNumber(datos.totales.descuentoValor)}</span>
+                    <span>- ${formatMoney(datos.totales.descuentoValor)}</span>
                 </div>
                 ` : ''}
                 <div class="total-row">
-                    <span>IVA (${datos.totales.ivaPorcentaje}%):</span>
-                    <span>$ ${formatNumber(datos.totales.ivaValor)}</span>
+                    <span>${escapeBrandHtml(brand.etiquetaImpuesto)} (${datos.totales.ivaPorcentaje}%):</span>
+                    <span>${formatMoney(datos.totales.ivaValor)}</span>
                 </div>
                 <div class="total-row final">
                     <span>TOTAL ORDEN:</span>
-                    <span>$ ${formatNumber(datos.totales.total)}</span>
+                    <span>${formatMoney(datos.totales.total)}</span>
                 </div>
             </div>
         </div>
@@ -455,13 +467,7 @@ export function generarOrdenCompraHTML(datos: DatosOrdenCompraPDF): string {
         </div>
         
         <!-- FOOTER -->
-        <div class="footer-oc">
-            <strong>MEKANOS S.A.S</strong> - NIT: 900.123.456-7<br>
-            BARRIO LIBANO CRA 49C #31-35 DIAG. AL SENA - Cartagena, Colombia<br>
-            TEL: 6359384 | CEL: 315-7083350 | EMAIL: mekanossas2@gmail.com<br>
-            <br>
-            Este documento es válido como orden de compra oficial. Cualquier discrepancia debe ser notificada antes de la entrega.
-        </div>
+        ${generarFooterCorporativoHtml(brand, 'Este documento es válido como orden de compra oficial. Cualquier discrepancia debe ser notificada antes de la entrega.')}
     </div>
 </body>
 </html>

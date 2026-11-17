@@ -12,8 +12,12 @@
  */
 
 import { PdfService } from './pdf.service';
-import { generarTipoUniversalEamHTML } from './templates/tipo-universal-eam.template';
+import {
+  esActividadMedicion,
+  generarTipoUniversalEamHTML,
+} from './templates/tipo-universal-eam.template';
 import { DatosOrdenPDF } from './templates/mekanos-base.template';
+import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
 
 describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
   let pdfService: PdfService;
@@ -27,37 +31,33 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
     );
   });
 
-  describe('1. Despacho Seguro Zero-Trust (pdfService.determinarTipoInforme)', () => {
-    it('debe despachar CORRECTIVO para cualquier equipo cuando el servicio es correctivo', () => {
+  describe('1. Despacho Declarativo EAM (pdfService.determinarTipoInforme)', () => {
+    it('debe despachar CORRECTIVO para cualquier equipo cuando el servicio es correctivo o NARRATIVO_CORRECTIVO', () => {
       expect(pdfService.determinarTipoInforme('GENERADOR', 'CORRECTIVO')).toBe('CORRECTIVO');
       expect(pdfService.determinarTipoInforme('BOMBA', 'CORRECTIVO')).toBe('CORRECTIVO');
       expect(pdfService.determinarTipoInforme('COMPRESOR', 'CORRECTIVO')).toBe('CORRECTIVO');
-      expect(pdfService.determinarTipoInforme('CHILLER_HVAC', 'CORRECTIVO')).toBe('CORRECTIVO');
+      expect(pdfService.determinarTipoInforme('ASCENSOR', 'PREVENTIVO_A', { formatoDocumento: 'NARRATIVO_CORRECTIVO' })).toBe('CORRECTIVO');
     });
 
-    it('debe preservar BOMBA_A exactamente para bombas preventivas (Golden Master)', () => {
-      expect(pdfService.determinarTipoInforme('BOMBA', 'PREVENTIVO_A')).toBe('BOMBA_A');
-      expect(pdfService.determinarTipoInforme('BOM', 'PREVENTIVO_A')).toBe('BOMBA_A');
+    it('preserva modo legacy únicamente bajo opt-in explícito usaPlantillaUniversal: false', () => {
+      expect(pdfService.determinarTipoInforme('BOMBA', 'PREVENTIVO_A', { usaPlantillaUniversal: false })).toBe('BOMBA_A');
+      expect(pdfService.determinarTipoInforme('GENERADOR', 'PREVENTIVO_A', { usaPlantillaUniversal: false })).toBe('GENERADOR_A');
+      expect(pdfService.determinarTipoInforme('GENERADOR', 'PREVENTIVO_B', { usaPlantillaUniversal: false })).toBe('GENERADOR_B');
     });
 
-    it('debe preservar GENERADOR_A y GENERADOR_B para plantas eléctricas (Golden Master)', () => {
-      expect(pdfService.determinarTipoInforme('GENERADOR', 'PREVENTIVO_A')).toBe('GENERADOR_A');
-      expect(pdfService.determinarTipoInforme('GEN', 'PREVENTIVO_A')).toBe('GENERADOR_A');
-      expect(pdfService.determinarTipoInforme('GENERADOR', 'PREVENTIVO_B')).toBe('GENERADOR_B');
-    });
+    it('converge Generadores, Bombas, Ascensores, Compresores, Motores y HVAC hacia UNIVERSAL_EAM por defecto', () => {
+      expect(pdfService.determinarTipoInforme('BOMBA', 'PREVENTIVO_A')).toBe('UNIVERSAL_EAM');
+      expect(pdfService.determinarTipoInforme('GENERADOR', 'PREVENTIVO_A')).toBe('UNIVERSAL_EAM');
+      expect(pdfService.determinarTipoInforme('ASCENSOR', 'PREVENTIVO_A')).toBe('UNIVERSAL_EAM');
 
-    it('NUNCA debe degradar silenciosamente a GENERADOR_A: Compresores y Motores despachan UNIVERSAL_EAM', () => {
       const tipoCompresor = pdfService.determinarTipoInforme('COMPRESOR', 'PREVENTIVO_A');
       expect(tipoCompresor).toBe('UNIVERSAL_EAM');
-      expect(tipoCompresor).not.toBe('GENERADOR_A');
 
       const tipoMotor = pdfService.determinarTipoInforme('MOTOR', 'PREVENTIVO_A');
       expect(tipoMotor).toBe('UNIVERSAL_EAM');
-      expect(tipoMotor).not.toBe('GENERADOR_A');
 
       const tipoHvac = pdfService.determinarTipoInforme('CHILLER_HVAC', 'PREVENTIVO_A');
       expect(tipoHvac).toBe('UNIVERSAL_EAM');
-      expect(tipoHvac).not.toBe('GENERADOR_A');
     });
   });
 
@@ -350,6 +350,7 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
             resultado: 'B' as any,
             observaciones: 'TEMP: 80',
             tipoActividad: 'MEDICION',
+            configInputJson: { unidad: '°C' },
           },
         ],
         mediciones: [],
@@ -544,6 +545,242 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
       expect(html).toContain('break-inside: avoid');
       expect(html).toContain('page-break-inside: avoid');
       expect(html).toContain('class="pendientes-tabla"');
+    });
+
+    it('debe soportar métricas de uso 100% personalizadas (MANIOBRAS) y evitar colisiones de etiquetas en Subestación Eléctrica (SUBEST)', () => {
+      const mockSubestacion: DatosOrdenPDF = {
+        numeroOrden: 'OS-202611-0099',
+        cliente: 'Centro Comercial Caribe Plaza S.A.',
+        direccion: 'Av. Pedro de Heredia #30-15',
+        marcaEquipo: 'SCHNEIDER',
+        serieEquipo: 'SUB-MT-2026',
+        tipoEquipo: 'SUBEST' as any,
+        tipoServicio: 'PREVENTIVO_A',
+        fecha: '14/11/2026',
+        tecnico: 'JUAN GRAU',
+        horaEntrada: '08:00',
+        horaSalida: '10:30',
+        equipoDetalle: {
+          codigoEquipo: 'SUBEST-CARIBE-01',
+          nombreEquipo: 'Subestación Transformador Seco 750 kVA',
+          tipoEquipo: 'SUBEST',
+          tipoEquipoNombre: 'SUBESTACIÓN ELÉCTRICA MT',
+          marca: 'SCHNEIDER',
+          modelo: 'TRIHAL-750',
+          serie: 'SUB-MT-2026',
+          cliente: 'Centro Comercial Caribe Plaza S.A.',
+          horometroIntervencion: 1500,
+          horometroAcumulado: 1500,
+          horometroAnterior: 1200,
+          horometroTranscurrido: 300,
+          unidadUso: 'MANIOBRAS',
+          etiquetaContador: 'Maniobras de Conmutación',
+          requiereHorometro: true,
+        },
+        actividades: [
+          {
+            sistema: 'INTERRUPTOR MT',
+            descripcion: 'Registrar contador de maniobras del interruptor de media tensión',
+            tipoActividad: 'INSPECCION',
+            resultado: 'B',
+            tipoControlInput: 'LECTURA_CONTADOR',
+            rolSemantico: 'LECTURA_CONTADOR_ACTIVO',
+            observaciones: 'MANIOBRAS: 1500|||Sin desgaste en mecanismo de resorte.',
+            respuestaJson: {
+              valor: 1500,
+              etiqueta: 'Maniobras de Conmutación',
+              unidad: 'maniobras',
+              unidadUso: 'MANIOBRAS',
+              semaforo: 'B',
+            },
+          },
+          {
+            sistema: 'BORNES Y BARRAJES',
+            descripcion: 'Medición de temperatura en bornes de baja tensión (°C)',
+            tipoActividad: 'MEDICION',
+            resultado: 'B',
+            tipoControlInput: 'INPUT_NUMERICO',
+            respuestaJson: {
+              valor: 46.5,
+              semaforo: 'B',
+            },
+          },
+        ],
+        mediciones: [],
+        evidencias: [],
+      };
+
+      const html = generarTipoUniversalEamHTML(mockSubestacion);
+
+      expect(html).toContain('Control por Maniobras de Conmutación');
+      expect(html).toContain('Maniobras de Conmutación Intervención');
+      expect(html).toContain('Maniobras de Conmutación Acumulado (Hoja de Vida)');
+      expect(html).toContain('1.500 maniobras');
+      expect(html).toContain('Anterior: 1.200 maniobras');
+      expect(html).toContain('Dif: +300 maniobras');
+      expect(html).toContain('Sin desgaste en mecanismo de resorte.');
+      expect(html).not.toContain('MANIOBRAS: 1500');
+
+      expect(html).toContain('Temperatura en bornes de baja tensión');
+      expect(html).toContain('46.5 °C');
+      expect(html).not.toContain('Presión de Succión');
+    });
+
+    it('debe resolver unidades UoM, rol principal dinámico, combinar tensiones, escapar < y > y soportar modo calendario CAL', () => {
+      const equipoMock: any = {
+        codigo_equipo: 'EQ-DEMO-01',
+        nombre_equipo: 'Transformador Seco 1000 kVA',
+        especificaciones: {
+          modulos: {
+            nucleo: {
+              potencia_aparente_custom: 1000,
+              grupo_conexion: 'Dyn5',
+            },
+            celda: {
+              tension_primaria_mt: 13.2,
+              tension_secundaria_bt: '220/127 VAC',
+            },
+          },
+          unidades: {
+            potencia_aparente_custom: 'KVA_APA',
+            tension_primaria_mt: 'KV_VOLT',
+          },
+        },
+        tipos_equipo: {
+          codigo_tipo: 'ARQ_CUSTOM',
+          nombre_tipo: 'Equipo Transformación Genérico',
+          unidad_uso: 'CAL',
+          etiqueta_contador: 'Control por Calendario',
+          requiere_horometro: false,
+          tipo_equipo_modulos: [
+            {
+              modulo: {
+                modulo_atributos: [
+                  {
+                    es_kpi: true,
+                    visible_en_pdf: true,
+                    atributo: {
+                      codigo_atributo: 'potencia_aparente_custom',
+                      nombre_atributo: 'Potencia Aparente Nominal',
+                      rol_semantico: 'POTENCIA_CAPACIDAD_PRINCIPAL',
+                      unidad_defecto_codigo: 'KVA_APA',
+                      unidad_defecto: { codigo: 'KVA_APA', simbolo: 'kVA' },
+                    },
+                  },
+                  {
+                    es_kpi: true,
+                    visible_en_pdf: true,
+                    atributo: {
+                      codigo_atributo: 'grupo_conexion',
+                      nombre_atributo: 'Grupo Vectorial',
+                      rol_semantico: 'ESTANDAR',
+                    },
+                  },
+                  {
+                    es_kpi: true,
+                    visible_en_pdf: true,
+                    atributo: {
+                      codigo_atributo: 'tension_primaria_mt',
+                      nombre_atributo: 'Tensión Primaria Nominal MT',
+                      rol_semantico: 'CONFIGURACION',
+                      unidad_defecto_codigo: 'KV_VOLT',
+                      unidad_defecto: { codigo: 'KV_VOLT', simbolo: 'kV' },
+                    },
+                  },
+                  {
+                    es_kpi: true,
+                    visible_en_pdf: true,
+                    atributo: {
+                      codigo_atributo: 'tension_secundaria_bt',
+                      nombre_atributo: 'Tensión Secundaria Nominal BT',
+                      rol_semantico: 'CONFIGURACION',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      };
+
+      const placa = EquipoSpecsReader.getPlacaUniversal(equipoMock);
+      expect(placa.capacidadPrincipal?.texto).toBe('1000 kVA');
+
+      const mockOrden: DatosOrdenPDF = {
+        numeroOrden: 'OS-202611-0123',
+        cliente: 'Cliente Demo',
+        direccion: 'Zona Industrial',
+        marcaEquipo: 'ABB',
+        serieEquipo: 'ABB-999',
+        tipoEquipo: 'ARQ_CUSTOM' as any,
+        tipoServicio: 'PREVENTIVO_A',
+        fecha: '14/11/2026',
+        tecnico: 'JUAN GRAU',
+        horaEntrada: '09:00',
+        horaSalida: '10:00',
+        equipoDetalle: {
+          codigoEquipo: 'EQ-DEMO-01',
+          nombreEquipo: 'Transformador Seco 1000 kVA',
+          tipoEquipo: 'ARQ_CUSTOM',
+          tipoEquipoNombre: 'Equipo Transformación Genérico',
+          marca: 'ABB',
+          modelo: 'RESIBLOC',
+          serie: 'ABB-999',
+          cliente: 'Cliente Demo',
+          unidadUso: 'CAL',
+          requiereHorometro: false,
+        },
+        actividades: [
+          {
+            sistema: 'NÚCLEO',
+            descripcion: 'Inspección termográfica infrarroja',
+            tipoActividad: 'INSPECCION',
+            tipoControlInput: 'PERSONALIZADO',
+            resultado: 'B',
+            respuestaJson: {
+              etiqueta: 'Óptimo (ΔT < 5°C y <a) >',
+              semaforo: 'B',
+            },
+          },
+          {
+            sistema: 'CELDA',
+            descripcion:
+              'Inspección de temperatura ambiente en celda, voltaje de control auxiliar, frecuencia de ventiladores y presión de contactos',
+            tipoControlInput: 'ESCALA_ESTADO',
+            resultado: 'R',
+          },
+        ],
+        mediciones: [
+          {
+            parametro: 'Resistencia de Aislamiento AT vs Tierra',
+            valor: 180,
+            unidad: 'MΩ',
+            rangoMin: 500,
+            rangoMax: 5000,
+            estado: 'ALERTA',
+          },
+        ],
+        evidencias: [],
+      };
+      (mockOrden as any).placaUniversal = placa;
+
+      expect(esActividadMedicion(mockOrden.actividades[1])).toBe(false);
+
+      const html = generarTipoUniversalEamHTML(mockOrden);
+      expect(html).toContain('1000 kVA');
+      expect(html).toContain('13.2 kV / 220/127 VAC');
+      expect(html).toContain('Grupo Vectorial: <strong>Dyn5</strong>');
+      expect(html).not.toContain('Potencia Aparente Nominal: <strong>1000 kVA</strong>');
+      expect(html).not.toContain('Tensión Primaria Nominal MT: <strong>13.2 kV</strong>');
+      expect(html).toContain('Control Exclusivo por Calendario');
+      expect(html).not.toContain('Horómetro Intervención');
+      expect(html).toContain('Óptimo (ΔT &lt; 5°C y &lt;a) &gt;');
+      expect(html).toContain(
+        'Inspección de temperatura ambiente en celda, voltaje de control auxiliar, frecuencia de ventiladores y presión de contactos',
+      );
+      expect(html).toContain('180 MΩ');
+      expect(html).toContain('500 - 5000 MΩ');
+      expect(html).toContain('ALERTA');
     });
   });
 });

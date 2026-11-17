@@ -26,6 +26,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import type { Orden, OrdenPendiente } from '@/types/ordenes';
 import {
   getClienteNombre,
@@ -622,6 +623,7 @@ function ProgramarVisitaModalContent({
 }
 
 export function HiloContinuidadCaso({ orden, onOpenPendientesTab }: HiloContinuidadCasoProps) {
+  const { formatCurrency } = useOrgFormatters();
   const queryClient = useQueryClient();
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
 
@@ -679,12 +681,7 @@ export function HiloContinuidadCaso({ orden, onOpenPendientesTab }: HiloContinui
     Boolean(orden.id_orden_padre) ||
     (orden.numero_visita_caso ?? 1) > 1;
 
-  const formatCOP = (val: number) =>
-    new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-    }).format(val || 0);
+  const formatCOP = (val: number) => formatCurrency(val || 0);
 
   const totalesCaso = hilo?.pendientes_totales ?? (orden.ordenes_pendientes?.length || 0);
   const resueltosCaso =

@@ -370,4 +370,153 @@ describe('Fase 4 — EquiposGestionService (Filtros B-Tree SI, Wizard Dual-Write
       expect(detalle.datos_especificos.potencia_hp_electrico).toBe(7.5);
     });
   });
+
+  describe('Gate F2 — Activos Polimórficos Agnosticos & Facetas Dinámicas', () => {
+    it('crea arquetipo ASCENSOR sin datosGenerador/datosBomba ni defaults inventados (1.0/1800/N/A)', async () => {
+      prismaMock.tipos_equipo.findUnique.mockResolvedValue({
+        id_tipo_equipo: 25,
+        codigo_tipo: 'ASCENSOR',
+        nombre_tipo: 'Ascensor de Pasajeros',
+      });
+      prismaMock.equipos.create.mockResolvedValue({
+        id_equipo: 701,
+        codigo_equipo: 'ASC-TORRE-01',
+        nombre_equipo: 'Ascensor Torre Norte',
+        id_cliente: 10,
+        id_tipo_equipo: 25,
+      });
+
+      const result = await service.crearEquipoCompleto(
+        {
+          tipo: 'ASCENSOR',
+          vincular_kit_bom: false,
+          datosEquipo: {
+            codigo_equipo: 'ASC-TORRE-01',
+            id_cliente: 10,
+            id_tipo_equipo: 25,
+            ubicacion_texto: 'Torre Norte Lobby',
+            estado_equipo: 'OPERATIVO' as any,
+            criticidad: 'ALTA' as any,
+          },
+          especificaciones: {
+            _version: 1,
+            modulos: {
+              cabina: {
+                marca_ascensor: 'OTIS',
+                capacidad_kg: 1000,
+              },
+            },
+          },
+        },
+        1,
+      );
+
+      expect(result.data.id_equipo).toBe(701);
+      expect(prismaMock.equipos_generador.create).not.toHaveBeenCalled();
+      expect(prismaMock.equipos_bomba.create).not.toHaveBeenCalled();
+      expect(prismaMock.equipos_motor.create).not.toHaveBeenCalled();
+
+      const createPayload = prismaMock.equipos.create.mock.calls[0][0].data;
+      expect(JSON.stringify(createPayload)).not.toContain('SN-TEMP-');
+      expect(JSON.stringify(createPayload)).not.toContain('"N/A"');
+    });
+
+    it('obtenerFacetasDinamicas(ASCENSOR) retorna marcas OEM, valoresTrabajo y atributosDinamicos', async () => {
+      prismaMock.tipos_equipo.findFirst = jest.fn().mockResolvedValue({
+        id_tipo_equipo: 25,
+        codigo_tipo: 'ASCENSOR',
+        nombre_tipo: 'Ascensor de Pasajeros',
+        tipo_equipo_modulos: [
+          {
+            modulo: {
+              codigo_modulo: 'cabina',
+              modulo_atributos: [
+                {
+                  es_filtrable: true,
+                  atributo: {
+                    codigo_atributo: 'capacidad_kg',
+                    nombre_atributo: 'Capacidad Nominal',
+                    tipo_control: 'NUMERO',
+                    unidad_defecto_codigo: 'KG',
+                    magnitud: { codigo_magnitud: 'MASA', unidades_medida: [] },
+                    unidad_defecto: { codigo_unidad: 'KG', simbolo: 'kg' },
+                  },
+                },
+                {
+                  es_filtrable: true,
+                  atributo: {
+                    codigo_atributo: 'tipo_traccion',
+                    nombre_atributo: 'Tipo de Tracción',
+                    tipo_control: 'SELECT',
+                    unidad_defecto_codigo: null,
+                    magnitud: null,
+                    unidad_defecto: null,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+      prismaMock.modelos_equipo = {
+        findMany: jest.fn().mockResolvedValue([
+          { marca: 'OTIS' },
+          { marca: 'SCHINDLER' },
+        ]),
+      };
+      prismaMock.equipos_atributos_filtro.findMany = jest.fn().mockResolvedValue([
+        {
+          codigo_atributo: 'capacidad_kg',
+          valor_texto: null,
+          valor_num_base: 800,
+          unidad_base_codigo: 'KG',
+        },
+        {
+          codigo_atributo: 'capacidad_kg',
+          valor_texto: null,
+          valor_num_base: 1250,
+          unidad_base_codigo: 'KG',
+        },
+        {
+          codigo_atributo: 'tipo_traccion',
+          valor_texto: 'GEARLESS',
+          valor_num_base: null,
+          unidad_base_codigo: null,
+        },
+      ]);
+
+      const facetas = await service.obtenerFacetasDinamicas('ASCENSOR');
+
+      expect(facetas.marcas).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            campo: 'marca_modelo',
+            valoresSugeridos: ['OTIS', 'SCHINDLER'],
+          }),
+        ]),
+      );
+      expect(facetas.valoresTrabajo).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            campo: 'capacidad_kg',
+            minSugerido: 800,
+            maxSugerido: 1250,
+          }),
+        ]),
+      );
+      expect(facetas.atributosDinamicos).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            codigo_atributo: 'capacidad_kg',
+            minSugerido: 800,
+            maxSugerido: 1250,
+          }),
+          expect.objectContaining({
+            codigo_atributo: 'tipo_traccion',
+            valoresSugeridos: ['GEARLESS'],
+          }),
+        ]),
+      );
+    });
+  });
 });

@@ -9,6 +9,7 @@ import {
   Cpu,
   ListTodo,
   Mail,
+  Palette,
   Settings2,
   Sparkles,
   Tag,
@@ -17,6 +18,14 @@ import Link from 'next/link';
 
 export default function ConfiguracionPage() {
   const modulosCat = [
+    {
+      title: 'Empresa, Marca y Región (White-Label)',
+      description:
+        'Identidad corporativa, logos, colores en vivo, moneda, zona horaria, impuestos y prefijos documentales.',
+      href: '/configuracion/empresa',
+      icon: Palette,
+      color: 'text-violet-600 bg-violet-50 border-violet-100',
+    },
     {
       title: 'Tipos de Servicio y Protocolos',
       description:
@@ -105,10 +114,10 @@ export default function ConfiguracionPage() {
               Catálogo de Equipos Maestros, Partes, Campos Técnicos y Modelos de Fábrica
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Configura los <strong>Tipos de Equipo</strong> (464 activos operativos), las
-              plantillas de <strong>Modelos de Fábrica y sus Kits de Repuestos (BOM)</strong>, las{' '}
+              Configura los <strong>Tipos de Equipo</strong>, las plantillas de{' '}
+              <strong>Modelos de Fábrica y sus Kits de Repuestos (BOM)</strong>, las{' '}
               <strong>Partes y Subsistemas</strong>, el{' '}
-              <strong>Catálogo de 145 Campos Técnicos</strong> y las{' '}
+              <strong>Catálogo Maestro de Campos Técnicos</strong> y las{' '}
               <strong>Unidades de Medida</strong> con simulador interactivo de formulario y placa
               PDF.
             </p>

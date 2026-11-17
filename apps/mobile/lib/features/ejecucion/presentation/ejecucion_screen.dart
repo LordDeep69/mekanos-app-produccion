@@ -8,7 +8,6 @@ import '../../../core/database/database_service.dart';
 import '../../../core/errors/error_feedback.dart';
 import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/smart_sync_service.dart';
-import '../../../core/sync/sync_progress.dart';
 import '../../../core/sync/sync_upload_service.dart'
     show SyncUploadResult, syncUploadServiceProvider;
 import '../../auth/data/auth_provider.dart';
@@ -19,10 +18,14 @@ import '../../firmas/data/firma_service.dart';
 import '../../firmas/presentation/firmas_section.dart';
 import '../../settings/presentation/configuracion_screen.dart'
     show formatoHora24Provider;
+import '../data/declarative_activity_resolver.dart';
 import '../data/ejecucion_service.dart';
 import '../../../core/telemetria/telemetria_service.dart';
 import 'pendientes_orden_widget.dart';
 import 'time_picker_sheet.dart';
+import 'widgets/medicion_input_card.dart';
+import 'widgets/metrica_uso_mobile.dart';
+import 'widgets/sync_progress_dialog.dart';
 
 /// Pantalla de Ejecución de Orden - RUTA 6
 /// TabBar: Checklist | Mediciones | Resumen
@@ -56,7 +59,6 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   bool _isLoading = true;
   String? _numeroOrden;
   bool _esCorrectivo = false;
-  bool _esBomba = false;
   String _codigoTipoServicio = '';
   String? _razonFallaActual;
   late TextEditingController _observacionesController;
@@ -77,7 +79,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   List<OrdenesEquipo> _equipos = [];
   Map<int, ActividadesCatalogoData> _catalogoPorId = {};
   List<String> _sistemasDinamicosEquipo = [];
-  _MetricaUsoMobile _metricaUso = _MetricaUsoMobile.desdeConfig(null);
+  MetricaUsoMobile _metricaUso = MetricaUsoMobile.desdeConfig(null);
   int _resumenTabTick = 0;
 
   // ✅ FIX 17-DIC-2025: Flag para saber si es orden de un solo equipo (necesita tab Resumen)
@@ -214,20 +216,34 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         }
         final int idEquipoMetrica = _idEquipoActual ?? orden.idEquipo;
         final eqMetrica = await db.getEquipoById(idEquipoMetrica);
-        _metricaUso = _MetricaUsoMobile.desdeConfig(eqMetrica?.configParametros);
+        _metricaUso = MetricaUsoMobile.desdeConfig(eqMetrica?.configParametros);
+
+        // Si las actividades de la orden no trajeron subsistemas distintos de GENERAL,
+        // completar desde el catálogo sincronizado para mantener subsistemas 100% dinámicos.
+        if (_sistemasDinamicosEquipo.isEmpty) {
+          final sistemasCat = <String>{};
+          for (final cat in _catalogoPorId.values) {
+            if (cat.idTipoServicio == orden.idTipoServicio ||
+                orden.idTipoServicio > 0) {
+              final sTrim = (cat.sistema ?? '').trim();
+              if (sTrim.isNotEmpty &&
+                  sTrim.toUpperCase() != 'GENERAL' &&
+                  sTrim != 'Sin sistema') {
+                sistemasCat.add(sTrim);
+              }
+            }
+          }
+          if (sistemasCat.isNotEmpty) {
+            _sistemasDinamicosEquipo = sistemasCat.toList();
+          }
+        }
+
         final tipoServicio = await db.getTipoServicioById(orden.idTipoServicio);
         final codigoTipo = tipoServicio?.codigo ?? '';
-        final nombreTipo = (tipoServicio?.nombre ?? '').toUpperCase();
         final numero = orden.numeroOrden.toUpperCase();
         _codigoTipoServicio = codigoTipo.toUpperCase();
         _esCorrectivo =
             _codigoTipoServicio.contains('CORR') || numero.contains('CORR');
-        // ✅ FIX 09-FEB-2026: Detección robusta de bomba
-        // Verificar por codigo (BOM_CORR), nombre ("Bomba"), o numero orden ("BOM")
-        _esBomba =
-            _codigoTipoServicio.contains('BOM') ||
-            nombreTipo.contains('BOMBA') ||
-            numero.contains('BOM');
 
         // ✅ SEGUIMIENTO EN TIEMPO REAL: Iniciar telemetría / heartbeat para Portal Admin
         if (orden.idBackend != null) {
@@ -240,7 +256,6 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         }
       } else {
         _esCorrectivo = false;
-        _esBomba = false;
       }
     } catch (e) {
       debugPrint('❌ Error cargando datos: $e');
@@ -1297,7 +1312,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   Widget _buildSimboloogiaChips(ActividadesEjecutada actividad) {
-    // Escala homologada MEKANOS: B / R / M / C / NA
+    // Escala estándar: B / R / M / C / NA
     final opciones = [
       ('B', 'Bueno', Colors.green),
       ('R', 'Regular', Colors.amber.shade700),
@@ -1361,224 +1376,64 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   // ==========================================================================
-  // RUTA 11: ACTIVIDADES ESPECIALES CON VALOR
+  // RUTA 11: MOTOR DECLARATIVO PURO DE ACTIVIDADES
   // ==========================================================================
 
-  /// Detecta el tipo de actividad especial
-  /// ✅ FIX 26-ENE-2026: Lógica refinada para detectar correctamente cada tipo
-  /// ✅ FIX 02-FEB-2026: Soporte para actividades de CORRECTIVO (GEN_CORR)
-  String? _getTipoActividadEspecial(String descripcion) {
-    final desc = descripcion.toUpperCase();
-
-    // =========================================================================
-    // CORRECTIVO: Actividades especiales para servicio correctivo (GEN_CORR)
-    // =========================================================================
-
-    // ESTADO INICIAL DEL EQUIPO → Selector: OPERATIVO, PARADO, FALLA, INACCESIBLE
-    if (desc.contains('ESTADO INICIAL DEL EQUIPO')) {
-      return 'CORR_ESTADO_INICIAL';
-    }
-
-    // ESTADO FINAL DEL EQUIPO → Selector: OPERATIVO, REPARACIÓN PARCIAL, etc.
-    if (desc.contains('ESTADO FINAL DEL EQUIPO')) {
-      return 'CORR_ESTADO_FINAL';
-    }
-
-    // SISTEMAS AFECTADOS → Selector múltiple de sistemas
-    if (desc.contains('SISTEMAS AFECTADOS')) {
-      return 'CORR_SISTEMAS_AFECTADOS';
-    }
-
-    // Actividades de TEXTO LIBRE para correctivo
-    if (desc.contains('DESCRIPCIÓN DEL PROBLEMA') ||
-        desc.contains('DESCRIPCION DEL PROBLEMA')) {
-      return 'CORR_TEXTO_PROBLEMA';
-    }
-    // ✅ FIX 03-FEB-2026: Soportar tanto el label viejo como el nuevo
-    if (desc.contains('SÍNTOMAS OBSERVADOS') ||
-        desc.contains('SINTOMAS OBSERVADOS') ||
-        desc.contains('FALLAS OBSERVADAS')) {
-      return 'CORR_TEXTO_SINTOMAS';
-    }
-    // ✅ FIX 03-FEB-2026: Soportar tanto el label viejo como el nuevo
-    if (desc.contains('DIAGNÓSTICO Y CAUSA') ||
-        desc.contains('DIAGNOSTICO Y CAUSA') ||
-        desc.contains('DIAGNÓSTICO') ||
-        desc.contains('DIAGNOSTICO')) {
-      return 'CORR_TEXTO_DIAGNOSTICO';
-    }
-    if (desc.contains('TRABAJOS REALIZADOS')) {
-      return 'CORR_TEXTO_TRABAJOS';
-    }
-    if (desc.contains('TRABAJOS PENDIENTES')) {
-      return 'CORR_TEXTO_PENDIENTES';
-    }
-    if (desc.contains('RECOMENDACIONES')) {
-      return 'CORR_TEXTO_RECOMENDACIONES';
-    }
-
-    // REPUESTOS y MATERIALES → Lista editable
-    if (desc.contains('REPUESTOS UTILIZADOS')) {
-      return 'CORR_LISTA_REPUESTOS';
-    }
-    if (desc.contains('MATERIALES E INSUMOS')) {
-      return 'CORR_LISTA_MATERIALES';
-    }
-
-    // =========================================================================
-    // PREVENTIVO: Actividades especiales existentes
-    // =========================================================================
-
-    // 1. PRIMERO: Detectar actividades SI/NO (terminan con "(SI/NO)")
-    if (desc.contains('(SI/NO)') || desc.contains('(S/N)')) {
-      return 'SI_NO';
-    }
-
-    // 2. Nivel de combustible - SOLO si es específicamente sobre NIVEL, no sobre TANQUE
-    // "REVISAR NIVEL DE COMBUSTIBLE" → selector de nivel
-    // "REVISAR TANQUE DE COMBUSTIBLE" → B/M/C/NA (revisar estado del tanque)
-    if ((desc.contains('NIVEL DE COMBUSTIBLE') ||
-            desc.contains('NIVEL COMBUSTIBLE')) &&
-        !desc.contains('TANQUE')) {
-      return 'NIVEL_COMBUSTIBLE';
-    }
-
-    // 3. Nivel de aceite - SOLO si es específicamente sobre NIVEL
-    if (desc.contains('NIVEL DE ACEITE') || desc.contains('NIVEL ACEITE')) {
-      return 'NIVEL_ACEITE';
-    }
-
-    // 4. Contador principal de uso (Horas / Horómetro / Ciclos / Odómetro / UPM)
-    if (desc.contains('HOROMETRO') ||
-        desc.contains('HORÓMETRO') ||
-        desc.contains('HORAS DE TRABAJO') ||
-        desc.contains('HORAS TRABAJO') ||
-        desc.contains('LECTURA DE HORAS') ||
-        desc.contains('CONTADOR') ||
-        desc.contains('CICLOS') ||
-        desc.contains('ODOMETRO') ||
-        desc.contains('ODÓMETRO') ||
-        desc.contains('KILOMETRAJE')) {
-      return 'HOROMETRO';
-    }
-
-    // 5. Electrolitos de batería - Selector tipo nivel (Full/OK/Bajo/Crítico)
-    // ✅ FIX 26-ENE-2026: Incluir variantes con y sin tilde
-    if (desc.contains('ELECTROLITOS DE BATERIA') ||
-        desc.contains('ELECTROLITOS DE BATERÍA') ||
-        desc.contains('ELECTROLITOS BATERIA') ||
-        desc.contains('ELECTROLITOS BATERÍA') ||
-        desc.contains('ELECTROLITOS')) {
-      return 'ELECTROLITOS';
-    }
-
-    // 6. Estado de batería - SOLO para "CARGA DE BATERIA" → selector porcentaje
-    // "CARGADOR DE BATERIA" o "SISTEMA DE CARGA" → B/M/C/NA (revisar estado)
-    if (desc.contains('CARGA DE BATERIA') &&
-        !desc.contains('CARGADOR') &&
-        !desc.contains('SISTEMA DE CARGA')) {
-      return 'BATERIA';
-    }
-
-    // 6. Temperatura
-    if (desc.contains('TEMPERATURA') || desc.contains('TEMP.')) {
-      return 'TEMPERATURA';
-    }
-
-    return null; // Actividad normal (B/M/C/NA)
-  }
-
-  /// Construye el widget apropiado según el Motor Declarativo Fase 6 y fallbacks legacy
+  /// Construye el widget apropiado usando `DeclarativeActivityResolver` sin secuestrar `ESCALA_ESTADO`.
   Widget _buildActividadInputWidget(ActividadesEjecutada actividad) {
     final cat = _catalogoPorId[actividad.idActividadCatalogo];
-    final rol = (cat?.rolSemantico ?? '').toUpperCase().trim();
-    final tipoControl = (cat?.tipoControlInput ?? 'ESCALA_ESTADO').toUpperCase().trim();
+    final resolution = DeclarativeActivityResolver.resolve(
+      descripcion: actividad.descripcion,
+      tipoControlInput: cat?.tipoControlInput,
+      rolSemantico: cat?.rolSemantico,
+      hasCatalogEntry: cat != null,
+    );
 
-    // 1. Prioritario: Rol semántico explícito
-    if (rol == 'LECTURA_CONTADOR_ACTIVO') {
-      return _buildHorometroInput(actividad);
-    }
-    switch (rol) {
-      case 'CORR_ESTADO_INICIAL':
-        return _buildCorrEstadoInicialSelector(actividad);
-      case 'CORR_ESTADO_FINAL':
-        return _buildCorrEstadoFinalSelector(actividad);
-      case 'CORR_SISTEMAS_AFECTADOS':
-        return _buildCorrSistemasAfectadosSelector(actividad);
-      case 'CORR_PROBLEMA':
-        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_PROBLEMA');
-      case 'CORR_FALLAS':
-        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_SINTOMAS');
-      case 'CORR_DIAGNOSTICO':
-        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_DIAGNOSTICO');
-      case 'CORR_TRABAJOS':
-        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_TRABAJOS');
-      case 'CORR_PENDIENTES':
-        return _buildPendientesActividadInput(actividad);
-      case 'CORR_RECOMENDACIONES':
-        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_RECOMENDACIONES');
-      case 'CORR_REPUESTOS':
-        return _buildCorrListaItemsInput(actividad, 'CORR_LISTA_REPUESTOS');
-      case 'CORR_MATERIALES':
-        return _buildCorrListaItemsInput(actividad, 'CORR_LISTA_MATERIALES');
-    }
-
-    // 2. Prioritario: Primitivo declarativo configurado en catálogo (tipoControlInput)
-    if (tipoControl == 'LECTURA_CONTADOR') {
-      return _buildHorometroInput(actividad);
-    }
-    if (tipoControl == 'SUBSISTEMAS_EQUIPO') {
-      return _buildCorrSistemasAfectadosSelector(actividad);
-    }
-    if (tipoControl != 'ESCALA_ESTADO' && tipoControl.isNotEmpty) {
-      return _buildDeclarativoSelector(actividad, tipoControl, cat?.configInputJson);
-    }
-
-    // 3. Fallback determinista legacy por descripción de actividad
-    final tipo = _getTipoActividadEspecial(actividad.descripcion);
-
-    switch (tipo) {
-      // =====================================================================
-      // CORRECTIVO: Widgets personalizados para servicio correctivo
-      // =====================================================================
-      case 'CORR_ESTADO_INICIAL':
-        return _buildCorrEstadoInicialSelector(actividad);
-      case 'CORR_ESTADO_FINAL':
-        return _buildCorrEstadoFinalSelector(actividad);
-      case 'CORR_SISTEMAS_AFECTADOS':
-        return _buildCorrSistemasAfectadosSelector(actividad);
-      case 'CORR_TEXTO_PROBLEMA':
-      case 'CORR_TEXTO_SINTOMAS':
-      case 'CORR_TEXTO_DIAGNOSTICO':
-      case 'CORR_TEXTO_TRABAJOS':
-        return _buildCorrTextoLibreInput(actividad, tipo!);
-      case 'CORR_TEXTO_PENDIENTES':
-        return _buildPendientesActividadInput(actividad);
-      case 'CORR_TEXTO_RECOMENDACIONES':
-        return _buildCorrTextoLibreInput(actividad, tipo!);
-      case 'CORR_LISTA_REPUESTOS':
-      case 'CORR_LISTA_MATERIALES':
-        return _buildCorrListaItemsInput(actividad, tipo!);
-
-      // =====================================================================
-      // PREVENTIVO: Widgets existentes
-      // =====================================================================
-      case 'SI_NO':
-        return _buildSiNoSelector(actividad);
-      case 'NIVEL_COMBUSTIBLE':
-        return _buildNivelCombustibleSelector(actividad);
-      case 'NIVEL_ACEITE':
-        return _buildNivelAceiteSelector(actividad);
-      case 'ELECTROLITOS':
-        return _buildElectrolitosSelector(actividad);
-      case 'HOROMETRO':
-        return _buildHorometroInput(actividad);
-      case 'BATERIA':
-        return _buildBateriaSelector(actividad);
-      case 'TEMPERATURA':
-        return _buildTemperaturaInput(actividad);
-      default:
+    switch (resolution.kind) {
+      case DeclarativeControlKind.escalaEstado:
         return _buildSimboloogiaChips(actividad);
+      case DeclarativeControlKind.lecturaContador:
+        return _buildHorometroInput(actividad);
+      case DeclarativeControlKind.subsistemasEquipo:
+        return _buildCorrSistemasAfectadosSelector(actividad);
+      case DeclarativeControlKind.selectorOpciones:
+        return _buildDeclarativoSelector(
+          actividad,
+          resolution.controlType ?? cat?.tipoControlInput ?? 'ESCALA_ESTADO',
+          cat?.configInputJson,
+        );
+      case DeclarativeControlKind.corrEstadoInicial:
+        return _buildCorrEstadoInicialSelector(actividad);
+      case DeclarativeControlKind.corrEstadoFinal:
+        return _buildCorrEstadoFinalSelector(actividad);
+      case DeclarativeControlKind.corrTextoProblema:
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_PROBLEMA');
+      case DeclarativeControlKind.corrTextoSintomas:
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_SINTOMAS');
+      case DeclarativeControlKind.corrTextoDiagnostico:
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_DIAGNOSTICO');
+      case DeclarativeControlKind.corrTextoTrabajos:
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_TRABAJOS');
+      case DeclarativeControlKind.corrPendientes:
+        return _buildPendientesActividadInput(actividad);
+      case DeclarativeControlKind.corrTextoRecomendaciones:
+        return _buildCorrTextoLibreInput(actividad, 'CORR_TEXTO_RECOMENDACIONES');
+      case DeclarativeControlKind.corrListaRepuestos:
+        return _buildCorrListaItemsInput(actividad, 'CORR_LISTA_REPUESTOS');
+      case DeclarativeControlKind.corrListaMateriales:
+        return _buildCorrListaItemsInput(actividad, 'CORR_LISTA_MATERIALES');
+      case DeclarativeControlKind.legacySiNo:
+        return _buildSiNoSelector(actividad);
+      case DeclarativeControlKind.legacyNivelCombustible:
+        return _buildNivelCombustibleSelector(actividad);
+      case DeclarativeControlKind.legacyNivelAceite:
+        return _buildNivelAceiteSelector(actividad);
+      case DeclarativeControlKind.legacyElectrolitos:
+        return _buildElectrolitosSelector(actividad);
+      case DeclarativeControlKind.legacyBateria:
+        return _buildBateriaSelector(actividad);
+      case DeclarativeControlKind.legacyTemperatura:
+        return _buildTemperaturaInput(actividad);
     }
   }
 
@@ -2139,7 +1994,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   static final RegExp _regexPrefijoContador = RegExp(
-    r'^(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR)\s*:\s*(.+)$',
+    r'^(?:[A-ZÁÉÍÓÚÑ0-9_]{2,25})\s*:\s*(.+)$',
     caseSensitive: false,
   );
 
@@ -3130,7 +2985,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         ? sistemasStr.split(',').toSet()
         : <String>{};
 
-    // Fase 6: Priorizar subsistemas dinámicos reales del equipo; fallback a Bomba/Generador solo para legacy
+    // Priorizar subsistemas dinámicos reales del equipo sincronizados desde el servidor;
+    // si no existen, ofrecer lista industrial agnóstica del tipo de activo.
     final List<(String, String, IconData)> sistemas;
     if (_sistemasDinamicosEquipo.isNotEmpty) {
       sistemas = [
@@ -3144,35 +3000,16 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         ('OTRO', 'Otro', Icons.more_horiz),
       ];
     } else {
-      final esBomba = _esBomba;
-      sistemas = esBomba
-          ? [
-              // Sistemas de BOMBA
-              ('HIDRAULICO', 'Hidráulico', Icons.water_drop),
-              ('MECANICO', 'Mecánico', Icons.settings),
-              ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
-              ('TABLERO', 'Tablero Control', Icons.settings_remote),
-              ('PRESOSTATO', 'Presostato', Icons.speed),
-              ('SELLO', 'Sellos Mecánicos', Icons.donut_large),
-              ('TANQUE', 'Tanques Hidroneum.', Icons.propane_tank),
-              ('VALVULAS', 'Válvulas', Icons.toggle_on),
-              ('TUBERIA', 'Tubería', Icons.plumbing),
-              ('OTRO', 'Otro', Icons.more_horiz),
-            ]
-          : [
-              // Sistemas de GENERADOR
-              ('MOTOR', 'Motor', Icons.settings),
-              ('GENERADOR', 'Generador', Icons.power),
-              ('ELECTRONICO', 'Electrónico', Icons.memory),
-              ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
-              ('CONTROL', 'Control', Icons.settings_remote),
-              ('ENFRIAMIENTO', 'Enfriamiento', Icons.ac_unit),
-              ('COMBUSTIBLE', 'Combustible', Icons.local_gas_station),
-              ('LUBRICACION', 'Lubricación', Icons.oil_barrel),
-              ('ESCAPE', 'Escape', Icons.air),
-              ('ASPIRACION', 'Aspiración', Icons.filter_alt),
-              ('OTRO', 'Otro', Icons.more_horiz),
-            ];
+      sistemas = [
+        ('SISTEMA_PRINCIPAL', 'Sistema Principal', Icons.settings_input_component),
+        ('CONTROL', 'Control / Tablero', Icons.settings_remote),
+        ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
+        ('MECANICO', 'Mecánico', Icons.settings),
+        ('SEGURIDAD', 'Seguridad / Protecciones', Icons.security),
+        ('POTENCIA', 'Transmisión / Potencia', Icons.bolt),
+        ('ESTRUCTURA', 'Estructura / Bastidor', Icons.view_in_ar),
+        ('OTRO', 'Otro', Icons.more_horiz),
+      ];
     }
 
     return Wrap(
@@ -3841,7 +3678,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
               ? _conteoEvidenciasPorActividad[idActividad] ?? 0
               : 0;
 
-          return _MedicionInputCard(
+          return MedicionInputCard(
             key: ValueKey(medicion.idLocal),
             medicion: medicion,
             onValorGuardado: _onMedicionGuardada, // ✅ FIX SCROLL
@@ -4791,7 +4628,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const _SyncProgressDialog(),
+      builder: (ctx) => const SyncProgressDialog(),
     );
 
     try {
@@ -4995,1161 +4832,6 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
           ),
         ],
       ),
-    );
-  }
-}
-
-// ============================================================================
-// WIDGET DE MEDICIÓN CON SEMÁFORO Y PERSISTENCIA
-// ============================================================================
-
-/// Widget de entrada de medición con:
-/// - Valor inicial desde BD (snapshot)
-/// - Unidad real del parámetro
-/// - Semáforo de colores según rangos
-/// - Persistencia automática al perder foco
-class _MedicionInputCard extends ConsumerStatefulWidget {
-  final Medicione medicion;
-  final void Function(int idLocal, double? valor)
-  onValorGuardado; // ✅ FIX SCROLL
-  final int conteoFotos; // ✅ MINI-GALERÍA v2
-  final VoidCallback? onCapturaEvidencia; // ✅ MINI-GALERÍA v2
-
-  const _MedicionInputCard({
-    super.key,
-    required this.medicion,
-    required this.onValorGuardado,
-    this.conteoFotos = 0,
-    this.onCapturaEvidencia,
-  });
-
-  @override
-  ConsumerState<_MedicionInputCard> createState() => _MedicionInputCardState();
-}
-
-class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
-  late TextEditingController _controller;
-  late FocusNode _focusNode;
-  String _estadoActual = 'PENDIENTE'; // NORMAL, ADVERTENCIA, CRITICO, PENDIENTE
-  bool _guardando = false;
-  bool _tieneCAmbiosPendientes = false; // ✅ FIX: Rastrear cambios sin guardar
-  String _valorOriginal = ''; // ✅ FIX: Para detectar cambios reales
-
-  @override
-  void initState() {
-    super.initState();
-    // Inicializar con valor existente de BD (si existe)
-    final valorInicial = widget.medicion.valor;
-    _valorOriginal = valorInicial != null ? valorInicial.toString() : '';
-    _controller = TextEditingController(text: _valorOriginal);
-    _focusNode = FocusNode();
-
-    // Escuchar pérdida de foco para guardar
-    _focusNode.addListener(_onFocusChange);
-
-    // Calcular estado inicial si hay valor
-    if (valorInicial != null) {
-      _estadoActual = _calcularEstado(valorInicial);
-    }
-  }
-
-  @override
-  void dispose() {
-    // ✅ FIX: Guardar SINCRÓNICAMENTE si hay cambios pendientes (último item de lista)
-    if (_tieneCAmbiosPendientes && _controller.text.trim() != _valorOriginal) {
-      final texto = _controller.text.trim();
-      final valor = double.tryParse(texto);
-      if (valor != null) {
-        // Guardar de forma fire-and-forget (el widget ya se está desmontando)
-        final service = ref.read(ejecucionServiceProvider);
-        service
-            .actualizarMedicion(
-              idMedicion: widget.medicion.idLocal,
-              valor: valor,
-              estadoValor: _calcularEstado(valor),
-            )
-            .then((_) {
-              // Notificar al padre si es posible
-              widget.onValorGuardado(widget.medicion.idLocal, valor);
-            });
-      }
-    }
-    _focusNode.removeListener(_onFocusChange);
-    _focusNode.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (!_focusNode.hasFocus) {
-      if (_controller.text.trim().isNotEmpty) {
-        _guardarValor();
-      } else if (widget.medicion.valor != null) {
-        // El campo tenía valor y ahora está vacío -> limpiar
-        _limpiarValor();
-      }
-    }
-  }
-
-  /// Limpia el valor cuando el usuario borra el contenido del campo
-  Future<void> _limpiarValor() async {
-    setState(() => _guardando = true);
-
-    final service = ref.read(ejecucionServiceProvider);
-    final exito = await service.limpiarMedicion(
-      idMedicion: widget.medicion.idLocal,
-    );
-
-    if (exito) {
-      setState(() {
-        _estadoActual = 'PENDIENTE';
-        _guardando = false;
-      });
-      widget.onValorGuardado(
-        widget.medicion.idLocal,
-        null,
-      ); // Notificar cambio (disminuir contador)
-    } else {
-      setState(() => _guardando = false);
-    }
-  }
-
-  /// Calcula el estado semáforo según los rangos del SNAPSHOT
-  String _calcularEstado(double valor) {
-    final minNormal = widget.medicion.rangoMinimoNormal;
-    final maxNormal = widget.medicion.rangoMaximoNormal;
-    final minCritico = widget.medicion.rangoMinimoCritico;
-    final maxCritico = widget.medicion.rangoMaximoCritico;
-
-    // Fuera de rangos críticos -> CRITICO
-    if (minCritico != null && valor < minCritico) return 'CRITICO';
-    if (maxCritico != null && valor > maxCritico) return 'CRITICO';
-
-    // Fuera de rangos normales -> ADVERTENCIA
-    if (minNormal != null && valor < minNormal) return 'ADVERTENCIA';
-    if (maxNormal != null && valor > maxNormal) return 'ADVERTENCIA';
-
-    // Dentro de rango -> NORMAL
-    return 'NORMAL';
-  }
-
-  Color _getColorForEstado(String estado) {
-    switch (estado) {
-      case 'NORMAL':
-        return Colors.green;
-      case 'ADVERTENCIA':
-        return Colors.orange;
-      case 'CRITICO':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getIconForEstado(String estado) {
-    switch (estado) {
-      case 'NORMAL':
-        return Icons.check_circle;
-      case 'ADVERTENCIA':
-        return Icons.warning;
-      case 'CRITICO':
-        return Icons.error;
-      default:
-        return Icons.pending;
-    }
-  }
-
-  /// Guarda el valor en la BD y actualiza el estado
-  Future<void> _guardarValor() async {
-    final texto = _controller.text.trim();
-    if (texto.isEmpty) return;
-
-    final valor = double.tryParse(texto);
-    if (valor == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ingrese un número válido'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() => _guardando = true);
-
-    final nuevoEstado = _calcularEstado(valor);
-    final service = ref.read(ejecucionServiceProvider);
-
-    final exito = await service.actualizarMedicion(
-      idMedicion: widget.medicion.idLocal,
-      valor: valor,
-      estadoValor: nuevoEstado,
-    );
-
-    if (!mounted) return; // Widget puede haberse desmontado durante await
-
-    if (exito) {
-      // ✅ FIX: Resetear flag y actualizar valor original
-      _tieneCAmbiosPendientes = false;
-      _valorOriginal = valor.toString();
-      setState(() {
-        _estadoActual = nuevoEstado;
-        _guardando = false;
-      });
-      widget.onValorGuardado(widget.medicion.idLocal, valor); // ✅ FIX SCROLL
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Medición guardada: $valor ${widget.medicion.unidadMedida}',
-            ),
-            backgroundColor: _getColorForEstado(nuevoEstado),
-            duration: const Duration(milliseconds: 800),
-          ),
-        );
-      }
-    } else {
-      setState(() => _guardando = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al guardar medición'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _getColorForEstado(_estadoActual);
-    final icon = _getIconForEstado(_estadoActual);
-    final unidad = widget.medicion.unidadMedida;
-    final nombre = widget.medicion.nombreParametro;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: _estadoActual != 'PENDIENTE'
-              ? color.withValues(alpha: 0.5)
-              : Colors.transparent,
-          width: 2,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header con nombre, estado y botón cámara
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    nombre,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-                // ✅ BOTÓN CÁMARA - MODELO HÍBRIDO
-                if (widget.onCapturaEvidencia != null)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: InkWell(
-                      onTap: widget.onCapturaEvidencia,
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        width: 42,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: widget.conteoFotos > 0
-                              ? Colors.blue.shade50
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: widget.conteoFotos > 0
-                                ? Colors.blue
-                                : Colors.grey.shade300,
-                            width: widget.conteoFotos > 0 ? 2 : 1,
-                          ),
-                        ),
-                        child: Stack(
-                          children: [
-                            Center(
-                              child: Icon(
-                                widget.conteoFotos > 0
-                                    ? Icons.photo_library
-                                    : Icons.camera_alt_outlined,
-                                color: widget.conteoFotos > 0
-                                    ? Colors.blue
-                                    : Colors.grey.shade400,
-                                size: 18,
-                              ),
-                            ),
-                            if (widget.conteoFotos > 0)
-                              Positioned(
-                                top: 2,
-                                right: 2,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    '${widget.conteoFotos}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                // Indicador de estado (semáforo)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 16, color: color),
-                      const SizedBox(width: 4),
-                      Text(
-                        _estadoActual,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Rangos de referencia (desde snapshot)
-            if (widget.medicion.rangoMinimoNormal != null ||
-                widget.medicion.rangoMaximoNormal != null)
-              Container(
-                padding: const EdgeInsets.all(8),
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Rango normal: ${widget.medicion.rangoMinimoNormal ?? "∞"} - ${widget.medicion.rangoMaximoNormal ?? "∞"} $unidad',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            // Campo de entrada con UNIDAD REAL
-            TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Valor medido',
-                hintText: 'Ingrese el valor',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: color),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: color, width: 2),
-                ),
-                prefixIcon: Icon(Icons.speed, color: color),
-                suffixText: unidad, // UNIDAD REAL del snapshot
-                suffixStyle: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-              onChanged: (text) {
-                // ✅ FIX: Marcar que hay cambios pendientes
-                _tieneCAmbiosPendientes = text.trim() != _valorOriginal;
-                // Actualizar semáforo en tiempo real
-                final valor = double.tryParse(text);
-                if (valor != null) {
-                  setState(() {
-                    _estadoActual = _calcularEstado(valor);
-                  });
-                }
-              },
-              onEditingComplete: () {
-                // ✅ FIX: Guardar al presionar Done/Enter del teclado
-                _guardarValor();
-                _focusNode.unfocus();
-              },
-              onSubmitted: (_) => _guardarValor(),
-            ),
-
-            // Indicador de guardado
-            if (_guardando)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: LinearProgressIndicator(),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// ✅ WIDGET DE DIÁLOGO DE PROGRESO DE SINCRONIZACIÓN
-/// Muestra el progreso en tiempo real de la subida al servidor
-class _SyncProgressDialog extends ConsumerWidget {
-  const _SyncProgressDialog();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final progress = ref.watch(syncProgressProvider);
-
-    return PopScope(
-      // No permitir cerrar con back mientras está en progreso
-      canPop:
-          progress.pasoActual == SyncStep.completado ||
-          progress.pasoActual == SyncStep.error,
-      child: AlertDialog(
-        title: Row(
-          children: [
-            if (progress.pasoActual == SyncStep.completado)
-              const Icon(Icons.check_circle, color: Colors.green, size: 28)
-            else if (progress.pasoActual == SyncStep.error)
-              const Icon(Icons.error, color: Colors.red, size: 28)
-            else
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2.5),
-              ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                progress.pasoActual == SyncStep.completado
-                    ? '¡Sincronización Exitosa!'
-                    : progress.pasoActual == SyncStep.error
-                    ? 'Error en Sincronización'
-                    : 'Sincronizando...',
-                style: const TextStyle(fontSize: 18),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ✅ 19-DIC-2025: Mostrar mensaje actual del servidor si está disponible
-              if (progress.mensajeActual != null &&
-                  progress.pasoActual != SyncStep.completado &&
-                  progress.pasoActual != SyncStep.error) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          progress.mensajeActual!,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.blue.shade900,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // ✅ 19-DIC-2025: Barra de progreso visual
-              if (progress.porcentaje > 0 &&
-                  progress.pasoActual != SyncStep.completado &&
-                  progress.pasoActual != SyncStep.error) ...[
-                LinearProgressIndicator(
-                  value: progress.porcentaje / 100,
-                  backgroundColor: Colors.grey.shade200,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.blue.shade600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${progress.porcentaje}%',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Lista de pasos con estados - Usando pasos visibles simplificados
-              _buildStepItem(
-                step: SyncStep.preparando,
-                progress: progress,
-                icon: Icons.settings,
-              ),
-              _buildStepItem(
-                step: SyncStep.validando,
-                progress: progress,
-                icon: Icons.verified_user,
-              ),
-              _buildStepItem(
-                step: SyncStep.obteniendoOrden,
-                progress: progress,
-                icon: Icons.cloud_download,
-              ),
-              _buildStepItem(
-                step: SyncStep.limpiezaResiduales,
-                progress: progress,
-                icon: Icons.cleaning_services,
-              ),
-              _buildStepItem(
-                step: SyncStep.evidencias,
-                progress: progress,
-                icon: Icons.photo_camera,
-              ),
-              _buildStepItem(
-                step: SyncStep.firmas,
-                progress: progress,
-                icon: Icons.draw,
-              ),
-              _buildStepItem(
-                step: SyncStep.actualizandoEstado,
-                progress: progress,
-                icon: Icons.cloud_done,
-              ),
-
-              // Mensaje de error si hay
-              if (progress.pasoActual == SyncStep.error &&
-                  progress.mensajeError != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning, color: Colors.red.shade700, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          progress.mensajeError!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.red.shade900,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // Mensaje de éxito
-              if (progress.pasoActual == SyncStep.completado) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.celebration,
-                        color: Colors.green.shade700,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          '¡Orden sincronizada correctamente con el servidor!',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          // Solo mostrar botón cuando esté completado o error
-          if (progress.pasoActual == SyncStep.completado ||
-              progress.pasoActual == SyncStep.error)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: progress.pasoActual == SyncStep.completado
-                    ? Colors.green
-                    : Colors.blue,
-              ),
-              onPressed: () {
-                Navigator.of(context).pop(); // Cerrar diálogo
-                if (progress.pasoActual == SyncStep.completado) {
-                  Navigator.of(context).pop(); // Volver a lista de órdenes
-                }
-              },
-              child: Text(
-                progress.pasoActual == SyncStep.completado
-                    ? 'CONTINUAR'
-                    : 'CERRAR',
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStepItem({
-    required SyncStep step,
-    required SyncProgress progress,
-    required IconData icon,
-  }) {
-    final isCompleted = progress.pasosCompletados.contains(step);
-    final isActive = progress.pasoActual == step;
-    final isError = progress.pasoActual == SyncStep.error && isActive;
-
-    Color color;
-    Widget leading;
-
-    if (isCompleted) {
-      color = Colors.green;
-      leading = const Icon(Icons.check_circle, color: Colors.green, size: 22);
-    } else if (isError) {
-      color = Colors.red;
-      leading = const Icon(Icons.error, color: Colors.red, size: 22);
-    } else if (isActive) {
-      color = Colors.blue;
-      leading = const SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      );
-    } else {
-      color = Colors.grey.shade400;
-      leading = Icon(
-        Icons.circle_outlined,
-        color: Colors.grey.shade400,
-        size: 22,
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          leading,
-          const SizedBox(width: 12),
-          Icon(icon, size: 20, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              isCompleted ? step.nombreCompletado : step.nombre,
-              style: TextStyle(
-                fontSize: 14,
-                color: color,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                decoration: isCompleted ? TextDecoration.none : null,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// ✅ DRUM TIME PICKER - Reemplazo profesional del reloj espiral nativo
-// Estilo scroll/drum (similar a iOS) para seleccionar hora y minuto
-// =============================================================================
-class _DrumTimePicker extends StatefulWidget {
-  final TimeOfDay initialTime;
-  final String title;
-
-  const _DrumTimePicker({required this.initialTime, required this.title});
-
-  @override
-  State<_DrumTimePicker> createState() => _DrumTimePickerState();
-}
-
-class _DrumTimePickerState extends State<_DrumTimePicker> {
-  late FixedExtentScrollController _hourController;
-  late FixedExtentScrollController _minuteController;
-  late int _selectedHour;
-  late int _selectedMinute;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedHour = widget.initialTime.hour;
-    _selectedMinute = widget.initialTime.minute;
-    _hourController = FixedExtentScrollController(initialItem: _selectedHour);
-    _minuteController = FixedExtentScrollController(
-      initialItem: _selectedMinute,
-    );
-  }
-
-  @override
-  void dispose() {
-    _hourController.dispose();
-    _minuteController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── Handle bar ──
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            // ── Title ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
-              child: Text(
-                widget.title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ),
-
-            // ── Preview ──
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                '${_selectedHour.toString().padLeft(2, '0')}:${_selectedMinute.toString().padLeft(2, '0')}',
-                style: TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-            ),
-
-            // ── Drum Pickers ──
-            SizedBox(
-              height: 200,
-              child: Row(
-                children: [
-                  // Hora
-                  Expanded(
-                    child: _buildWheel(
-                      controller: _hourController,
-                      itemCount: 24,
-                      selectedValue: _selectedHour,
-                      onChanged: (val) => setState(() => _selectedHour = val),
-                      labelSuffix: 'h',
-                    ),
-                  ),
-
-                  // Separador
-                  Text(
-                    ':',
-                    style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade400,
-                    ),
-                  ),
-
-                  // Minuto
-                  Expanded(
-                    child: _buildWheel(
-                      controller: _minuteController,
-                      itemCount: 60,
-                      selectedValue: _selectedMinute,
-                      onChanged: (val) => setState(() => _selectedMinute = val),
-                      labelSuffix: 'm',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            // ── Botones rápidos ──
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _quickButton('Ahora', () {
-                    final now = TimeOfDay.now();
-                    setState(() {
-                      _selectedHour = now.hour;
-                      _selectedMinute = now.minute;
-                    });
-                    _hourController.animateToItem(
-                      now.hour,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                    _minuteController.animateToItem(
-                      now.minute,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  }),
-                  const SizedBox(width: 12),
-                  _quickButton('-1 hora', () {
-                    final now = TimeOfDay.now();
-                    final h = (now.hour - 1 + 24) % 24;
-                    setState(() {
-                      _selectedHour = h;
-                      _selectedMinute = now.minute;
-                    });
-                    _hourController.animateToItem(
-                      h,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                    _minuteController.animateToItem(
-                      now.minute,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  }),
-                  const SizedBox(width: 12),
-                  _quickButton('-2 horas', () {
-                    final now = TimeOfDay.now();
-                    final h = (now.hour - 2 + 24) % 24;
-                    setState(() {
-                      _selectedHour = h;
-                      _selectedMinute = now.minute;
-                    });
-                    _hourController.animateToItem(
-                      h,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                    _minuteController.animateToItem(
-                      now.minute,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  }),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Action buttons ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(null),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text('CANCELAR'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop(
-                          TimeOfDay(
-                            hour: _selectedHour,
-                            minute: _selectedMinute,
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        'ACEPTAR',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWheel({
-    required FixedExtentScrollController controller,
-    required int itemCount,
-    required int selectedValue,
-    required ValueChanged<int> onChanged,
-    required String labelSuffix,
-  }) {
-    return ListWheelScrollView.useDelegate(
-      controller: controller,
-      itemExtent: 50,
-      perspective: 0.005,
-      diameterRatio: 1.5,
-      physics: const FixedExtentScrollPhysics(),
-      onSelectedItemChanged: onChanged,
-      childDelegate: ListWheelChildBuilderDelegate(
-        childCount: itemCount,
-        builder: (context, index) {
-          final isSelected = index == selectedValue;
-          return Center(
-            child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              style: TextStyle(
-                fontSize: isSelected ? 28 : 18,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w400,
-                color: isSelected
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey.shade400,
-              ),
-              child: Text(index.toString().padLeft(2, '0')),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _quickButton(String label, VoidCallback onTap) {
-    return Material(
-      color: Colors.grey.shade100,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey.shade700,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Metadatos dinámicos de metrología de uso en Mobile según _metrologia del arquetipo.
-class _MetricaUsoMobile {
-  final String unidadUso;
-  final String prefijo;
-  final String sufijo;
-  final String etiqueta;
-  final String tituloDialogo;
-  final String labelInput;
-  final String textoRegistrar;
-  final String hint;
-  final IconData icono;
-  final double? lecturaActual;
-
-  const _MetricaUsoMobile({
-    required this.unidadUso,
-    required this.prefijo,
-    required this.sufijo,
-    required this.etiqueta,
-    required this.tituloDialogo,
-    required this.labelInput,
-    required this.textoRegistrar,
-    required this.hint,
-    required this.icono,
-    this.lecturaActual,
-  });
-
-  factory _MetricaUsoMobile.desdeConfig(String? configParametrosJson) {
-    String rawUnidad = 'HORAS';
-    String etiquetaCfg = '';
-    bool requiereHorometro = true;
-    double? lecturaActual;
-
-    if (configParametrosJson != null && configParametrosJson.trim().isNotEmpty) {
-      try {
-        final decoded = jsonDecode(configParametrosJson);
-        if (decoded is Map && decoded['_metrologia'] is Map) {
-          final metro = Map<String, dynamic>.from(decoded['_metrologia'] as Map);
-          rawUnidad = (metro['unidadUso']?.toString() ?? 'HORAS').toUpperCase().trim();
-          etiquetaCfg = (metro['etiquetaContador']?.toString() ?? '').trim();
-          requiereHorometro = metro['requiereHorometro'] != false;
-          final rawLectura = metro['lecturaActual'];
-          if (rawLectura != null) {
-            lecturaActual = double.tryParse(rawLectura.toString());
-          }
-        }
-      } catch (_) {}
-    }
-
-    if (rawUnidad == 'CICLOS' || etiquetaCfg.toUpperCase().contains('CICLO')) {
-      final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Ciclos de Operación';
-      return _MetricaUsoMobile(
-        unidadUso: 'CICLOS',
-        prefijo: 'CICLOS',
-        sufijo: 'ciclos',
-        etiqueta: etq,
-        tituloDialogo: 'Lectura de $etq',
-        labelInput: etq,
-        textoRegistrar: 'Registrar ${etq.toLowerCase()}',
-        hint: 'Ej: 15000',
-        icono: Icons.repeat,
-        lecturaActual: lecturaActual,
-      );
-    }
-
-    if (rawUnidad == 'KM_ODO' || rawUnidad == 'KM') {
-      final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Kilometraje (Odómetro)';
-      return _MetricaUsoMobile(
-        unidadUso: 'KM_ODO',
-        prefijo: 'KM',
-        sufijo: 'km',
-        etiqueta: etq,
-        tituloDialogo: 'Lectura de $etq',
-        labelInput: etq,
-        textoRegistrar: 'Registrar ${etq.toLowerCase()}',
-        hint: 'Ej: 45200',
-        icono: Icons.speed,
-        lecturaActual: lecturaActual,
-      );
-    }
-
-    if (rawUnidad == 'UPM') {
-      final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Unidades Producidas';
-      return _MetricaUsoMobile(
-        unidadUso: 'UPM',
-        prefijo: 'UPM',
-        sufijo: 'uds',
-        etiqueta: etq,
-        tituloDialogo: 'Lectura de $etq',
-        labelInput: etq,
-        textoRegistrar: 'Registrar ${etq.toLowerCase()}',
-        hint: 'Ej: 1200',
-        icono: Icons.numbers,
-        lecturaActual: lecturaActual,
-      );
-    }
-
-    if (rawUnidad == 'CAL' || !requiereHorometro) {
-      final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Contador';
-      return _MetricaUsoMobile(
-        unidadUso: rawUnidad == 'CAL' ? 'CAL' : rawUnidad,
-        prefijo: 'CONTADOR',
-        sufijo: '',
-        etiqueta: etq,
-        tituloDialogo: 'Lectura de $etq',
-        labelInput: etq,
-        textoRegistrar: 'Registrar ${etq.toLowerCase()}',
-        hint: 'Ej: 100',
-        icono: Icons.numbers,
-        lecturaActual: lecturaActual,
-      );
-    }
-
-    final etq = etiquetaCfg.isNotEmpty ? etiquetaCfg : 'Horómetro';
-    return _MetricaUsoMobile(
-      unidadUso: 'HORAS',
-      prefijo: 'HORAS',
-      sufijo: 'hrs',
-      etiqueta: etq,
-      tituloDialogo: 'Lectura $etq',
-      labelInput: 'Horas de trabajo',
-      textoRegistrar: 'Registrar horas',
-      hint: 'Ej: 12345.5',
-      icono: Icons.timer,
-      lecturaActual: lecturaActual,
     );
   }
 }

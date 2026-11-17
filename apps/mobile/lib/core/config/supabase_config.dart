@@ -1,30 +1,47 @@
-/// Configuración de Supabase para la app móvil
+/// Configuración de Supabase para Realtime por tenant.
 ///
-/// Credenciales para conectar a Supabase Realtime
-/// RUTA 14 - Notificaciones
+/// Lee credenciales exclusivamente de `--dart-define=SUPABASE_URL` y
+/// `--dart-define=SUPABASE_ANON_KEY`. Si no están configuradas, Realtime se
+/// omite sin afectar la operación offline-first ni las APIs REST.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Configuración de Supabase
+import 'app_config.dart';
+
 class SupabaseConfig {
-  // URL del proyecto Supabase
-  static const String supabaseUrl = 'https://nemrrkaobdlwehfnetxs.supabase.co';
+  static bool _initialized = false;
 
-  // Anon Key (público, solo para operaciones autenticadas)
-  static const String supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lbXJya2FvYmRsd2VoZm5ldHhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2Njk0MzYsImV4cCI6MjA3NzI0NTQzNn0.7fXM9v1m31j5ZnOlSS-IyGWkvCPIrXsSIs9eWn2_xiE';
+  static String get supabaseUrl => AppConfig.supabaseUrl;
+  static String get supabaseAnonKey => AppConfig.supabaseAnonKey;
 
-  /// Inicializa Supabase
+  static bool get isConfigured => AppConfig.hasSupabaseConfig;
+
+  /// Inicializa Supabase solo si hay credenciales configuradas en compilación.
   static Future<void> initialize() async {
+    if (_initialized || !isConfigured) {
+      if (!isConfigured) {
+        debugPrint('ℹ️ [Supabase] Realtime deshabilitado (sin SUPABASE_URL configurado)');
+      }
+      return;
+    }
+
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
-      // Configuración para Realtime
       realtimeClientOptions: const RealtimeClientOptions(eventsPerSecond: 10),
     );
+    _initialized = true;
   }
 
-  /// Cliente de Supabase (singleton)
-  static SupabaseClient get client => Supabase.instance.client;
+  /// Retorna el cliente si Supabase fue inicializado, o `null` en caso contrario.
+  static SupabaseClient? get clientOrNull {
+    if (!_initialized) return null;
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
 }

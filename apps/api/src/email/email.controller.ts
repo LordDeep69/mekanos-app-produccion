@@ -1,5 +1,8 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import {
   EnviarEmailResponseDto,
   EnviarInformeTecnicoDto,
@@ -28,6 +31,8 @@ import { EmailService, OrdenEmailData } from './email.service';
 
 @Controller('email')
 @ApiTags('Email')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class EmailController {
   constructor(private readonly emailService: EmailService) {}
 
@@ -37,6 +42,7 @@ export class EmailController {
    * =========================================================================
    */
   @Get('status')
+  @Roles('ADMIN')
   @ApiOperation({
     summary: 'Estado del servicio de email',
     description: 'Verifica si el servicio de email está configurado correctamente',
@@ -49,7 +55,7 @@ export class EmailController {
       properties: {
         configured: { type: 'boolean', example: true },
         provider: { type: 'string', example: 'Nodemailer (SMTP)' },
-        from: { type: 'string', example: 'mekanossas2@gmail.com' },
+        from: { type: 'string', example: 'noreply@example.com' },
       },
     },
   })
@@ -61,12 +67,12 @@ export class EmailController {
    * =========================================================================
    * GET /email/debug - Diagnóstico directo de variables de entorno
    * =========================================================================
-   * ✅ FIX 22-ENE-2026: Endpoint para debugging de variables SMTP
    */
   @Get('debug')
+  @Roles('ADMIN')
   @ApiOperation({
     summary: 'Diagnóstico de variables SMTP',
-    description: 'Muestra el estado de las variables de entorno SMTP directamente',
+    description: 'Muestra si las variables de entorno SMTP están definidas sin exponer credenciales',
   })
   getDebug() {
     const emailSmtpUser = process.env.EMAIL_SMTP_USER;
@@ -80,21 +86,19 @@ export class EmailController {
     return {
       timestamp: new Date().toISOString(),
       variables: {
-        EMAIL_SMTP_HOST: process.env.EMAIL_SMTP_HOST || '(not set)',
-        EMAIL_SMTP_PORT: process.env.EMAIL_SMTP_PORT || '(not set)',
-        EMAIL_SMTP_USER: emailSmtpUser ? `${emailSmtpUser.substring(0, 5)}...` : '(not set)',
-        EMAIL_SMTP_PASS: emailSmtpPass ? `✅ set (${emailSmtpPass.length} chars)` : '(not set)',
-        SMTP_HOST: process.env.SMTP_HOST || '(not set)',
-        SMTP_PORT: process.env.SMTP_PORT || '(not set)',
-        SMTP_USER: smtpUser ? `${smtpUser.substring(0, 5)}...` : '(not set)',
-        SMTP_PASS: smtpPass ? `✅ set (${smtpPass.length} chars)` : '(not set)',
-        EMAIL_FROM: process.env.EMAIL_FROM || '(not set)',
+        EMAIL_SMTP_HOST: Boolean(process.env.EMAIL_SMTP_HOST),
+        EMAIL_SMTP_PORT: Boolean(process.env.EMAIL_SMTP_PORT),
+        EMAIL_SMTP_USER: Boolean(emailSmtpUser),
+        EMAIL_SMTP_PASS: Boolean(emailSmtpPass),
+        SMTP_HOST: Boolean(process.env.SMTP_HOST),
+        SMTP_PORT: Boolean(process.env.SMTP_PORT),
+        SMTP_USER: Boolean(smtpUser),
+        SMTP_PASS: Boolean(smtpPass),
+        EMAIL_FROM: Boolean(process.env.EMAIL_FROM),
       },
       effective: {
-        user: effectiveUser
-          ? `${effectiveUser.substring(0, 5)}...@${effectiveUser.split('@')[1] || '?'}`
-          : '❌ NONE',
-        pass: effectivePass ? `✅ (${effectivePass.length} chars)` : '❌ NONE',
+        userConfigured: Boolean(effectiveUser),
+        passConfigured: Boolean(effectivePass),
         willUseMock: !effectiveUser || !effectivePass,
       },
       serviceState: this.emailService.checkConfiguration(),
@@ -107,6 +111,7 @@ export class EmailController {
    * =========================================================================
    */
   @Post('test')
+  @Roles('ADMIN')
   @ApiOperation({
     summary: 'Enviar email de prueba',
     description: 'Envía un email de prueba para verificar la configuración SMTP',

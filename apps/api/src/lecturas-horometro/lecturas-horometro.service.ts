@@ -1,4 +1,5 @@
 import { PrismaService } from '@mekanos/database';
+import { Prisma } from '@prisma/client';
 import {
   BadRequestException,
   Injectable,
@@ -14,7 +15,7 @@ export class LecturasHorometroService {
 
   async create(createDto: CreateLecturasHorometroDto) {
     try {
-      const { id_equipo, horas_lectura, id_orden_servicio } = createDto as any;
+      const { id_equipo, horas_lectura, id_orden_servicio } = createDto;
 
       // 1. Validar que las horas no sean negativas
       if (horas_lectura < 0) {
@@ -48,7 +49,7 @@ export class LecturasHorometroService {
 
       // 4. Crear registro
       return await this.prisma.lecturas_horometro.create({
-        data: createDto as any,
+        data: createDto as unknown as Prisma.lecturas_horometroUncheckedCreateInput,
       });
     } catch (error: unknown) {
       if (error instanceof BadRequestException) throw error;

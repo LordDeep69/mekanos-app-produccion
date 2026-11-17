@@ -6,7 +6,7 @@
 import { FirmaAdministrativaForm } from '@/features/firmas-administrativas/components/firma-administrativa-form';
 
 export const metadata = {
-    title: 'Nueva Firma Administrativa | MEKANOS Admin',
+    title: 'Nueva Firma Administrativa | EAM Admin',
     description: 'Crear nueva firma administrativa',
 };
 

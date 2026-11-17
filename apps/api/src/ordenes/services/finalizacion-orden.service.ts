@@ -33,9 +33,12 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { ConfigParametrosService } from '../../config-parametros/config-parametros.service';
+import { ConfiguracionOrganizacionService } from '../../configuracion-organizacion/configuracion-organizacion.service';
 import {
   evaluarValorContraRangos,
   extraerConfigEquipoDeOrden,
@@ -44,6 +47,13 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService, OrdenEmailData } from '../../email/email.service';
 import { EquipoSpecsReader } from '../../equipos/services/equipo-specs.reader';
+import {
+  DEFAULT_ORG_BRANDING,
+  OrgBrandingContext,
+  buildOrgBranding,
+  formatDateOrg,
+} from '../../pdf/org-branding.types';
+import { PdfAssemblerService } from '../../pdf/pdf-assembler.service';
 import { buildInformeFilename } from '../../pdf/pdf-naming.helper';
 import { PdfService, TipoInforme } from '../../pdf/pdf.service';
 import { CloudinaryService, UploadResult } from '../../storage/cloudinary.service';
@@ -338,6 +348,8 @@ export class FinalizacionOrdenService {
     private readonly pdfService: PdfService,
     private readonly emailService: EmailService,
     private readonly configParametrosService: ConfigParametrosService,
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
+    @Optional() private readonly pdfAssembler?: PdfAssemblerService,
   ) {}
 
   /**
@@ -406,16 +418,14 @@ export class FinalizacionOrdenService {
       }
     };
 
-    // Variables para tracking de recursos creados (para rollback)
-    const recursosCreados = {
-      evidencias: [] as number[],
-      firmas: [] as number[],
-      documento: null as number | null,
-    };
+    // Variables para tracking de progreso/contexto
+    let evidenciasResultado: Array<{ id: number; tipo: string; url: string }> = [];
+    let firmasResultado: Array<{ id: number; tipo: string }> = [];
+    let documentoResult: { id: number } | null = null;
 
     try {
       // ========================================================================
-      // PASO 0: Validaciones iniciales + Precarga de datos comunes
+      // PASO 0: Validaciones iniciales (Zero DB Writes)
       // ========================================================================
       emitProgress('validando', 'in_progress', 'Validando datos de entrada...', 5);
       this.logger.log('📋 Paso 0: Validando datos de entrada...');
@@ -423,15 +433,15 @@ export class FinalizacionOrdenService {
       emitProgress('validando', 'completed', 'Datos validados correctamente', 10);
 
       // ========================================================================
-      // PASO 1: Obtener datos completos de la orden + Estado COMPLETADA (en paralelo)
-      // ✅ OPTIMIZACIÓN 31-DIC-2025: Precargar estado COMPLETADA aquí evita query posterior
+      // PASO 1: Cargar datos completos + Config Tenant + Estado COMPLETADA
       // ========================================================================
       emitProgress('obteniendo_orden', 'in_progress', 'Obteniendo datos de la orden...', 12);
       this.logger.log('📋 Paso 1: Obteniendo datos de la orden...');
 
-      const [orden, estadoCompletada] = await Promise.all([
+      const [orden, estadoCompletada, configOrg] = await Promise.all([
         this.obtenerOrdenCompleta(dto.idOrden),
         this.prisma.estados_orden.findFirst({ where: { codigo_estado: 'COMPLETADA' } }),
+        this.configOrgService?.getContext().catch(() => null),
       ]);
 
       if (!estadoCompletada) {
@@ -442,16 +452,12 @@ export class FinalizacionOrdenService {
       const esResubidaAutorizada =
         codigoEstadoActual === 'COMPLETADA' && orden.edicion_tecnico_habilitada === true;
 
-      // ✅ IDEMPOTENCIA ZERO-TRUST (27-OCT-2026):
-      // Si la orden YA está COMPLETADA o APROBADA en el servidor y NO es una resubida autorizada,
-      // un intento previo de sincronización o corte de red ya la procesó exitosamente.
-      // Retornar éxito inmediato para que el cliente móvil limpie su cola local y confirme al técnico sin error.
       if (
         (codigoEstadoActual === 'COMPLETADA' || codigoEstadoActual === 'APROBADA') &&
         !esResubidaAutorizada
       ) {
         this.logger.log(
-          `✅ [IDEMPOTENCIA] Orden ${orden.numero_orden} (ID ${orden.id_orden_servicio}) ya se encuentra en estado ${codigoEstadoActual}. Retornando éxito idempotente al cliente móvil.`,
+          `✅ [IDEMPOTENCIA] Orden ${orden.numero_orden} (ID ${orden.id_orden_servicio}) ya se encuentra en estado ${codigoEstadoActual}. Retornando éxito idempotente.`,
         );
 
         emitProgress('validando', 'completed', 'Orden verificada en el servidor', 30);
@@ -499,8 +505,10 @@ export class FinalizacionOrdenService {
         };
       }
 
-      // ✅ 19-OCT-2026 & 27-OCT-2026: Si la orden fue ejecutada por otro técnico en campo,
-      // reasignar al técnico autenticado que sube las evidencias y firma para no bloquear el trabajo offline.
+      // Resolver posible reasignación en memoria (se audita y persiste dentro de la transacción atómica)
+      let reasignacionTecnico:
+        | { tecnicoOriginalId: number; tecnicoEjecutorId: number }
+        | undefined;
       if (
         user &&
         !user.esAdmin &&
@@ -509,200 +517,46 @@ export class FinalizacionOrdenService {
         orden.id_tecnico_asignado !== user.idEmpleado
       ) {
         this.logger.warn(
-          `⚠️ Orden ${orden.numero_orden} estaba asignada al técnico #${orden.id_tecnico_asignado}, pero fue finalizada por técnico #${user.idEmpleado}. Se reasigna para preservar las evidencias del trabajo realizado.`,
+          `⚠️ Orden ${orden.numero_orden} asignada al técnico #${orden.id_tecnico_asignado}, finalizada por técnico #${user.idEmpleado}. Se auditará reasignación en transacción atómica.`,
         );
-        await this.prisma.ordenes_servicio.update({
-          where: { id_orden_servicio: orden.id_orden_servicio },
-          data: { id_tecnico_asignado: user.idEmpleado },
-        });
+        reasignacionTecnico = {
+          tecnicoOriginalId: orden.id_tecnico_asignado,
+          tecnicoEjecutorId: user.idEmpleado,
+        };
         orden.id_tecnico_asignado = user.idEmpleado;
-      }
-
-      emitProgress('obteniendo_orden', 'completed', `Orden ${orden.numero_orden} cargada`, 15);
-
-      // ========================================================================
-      // PASO 1.5: LIMPIEZA / ROLLBACK - Eliminar datos anteriores antes de re-insertar
-      // ✅ FIX 10-FEB-2026: Limpia evidencias huérfanas de intentos fallidos
-      // ✅ FIX 26-FEB-2026: También hace rollback completo para re-subida de COMPLETADA
-      // ========================================================================
-      const estadoActual = orden.id_estado_actual;
-      const esYaCompletada = estadoActual === estadoCompletada.id_estado;
-
-      // ✅ FIX 26-FEB-2026: SIEMPRE ejecutar limpieza
-      // - Para !esYaCompletada: limpia residuales de intentos fallidos
-      // - Para esYaCompletada: hace rollback de datos anteriores para re-subida
-      {
-        const motivo = esYaCompletada ? 'rollback para re-subida' : 'limpieza de residuales';
-        emitProgress(
-          'limpieza_residuales',
-          'in_progress',
-          esYaCompletada
-            ? 'Preparando re-subida (rollback)...'
-            : 'Verificando evidencias residuales...',
-          16,
-        );
-        this.logger.log(`🧹 Paso 1.5: ${motivo}...`);
-
-        try {
-          // Contar evidencias existentes para esta orden
-          const evidenciasExistentes = await this.prisma.evidencias_fotograficas.count({
-            where: { id_orden_servicio: orden.id_orden_servicio },
-          });
-
-          if (evidenciasExistentes > 0) {
-            this.logger.warn(
-              `   ⚠️ Encontradas ${evidenciasExistentes} evidencias residuales de intentos anteriores`,
-            );
-
-            // Eliminar TODAS las evidencias existentes para esta orden
-            // (son residuales porque la orden aún no está COMPLETADA)
-            const deleteResult = await this.prisma.evidencias_fotograficas.deleteMany({
-              where: { id_orden_servicio: orden.id_orden_servicio },
-            });
-            this.logger.log(`   🗑️ Eliminadas ${deleteResult.count} evidencias residuales`);
-          }
-
-          // También limpiar firmas residuales vinculadas a la orden
-          // (firmas huérfanas de intentos fallidos)
-          const firmaResidualTecnico = orden.id_firma_tecnico;
-          const firmaResidualCliente = orden.id_firma_cliente;
-
-          if (firmaResidualTecnico || firmaResidualCliente) {
-            this.logger.log(`   🧹 Desvinculando firmas residuales de la orden...`);
-            await this.prisma.ordenes_servicio.update({
-              where: { id_orden_servicio: orden.id_orden_servicio },
-              data: {
-                id_firma_tecnico: null,
-                id_firma_cliente: null,
-              },
-            });
-
-            for (const firmaId of [firmaResidualTecnico, firmaResidualCliente].filter(Boolean)) {
-              await this.prisma.firmas_digitales
-                .delete({
-                  where: { id_firma_digital: firmaId! },
-                })
-                .catch(() => {
-                  // Ignorar si ya fue eliminada
-                });
-            }
-            this.logger.log(`   ✅ Firmas residuales limpiadas`);
-          }
-
-          // Limpiar actividades ejecutadas residuales
-          const actividadesResExist = await this.prisma.actividades_ejecutadas.count({
-            where: { id_orden_servicio: orden.id_orden_servicio },
-          });
-          if (actividadesResExist > 0) {
-            // ✅ ZERO-TRUST WMS: Preservar repuestos despachados desde Almacén WMS (id_movimiento_inventario != null)
-            // Desvincular id_actividad_ejecutada si existiera, y solo limpiar registros huérfanos sin movimiento Kardex
-            await this.prisma.componentes_usados.updateMany({
-              where: {
-                id_orden_servicio: orden.id_orden_servicio,
-                id_actividad_ejecutada: { not: null },
-              },
-              data: { id_actividad_ejecutada: null },
-            });
-            await this.prisma.actividades_ejecutadas.deleteMany({
-              where: { id_orden_servicio: orden.id_orden_servicio },
-            });
-            this.logger.log(
-              `   🗑️ Eliminadas ${actividadesResExist} actividades residuales (preservados repuestos WMS)`,
-            );
-          }
-
-          // Limpiar mediciones residuales
-          const medicionesResExist = await this.prisma.mediciones_servicio.count({
-            where: { id_orden_servicio: orden.id_orden_servicio },
-          });
-          if (medicionesResExist > 0) {
-            await this.prisma.mediciones_servicio.deleteMany({
-              where: { id_orden_servicio: orden.id_orden_servicio },
-            });
-            this.logger.log(`   🗑️ Eliminadas ${medicionesResExist} mediciones residuales`);
-          }
-
-          // Limpiar pendientes técnicos residuales
-          const pendientesResExist = await this.prisma.ordenes_pendientes.count({
-            where: { id_orden_servicio: orden.id_orden_servicio },
-          });
-          if (pendientesResExist > 0) {
-            await this.prisma.ordenes_pendientes.deleteMany({
-              where: { id_orden_servicio: orden.id_orden_servicio },
-            });
-            this.logger.log(`   🗑️ Eliminados ${pendientesResExist} pendientes residuales`);
-          }
-
-          // ✅ SANEAMIENTO RESUBIDA: Limpiar lecturas de contador registradas por esta orden
-          // y restaurar el acumulado previo del equipo antes de volver a ejecutar Paso 3.8
-          const lecturasResExist = await this.prisma.lecturas_horometro.findMany({
-            where: { id_orden_servicio: orden.id_orden_servicio },
-            select: {
-              id_equipo: true,
-              horas_lectura: true,
-              horas_transcurridas: true,
-            },
-          });
-          if (lecturasResExist.length > 0) {
-            await this.prisma.lecturas_horometro.deleteMany({
-              where: { id_orden_servicio: orden.id_orden_servicio },
-            });
-            const equiposAfectados = Array.from(new Set(lecturasResExist.map((l) => l.id_equipo)));
-            for (const idEq of equiposAfectados) {
-              const ultimaRestante = await this.prisma.lecturas_horometro.findFirst({
-                where: { id_equipo: idEq },
-                orderBy: [{ fecha_lectura: 'desc' }, { id_lectura: 'desc' }],
-              });
-              const borradaEq = lecturasResExist.find((l) => l.id_equipo === idEq);
-              const valorRestaurado = ultimaRestante
-                ? Number(ultimaRestante.horas_lectura)
-                : borradaEq?.horas_transcurridas != null
-                  ? Math.max(
-                      0,
-                      Number(borradaEq.horas_lectura) - Number(borradaEq.horas_transcurridas),
-                    )
-                  : null;
-              if (valorRestaurado != null && Number.isFinite(valorRestaurado)) {
-                const eqActualizado = await this.prisma.equipos.update({
-                  where: { id_equipo: idEq },
-                  data: {
-                    horas_actuales: valorRestaurado,
-                    ...(ultimaRestante
-                      ? { fecha_ultima_lectura_horas: ultimaRestante.fecha_lectura }
-                      : {}),
+        if (typeof this.prisma.empleados?.findUnique === 'function') {
+          const empEjecutor = await this.prisma.empleados
+            .findUnique({
+              where: { id_empleado: user.idEmpleado },
+              include: {
+                persona: {
+                  include: {
+                    usuarios: { select: { id_usuario: true } },
                   },
-                });
-                if (orden.equipos && orden.equipos.id_equipo === idEq) {
-                  orden.equipos.horas_actuales = eqActualizado.horas_actuales;
-                }
-              }
-            }
-            this.logger.log(
-              `   🗑️ Eliminadas ${lecturasResExist.length} lectura(s) de contador de la orden para recálculo limpio`,
-            );
+                },
+              },
+            })
+            .catch(() => null);
+          if (empEjecutor) {
+            orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados = empEjecutor as any;
           }
-
-          const totalResidual =
-            evidenciasExistentes +
-            actividadesResExist +
-            medicionesResExist +
-            pendientesResExist +
-            lecturasResExist.length;
-          emitProgress(
-            'limpieza_residuales',
-            'completed',
-            `Limpieza completada (${totalResidual} registros residuales eliminados)`,
-            17,
-          );
-        } catch (cleanupError) {
-          // La limpieza es best-effort, no debe bloquear la finalización
-          this.logger.warn(`   ⚠️ Error en limpieza de residuales (continuando): ${cleanupError}`);
-          emitProgress('limpieza_residuales', 'completed', 'Limpieza omitida (no crítico)', 17);
         }
       }
 
+      const esYaCompletada = orden.id_estado_actual === estadoCompletada.id_estado;
+      emitProgress('obteniendo_orden', 'completed', `Orden ${orden.numero_orden} cargada`, 15);
+
+      // Validar resolución de identidades de firmas ANTES de subir binarios o escribir BD
+      const [idPersonaFirmaTecnico, idPersonaFirmaCliente] = await Promise.all([
+        this.resolverIdPersonaFirma(dto.firmas.tecnico, dto.usuarioId, orden),
+        dto.firmas.cliente?.base64
+          ? this.resolverIdPersonaFirma(dto.firmas.cliente, dto.usuarioId, orden)
+          : Promise.resolve(null),
+      ]);
+
       // ========================================================================
-      // PASO 2: Subir evidencias a Cloudinary y registrar en BD
+      // FASE A (ZERO DB MUTATION): Subir evidencias a la nube, generar PDF y subir PDF a R2
+      // Si cualquier paso externo falla aquí, la BD permanece 100% intacta sin borrados previos.
       // ========================================================================
       emitProgress(
         'evidencias',
@@ -710,12 +564,12 @@ export class FinalizacionOrdenService {
         `Subiendo ${dto.evidencias.length} evidencias...`,
         18,
       );
-      this.logger.log('📷 Paso 2: Procesando evidencias fotográficas...');
-      const evidenciasResultado = await this.procesarEvidencias(
+      this.logger.log('📷 Fase A.1: Subiendo evidencias fotográficas a almacenamiento...');
+      const storagePrefijo = configOrg?.storage_prefijo_raiz || 'eam-media';
+      const evidenciasSubidas = await this.subirEvidenciasCloud(
         dto.evidencias,
-        orden.id_orden_servicio,
         orden.numero_orden,
-        dto.usuarioId,
+        storagePrefijo,
         (subidas, total) => {
           const progreso = 18 + Math.round((subidas / total) * 17);
           emitProgress(
@@ -726,148 +580,36 @@ export class FinalizacionOrdenService {
           );
         },
       );
-      recursosCreados.evidencias = evidenciasResultado.map((e) => e.id);
+      const evidenciasPreviewPdf = evidenciasSubidas.map((ev, index) => ({
+        id: index + 1,
+        tipo: ev.tipoFinal,
+        url: ev.url,
+      }));
       emitProgress(
         'evidencias',
         'completed',
-        `${evidenciasResultado.length} evidencias subidas`,
+        `${evidenciasSubidas.length} evidencias subidas`,
         35,
       );
 
-      // ========================================================================
-      // PASO 3: Registrar firmas digitales
-      // ========================================================================
-      emitProgress('firmas', 'in_progress', 'Registrando firmas digitales...', 38);
-      this.logger.log('✍️ Paso 3: Registrando firmas digitales...');
-      const firmasResultado = await this.procesarFirmas(dto.firmas, dto.usuarioId, orden);
-      recursosCreados.firmas = firmasResultado.map((f) => f.id);
-      this.logger.log(`   ✓ ${firmasResultado.length} firmas registradas`);
-      emitProgress('firmas', 'completed', `${firmasResultado.length} firmas registradas`, 45);
-
-      // ✅ FIX 05-ENE-2026: Vincular AMBAS firmas a la orden para trazabilidad completa
-      const firmaTecnico = firmasResultado.find((f) => f.tipo === 'TECNICO');
-      const firmaCliente = firmasResultado.find((f) => f.tipo === 'CLIENTE');
-
-      await this.prisma.ordenes_servicio.update({
-        where: { id_orden_servicio: orden.id_orden_servicio },
-        data: {
-          // Firma del técnico (NUEVA - evita mezclar firmas entre órdenes)
-          id_firma_tecnico: firmaTecnico?.id || null,
-          // Firma del cliente
-          id_firma_cliente: firmaCliente?.id || null,
-          // ✅ FIX 02-FEB-2026: Usar nuevos campos nombreFirmante/cargoFirmante
-          nombre_quien_recibe: dto.firmas.cliente?.nombreFirmante || 'Cliente',
-          cargo_quien_recibe: dto.firmas.cliente?.cargoFirmante || null,
-        },
-      });
-      this.logger.log(
-        `   ✓ Firmas vinculadas a orden (técnico: ${firmaTecnico?.id}, cliente: ${firmaCliente?.id})`,
-      );
-
-      // ========================================================================
-      // PASO 3.5: Persistir actividades ejecutadas en BD (para estadísticas)
-      // ========================================================================
-      emitProgress('actividades', 'in_progress', 'Registrando actividades ejecutadas...', 48);
-      this.logger.log('📋 Paso 3.5: Registrando actividades ejecutadas...');
-      const actividadesGuardadas = await this.persistirActividades(
-        orden.id_orden_servicio,
-        dto.actividades,
-        idEmpleadoTecnico || dto.usuarioId, // Usar id_empleado resuelto
-      );
-      this.logger.log(`   ✓ ${actividadesGuardadas} actividades registradas`);
-      emitProgress(
-        'actividades',
-        'completed',
-        `${actividadesGuardadas} actividades registradas`,
-        52,
-      );
-
-      // ========================================================================
-      // PASO 3.6: Persistir mediciones en BD (para estadísticas)
-      // ========================================================================
-      if (dto.mediciones && dto.mediciones.length > 0) {
-        emitProgress(
-          'mediciones',
-          'in_progress',
-          `Registrando ${dto.mediciones.length} mediciones...`,
-          54,
-        );
-        this.logger.log('📏 Paso 3.6: Registrando mediciones...');
-        const medicionesGuardadas = await this.persistirMediciones(
-          orden.id_orden_servicio,
-          dto.mediciones,
-          idEmpleadoTecnico || dto.usuarioId, // Usar id_empleado resuelto
-        );
-        this.logger.log(`   ✓ ${medicionesGuardadas} mediciones registradas`);
-        emitProgress(
-          'mediciones',
-          'completed',
-          `${medicionesGuardadas} mediciones registradas`,
-          58,
-        );
-      }
-
-      // ========================================================================
-      // PASO 3.7: Persistir pendientes técnicos en BD
-      // ========================================================================
-      if (dto.pendientes && dto.pendientes.length > 0) {
-        emitProgress(
-          'pendientes',
-          'in_progress',
-          `Registrando ${dto.pendientes.length} pendientes...`,
-          59,
-        );
-        this.logger.log('📌 Paso 3.7: Registrando pendientes técnicos...');
-        const pendientesGuardados = await this.persistirPendientes(
-          orden,
-          dto.pendientes,
-          idEmpleadoTecnico,
-        );
-        this.logger.log(`   ✓ ${pendientesGuardados} pendientes registrados`);
-        emitProgress(
-          'pendientes',
-          'completed',
-          `${pendientesGuardados} pendientes registrados`,
-          60,
-        );
-      }
-
-      // Mapear mediciones del array a datosModulo (necesario para horómetro)
+      // Mapear mediciones del array a datosModulo para cálculo de PDF + contador
       const datosModuloMapeado = this.mapearMedicionesADatosModulo(dto.mediciones || []);
-
-      // ========================================================================
-      // PASO 3.8: Sincronizar contador(es) en hoja de vida ANTES del PDF
-      // ========================================================================
-      this.logger.log('⏳ Paso 3.8: Sincronizando contador(es) en hoja de vida...');
-      await this.sincronizarContadoresHojaDeVida(orden, dto, datosModuloMapeado);
-
-      // ========================================================================
-      // MODO DE FINALIZACIÓN: COMPLETO vs SOLO_DATOS
-      // ========================================================================
       const modoCompleto = dto.modo !== 'SOLO_DATOS';
 
-      // Variables para resultados (pueden ser null en modo SOLO_DATOS)
       let pdfResult: { buffer: Buffer; filename: string; size: number } | null = null;
-      let r2Result: { url: string } | null = null;
-      let emailResult: { enviado: boolean; destinatario: string; messageId?: string } = {
-        enviado: false,
-        destinatario: '',
-      };
-      let documentoResult: { id: number } | null = null;
+      let r2Result: { url: string; key: string } | null = null;
+      let downloadFilename: string | undefined;
 
       if (modoCompleto) {
-        // ========================================================================
-        // PASO 4: Generar PDF con template real (SOLO EN MODO COMPLETO)
-        // ========================================================================
-        emitProgress('generando_pdf', 'in_progress', 'Generando informe PDF...', 60);
-        this.logger.log('📄 Paso 4: Generando PDF con template profesional...');
+        emitProgress('generando_pdf', 'in_progress', 'Generando informe PDF...', 55);
+        this.logger.log('📄 Fase A.2: Generando PDF con template profesional (pre-commit)...');
 
         const tipoInforme = this.determinarTipoInforme(orden);
         pdfResult = await this.generarPDFOrden(
           orden,
           dto,
-          evidenciasResultado,
-          firmasResultado,
+          evidenciasPreviewPdf,
+          [],
           tipoInforme,
           datosModuloMapeado,
         );
@@ -875,91 +617,169 @@ export class FinalizacionOrdenService {
           'generando_pdf',
           'completed',
           `PDF generado (${Math.round(pdfResult.size / 1024)} KB)`,
-          72,
+          68,
         );
 
-        // ========================================================================
-        // PASO 5+7: Subir PDF a R2 + Enviar email EN PARALELO (SOLO EN MODO COMPLETO)
-        // ========================================================================
         emitProgress(
           'subiendo_pdf',
           'in_progress',
-          'Subiendo PDF y enviando email en paralelo...',
-          74,
+          'Subiendo informe PDF a almacenamiento seguro...',
+          72,
         );
-        this.logger.log('⚡ [PERF] Pasos 5+7: Subiendo PDF a R2 + Enviando email EN PARALELO...');
-
-        // ✅ FIX 29-ABR-2026: Calcular nombre de descarga canónico una sola vez
-        //    para mantener consistencia entre R2 (Content-Disposition) y email (filename adjunto).
-        const downloadFilename = this.calcularDownloadFilename(orden);
-
-        const startParallel = Date.now();
-        const [r2Res, emailRes] = await Promise.all([
-          this.subirPDFaR2(pdfResult.buffer, orden.numero_orden, downloadFilename),
-          this.enviarEmailInforme(orden, pdfResult, dto.emailAdicional, downloadFilename),
-        ]);
-        r2Result = r2Res;
-        emailResult = emailRes;
-
-        const parallelTime = Date.now() - startParallel;
-        this.logger.log(`⚡ [PERF] R2 + Email completados en ${parallelTime}ms (paralelo)`);
-
+        downloadFilename = this.calcularDownloadFilename(orden);
+        r2Result = await this.subirPDFaR2(pdfResult.buffer, orden.numero_orden, downloadFilename);
         emitProgress('subiendo_pdf', 'completed', 'PDF almacenado en la nube', 80);
+      } else {
+        this.logger.log('📋 Modo SOLO_DATOS: Saltando generación de PDF y almacenamiento R2');
+        emitProgress('generando_pdf', 'completed', 'PDF se generará desde Admin Portal', 68);
+        emitProgress('subiendo_pdf', 'completed', 'Omitido (modo solo datos)', 80);
+      }
+
+      // ========================================================================
+      // FASE B (ATÓMICA EN BASE DE DATOS): Todo dentro de UNA sola $transaction
+      // ========================================================================
+      emitProgress(
+        'limpieza_residuales',
+        'in_progress',
+        'Consolidando registros en base de datos...',
+        82,
+      );
+      this.logger.log('🔒 Fase B: Ejecutando commit atómico integral en PostgreSQL...');
+
+      const commitOutcome = await this.prisma.$transaction(
+        async (tx) => {
+          // 1. Limpieza de residuales previos (segura dentro de tx: si algo falla, se revierte)
+          await this.limpiarDatosPreviosOrden(orden, tx);
+
+          // 2. Persistir evidencias ya subidas
+          emitProgress('actividades', 'in_progress', 'Persistiendo evidencias y firmas...', 85);
+          const evDb = await this.persistirEvidenciasDb(
+            tx,
+            evidenciasSubidas,
+            orden.id_orden_servicio,
+          );
+
+          // 3. Registrar firmas digitales y vincular orden
+          const frmDb = await this.procesarFirmas(
+            dto.firmas,
+            dto.usuarioId,
+            orden,
+            {
+              tecnico: idPersonaFirmaTecnico,
+              cliente: idPersonaFirmaCliente ?? undefined,
+            },
+            tx,
+          );
+          const firmaTecnico = frmDb.find((f) => f.tipo === 'TECNICO');
+          const firmaCliente = frmDb.find((f) => f.tipo === 'CLIENTE');
+
+          await tx.ordenes_servicio.update({
+            where: { id_orden_servicio: orden.id_orden_servicio },
+            data: {
+              ...(reasignacionTecnico
+                ? { id_tecnico_asignado: reasignacionTecnico.tecnicoEjecutorId }
+                : {}),
+              id_firma_tecnico: firmaTecnico?.id || null,
+              id_firma_cliente: firmaCliente?.id || null,
+              nombre_quien_recibe: dto.firmas.cliente?.nombreFirmante || 'Cliente',
+              cargo_quien_recibe: dto.firmas.cliente?.cargoFirmante || null,
+            },
+          });
+
+          // 4. Actividades ejecutadas
+          await this.persistirActividades(
+            orden.id_orden_servicio,
+            dto.actividades,
+            idEmpleadoTecnico || dto.usuarioId,
+            tx,
+          );
+
+          // 5. Mediciones
+          if (dto.mediciones && dto.mediciones.length > 0) {
+            await this.persistirMediciones(
+              orden.id_orden_servicio,
+              dto.mediciones,
+              idEmpleadoTecnico || dto.usuarioId,
+              tx,
+            );
+          }
+
+          // 6. Pendientes técnicos
+          if (dto.pendientes && dto.pendientes.length > 0) {
+            await this.persistirPendientes(orden, dto.pendientes, idEmpleadoTecnico, tx);
+          }
+
+          // 7. Contadores metrológicos en hoja de vida (horas_actuales + lectura_uso_actual)
+          await this.sincronizarContadoresHojaDeVida(orden, dto, datosModuloMapeado, tx);
+
+          // 8. Registrar documento generado (si modoCompleto)
+          let docDb: { id: number } | null = null;
+          if (modoCompleto && r2Result && pdfResult) {
+            docDb = await this.registrarDocumento(
+              orden.id_orden_servicio,
+              orden.numero_orden,
+              r2Result.url,
+              pdfResult,
+              dto.usuarioId,
+              configOrg?.nombre_comercial,
+              tx,
+            );
+          }
+
+          // 9. Actualizar estado de orden a COMPLETADA e historial auditado
+          await this.actualizarEstadoOrden(
+            orden.id_orden_servicio,
+            estadoCompletada.id_estado,
+            dto.observaciones,
+            dto.usuarioId,
+            dto.horaEntrada,
+            dto.horaSalida,
+            esYaCompletada,
+            reasignacionTecnico,
+            tx,
+          );
+
+          return {
+            evidencias: evDb,
+            firmas: frmDb,
+            documento: docDb,
+          };
+        },
+        { timeout: 30000 },
+      );
+
+      evidenciasResultado = commitOutcome.evidencias;
+      firmasResultado = commitOutcome.firmas;
+      documentoResult = commitOutcome.documento;
+
+      emitProgress('actividades', 'completed', 'Registros persistidos atómicamente', 90);
+      emitProgress('actualizando_estado', 'completed', 'Estado actualizado a COMPLETADA', 94);
+
+      // ========================================================================
+      // FASE C (POST-COMMIT NO BLOQUEANTE): Notificación Email con Informe Adjunto
+      // ========================================================================
+      let emailResult: { enviado: boolean; destinatario: string; messageId?: string } = {
+        enviado: false,
+        destinatario: '',
+      };
+
+      if (modoCompleto && pdfResult) {
+        emitProgress('enviando_email', 'in_progress', 'Enviando informe por email...', 96);
+        emailResult = await this.enviarEmailInforme(
+          orden,
+          pdfResult,
+          dto.emailAdicional,
+          downloadFilename,
+        );
         emitProgress(
           'enviando_email',
           'completed',
           emailResult.enviado ? 'Email enviado' : 'Email no enviado (sin destinatario)',
-          85,
+          98,
         );
-
-        // ========================================================================
-        // PASO 6: Registrar documento en BD (SOLO EN MODO COMPLETO)
-        // ========================================================================
-        emitProgress(
-          'registrando_doc',
-          'in_progress',
-          'Registrando documento en base de datos...',
-          87,
-        );
-        this.logger.log('💾 Paso 6: Registrando documento en base de datos...');
-        documentoResult = await this.registrarDocumento(
-          orden.id_orden_servicio,
-          orden.numero_orden,
-          r2Result.url,
-          pdfResult,
-          dto.usuarioId,
-        );
-        recursosCreados.documento = documentoResult.id;
-        emitProgress('registrando_doc', 'completed', 'Documento registrado', 90);
       } else {
-        // MODO SOLO_DATOS: Skip PDF, R2 y Email
-        this.logger.log('📋 Modo SOLO_DATOS: Saltando generación de PDF y envío de email');
-        emitProgress('generando_pdf', 'completed', 'PDF se generará desde Admin Portal', 72);
-        emitProgress('subiendo_pdf', 'completed', 'Omitido (modo solo datos)', 80);
-        emitProgress('enviando_email', 'completed', 'Email se enviará desde Admin Portal', 85);
-        emitProgress(
-          'registrando_doc',
-          'completed',
-          'Documento se registrará desde Admin Portal',
-          90,
-        );
+        emitProgress('enviando_email', 'completed', 'Email se enviará desde Admin Portal', 98);
       }
-
-      // ========================================================================
-      // PASO 8: Actualizar estado de la orden - SIEMPRE
-      // ========================================================================
-      emitProgress('actualizando_estado', 'in_progress', 'Actualizando estado de la orden...', 94);
-      this.logger.log('✅ Paso 8: Actualizando estado de la orden...');
-      await this.actualizarEstadoOrden(
-        orden.id_orden_servicio,
-        estadoCompletada.id_estado,
-        dto.observaciones,
-        dto.usuarioId,
-        dto.horaEntrada,
-        dto.horaSalida,
-        esYaCompletada,
-      );
-      emitProgress('actualizando_estado', 'completed', 'Estado actualizado a COMPLETADA', 98);
 
       // ========================================================================
       // RESULTADO EXITOSO
@@ -1016,9 +836,6 @@ export class FinalizacionOrdenService {
         errorMessage: err.message,
         errorStack: err.stack,
       });
-
-      // Intentar rollback de recursos creados
-      await this.rollback(recursosCreados);
 
       // Re-lanzar errores HTTP de Nest TAL CUAL (400, 403, 404, etc.).
       // ✅ 19-OCT-2026: antes solo se preservaban 400/404; el 403 del
@@ -1190,22 +1007,124 @@ export class FinalizacionOrdenService {
   }
 
   /**
-   * Procesa y sube evidencias a Cloudinary + BD
-   * ✅ OPTIMIZADO: Subida paralela a Cloudinary con Promise.all
+   * Limpia datos previos residuales de una orden dentro de la transacción atómica (Fase B).
+   * Preserva repuestos despachados desde WMS (componentes_usados con movimiento).
    */
-  private async procesarEvidencias(
+  private async limpiarDatosPreviosOrden(orden: any, tx: Prisma.TransactionClient): Promise<void> {
+    const idOrden = orden.id_orden_servicio;
+
+    await tx.evidencias_fotograficas.deleteMany({
+      where: { id_orden_servicio: idOrden },
+    });
+
+    const firmaResidualTecnico = orden.id_firma_tecnico;
+    const firmaResidualCliente = orden.id_firma_cliente;
+    if (firmaResidualTecnico || firmaResidualCliente) {
+      await tx.ordenes_servicio.update({
+        where: { id_orden_servicio: idOrden },
+        data: {
+          id_firma_tecnico: null,
+          id_firma_cliente: null,
+        },
+      });
+      for (const firmaId of [firmaResidualTecnico, firmaResidualCliente].filter(Boolean)) {
+        await tx.firmas_digitales
+          .delete({ where: { id_firma_digital: firmaId! } })
+          .catch(() => {});
+      }
+    }
+
+    await tx.componentes_usados.updateMany({
+      where: {
+        id_orden_servicio: idOrden,
+        id_actividad_ejecutada: { not: null },
+      },
+      data: { id_actividad_ejecutada: null },
+    });
+    await tx.actividades_ejecutadas.deleteMany({
+      where: { id_orden_servicio: idOrden },
+    });
+    await tx.mediciones_servicio.deleteMany({
+      where: { id_orden_servicio: idOrden },
+    });
+    await tx.ordenes_pendientes.deleteMany({
+      where: { id_orden_servicio: idOrden },
+    });
+
+    const lecturasResExist = await tx.lecturas_horometro.findMany({
+      where: { id_orden_servicio: idOrden },
+      select: {
+        id_equipo: true,
+        horas_lectura: true,
+        horas_transcurridas: true,
+      },
+    });
+    if (lecturasResExist.length > 0) {
+      await tx.lecturas_horometro.deleteMany({
+        where: { id_orden_servicio: idOrden },
+      });
+      const equiposAfectados = Array.from(new Set(lecturasResExist.map((l) => l.id_equipo)));
+      for (const idEq of equiposAfectados) {
+        const ultimaRestante = await tx.lecturas_horometro.findFirst({
+          where: { id_equipo: idEq },
+          orderBy: [{ fecha_lectura: 'desc' }, { id_lectura: 'desc' }],
+        });
+        const borradaEq = lecturasResExist.find((l) => l.id_equipo === idEq);
+        const valorRestaurado = ultimaRestante
+          ? Number(ultimaRestante.horas_lectura)
+          : borradaEq?.horas_transcurridas != null
+            ? Math.max(
+                0,
+                Number(borradaEq.horas_lectura) - Number(borradaEq.horas_transcurridas),
+              )
+            : null;
+        if (valorRestaurado != null && Number.isFinite(valorRestaurado)) {
+          const eqActualizado = await tx.equipos.update({
+            where: { id_equipo: idEq },
+            data: {
+              horas_actuales: valorRestaurado,
+              lectura_uso_actual: valorRestaurado,
+              ...(ultimaRestante
+                ? {
+                    fecha_ultima_lectura_horas: ultimaRestante.fecha_lectura,
+                    fecha_ultima_lectura_uso: ultimaRestante.fecha_lectura,
+                  }
+                : {}),
+            },
+          });
+          if (orden.equipos && orden.equipos.id_equipo === idEq) {
+            orden.equipos.horas_actuales = eqActualizado.horas_actuales;
+            orden.equipos.lectura_uso_actual = eqActualizado.lectura_uso_actual;
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Fase A: Sube evidencias fotográficas a almacenamiento en la nube SIN escribir BD todavía.
+   */
+  private async subirEvidenciasCloud(
     evidencias: EvidenciaInput[],
-    idOrden: number,
     numeroOrden: string,
-    _usuarioId: number, // Reservado para auditoría futura
+    storagePrefijo: string,
     onBatchProgress?: (subidas: number, total: number) => void,
-  ): Promise<Array<{ id: number; tipo: string; url: string }>> {
+  ): Promise<
+    Array<{
+      ev: EvidenciaInput;
+      buffer: Buffer;
+      url: string;
+      hash: string;
+      index: number;
+      tipoFinal: string;
+    }>
+  > {
     if (evidencias.length === 0) return [];
 
-    const folder = `mekanos/evidencias/${numeroOrden}`;
+    const cleanPrefix = (storagePrefijo || 'eam-media').replace(/^\/+|\/+$/g, '');
+    const folder = `${cleanPrefix}/evidencias/${numeroOrden}`;
 
-    // PASO 1: Subir imágenes a Cloudinary CON CUPO CONTROLADO (3 en paralelo)
-    this.logger.log(`   📤 Subiendo ${evidencias.length} evidencias (cupo=3)...`);
+    this.logger.log(`   📤 Subiendo ${evidencias.length} evidencias a ${folder} (cupo=3)...`);
     const startUpload = Date.now();
 
     const MAX_CONCURRENCY = 3;
@@ -1215,23 +1134,16 @@ export class FinalizacionOrdenService {
     while (idx < evidencias.length) {
       const batch = evidencias.slice(idx, idx + MAX_CONCURRENCY);
       const batchPromises = batch.map(async (ev) => {
-        try {
-          const buffer = Buffer.from(ev.base64, 'base64');
-          const result = await this.cloudinaryService.uploadImage(buffer, {
-            folder,
-            tags: [ev.tipo, numeroOrden],
-          });
-          return { ev, buffer, result };
-        } catch (err) {
-          this.logger.error(
-            `   ❌ Error subiendo evidencia ${ev.tipo}: ${err instanceof Error ? err.message : err}`,
-          );
-          return null;
-        }
+        const buffer = Buffer.from(ev.base64, 'base64');
+        const result = await this.cloudinaryService.uploadImage(buffer, {
+          folder,
+          tags: [ev.tipo, numeroOrden],
+        });
+        return { ev, buffer, result };
       });
       const batchResults = await Promise.all(batchPromises);
       for (const r of batchResults) {
-        if (r) uploadResults.push(r);
+        uploadResults.push(r);
       }
       idx += MAX_CONCURRENCY;
       onBatchProgress?.(Math.min(idx, evidencias.length), evidencias.length);
@@ -1242,65 +1154,71 @@ export class FinalizacionOrdenService {
       `   ⚡ Subida completada en ${uploadTime}ms (${uploadResults.length} archivos)`,
     );
 
-    // PASO 2: Validar resultados de Cloudinary (saltar fallos)
-    const ahora = new Date();
+    const GENERAL_PREFIX_RE = /^(ANTES|DURANTE|DESPUES):\s/i;
+    const RECLASSIFIABLE_TYPES = ['ANTES', 'DURANTE', 'DESPUES'];
     const datosValidados: Array<{
       ev: EvidenciaInput;
       buffer: Buffer;
       url: string;
       hash: string;
       index: number;
+      tipoFinal: string;
     }> = [];
 
     for (let i = 0; i < uploadResults.length; i++) {
       const { ev, buffer, result: cloudinaryResult } = uploadResults[i];
-
       if (!cloudinaryResult.success || !cloudinaryResult.url) {
-        this.logger.warn(
-          `   ⚠️ Evidencia ${ev.tipo} saltada por fallo en Cloudinary: ${cloudinaryResult.error || 'URL no generada'}`,
+        throw new InternalServerErrorException(
+          `Fallo al subir evidencia ${ev.tipo}: ${cloudinaryResult.error || 'URL no generada'}`,
         );
-        continue;
+      }
+
+      let tipoFinal: string = ev.tipo;
+      if (
+        RECLASSIFIABLE_TYPES.includes(ev.tipo?.toUpperCase()) &&
+        GENERAL_PREFIX_RE.test(ev.descripcion || '')
+      ) {
+        tipoFinal = 'GENERAL';
       }
 
       const hash = createHash('sha256').update(buffer).digest('hex');
-      datosValidados.push({ ev, buffer, url: cloudinaryResult.url, hash, index: i });
+      datosValidados.push({ ev, buffer, url: cloudinaryResult.url, hash, index: i, tipoFinal });
     }
 
-    if (datosValidados.length === 0) {
-      this.logger.warn('   ⚠️ Ninguna evidencia pudo ser subida a Cloudinary');
-      return [];
-    }
+    return datosValidados;
+  }
 
-    // PASO 3: Registrar en BD CON CUPO CONTROLADO (5 en paralelo)
-    // ✅ OPTIMIZACIÓN: Evita saturar el pool de conexiones PgBouncer
-    // El pooler de Supabase permite ~21 conexiones; varias ya están en uso
-    // por otras operaciones de la finalización, así que limitamos a 5.
-    const GENERAL_PREFIX_RE = /^(ANTES|DURANTE|DESPUES):\s/i;
-    const RECLASSIFIABLE_TYPES = ['ANTES', 'DURANTE', 'DESPUES'];
+  /**
+   * Fase B: Registra las evidencias previamente subidas dentro de la transacción atómica.
+   */
+  private async persistirEvidenciasDb(
+    tx: Prisma.TransactionClient,
+    datosValidados: Array<{
+      ev: EvidenciaInput;
+      buffer: Buffer;
+      url: string;
+      hash: string;
+      index: number;
+      tipoFinal: string;
+    }>,
+    idOrden: number,
+  ): Promise<Array<{ id: number; tipo: string; url: string }>> {
+    if (datosValidados.length === 0) return [];
 
+    const ahora = new Date();
     const DB_CONCURRENCY = 5;
     const resultados: Array<{ id: number; tipo: string; url: string }> = [];
     let dbIdx = 0;
 
     while (dbIdx < datosValidados.length) {
       const dbBatch = datosValidados.slice(dbIdx, dbIdx + DB_CONCURRENCY);
-      const dbBatchPromises = dbBatch.map(({ ev, buffer, url, hash, index }) => {
-        let tipoFinal = ev.tipo;
-        if (
-          RECLASSIFIABLE_TYPES.includes(ev.tipo?.toUpperCase()) &&
-          GENERAL_PREFIX_RE.test(ev.descripcion || '')
-        ) {
-          this.logger.log(
-            `   📸 Reclasificando evidencia ${ev.tipo} → GENERAL (prefijo detectado en descripción)`,
-          );
-          tipoFinal = 'GENERAL';
-        }
-        return this.prisma.evidencias_fotograficas
+      const dbBatchPromises = dbBatch.map(({ ev, buffer, url, hash, index, tipoFinal }) =>
+        tx.evidencias_fotograficas
           .create({
             data: {
               id_orden_servicio: idOrden,
               id_orden_equipo: ev.idOrdenEquipo || null,
-              tipo_evidencia: tipoFinal,
+              tipo_evidencia: tipoFinal as any,
               descripcion: ev.descripcion || `Evidencia ${ev.tipo} del servicio`,
               nombre_archivo: `${ev.tipo.toLowerCase()}_${ahora.getTime()}_${index}.${ev.formato || 'png'}`,
               ruta_archivo: url,
@@ -1316,8 +1234,8 @@ export class FinalizacionOrdenService {
             id: evidenciaDB.id_evidencia,
             tipo: ev.tipo,
             url,
-          }));
-      });
+          })),
+      );
 
       const batchResults = await Promise.all(dbBatchPromises);
       for (const r of batchResults) {
@@ -1326,132 +1244,101 @@ export class FinalizacionOrdenService {
       dbIdx += DB_CONCURRENCY;
     }
 
-    this.logger.log(`   ✅ ${resultados.length} evidencias procesadas`);
+    this.logger.log(`   ✅ ${resultados.length} evidencias persistidas en BD`);
     return resultados;
   }
 
   /**
-   * Procesa y registra firmas digitales
-   * ✅ OPTIMIZACIÓN 06-ENE-2026: Procesamiento PARALELO con Promise.all()
+   * Resuelve el id_persona válido para una firma sin escribir BD (pre-commit).
    */
-  private async procesarFirmas(
-    firmas: { tecnico: FirmaInput; cliente?: FirmaInput },
+  private async resolverIdPersonaFirma(
+    firma: FirmaInput,
     usuarioId: number,
     orden: any,
-  ): Promise<Array<{ id: number; tipo: string }>> {
-    const startTime = Date.now();
-    this.logger.log(`⚡ [PERF] Procesando firmas EN PARALELO...`);
-
-    // Construir array de promesas para procesamiento paralelo
-    const firmaPromises: Promise<{ id: number; tipo: string }>[] = [
-      // Firma del técnico (siempre requerida)
-      this.registrarFirma(firmas.tecnico, usuarioId, orden).then((f) => ({
-        id: f.id_firma_digital,
-        tipo: 'TECNICO',
-      })),
-    ];
-
-    // Agregar firma del cliente si existe
-    if (firmas.cliente?.base64) {
-      firmaPromises.push(
-        this.registrarFirma(firmas.cliente, usuarioId, orden).then((f) => ({
-          id: f.id_firma_digital,
-          tipo: 'CLIENTE',
-        })),
-      );
-    }
-
-    // Ejecutar TODAS las firmas en paralelo
-    const resultados = await Promise.all(firmaPromises);
-
-    const elapsed = Date.now() - startTime;
-    this.logger.log(`⚡ [PERF] ${resultados.length} firmas procesadas en ${elapsed}ms`);
-
-    return resultados;
-  }
-
-  /**
-   * Registra una firma digital en BD
-   * Busca primero para manejar el constraint único (id_persona, tipo_firma)
-   * ✅ FIX 28-DIC-2025: Mapeo robusto de id_usuario -> id_persona para evitar FK error
-   */
-  private async registrarFirma(firma: FirmaInput, usuarioId: number, orden: any) {
-    const hash = createHash('sha256').update(firma.base64).digest('hex');
-
-    this.logger.log(
-      `🔍 Registrando firma [${firma.tipo}]: idPersona recibida=${firma.idPersona}, usuarioId=${usuarioId}`,
-    );
-
+  ): Promise<number> {
     let idPersonaReal: number | null = null;
 
     if (firma.tipo === 'TECNICO') {
-      // 1. Intentar obtener desde el técnico asignado a la orden (vía empleados)
       idPersonaReal = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_persona;
 
-      // 2. Si no, intentar resolver el idPersona que mandó el móvil (que suele ser el id_usuario)
       if (!idPersonaReal && firma.idPersona > 0) {
         const u = await this.prisma.usuarios.findUnique({
           where: { id_usuario: firma.idPersona },
           select: { id_persona: true },
         });
-        if (u?.id_persona) {
-          idPersonaReal = u.id_persona;
-          this.logger.log(
-            `   💡 id_persona resuelto desde idPersona del móvil (id_usuario=${firma.idPersona}) -> ${idPersonaReal}`,
-          );
-        }
+        if (u?.id_persona) idPersonaReal = u.id_persona;
       }
 
-      // 3. Fallback: usar el usuarioId del contexto de finalización (quien registra)
       if (!idPersonaReal) {
         const u = await this.prisma.usuarios.findUnique({
           where: { id_usuario: usuarioId },
           select: { id_persona: true },
         });
-        if (u?.id_persona) {
-          idPersonaReal = u.id_persona;
-          this.logger.log(
-            `   💡 id_persona resuelto desde usuarioId del contexto (${usuarioId}) -> ${idPersonaReal}`,
-          );
-        }
+        if (u?.id_persona) idPersonaReal = u.id_persona;
       }
     } else {
-      // Para CLIENTE
-      // 1. Usar ID que viene del móvil si es > 0
       if (firma.idPersona && firma.idPersona > 0) {
         idPersonaReal = firma.idPersona;
       }
-
-      // 2. Fallback: usar la persona del cliente vinculado a la orden
       if (!idPersonaReal) {
         idPersonaReal = orden.clientes?.id_persona;
-        if (idPersonaReal) {
-          this.logger.log(
-            `   💡 id_persona resuelto desde cliente de la orden -> ${idPersonaReal}`,
-          );
-        }
       }
     }
 
-    // Si después de todo no hay id_persona, no podemos continuar con esta firma
     if (!idPersonaReal) {
-      this.logger.error(
-        `❌ ERROR: No se pudo determinar un id_persona válido para la firma ${firma.tipo}`,
-      );
       throw new BadRequestException(
-        `No se pudo determinar la identidad de la persona para la firma del ${firma.tipo.toLowerCase()}. ` +
-          `Asegúrese de que el ${firma.tipo === 'TECNICO' ? 'técnico' : 'cliente'} tenga un registro de persona asociado.`,
+        `No se pudo determinar la identidad de la persona para la firma del ${firma.tipo.toLowerCase()}.`,
+      );
+    }
+    return idPersonaReal;
+  }
+
+  /**
+   * Procesa y registra firmas digitales dentro de la transacción atómica.
+   */
+  private async procesarFirmas(
+    firmas: { tecnico: FirmaInput; cliente?: FirmaInput },
+    usuarioId: number,
+    orden: any,
+    personasResueltas: { tecnico: number; cliente?: number },
+    tx: Prisma.TransactionClient = this.prisma,
+  ): Promise<Array<{ id: number; tipo: string }>> {
+    const startTime = Date.now();
+    const firmaPromises: Promise<{ id: number; tipo: string }>[] = [
+      this.registrarFirma(firmas.tecnico, usuarioId, orden, personasResueltas.tecnico, tx).then(
+        (f) => ({
+          id: f.id_firma_digital,
+          tipo: 'TECNICO',
+        }),
+      ),
+    ];
+
+    if (firmas.cliente?.base64 && personasResueltas.cliente) {
+      firmaPromises.push(
+        this.registrarFirma(firmas.cliente, usuarioId, orden, personasResueltas.cliente, tx).then(
+          (f) => ({
+            id: f.id_firma_digital,
+            tipo: 'CLIENTE',
+          }),
+        ),
       );
     }
 
-    // ✅ FIX 05-ENE-2026: SIEMPRE crear nueva firma para cada orden
-    // Antes: Hacía upsert por (id_persona, tipo_firma) causando que todas las
-    // órdenes del mismo técnico compartieran la misma firma (sobrescribiéndose)
-    // Ahora: Cada finalización crea una firma nueva y única para esa orden
+    const resultados = await Promise.all(firmaPromises);
+    const elapsed = Date.now() - startTime;
+    this.logger.log(`⚡ [PERF] ${resultados.length} firmas procesadas en ${elapsed}ms`);
+    return resultados;
+  }
 
-    this.logger.log(`   🆕 Creando nueva firma para persona ${idPersonaReal} (orden específica)`);
-
-    return this.prisma.firmas_digitales.create({
+  private async registrarFirma(
+    firma: FirmaInput,
+    usuarioId: number,
+    orden: any,
+    idPersonaReal: number,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const hash = createHash('sha256').update(firma.base64).digest('hex');
+    return tx.firmas_digitales.create({
       data: {
         id_persona: idPersonaReal,
         tipo_firma: firma.tipo,
@@ -1459,7 +1346,7 @@ export class FinalizacionOrdenService {
         formato_firma: (firma.formato || 'PNG').toUpperCase(),
         hash_firma: hash,
         fecha_captura: new Date(),
-        es_firma_principal: false, // Solo la primera firma del técnico es principal
+        es_firma_principal: false,
         activa: true,
         observaciones: `Firma de ${firma.tipo} - Orden ${orden.numero_orden}`,
         registrada_por: usuarioId,
@@ -1526,12 +1413,13 @@ export class FinalizacionOrdenService {
    * y dispatch basado en tipos_servicio.categoria (enum canónico)
    */
   private determinarTipoInforme(orden: any): TipoInforme {
-    // Extraer relaciones con nombres correctos de Prisma
+    if (this.pdfAssembler) {
+      return this.pdfAssembler.determinarTipoInformeDesdeOrden(orden).tipoInforme;
+    }
+
     const equipo = orden.equipos;
     const tipoServicio = orden.tipos_servicio;
-
-    // Determinar por tipo de equipo (usar tipos_equipo?.nombre_tipo)
-    const tipoEquipoNombre = (equipo?.tipos_equipo?.nombre_tipo || '').toLowerCase();
+    const tipoEquipoNombre = (equipo?.tipos_equipo?.nombre_tipo || '').toUpperCase();
     const tipoServicioCodigo = (
       tipoServicio?.codigo_tipo ||
       tipoServicio?.codigo ||
@@ -1540,12 +1428,6 @@ export class FinalizacionOrdenService {
     const tipoServicioNombre = (tipoServicio?.nombre_tipo || '').toUpperCase();
     const categoriaServicio = (tipoServicio?.categoria || '').toUpperCase();
 
-    this.logger.log(
-      `🔍 Determinando tipo informe: tipoEquipo="${tipoEquipoNombre}", categoria="${categoriaServicio}", servicioCodigo="${tipoServicioCodigo}", servicioNombre="${tipoServicioNombre}"`,
-    );
-
-    // Si es CORRECTIVO / EMERGENCIA / DIAGNOSTICO → CORRECTIVO (independiente del equipo)
-    // Fuente de verdad: tipos_servicio.categoria (enum canónico)
     if (
       categoriaServicio === 'CORRECTIVO' ||
       categoriaServicio === 'EMERGENCIA' ||
@@ -1553,41 +1435,40 @@ export class FinalizacionOrdenService {
       tipoServicioCodigo.includes('CORR') ||
       tipoServicioNombre.includes('CORRECTIVO')
     ) {
-      this.logger.log(
-        `📋 Tipo informe seleccionado: CORRECTIVO (por categoria: ${categoriaServicio || 'heurística'})`,
-      );
       return 'CORRECTIVO';
     }
 
-    // Si es bomba → BOMBA_A (legacy)
-    const codigoTipoEquipo = (equipo?.tipos_equipo?.codigo_tipo || '').toUpperCase();
-    if (tipoEquipoNombre.includes('bomba') || codigoTipoEquipo === 'BOM') {
-      this.logger.log(`📋 Tipo informe seleccionado: BOMBA_A`);
-      return 'BOMBA_A';
-    }
-
-    // Si es generador o planta eléctrica (legacy)
-    if (
-      tipoEquipoNombre.includes('generador') ||
-      tipoEquipoNombre.includes('electrogeno') ||
-      tipoEquipoNombre.includes('planta') ||
-      codigoTipoEquipo === 'GEN'
-    ) {
-      if (
+    if (typeof (this.pdfService as any)?.determinarTipoInforme === 'function') {
+      const esB =
         tipoServicioCodigo.includes('TIPO_B') ||
         tipoServicioCodigo.includes('_B') ||
-        tipoServicioNombre.includes('TIPO B')
-      ) {
-        this.logger.log(`📋 Tipo informe seleccionado: GENERADOR_B`);
-        return 'GENERADOR_B';
-      }
-      this.logger.log(`📋 Tipo informe seleccionado: GENERADOR_A`);
-      return 'GENERADOR_A';
+        tipoServicioNombre.includes('TIPO B');
+      return this.pdfService.determinarTipoInforme(
+        tipoEquipoNombre || 'EQUIPO',
+        esB ? 'PREVENTIVO_B' : 'PREVENTIVO_A',
+        {
+          usaPlantillaUniversal: equipo?.tipos_equipo?.usa_plantilla_universal ?? true,
+          formatoDocumento: tipoServicio?.formato_documento ?? null,
+          categoriaServicio: tipoServicio?.categoria ?? null,
+        },
+      );
     }
 
-    // ✅ EAM FASE 5: Compresores, Motores, Chiller o cualquier arquetipo del Hub EAM
-    this.logger.log(`📋 Tipo informe seleccionado: UNIVERSAL_EAM`);
     return 'UNIVERSAL_EAM';
+  }
+
+  private async resolveOrgBrandingSafe(): Promise<OrgBrandingContext> {
+    if (this.pdfAssembler) {
+      return this.pdfAssembler.resolveBranding();
+    }
+    if (typeof (this.pdfService as any)?.resolveBranding === 'function') {
+      return (this.pdfService as any).resolveBranding();
+    }
+    if (typeof (this.configOrgService as any)?.getContext === 'function') {
+      const ctx = await this.configOrgService!.getContext().catch(() => null);
+      if (ctx) return buildOrgBranding(ctx);
+    }
+    return DEFAULT_ORG_BRANDING;
   }
 
   /**
@@ -2116,13 +1997,21 @@ export class FinalizacionOrdenService {
       contadorDesdeActividad ??
       orden.horometro_inicial;
 
+    const brand = await this.resolveOrgBrandingSafe();
+    const contadorNum = contadorIntervencion != null ? Number(contadorIntervencion) : undefined;
+
     const datosPDF = {
+      branding: brand,
       cliente:
         cliente?.persona?.nombre_comercial ||
         cliente?.persona?.nombre_completo ||
         cliente?.persona?.razon_social ||
         'N/A',
-      direccion: cliente?.persona?.direccion_principal || cliente?.persona?.ciudad || 'N/A',
+      direccion:
+        orden.sedes_cliente?.direccion_sede ||
+        cliente?.persona?.direccion_principal ||
+        cliente?.persona?.ciudad ||
+        'N/A',
       marcaEquipo: orden.equipos
         ? EquipoSpecsReader.getMarca(orden.equipos)
         : equipo?.nombre_equipo || 'N/A',
@@ -2133,113 +2022,129 @@ export class FinalizacionOrdenService {
         (equipo as any)?.tipos_equipo?.nombre_tipo ||
         orden.equipos?.tipos_equipo?.nombre_tipo ||
         'EQUIPO',
-      fecha: new Date().toLocaleDateString('es-CO'),
+      fecha: this.pdfAssembler
+        ? this.pdfAssembler.formatearFechaConBrand(orden.fecha_inicio_real || new Date(), brand)
+        : formatDateOrg(orden.fecha_inicio_real || new Date(), brand),
       tecnico: nombreTecnico,
       horaEntrada: dto.horaEntrada,
       horaSalida: dto.horaSalida,
       tipoServicio: tipoServicio?.nombre_tipo || tipoServicio?.nombre || 'PREVENTIVO',
       numeroOrden: orden.numero_orden,
       datosModulo: { ...datosModuloMapeado, ...(dto.datosModulo || {}) },
-      repuestosDetallados: (orden.componentes_usados || []).map((cu: any) => ({
-        sku: cu.catalogo_componentes?.codigo_interno || cu.referencia_manual || '',
-        descripcion:
-          cu.descripcion ||
-          cu.catalogo_componentes?.descripcion_corta ||
-          cu.catalogo_componentes?.nombre ||
-          'Repuesto',
-        marca: cu.catalogo_componentes?.marca || cu.marca_manual || '',
-        modelo: cu.catalogo_componentes?.modelo || '',
-        cantidad: Number(cu.cantidad ?? 1),
-        unidad: cu.unidad || cu.catalogo_componentes?.unidad_medida || 'UND',
-        origen: (cu.origen_componente as any) || 'BODEGA',
-        lote: cu.lotes_componentes?.codigo_lote || undefined,
-        ubicacionBodega: cu.ubicaciones_bodega?.codigo_ubicacion || undefined,
-        estadoRetirado: cu.estado_componente_retirado || undefined,
-        observaciones: cu.observaciones || undefined,
-      })),
-      equipoDetalle: orden.equipos
-        ? {
-            codigoEquipo: orden.equipos.codigo_equipo || 'S/C',
-            nombreEquipo: orden.equipos.nombre_equipo || undefined,
-            tipoEquipo: orden.equipos.tipos_equipo?.nombre_tipo || 'EQUIPO',
-            tipoEquipoNombre: orden.equipos.tipos_equipo?.nombre_tipo || 'EQUIPO',
-            marca: EquipoSpecsReader.getMarca(orden.equipos),
-            modelo: EquipoSpecsReader.getModelo(orden.equipos),
-            serie: EquipoSpecsReader.getSerie(orden.equipos),
-            ubicacion: orden.equipos.ubicacion_texto || undefined,
-            sede: orden.sedes_cliente?.nombre_sede || undefined,
-            cliente:
-              cliente?.persona?.razon_social ||
-              cliente?.persona?.nombre_comercial ||
-              cliente?.persona?.nombre_completo ||
-              'N/A',
-            clienteNit: cliente?.persona?.numero_documento
-              ? `${cliente.persona.tipo_documento || 'NIT'}: ${cliente.persona.numero_documento}`
-              : undefined,
-            direccion:
-              orden.sedes_cliente?.direccion_sede || cliente?.persona?.direccion_principal || 'N/A',
-            ciudad: orden.sedes_cliente?.ciudad || cliente?.persona?.ciudad || undefined,
-            potenciaKva: orden.equipos.equipos_generador?.potencia_kva
-              ? Number(orden.equipos.equipos_generador.potencia_kva)
-              : undefined,
-            potenciaKw: orden.equipos.equipos_generador?.potencia_kw
-              ? Number(orden.equipos.equipos_generador.potencia_kw)
-              : orden.equipos.equipos_motor?.potencia_kw
-                ? Number(orden.equipos.equipos_motor.potencia_kw)
+      repuestosDetallados: this.pdfAssembler
+        ? this.pdfAssembler.extraerRepuestosDetallados(orden)
+        : (orden.componentes_usados || []).map((cu: any) => ({
+            sku: cu.catalogo_componentes?.codigo_interno || cu.referencia_manual || '',
+            descripcion:
+              cu.descripcion ||
+              cu.catalogo_componentes?.descripcion_corta ||
+              cu.catalogo_componentes?.nombre ||
+              'Repuesto',
+            marca: cu.catalogo_componentes?.marca || cu.marca_manual || '',
+            modelo: cu.catalogo_componentes?.modelo || '',
+            cantidad: Number(cu.cantidad ?? 1),
+            unidad: cu.unidad || cu.catalogo_componentes?.unidad_medida || 'UND',
+            origen: (cu.origen_componente as any) || 'BODEGA',
+            lote: cu.lotes_componentes?.codigo_lote || undefined,
+            ubicacionBodega: cu.ubicaciones_bodega?.codigo_ubicacion || undefined,
+            estadoRetirado: cu.estado_componente_retirado || undefined,
+            observaciones: cu.observaciones || undefined,
+          })),
+      equipoDetalle: this.pdfAssembler
+        ? this.pdfAssembler.extraerEquipoDetallado(
+            orden,
+            { ...datosModuloMapeado, ...(dto.datosModulo || {}) },
+            undefined,
+            brand,
+            contadorNum,
+          )
+        : orden.equipos
+          ? {
+              codigoEquipo: orden.equipos.codigo_equipo || 'S/C',
+              nombreEquipo: orden.equipos.nombre_equipo || undefined,
+              tipoEquipo: orden.equipos.tipos_equipo?.nombre_tipo || 'EQUIPO',
+              tipoEquipoNombre: orden.equipos.tipos_equipo?.nombre_tipo || 'EQUIPO',
+              marca: EquipoSpecsReader.getMarca(orden.equipos),
+              modelo: EquipoSpecsReader.getModelo(orden.equipos),
+              serie: EquipoSpecsReader.getSerie(orden.equipos),
+              ubicacion: orden.equipos.ubicacion_texto || undefined,
+              sede: orden.sedes_cliente?.nombre_sede || undefined,
+              cliente:
+                cliente?.persona?.razon_social ||
+                cliente?.persona?.nombre_comercial ||
+                cliente?.persona?.nombre_completo ||
+                'N/A',
+              clienteNit: cliente?.persona?.numero_identificacion
+                ? `${cliente.persona.tipo_identificacion || brand.tipoIdFiscal}: ${cliente.persona.numero_identificacion}`
                 : undefined,
-            potenciaHp: orden.equipos.equipos_motor?.potencia_hp
-              ? Number(orden.equipos.equipos_motor.potencia_hp)
-              : orden.equipos.equipos_bomba?.potencia_hidraulica_kw
-                ? Number(orden.equipos.equipos_bomba.potencia_hidraulica_kw)
+              direccion:
+                orden.sedes_cliente?.direccion_sede ||
+                cliente?.persona?.direccion_principal ||
+                'N/A',
+              ciudad:
+                orden.sedes_cliente?.ciudad_sede ||
+                cliente?.persona?.ciudad ||
+                brand.ciudadDefecto ||
+                undefined,
+              potenciaKva: orden.equipos.equipos_generador?.potencia_kva
+                ? Number(orden.equipos.equipos_generador.potencia_kva)
                 : undefined,
-            voltaje: orden.equipos.equipos_generador?.voltaje_salida || undefined,
-            frecuencia: orden.equipos.equipos_generador?.frecuencia_hz
-              ? `${orden.equipos.equipos_generador.frecuencia_hz} Hz`
-              : undefined,
-            fases: orden.equipos.equipos_generador?.numero_fases
-              ? `${orden.equipos.equipos_generador.numero_fases}F`
-              : undefined,
-            rpm: orden.equipos.equipos_motor?.velocidad_nominal_rpm
-              ? `${orden.equipos.equipos_motor.velocidad_nominal_rpm} RPM`
-              : undefined,
-            tipoBomba: orden.equipos.equipos_bomba?.tipo_bomba || undefined,
-            caudalGpm: orden.equipos.equipos_bomba?.caudal_maximo_m3h
-              ? `${orden.equipos.equipos_bomba.caudal_maximo_m3h} m³/h`
-              : undefined,
-            presionPsi: orden.equipos.equipos_bomba?.altura_presion_trabajo_m
-              ? `${orden.equipos.equipos_bomba.altura_presion_trabajo_m} m`
-              : undefined,
-            horometroIntervencion:
-              contadorIntervencion != null ? Number(contadorIntervencion) : undefined,
-            horometroAcumulado:
-              Math.max(
-                orden.equipos.horas_actuales ? Number(orden.equipos.horas_actuales) : 0,
-                contadorIntervencion != null ? Number(contadorIntervencion) : 0,
-              ) || undefined,
-            unidadUso: orden.equipos.tipos_equipo?.unidad_uso || undefined,
-            etiquetaContador: orden.equipos.tipos_equipo?.etiqueta_contador || undefined,
-            requiereHorometro: orden.equipos.tipos_equipo?.requiere_horometro ?? undefined,
-          }
-        : undefined,
+              potenciaKw: orden.equipos.equipos_generador?.potencia_kw
+                ? Number(orden.equipos.equipos_generador.potencia_kw)
+                : orden.equipos.equipos_motor?.potencia_kw
+                  ? Number(orden.equipos.equipos_motor.potencia_kw)
+                  : undefined,
+              potenciaHp: orden.equipos.equipos_motor?.potencia_hp
+                ? Number(orden.equipos.equipos_motor.potencia_hp)
+                : orden.equipos.equipos_bomba?.potencia_hidraulica_kw
+                  ? Number(orden.equipos.equipos_bomba.potencia_hidraulica_kw)
+                  : undefined,
+              voltaje: orden.equipos.equipos_generador?.voltaje_salida || undefined,
+              frecuencia: orden.equipos.equipos_generador?.frecuencia_hz
+                ? `${orden.equipos.equipos_generador.frecuencia_hz} Hz`
+                : undefined,
+              fases: orden.equipos.equipos_generador?.numero_fases
+                ? `${orden.equipos.equipos_generador.numero_fases}F`
+                : undefined,
+              rpm: orden.equipos.equipos_motor?.velocidad_nominal_rpm
+                ? `${orden.equipos.equipos_motor.velocidad_nominal_rpm} RPM`
+                : undefined,
+              tipoBomba: orden.equipos.equipos_bomba?.tipo_bomba || undefined,
+              caudalGpm: orden.equipos.equipos_bomba?.caudal_maximo_m3h
+                ? `${orden.equipos.equipos_bomba.caudal_maximo_m3h} m³/h`
+                : undefined,
+              presionPsi: orden.equipos.equipos_bomba?.altura_presion_trabajo_m
+                ? `${orden.equipos.equipos_bomba.altura_presion_trabajo_m} m`
+                : undefined,
+              horometroIntervencion: contadorNum,
+              horometroAcumulado:
+                Math.max(
+                  Number(orden.equipos.lectura_uso_actual ?? orden.equipos.horas_actuales ?? 0),
+                  contadorNum ?? 0,
+                ) || undefined,
+              unidadUso: orden.equipos.tipos_equipo?.unidad_uso || undefined,
+              etiquetaContador: orden.equipos.tipos_equipo?.etiqueta_contador || undefined,
+              requiereHorometro: orden.equipos.tipos_equipo?.requiere_horometro ?? undefined,
+            }
+          : undefined,
       placaUniversal: orden.equipos
         ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
         : undefined,
-      pendientes:
-        (orden as any).ordenes_pendientes && (orden as any).ordenes_pendientes.length > 0
+      pendientes: Array.isArray(dto.pendientes)
+        ? dto.pendientes.map((p: any) => ({
+            descripcion: p.descripcion,
+            prioridad: p.prioridad,
+            estado: 'PENDIENTE',
+            observaciones: p.observaciones || undefined,
+          }))
+        : (orden as any).ordenes_pendientes?.length > 0
           ? (orden as any).ordenes_pendientes.map((p: any) => ({
               descripcion: p.descripcion,
               prioridad: p.prioridad,
               estado: p.estado,
               observaciones: p.observaciones || p.notas_resolucion || undefined,
             }))
-          : Array.isArray(dto.pendientes)
-            ? dto.pendientes.map((p: any) => ({
-                descripcion: p.descripcion,
-                prioridad: p.prioridad,
-                estado: 'PENDIENTE',
-                observaciones: p.observaciones || undefined,
-              }))
-            : undefined,
+          : undefined,
       // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades personalizadas para PDF
       configUnidades,
       // Actividades flat (para backward compatibility)
@@ -2379,10 +2284,16 @@ export class FinalizacionOrdenService {
     url: string,
     pdfResult: any,
     usuarioId: number,
+    nombreEmpresa?: string,
+    tx: Prisma.TransactionClient = this.prisma,
   ): Promise<{ id: number }> {
     const hash = createHash('sha256').update(pdfResult.buffer).digest('hex');
+    const orgTag = (nombreEmpresa || 'EAM')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .slice(0, 20);
 
-    const documento = await this.prisma.documentos_generados.create({
+    const documento = await tx.documentos_generados.create({
       data: {
         tipo_documento: 'INFORME_SERVICIO',
         id_referencia: idOrden,
@@ -2393,77 +2304,60 @@ export class FinalizacionOrdenService {
         mime_type: 'application/pdf',
         fecha_generacion: new Date(),
         generado_por: usuarioId,
-        herramienta_generacion: 'MEKANOS-FINALIZACION-SERVICE',
+        herramienta_generacion: `${orgTag}-FINALIZACION-SERVICE`,
       },
     });
 
     return { id: documento.id_documento };
   }
 
-  /**
-   * Envía email con el informe adjunto al cliente
-   *
-   * Usa el email_principal del cliente registrado en la BD.
-   * Para pruebas, actualizar el email de los clientes a lorddeep3@gmail.com
-   * ✅ FIX 15-DIC-2025: Corregidos nombres de propiedades según schema Prisma
-   */
   private async enviarEmailInforme(
     orden: any,
     pdfResult: any,
     emailAdicional?: string,
     downloadFilename?: string,
   ): Promise<{ enviado: boolean; destinatario: string; messageId?: string }> {
-    const EMAIL_FALLBACK = 'notificaciones@mekanos.com';
-
-    // Extraer relaciones con nombres correctos de Prisma
     const cliente = orden.clientes;
     const equipo = orden.equipos;
     const tipoServicio = orden.tipos_servicio;
     const tecnicoEmpleado = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
 
-    // Usar email real del cliente
-    const emailCliente = cliente?.persona?.email_principal || EMAIL_FALLBACK;
+    const destinatarios: string[] = [];
+    const emailCliente = cliente?.persona?.email_principal?.trim();
+    if (emailCliente && emailCliente.includes('@')) {
+      destinatarios.push(emailCliente);
+    }
 
-    // ✅ 24-FEB-2026: MULTI-EMAIL - Recopilar TODOS los correos del cliente
-    const destinatarios: string[] = [emailCliente];
-
-    // Agregar emails_notificacion del cliente (separados por ';;')
     if (cliente?.emails_notificacion) {
       const emailsExtra = cliente.emails_notificacion
         .split(';;')
         .map((e: string) => e.trim())
         .filter((e: string) => e.length > 0 && e.includes('@'));
       for (const extra of emailsExtra) {
-        if (!destinatarios.includes(extra)) {
-          destinatarios.push(extra);
-        }
+        if (!destinatarios.includes(extra)) destinatarios.push(extra);
       }
     }
 
-    // ✅ FIX 28-FEB-2026: Para sedes, también incluir emails_notificacion del cliente principal
     if (cliente?.cliente_principal?.emails_notificacion) {
       const emailsPrincipal = cliente.cliente_principal.emails_notificacion
         .split(';;')
         .map((e: string) => e.trim())
         .filter((e: string) => e.length > 0 && e.includes('@'));
       for (const extra of emailsPrincipal) {
-        if (!destinatarios.includes(extra)) {
-          destinatarios.push(extra);
-        }
+        if (!destinatarios.includes(extra)) destinatarios.push(extra);
       }
     }
 
-    // Incluir email adicional si se proporciona
-    if (emailAdicional && !destinatarios.includes(emailAdicional)) {
+    if (emailAdicional && emailAdicional.includes('@') && !destinatarios.includes(emailAdicional)) {
       destinatarios.push(emailAdicional);
     }
 
     this.logger.log(
-      `📧 Email destino (${destinatarios.length} destinatarios): ${destinatarios.join(', ')}`,
+      `📧 Email destino (${destinatarios.length} destinatarios): ${destinatarios.join(', ') || 'ninguno'}`,
     );
 
     if (destinatarios.length === 0) {
-      this.logger.warn('⚠️ No hay destinatarios de email configurados');
+      this.logger.warn('⚠️ No hay destinatarios de email configurados para este cliente');
       return { enviado: false, destinatario: 'ninguno' };
     }
 
@@ -2473,7 +2367,9 @@ export class FinalizacionOrdenService {
       const equipoNombre = equipo?.nombre_equipo || '';
       const equipoDesc = equipoNombre || tipoEquipoNombre || 'Equipo';
 
+      const brand = await this.resolveOrgBrandingSafe();
       const emailData: OrdenEmailData = {
+        branding: brand,
         ordenNumero: orden.numero_orden,
         clienteNombre:
           cliente?.persona?.nombre_comercial ||
@@ -2482,7 +2378,7 @@ export class FinalizacionOrdenService {
           'Cliente',
         equipoDescripcion: equipoDesc,
         tipoMantenimiento: tipoServicio?.nombre_tipo || tipoServicio?.codigo_tipo || 'PREVENTIVO',
-        fechaServicio: new Date().toLocaleDateString('es-CO'),
+        fechaServicio: formatDateOrg(orden.fecha_inicio_real || new Date(), brand),
         tecnicoNombre:
           `${tecnicoEmpleado?.persona?.primer_nombre || ''} ${tecnicoEmpleado?.persona?.primer_apellido || ''}`.trim() ||
           'Técnico',
@@ -2523,17 +2419,16 @@ export class FinalizacionOrdenService {
    */
   private async actualizarEstadoOrden(
     idOrden: number,
-    idEstadoCompletada: number, // ✅ Ahora recibe el ID precargado
+    idEstadoCompletada: number,
     observaciones: string,
     usuarioId: number,
     horaEntrada?: string,
     horaSalida?: string,
     esResubida: boolean = false,
+    reasignacionTecnico?: { tecnicoOriginalId: number; tecnicoEjecutorId: number },
+    tx: Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
-    // 🔧 FIX 20-DIC-2025: Obtener la orden para usar fecha_inicio_real existente
-    // Esto evita violar el constraint chk_os_fecha_fin_posterior cuando la orden
-    // fue iniciada en un día diferente al que se finaliza
-    const ordenExistente = await this.prisma.ordenes_servicio.findUnique({
+    const ordenExistente = await tx.ordenes_servicio.findUnique({
       where: { id_orden_servicio: idOrden },
       select: {
         id_estado_actual: true,
@@ -2679,114 +2574,63 @@ export class FinalizacionOrdenService {
     // Eliminado query de verificación (diagnóstico) que añadía ~2-3s innecesarios
     const fechaModificacionValue = new Date();
 
-    await this.prisma.$transaction([
-      // 1. Actualizar orden
-      this.prisma.ordenes_servicio.update({
-        where: { id_orden_servicio: idOrden },
-        data: {
-          id_estado_actual: idEstadoCompletada, // ✅ Usar parámetro precargado
-          fecha_inicio_real: fechaInicioReal,
-          fecha_fin_real: fechaFinReal,
-          duracion_minutos: duracionMinutos,
-          observaciones_cierre: observaciones,
-          modificado_por: usuarioId,
-          fecha_modificacion: fechaModificacionValue,
-        },
-      }),
-      // 2. Registrar en historial (en la misma transacción)
-      this.prisma.historial_estados_orden.create({
-        data: {
-          id_orden_servicio: idOrden,
-          // En resubida el estado anterior y el nuevo son COMPLETADA;
-          // en finalización normal, el estado anterior es el que tenía la orden (ej: EN_PROCESO)
-          id_estado_anterior: esResubida
-            ? idEstadoCompletada
-            : (ordenExistente?.id_estado_actual ?? undefined),
-          id_estado_nuevo: idEstadoCompletada, // ✅ Usar parámetro precargado
-          accion: esResubida ? 'RESUBIDA_TECNICO' : 'FINALIZAR',
-          motivo_cambio: esResubida
-            ? 'Corrección autorizada por el administrador'
-            : 'Finalización de orden de servicio',
-          fecha_cambio: fechaModificacionValue,
-          observaciones: esResubida
-            ? `Orden corregida y resubida. ${observaciones}`
-            : `Orden finalizada. ${observaciones}`,
-          realizado_por: usuarioId,
-          // La observación original del técnico queda también en
-          // metadata, sin el prefijo narrativo, para que el Portal
-          // Admin pueda mostrar el "antes / después" sin ambigüedad.
-          metadata: crearMetadataObservacionesCierre({
-            origen: 'FINALIZACION_MOVIL',
-            anterior: ordenExistente?.observaciones_cierre,
-            nueva: observaciones,
-            extra: {
-              evento: esResubida ? 'RESUBIDA_TECNICO' : 'FINALIZACION_TECNICO',
-            },
-          }) as any,
-        },
-      }),
-    ]);
+    await tx.ordenes_servicio.update({
+      where: { id_orden_servicio: idOrden },
+      data: {
+        id_estado_actual: idEstadoCompletada,
+        fecha_inicio_real: fechaInicioReal,
+        fecha_fin_real: fechaFinReal,
+        duracion_minutos: duracionMinutos,
+        observaciones_cierre: observaciones,
+        modificado_por: usuarioId,
+        fecha_modificacion: fechaModificacionValue,
+      },
+    });
+
+    await tx.historial_estados_orden.create({
+      data: {
+        id_orden_servicio: idOrden,
+        id_estado_anterior: esResubida
+          ? idEstadoCompletada
+          : (ordenExistente?.id_estado_actual ?? undefined),
+        id_estado_nuevo: idEstadoCompletada,
+        accion: esResubida ? 'RESUBIDA_TECNICO' : 'FINALIZAR',
+        motivo_cambio: esResubida
+          ? 'Corrección autorizada por el administrador'
+          : 'Finalización de orden de servicio',
+        fecha_cambio: fechaModificacionValue,
+        observaciones: esResubida
+          ? `Orden corregida y resubida. ${observaciones}`
+          : `Orden finalizada. ${observaciones}`,
+        realizado_por: usuarioId,
+        metadata: crearMetadataObservacionesCierre({
+          origen: 'FINALIZACION_MOVIL',
+          anterior: ordenExistente?.observaciones_cierre,
+          nueva: observaciones,
+          extra: {
+            evento: esResubida ? 'RESUBIDA_TECNICO' : 'FINALIZACION_TECNICO',
+            ...(reasignacionTecnico
+              ? {
+                  reasignado_desde_tecnico_id: reasignacionTecnico.tecnicoOriginalId,
+                  ejecutado_por_tecnico_id: reasignacionTecnico.tecnicoEjecutorId,
+                }
+              : {}),
+          },
+        }) as any,
+      },
+    });
   }
 
-  /**
-   * Intenta hacer rollback de recursos creados en caso de error
-   */
-  private async rollback(recursos: {
-    evidencias: number[];
-    firmas: number[];
-    documento: number | null;
-  }): Promise<void> {
-    this.logger.warn('⚠️ Iniciando rollback de recursos creados...');
-
-    try {
-      // Eliminar documento
-      if (recursos.documento) {
-        await this.prisma.documentos_generados
-          .delete({
-            where: { id_documento: recursos.documento },
-          })
-          .catch(() => {});
-      }
-
-      // Eliminar firmas
-      for (const id of recursos.firmas) {
-        await this.prisma.firmas_digitales
-          .delete({
-            where: { id_firma_digital: id },
-          })
-          .catch(() => {});
-      }
-
-      // Eliminar evidencias
-      for (const id of recursos.evidencias) {
-        await this.prisma.evidencias_fotograficas
-          .delete({
-            where: { id_evidencia: id },
-          })
-          .catch(() => {});
-      }
-
-      this.logger.log('✅ Rollback completado');
-    } catch (error: unknown) {
-      const err = error as Error;
-      this.logger.error(`Error en rollback: ${err.message}`);
-    }
-  }
-
-  /**
-   * Persiste las actividades ejecutadas en BD para estadísticas y trazabilidad
-   * ✅ OPTIMIZADO: Precarga catálogo + batch insert con createMany
-   * ✅ FIX 26-ENE-2026: Idempotencia real - verificar si ya existen registros
-   */
   private async persistirActividades(
     idOrden: number,
     actividades: ActividadInput[],
     usuarioId: number,
+    tx: Prisma.TransactionClient = this.prisma,
   ): Promise<number> {
     if (actividades.length === 0) return 0;
 
     // ✅ IDEMPOTENCIA: Verificar si ya hay actividades para esta orden
-    const actividadesExistentes = await this.prisma.actividades_ejecutadas.count({
+    const actividadesExistentes = await tx.actividades_ejecutadas.count({
       where: { id_orden_servicio: idOrden },
     });
 
@@ -2798,7 +2642,7 @@ export class FinalizacionOrdenService {
     }
 
     // PASO 1: Precargar TODO el catálogo en UNA sola query
-    const catalogoCompleto = await this.prisma.catalogo_actividades.findMany({
+    const catalogoCompleto = await tx.catalogo_actividades.findMany({
       select: { id_actividad_catalogo: true, descripcion_actividad: true },
     });
 
@@ -2856,7 +2700,7 @@ export class FinalizacionOrdenService {
     });
 
     // PASO 3: Batch insert con createMany
-    const resultado = await this.prisma.actividades_ejecutadas.createMany({
+    const resultado = await tx.actividades_ejecutadas.createMany({
       data: datosParaInsertar,
       skipDuplicates: true,
     });
@@ -2873,11 +2717,12 @@ export class FinalizacionOrdenService {
     idOrden: number,
     mediciones: MedicionInput[],
     usuarioId: number,
+    tx: Prisma.TransactionClient = this.prisma,
   ): Promise<number> {
     if (mediciones.length === 0) return 0;
 
     // ✅ IDEMPOTENCIA: Verificar si ya hay mediciones para esta orden
-    const medicionesExistentes = await this.prisma.mediciones_servicio.count({
+    const medicionesExistentes = await tx.mediciones_servicio.count({
       where: { id_orden_servicio: idOrden },
     });
 
@@ -2890,8 +2735,8 @@ export class FinalizacionOrdenService {
 
     // PASO 1: Precargar TODOS los parámetros y contexto de equipo de la orden
     const [parametrosCompletos, ordenContext] = await Promise.all([
-      this.prisma.parametros_medicion.findMany(),
-      this.prisma.ordenes_servicio.findUnique({
+      tx.parametros_medicion.findMany(),
+      tx.ordenes_servicio.findUnique({
         where: { id_orden_servicio: idOrden },
         select: {
           equipos: { select: { config_parametros: true, plantillas_parametros: true } },
@@ -2971,7 +2816,7 @@ export class FinalizacionOrdenService {
     if (datosParaInsertar.length === 0) return 0;
 
     // PASO 3: Batch insert con createMany
-    const resultado = await this.prisma.mediciones_servicio.createMany({
+    const resultado = await tx.mediciones_servicio.createMany({
       data: datosParaInsertar,
       skipDuplicates: true,
     });
@@ -3025,14 +2870,22 @@ export class FinalizacionOrdenService {
     minMargen: number;
     sinPrevioMax: number;
   } {
-    const rawUnit = (tipoEquipo?.unidad_uso || 'HORAS').toUpperCase().trim();
+    const rawUnitOriginal = (tipoEquipo?.unidad_uso || 'HORAS').trim();
+    const rawUnit = rawUnitOriginal.toUpperCase();
     const rawEtiqueta = tipoEquipo?.etiqueta_contador?.trim() || '';
     const etiqLower = rawEtiqueta.toLowerCase();
 
-    if (tipoEquipo?.requiere_horometro === false || rawUnit === 'CAL') {
+    if (
+      tipoEquipo?.requiere_horometro === false ||
+      rawUnit === 'CAL' ||
+      rawEtiqueta.toUpperCase() === 'N/A'
+    ) {
       return {
         unidadUso: 'CAL',
-        label: rawEtiqueta || 'Contador de Calendario',
+        label:
+          rawEtiqueta && rawEtiqueta.toUpperCase() !== 'N/A'
+            ? rawEtiqueta
+            : 'Contador de Calendario',
         sufijo: '',
         maxDiario: 100000,
         minMargen: 100000,
@@ -3075,6 +2928,16 @@ export class FinalizacionOrdenService {
         sinPrevioMax: 50000000,
       };
     }
+    if (rawUnit !== '' && rawUnit !== 'HORAS' && rawUnit !== 'HRS' && rawUnit !== 'H') {
+      return {
+        unidadUso: rawUnit,
+        label: rawEtiqueta || rawUnitOriginal || rawUnit,
+        sufijo: rawUnitOriginal.toLowerCase() || rawUnit.toLowerCase(),
+        maxDiario: 100000,
+        minMargen: 250000,
+        sinPrevioMax: 50000000,
+      };
+    }
     return {
       unidadUso: 'HORAS',
       label: rawEtiqueta || 'Horómetro',
@@ -3101,18 +2964,28 @@ export class FinalizacionOrdenService {
       const rawVal =
         typeof parsed === 'object' ? (parsed?.valor ?? parsed?.lectura ?? parsed?.horas) : parsed;
       if (rawVal != null) {
-        const n = parseFloat(String(rawVal).replace(',', '.'));
+        let rawStr = String(rawVal).trim();
+        if (/^\d{1,3}(\.\d{3})+$/.test(rawStr)) {
+          rawStr = rawStr.replace(/\./g, '');
+        } else {
+          rawStr = rawStr.replace(',', '.');
+        }
+        const n = parseFloat(rawStr);
         if (!isNaN(n) && n > 0) return n;
       }
     }
-    return this.extraerHorasDeObservacion(act.observaciones);
+    return this.extraerHorasDeObservacion(act.observaciones, true);
   }
 
-  private extraerHorasDeObservacion(obs?: string): number | null {
+  private extraerHorasDeObservacion(
+    obs?: string,
+    permitirCualquierPrefijo = false,
+  ): number | null {
     if (!obs) return null;
-    const match = obs.match(
-      /(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR|Lectura registrada)\s*:\s*([\d.,]+)/i,
-    );
+    const regex = permitirCualquierPrefijo
+      ? /(?:[A-ZÁÉÍÓÚÑ0-9_]{2,25}|Lectura registrada)\s*:\s*([\d.,]+)/i
+      : /(?:HORAS|HOROMETRO|HORÓMETRO|CICLOS|KM|UPM|CONTADOR|Lectura registrada)\s*:\s*([\d.,]+)/i;
+    const match = obs.match(regex);
     if (match && match[1]) {
       let raw = match[1].trim();
       if (/^\d{1,3}(\.\d{3})+$/.test(raw)) {
@@ -3130,9 +3003,15 @@ export class FinalizacionOrdenService {
     orden: any,
     dto: FinalizarOrdenDto,
     datosModuloMapeado: { horasTrabajo?: number },
+    tx: Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
-    const contadoresCatalogo = await this.prisma.catalogo_actividades.findMany({
-      where: { rol_semantico: 'LECTURA_CONTADOR_ACTIVO' },
+    const contadoresCatalogo = await tx.catalogo_actividades.findMany({
+      where: {
+        OR: [
+          { rol_semantico: 'LECTURA_CONTADOR_ACTIVO' },
+          { tipo_control_input: 'LECTURA_CONTADOR' },
+        ],
+      },
       select: { id_actividad_catalogo: true },
     });
     const idsContadorActivo = new Set(contadoresCatalogo.map((c) => c.id_actividad_catalogo));
@@ -3141,9 +3020,10 @@ export class FinalizacionOrdenService {
 
     const actualizarMemoriaEquipo = (idEq: number, horas: number) => {
       if (orden.equipos && orden.equipos.id_equipo === idEq) {
-        const prev = orden.equipos.horas_actuales ? Number(orden.equipos.horas_actuales) : 0;
+        const prev = Number(orden.equipos.lectura_uso_actual ?? orden.equipos.horas_actuales ?? 0);
         if (horas >= prev) {
           orden.equipos.horas_actuales = horas;
+          orden.equipos.lectura_uso_actual = horas;
         }
       }
     };
@@ -3215,6 +3095,7 @@ export class FinalizacionOrdenService {
             oe.id_equipo,
             horasEquipo,
             dto.usuarioId,
+            tx,
           );
           actualizarMemoriaEquipo(oe.id_equipo, horasEquipo);
           equiposSincronizados.add(oe.id_equipo);
@@ -3241,6 +3122,7 @@ export class FinalizacionOrdenService {
           idEquipoPrincipal,
           horasPrincipal,
           dto.usuarioId,
+          tx,
         );
         actualizarMemoriaEquipo(idEquipoPrincipal, horasPrincipal);
       }
@@ -3252,15 +3134,16 @@ export class FinalizacionOrdenService {
     idEquipo: number,
     horas: number,
     usuarioId: number,
+    tx: Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
     try {
-      // 1. Obtener el equipo (con su arquetipo metrológico) y su última lectura histórica
       const [equipo, ultimaLectura] = await Promise.all([
-        this.prisma.equipos.findUnique({
+        tx.equipos.findUnique({
           where: { id_equipo: idEquipo },
           select: {
             id_equipo: true,
             horas_actuales: true,
+            lectura_uso_actual: true,
             codigo_equipo: true,
             tipos_equipo: {
               select: {
@@ -3271,7 +3154,7 @@ export class FinalizacionOrdenService {
             },
           },
         }),
-        this.prisma.lecturas_horometro.findFirst({
+        tx.lecturas_horometro.findFirst({
           where: { id_equipo: idEquipo },
           orderBy: { fecha_lectura: 'desc' },
         }),
@@ -3280,17 +3163,16 @@ export class FinalizacionOrdenService {
       const metrica = this.resolverMetricaUsoBackend(equipo?.tipos_equipo);
       const sufStr = metrica.sufijo ? ` ${metrica.sufijo}` : '';
 
-      const horasActuales = equipo?.horas_actuales ? Number(equipo.horas_actuales) : 0;
+      const rawEquipoUso = equipo?.lectura_uso_actual ?? equipo?.horas_actuales;
+      const horasActuales = rawEquipoUso ? Number(rawEquipoUso) : 0;
       const ultimaHoras = ultimaLectura ? Number(ultimaLectura.horas_lectura) : 0;
       const referenciaHoras = Math.max(horasActuales, ultimaHoras);
 
-      // 2. Validación Zero Trust: Evitar contador en reversa si ya existía lectura mayor registrada
       if (referenciaHoras > 0 && horas < referenciaHoras) {
         this.logger.warn(
           `⚠️ Intento de registrar lectura de ${metrica.label} menor al actual (${horas}${sufStr} < ${referenciaHoras}${sufStr}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se mantendrá el acumulado mayor en la hoja de vida.`,
         );
-        // Registrar en bitácora para auditoría de campo, pero SIN modificar equipos.horas_actuales
-        await this.prisma.lecturas_horometro.create({
+        await tx.lecturas_horometro.create({
           data: {
             id_equipo: idEquipo,
             id_orden_servicio: idOrden,
@@ -3320,7 +3202,6 @@ export class FinalizacionOrdenService {
           )
         : null;
 
-      // 2.1 Validación de Plausibilidad Física calibrada por unidad_uso (HORAS / CICLOS / KM_ODO / UPM)
       const diasPositivos = Math.max(0, diasTranscurridos ?? 0);
       const limiteFisicoHoras =
         diasTranscurridos != null
@@ -3333,13 +3214,14 @@ export class FinalizacionOrdenService {
           `⚠️ Salto amplio de ${metrica.label} (+${horasTranscurridas}${sufStr} en ${diasTranscurridos} días, límite referencial [${metrica.unidadUso}]: ${limiteFisicoHoras}${sufStr}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se registra con nota de auditoría.`,
         );
       }
-      // 3. Registrar nueva lectura en tabla histórica
-      await this.prisma.lecturas_horometro.create({
+
+      const ahora = new Date();
+      await tx.lecturas_horometro.create({
         data: {
           id_equipo: idEquipo,
           id_orden_servicio: idOrden,
           horas_lectura: horas,
-          fecha_lectura: new Date(),
+          fecha_lectura: ahora,
           tipo_lectura: 'MANTENIMIENTO',
           horas_transcurridas: horasTranscurridas,
           dias_transcurridos: diasTranscurridos,
@@ -3350,12 +3232,13 @@ export class FinalizacionOrdenService {
         },
       });
 
-      // ✅ 4. SINCRONIZACIÓN ATÓMICA DE HOJA DE VIDA: Actualizar equipos.horas_actuales
-      await this.prisma.equipos.update({
+      await tx.equipos.update({
         where: { id_equipo: idEquipo },
         data: {
           horas_actuales: horas,
-          fecha_ultima_lectura_horas: new Date(),
+          lectura_uso_actual: horas,
+          fecha_ultima_lectura_horas: ahora,
+          fecha_ultima_lectura_uso: ahora,
         },
       });
 
@@ -3365,7 +3248,6 @@ export class FinalizacionOrdenService {
     } catch (error: unknown) {
       const err = error as Error;
       this.logger.error(`❌ Error persistiendo lectura de uso: ${err.message}`);
-      // No fallar la finalización si falla la lectura de uso (non-critical path)
     }
   }
 
@@ -3391,11 +3273,12 @@ export class FinalizacionOrdenService {
     orden: any,
     pendientes: PendienteFinalizacionDto[],
     idEmpleadoTecnico: number | null,
+    tx: Prisma.TransactionClient = this.prisma,
   ): Promise<number> {
     if (!pendientes || pendientes.length === 0) return 0;
 
     // Idempotencia: Verificar si ya existen pendientes para esta orden
-    const pendientesExistentes = await this.prisma.ordenes_pendientes.count({
+    const pendientesExistentes = await tx.ordenes_pendientes.count({
       where: { id_orden_servicio: orden.id_orden_servicio },
     });
 
@@ -3460,7 +3343,7 @@ export class FinalizacionOrdenService {
       };
     });
 
-    const resultado = await this.prisma.ordenes_pendientes.createMany({
+    const resultado = await tx.ordenes_pendientes.createMany({
       data: datosParaInsertar,
       skipDuplicates: true,
     });

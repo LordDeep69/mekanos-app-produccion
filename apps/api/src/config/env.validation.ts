@@ -5,7 +5,7 @@ import { z } from 'zod';
  * Todas las variables requeridas deben estar presentes al iniciar la aplicación
  */
 const envSchema = z.object({
-  // Application
+  // Application & White-Label
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
     .default('development'),
@@ -14,23 +14,31 @@ const envSchema = z.object({
     .default('3000')
     .transform((val) => parseInt(val, 10))
     .pipe(z.number().min(1).max(65535)),
+  APP_NAME: z.string().min(1).default('EAM Platform API'),
+  APP_SLUG: z.string().min(1).default('eam-api'),
 
   // Database
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.string().min(1),
+  DIRECT_URL: z.string().optional(),
 
-  // Supabase
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // Supabase (opcional en despliegues PostgreSQL standalone / Docker)
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_ANON_KEY: z.string().min(1).optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
 
-  // JWT
+  // JWT & Secrets Encryption
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRATION: z.string().default('15m'),
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_REFRESH_EXPIRATION: z.string().default('7d'),
+  CONFIG_ENCRYPTION_KEY: z.string().min(16).optional(),
 
-  // CORS
-  CORS_ORIGIN: z.string().url().optional(),
+  // CORS ('*' o lista separada por comas de orígenes HTTP/HTTPS)
+  CORS_ORIGIN: z.string().min(1).optional(),
+
+  // Puppeteer / PDF engine
+  PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
+  PUPPETEER_CACHE_DIR: z.string().optional(),
 
   // Cloudinary - Plantas
   CLOUDINARY_CLOUD_NAME_PLANTAS: z.string().optional(),

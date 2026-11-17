@@ -47,6 +47,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { comprasService } from '@/lib/api/compras.service';
 import { ordenesCompraService } from '@/lib/api/ordenes-compra.service';
 import { getDetalleComponente } from '@/features/inventario/api/inventario-motor.service';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { ArticuloMaestro, ProveedorCompleto } from '@/types/compras.types';
 import { ArticuloSourcing, CrearOrdenCompraPayload } from '@/types/ordenes-compra.types';
 
@@ -71,6 +72,7 @@ interface LineaOrdenCompra {
 function NuevaOrdenCompraContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { formatCurrency, taxLabel } = useOrgFormatters();
 
   // Detección y extracción robusta de proveedor preseleccionado desde URL (?proveedorId=... o ?idProveedor=...)
   const proveedorIdParam = searchParams.get('proveedorId') || searchParams.get('idProveedor');
@@ -127,17 +129,9 @@ function NuevaOrdenCompraContent() {
   // Tabla reactiva de líneas
   const [lineas, setLineas] = useState<LineaOrdenCompra[]>([]);
 
-  // Formateador COP con precisión determinista
-  const formatCOP = (valor: number | null | undefined, forceDecimals = false) => {
-    if (valor === null || valor === undefined) return '$ 0';
-    const num = Number(valor);
-    const hasDecimals = !Number.isInteger(num);
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: forceDecimals || hasDecimals ? 2 : 0,
-      maximumFractionDigits: forceDecimals || hasDecimals ? 2 : 0,
-    }).format(num);
+  const formatCOP = (valor: number | null | undefined) => {
+    if (valor === null || valor === undefined) return formatCurrency(0);
+    return formatCurrency(valor);
   };
 
   // Sincronizar selección de proveedor si el query parameter cambia dinámicamente
@@ -810,7 +804,7 @@ function NuevaOrdenCompraContent() {
               Observaciones / Justificación de Compra
             </Label>
             <Textarea
-              placeholder="Ej: Repuestos críticos para mantenimiento preventivo de generadores diésel Cummins..."
+              placeholder="Ej: Repuestos críticos para mantenimiento preventivo del parque de equipos..."
               value={observacionesGenerales}
               onChange={(e) => setObservacionesGenerales(e.target.value)}
               className="bg-white border-slate-200 text-slate-900 text-xs min-h-[55px] rounded-lg"
@@ -1488,7 +1482,7 @@ function NuevaOrdenCompraContent() {
             </span>
           </div>
           <div className="flex justify-between text-slate-600">
-            <span>IVA ({liquidacion.porcentajeIva}%):</span>
+            <span>{taxLabel} ({liquidacion.porcentajeIva}%):</span>
             <span className="font-semibold text-slate-800">{formatCOP(liquidacion.iva)}</span>
           </div>
           <div className="border-t border-slate-200 pt-2.5 flex justify-between items-center">

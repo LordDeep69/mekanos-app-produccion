@@ -1,32 +1,29 @@
 #!/bin/bash
-# Render.com Build Script - Mekanos API
-# Instala dependencias y construye el proyecto
+# Build Script White-Label para PaaS (Render.com / VM Linux)
+set -euo pipefail
 
-set -e  # Exit on error
+echo "🚀 Starting EAM Platform build process..."
 
-echo "🚀 Starting Render build process..."
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "📦 Installing pnpm@8.11.0..."
+  npm install -g pnpm@8.11.0
+fi
 
-# 1. Instalar pnpm globalmente
-echo "📦 Installing pnpm..."
-npm install -g pnpm
-
-# 2. Instalar dependencias del workspace
 echo "📦 Installing workspace dependencies..."
 NODE_ENV=development pnpm install --no-frozen-lockfile --ignore-scripts
 
-# 3. Generar Prisma Client
-echo "🔧 Generating Prisma Client..."
-cd packages/database
-pnpm prisma generate
-cd ../..
+echo "🔧 Generating Prisma Client & building workspace packages..."
+pnpm --filter @mekanos/database exec prisma generate
+pnpm --filter @mekanos/shared build
+pnpm --filter @mekanos/core build
+pnpm --filter @mekanos/database build
 
-# 4. Instalar Chromium para Puppeteer
-echo "🌐 Installing Chromium for Puppeteer..."
-pnpx puppeteer browsers install chrome
+if [ "${SKIP_CHROMIUM_INSTALL:-false}" != "true" ]; then
+  echo "🌐 Installing Chromium for Puppeteer..."
+  pnpx puppeteer browsers install chrome
+fi
 
-# 5. Build de la aplicación
-echo "🏗️ Building application..."
-cd apps/api
-pnpm run build
+echo "🏗️ Building API application..."
+pnpm --filter @mekanos/api build
 
 echo "✅ Build completed successfully!"

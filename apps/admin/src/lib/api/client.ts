@@ -233,8 +233,32 @@ apiClient.interceptors.response.use(
           logDetail('[API] Detalle del error:', error.response.data);
         }
       }
+    } else if (axios.isCancel(error) || error.code === 'ERR_CANCELED') {
+      const method = error.config?.method?.toUpperCase() || 'REQ';
+      const url = error.config?.url || 'desconocida';
+      if (process.env.NODE_ENV === 'development') {
+        console.debug(`[API] Petición cancelada (${method} ${url})`);
+      }
     } else if (error.request) {
-      console.error('[API] Error de red - Sin respuesta del servidor');
+      const method = error.config?.method?.toUpperCase() || 'REQ';
+      const baseURL = error.config?.baseURL || API_BASE_URL;
+      const endpoint = error.config?.url || 'desconocido';
+      const fullUrl = endpoint.startsWith('http') ? endpoint : `${baseURL}${endpoint}`;
+      const code = error.code || 'SIN_RESPUESTA';
+      const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+      const isTimeout = code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout');
+      const motivo = isTimeout
+        ? `Tiempo de espera agotado (${error.config?.timeout ?? API_TIMEOUT}ms)`
+        : !online
+          ? 'Sin conexión a internet en el navegador'
+          : 'Sin respuesta del servidor (corte transitorio, red dormida o backend apagado)';
+
+      // Usar console.warn para no disparar overlays bloqueantes en Next.js durante reintentos automáticos de React Query
+      console.warn(
+        `[API] Red [${code}] ${method} ${fullUrl} — ${motivo}`,
+        error.message || '',
+      );
+      error.message = `Error de red (${code}) en ${method} ${endpoint}: ${motivo}`;
     }
 
     return Promise.reject(error);

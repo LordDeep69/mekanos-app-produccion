@@ -18,6 +18,8 @@ interface BackendLoginResponse {
     email: string;
     nombre: string;
     rol: string;
+    roles?: string[];
+    permisos?: string[];
     idEmpleado?: number;
   };
 }
@@ -26,6 +28,8 @@ interface AuthTokenPayload extends Record<string, unknown> {
   id?: string;
   nombre?: string;
   rol?: string;
+  roles?: string[];
+  permisos?: string[];
   idEmpleado?: number;
   accessToken?: string;
   refreshToken?: string;
@@ -33,7 +37,23 @@ interface AuthTokenPayload extends Record<string, unknown> {
   error?: string;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const BACKEND_URL =
+  process.env.INTERNAL_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:3000/api';
+
+function resolveAuthSecret(): string {
+  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+  if (secret && secret.trim().length > 0) {
+    return secret.trim();
+  }
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return '';
+  }
+  throw new Error(
+    '[SECURITY FATAL] AUTH_SECRET o NEXTAUTH_SECRET debe estar definido en el entorno.',
+  );
+}
 
 /**
  * Refresca el access token usando el refresh token
@@ -83,10 +103,7 @@ async function refreshAccessToken(token: AuthTokenPayload): Promise<AuthTokenPay
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret:
-    process.env.AUTH_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    'mekanos-jwt-secret-ultra-secure-2025-production-change-this-in-deployment',
+  secret: resolveAuthSecret(),
   providers: [
     Credentials({
       name: 'Credentials',
@@ -129,6 +146,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // Propiedades custom que irán al JWT callback
             nombre: data.user.nombre,
             rol: data.user.rol,
+            roles: data.user.roles,
+            permisos: data.user.permisos,
             idEmpleado: data.user.idEmpleado,
             accessToken: data.access_token,
             refreshToken: data.refresh_token,
@@ -156,6 +175,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: customUser.id,
           nombre: customUser.nombre,
           rol: customUser.rol,
+          roles: customUser.roles,
+          permisos: customUser.permisos,
           idEmpleado: customUser.idEmpleado,
           accessToken: customUser.accessToken,
           refreshToken: customUser.refreshToken,
@@ -191,6 +212,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: token.id as string,
           nombre: token.nombre as string,
           rol: token.rol as string,
+          roles: (token.roles as string[] | undefined) ?? [],
+          permisos: (token.permisos as string[] | undefined) ?? [],
           idEmpleado: token.idEmpleado as number | undefined,
         },
         accessToken: token.accessToken as string,

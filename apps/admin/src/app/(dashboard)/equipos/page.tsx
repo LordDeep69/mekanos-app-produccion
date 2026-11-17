@@ -40,6 +40,8 @@ const EquipoForm = dynamic(
   },
 );
 import { cn } from '@/lib/utils';
+import { resolveEquipoLucideIcon } from '@/lib/equipo-icon';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   AlertCircle,
   AlertTriangle,
@@ -999,7 +1001,7 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
                       <p className="mb-2">Se eliminarán permanentemente:</p>
                       <ul className="list-disc list-inside space-y-1">
                         <li>El equipo principal y su BOM asociado</li>
-                        <li>Especificaciones de motor, generador, bomba o compresor</li>
+                        <li>Especificaciones técnicas y módulos configurados</li>
                         <li>Historial de estados y lecturas de contador / uso</li>
                       </ul>
                     </div>
@@ -1072,40 +1074,24 @@ export default function EquiposPage() {
   const { data: modulosHub } = useModulosEam();
   const { data: magnitudesHub } = useMagnitudesEam();
 
-  // Opciones dinámicas de Tipos de Equipo para el selector superior
+  // Opciones dinámicas de Tipos de Equipo para el selector superior (100% Hub EAM)
   const tiposEquipoOpciones = useMemo(() => {
-    const base = [
-      { value: 'GENERADOR', label: '⚡ Generadores / Plantas Eléctricas' },
-      { value: 'BOMBA', label: '💧 Bombas Hidráulicas / Sistemas de Bombeo' },
-      { value: 'MOTOR', label: '⚙️ Motores Industriales (Combustión / Eléctricos)' },
-      { value: 'COMPRESOR', label: '🌀 Compresores de Aire Industrial' },
-    ];
-    if (!arquetiposHub || arquetiposHub.length === 0) return base;
-
-    const vistos = new Set(base.map((b) => b.value));
-    const extras: Array<{ value: string; label: string }> = [];
+    if (!arquetiposHub || arquetiposHub.length === 0) return [];
+    const vistos = new Set<string>();
+    const opciones: Array<{ value: string; label: string }> = [];
 
     for (const arq of arquetiposHub) {
-      if (!arq.activo) continue;
+      if (arq.activo === false) continue;
       const code = (arq.codigo_tipo || '').toUpperCase().trim();
-      if (
-        !code ||
-        vistos.has(code) ||
-        code === 'GEN' ||
-        code === 'BOM' ||
-        code === 'MOT' ||
-        code === 'COMP'
-      ) {
-        continue;
-      }
+      if (!code || vistos.has(code)) continue;
       vistos.add(code);
-      extras.push({
+      opciones.push({
         value: code,
-        label: `🔧 ${arq.nombre_canonico || arq.nombre_tipo} (${code})`,
+        label: `${arq.nombre_canonico || arq.nombre_tipo} (${code})`,
       });
     }
 
-    return [...base, ...extras];
+    return opciones;
   }, [arquetiposHub]);
 
   // Construir catálogo unificado de Campos Técnicos Filtrables B-Tree (Hub + Canónicos)
@@ -1527,9 +1513,7 @@ export default function EquiposPage() {
   }, [refetch]);
 
   const totalParque = resumen?.total_parque ?? pagination?.total ?? 0;
-  const totalGeneradores = resumen?.generadores ?? 0;
-  const totalBombas = resumen?.bombas ?? 0;
-  const totalOtros = resumen?.otros ?? Math.max(0, totalParque - totalGeneradores - totalBombas);
+  const topTiposResumen = (resumen?.por_tipo || []).slice(0, 2);
   const totalOperativos = resumen?.operativos ?? 0;
   const pctOperativo = totalParque > 0 ? Math.round((totalOperativos / totalParque) * 100) : 100;
 
@@ -1605,82 +1589,131 @@ export default function EquiposPage() {
           </div>
           <p
             className="text-[11px] text-slate-500 mt-1 truncate"
-            title={`${totalGeneradores} Generadores • ${totalBombas} Bombas • ${totalOtros} Otros Activos (Total: ${totalParque})`}
+            title={
+              (resumen?.por_tipo || [])
+                .map((t) => `${t.cantidad} ${t.nombre_tipo}`)
+                .join(' • ') || `Total: ${totalParque}`
+            }
           >
-            <strong>{totalGeneradores}</strong> Gen • <strong>{totalBombas}</strong> Bombas •{' '}
-            <strong>{totalOtros}</strong> Otros
+            {(resumen?.por_tipo || []).length > 0 ? (
+              (resumen?.por_tipo || []).slice(0, 2).map((t, i) => (
+                <span key={t.id_tipo_equipo}>
+                  {i > 0 ? ' • ' : ''}
+                  <strong>{t.cantidad}</strong> {t.nombre_tipo}
+                </span>
+              ))
+            ) : (
+              <span>{totalParque} activos registrados</span>
+            )}
           </p>
         </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setTipoFiltro(tipoFiltro === 'GENERADOR' ? '' : 'GENERADOR');
-            setPage(1);
-          }}
-          className={cn(
-            'text-left bg-white p-4 rounded-xl border transition-all shadow-2xs cursor-pointer',
-            tipoFiltro === 'GENERADOR'
-              ? 'border-amber-400 ring-1 ring-amber-100 bg-amber-50/20'
-              : 'border-slate-200 hover:border-amber-200',
-          )}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Plantas Eléctricas
-            </span>
-            <div className="p-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg">
-              <Zap className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">
-              {totalGeneradores.toLocaleString()}
-            </span>
-            <span className="text-xs font-semibold text-amber-700">Generadores</span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {totalParque > 0
-              ? `${Math.round((totalGeneradores / totalParque) * 100)}% del parque • `
-              : ''}
-            Grupos electrógenos
-          </p>
-        </button>
+        {topTiposResumen.map((tipoStat, idx) => {
+          const isSelected =
+            tipoFiltro.toUpperCase() === tipoStat.codigo_tipo.toUpperCase() ||
+            tipoFiltro === String(tipoStat.id_tipo_equipo);
+          const TipoIcon = resolveEquipoLucideIcon(tipoStat.icono_ui, tipoStat.codigo_tipo);
+          const accent = tipoStat.color_hex || (idx === 0 ? '#D97706' : '#2563EB');
+          const pct =
+            totalParque > 0 ? Math.round((tipoStat.cantidad / totalParque) * 100) : 0;
+          return (
+            <button
+              key={tipoStat.id_tipo_equipo}
+              type="button"
+              onClick={() => {
+                setTipoFiltro(isSelected ? '' : tipoStat.codigo_tipo);
+                setPage(1);
+              }}
+              className={cn(
+                'text-left bg-white p-4 rounded-xl border transition-all shadow-2xs cursor-pointer',
+                isSelected
+                  ? 'border-blue-400 ring-1 ring-blue-100 bg-blue-50/20'
+                  : 'border-slate-200 hover:border-slate-300',
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate">
+                  {tipoStat.nombre_tipo}
+                </span>
+                <div
+                  className="p-1.5 rounded-lg border shrink-0"
+                  style={{
+                    backgroundColor: `${accent}14`,
+                    color: accent,
+                    borderColor: `${accent}33`,
+                  }}
+                >
+                  <TipoIcon className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-slate-900">
+                  {tipoStat.cantidad.toLocaleString()}
+                </span>
+                <span className="text-xs font-semibold truncate" style={{ color: accent }}>
+                  {tipoStat.codigo_tipo}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1 truncate">
+                {totalParque > 0 ? `${pct}% del parque` : 'Sin unidades'}
+              </p>
+            </button>
+          );
+        })}
 
-        <button
-          type="button"
-          onClick={() => {
-            setTipoFiltro(tipoFiltro === 'BOMBA' ? '' : 'BOMBA');
-            setPage(1);
-          }}
-          className={cn(
-            'text-left bg-white p-4 rounded-xl border transition-all shadow-2xs cursor-pointer',
-            tipoFiltro === 'BOMBA'
-              ? 'border-blue-400 ring-1 ring-blue-100 bg-blue-50/20'
-              : 'border-slate-200 hover:border-blue-200',
-          )}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Sistemas de Bombeo
-            </span>
-            <div className="p-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
-              <Droplets className="h-4 w-4" />
+        {topTiposResumen.length < 2 && (
+          <button
+            type="button"
+            onClick={() => {
+              setEstadoFiltro(estadoFiltro === 'EN_REPARACION' ? '' : 'EN_REPARACION');
+              setPage(1);
+            }}
+            className={cn(
+              'text-left bg-white p-4 rounded-xl border transition-all shadow-2xs cursor-pointer',
+              estadoFiltro === 'EN_REPARACION'
+                ? 'border-amber-400 ring-1 ring-amber-100 bg-amber-50/20'
+                : 'border-slate-200 hover:border-amber-200',
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                En Mantenimiento
+              </span>
+              <div className="p-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg">
+                <Wrench className="h-4 w-4" />
+              </div>
             </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-slate-900">
+                {(resumen?.en_reparacion ?? 0).toLocaleString()}
+              </span>
+              <span className="text-xs font-semibold text-amber-700">en taller / reparación</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Criticidad alta: <strong>{resumen?.criticidad_alta ?? 0}</strong>
+            </p>
+          </button>
+        )}
+
+        {topTiposResumen.length === 0 && (
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Criticidad Alta
+              </span>
+              <div className="p-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-slate-900">
+                {(resumen?.criticidad_alta ?? 0).toLocaleString()}
+              </span>
+              <span className="text-xs font-semibold text-rose-700">críticos</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">Activos prioritarios</p>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">
-              {totalBombas.toLocaleString()}
-            </span>
-            <span className="text-xs font-semibold text-blue-700">Bombas</span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {totalParque > 0
-              ? `${Math.round((totalBombas / totalParque) * 100)}% del parque • `
-              : ''}
-            Presión y red de agua
-          </p>
-        </button>
+        )}
 
         <button
           type="button"
@@ -1725,7 +1758,7 @@ export default function EquiposPage() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Buscar por código (ej: GEN-CLI-DDQU49 o BOM-TAKU-HL3IAD), nombre del equipo, número de serie o cliente..."
+            placeholder="Buscar por código de inventario, nombre del activo, número de serie o cliente..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="w-full pl-10 pr-10 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -2273,30 +2306,23 @@ export default function EquiposPage() {
 
                 {/* Accesos rápidos a campos frecuentes o sugerencias de valores */}
                 {!campoBTreeActual ? (
-                  <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-                    <span className="text-[11px] font-semibold text-slate-500 mr-1">
-                      Búsquedas rápidas frecuentes:
-                    </span>
-                    {[
-                      { code: 'potencia_kva', label: '⚡ Potencia (kVA / kW / HP)' },
-                      { code: 'potencia_motor_hp', label: '⚙️ Potencia Motor (HP)' },
-                      { code: 'caudal_maximo_m3h', label: '💧 Caudal Bomba (m³/h o GPM)' },
-                      { code: 'presion_maxima_psi', label: '🌀 Presión Máxima (PSI / bar)' },
-                      { code: 'marca_motor', label: '🏷️ Marca del Motor' },
-                      { code: 'marca_generador', label: '🏷️ Marca del Generador' },
-                      { code: 'marca_bomba', label: '🏷️ Marca de la Bomba' },
-                      { code: 'capacidad_aceite_l', label: '🛢️ Capacidad de Aceite (L / gal)' },
-                    ].map((quick) => (
-                      <button
-                        key={quick.code}
-                        type="button"
-                        onClick={() => handleSelectCampoBTree(quick.code)}
-                        className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 transition-colors cursor-pointer"
-                      >
-                        {quick.label}
-                      </button>
-                    ))}
-                  </div>
+                  camposFiltrablesBTree.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
+                      <span className="text-[11px] font-semibold text-slate-500 mr-1">
+                        Atributos frecuentes:
+                      </span>
+                      {camposFiltrablesBTree.slice(0, 8).map((quick) => (
+                        <button
+                          key={quick.codigo_atributo}
+                          type="button"
+                          onClick={() => handleSelectCampoBTree(quick.codigo_atributo)}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 transition-colors cursor-pointer"
+                        >
+                          {quick.nombre_atributo}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null
                 ) : sugerenciasBTreeActual.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
                     <span className="text-[11px] font-semibold text-slate-500 mr-1">

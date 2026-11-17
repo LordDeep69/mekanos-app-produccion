@@ -1,0 +1,137 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: eam-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-eam_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-eam_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definir POSTGRES_PASSWORD en .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - eam_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-eam_admin} -d $${POSTGRES_DB:-eam_platform}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  db-bootstrap:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrator
+    container_name: eam-db-bootstrap
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-eam_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eam_platform}?schema=public}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://${POSTGRES_USER:-eam_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eam_platform}?schema=public}
+      RUN_SEED: ${RUN_SEED:-true}
+      SEED_PRESETS: ${SEED_PRESETS:-ALL}
+      SEED_ORG_NAME: ${SEED_ORG_NAME:-Mi Organización EAM}
+      SEED_ORG_RAZON_SOCIAL: ${SEED_ORG_RAZON_SOCIAL:-Mi Organización S.A.S.}
+      SEED_ORG_TAX_TYPE: ${SEED_ORG_TAX_TYPE:-NIT}
+      SEED_ORG_CITY: ${SEED_ORG_CITY:-Ciudad}
+      SEED_ORG_COUNTRY: ${SEED_ORG_COUNTRY:-Colombia}
+      SEED_ORG_ISO: ${SEED_ORG_ISO:-CO}
+      SEED_ORG_TIMEZONE: ${SEED_ORG_TIMEZONE:-America/Bogota}
+      SEED_ORG_LOCALE: ${SEED_ORG_LOCALE:-es-CO}
+      SEED_ORG_CURRENCY: ${SEED_ORG_CURRENCY:-USD}
+      SEED_ORG_CURRENCY_SYMBOL: ${SEED_ORG_CURRENCY_SYMBOL:-$}
+      SEED_ORG_DECIMALS: ${SEED_ORG_DECIMALS:-2}
+      SEED_ORG_TAX_LABEL: ${SEED_ORG_TAX_LABEL:-IVA}
+      SEED_ORG_TAX_RATE: ${SEED_ORG_TAX_RATE:-19}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Administrador}
+      SEED_ADMIN_DOC: ${SEED_ADMIN_DOC:-ADMIN-0001}
+    command:
+      - sh
+      - -c
+      - |
+        pnpm exec prisma migrate deploy && \
+        if [ "$${RUN_SEED:-true}" = "true" ]; then pnpm exec tsx prisma/seed.ts; fi
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runner
+    container_name: eam-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      APP_NAME: ${APP_NAME:-Mi Plataforma EAM}
+      APP_SLUG: ${APP_SLUG:-eam-platform}
+      APP_WEBSITE: ${APP_WEBSITE:-https://example.com}
+      APP_CONTACT_EMAIL: ${APP_CONTACT_EMAIL:-soporte@example.com}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-eam_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eam_platform}?schema=public}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://${POSTGRES_USER:-eam_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eam_platform}?schema=public}
+      JWT_SECRET: ${JWT_SECRET:?Definir JWT_SECRET en .env}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Definir JWT_REFRESH_SECRET en .env}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-7d}
+      CONFIG_ENCRYPTION_KEY: ${CONFIG_ENCRYPTION_KEY:?Definir CONFIG_ENCRYPTION_KEY en .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-587}
+      EMAIL_SMTP_USER: ${EMAIL_SMTP_USER:-}
+      EMAIL_SMTP_PASS: ${EMAIL_SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    volumes:
+      - eam_api_uploads:/app/apps/api/uploads
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000/api}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Mi Plataforma EAM}
+    container_name: eam-admin
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000/api}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Mi Plataforma EAM}
+      INTERNAL_API_URL: http://api:3000/api
+      AUTH_SECRET: ${AUTH_SECRET:?Definir AUTH_SECRET en .env}
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
+    ports:
+      - "${ADMIN_PORT:-3001}:3001"
+
+volumes:
+  eam_pg_data:
+  eam_api_uploads:

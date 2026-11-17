@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { getNextTableId } from '../common/utils/next-id.helper';
 import { PrismaService } from '../database/prisma.service';
 import { CreateContactosAdicionalesDto } from './dto/create-contactos-adicionales.dto';
 import { UpdateContactosAdicionalesDto } from './dto/update-contactos-adicionales.dto';
@@ -18,12 +17,9 @@ export class ContactosAdicionalesService {
       throw new Error(`Persona con ID ${createDto.id_persona} no existe`);
     }
 
-    const nextId = await getNextTableId(this.prisma, 'contactos_adicionales', 'id_contacto');
-
     return this.prisma.contactos_adicionales.create({
       data: {
         ...createDto,
-        id_contacto: nextId,
         registrado_por: userId,
         fecha_registro: new Date(),
       },

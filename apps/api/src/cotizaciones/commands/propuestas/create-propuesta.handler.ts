@@ -1,7 +1,6 @@
 import { PrismaService } from '@mekanos/database';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { getNextTableId } from '../../../common/utils/next-id.helper';
 import { CreatePropuestaCommand } from './create-propuesta.command';
 
 /**
@@ -89,10 +88,8 @@ export class CreatePropuestaHandler implements ICommandHandler<CreatePropuestaCo
     }
 
     // PASO 4: Crear propuesta correctivo
-    const idPropuesta = await getNextTableId(this.prisma, 'propuestas_correctivo', 'id_propuesta');
     const propuesta = await this.prisma.propuestas_correctivo.create({
       data: {
-        id_propuesta: idPropuesta,
         numero_propuesta: numeroPropuesta,
         id_orden_servicio: idOrdenServicio,
         id_cliente: ordenServicio.id_cliente,

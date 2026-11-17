@@ -11,7 +11,16 @@
  * - Firmas de entrega/recepción
  */
 
-import { baseStyles, MEKANOS_COLORS } from './mekanos-base.template';
+import {
+    baseStyles,
+    buildBrandCssVars,
+    escapeBrandHtml,
+    generarFooterCorporativoHtml,
+    MEKANOS_COLORS,
+    OrgBrandingContext,
+    renderOrgLogoHtml,
+    resolveOrgBranding,
+} from './mekanos-base.template';
 
 // Extender colores
 const COLORS = {
@@ -20,6 +29,7 @@ const COLORS = {
 };
 
 export interface DatosRemisionPDF {
+    branding?: OrgBrandingContext;
     // Identificación
     numeroRemision: string;
     fechaEmision: string;
@@ -78,6 +88,7 @@ export interface ItemRemisionPDF {
  * Genera el HTML de la remisión
  */
 export function generarRemisionHTML(datos: DatosRemisionPDF): string {
+    const brand = resolveOrgBranding(datos.branding);
     const getEstadoStyle = (estado: string) => {
         switch (estado) {
             case 'PENDIENTE':
@@ -98,6 +109,7 @@ export function generarRemisionHTML(datos: DatosRemisionPDF): string {
     <meta charset="UTF-8">
     <title>Remisión ${datos.numeroRemision}</title>
     <style>
+        ${buildBrandCssVars(brand)}
         ${baseStyles}
         
         .remision-page {
@@ -267,11 +279,10 @@ export function generarRemisionHTML(datos: DatosRemisionPDF): string {
         <!-- HEADER -->
         <div class="remision-header">
             <div>
-                <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                    <div style="width: 40px; height: 40px; background: ${MEKANOS_COLORS.primary}; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold; margin-right: 10px;">MK</div>
-                    <div>
-                        <div style="font-size: 14px; font-weight: bold; color: ${MEKANOS_COLORS.primary};">MEKANOS S.A.S</div>
-                        <div style="font-size: 8px; color: ${COLORS.textLight};">NIT: 900.123.456-7</div>
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                    ${renderOrgLogoHtml(brand, 40, 'light')}
+                    <div style="font-size: 8px; color: ${COLORS.textLight};">
+                        ${brand.numeroIdFiscal ? `${escapeBrandHtml(brand.tipoIdFiscal)}: ${escapeBrandHtml(brand.numeroIdFiscal)}` : ''}
                     </div>
                 </div>
                 <div class="remision-title">REMISIÓN DE MATERIALES</div>
@@ -394,10 +405,7 @@ export function generarRemisionHTML(datos: DatosRemisionPDF): string {
         </div>
         
         <!-- FOOTER -->
-        <div class="footer-remision">
-            <strong>MEKANOS S.A.S</strong> - Documento interno de transferencia de materiales<br>
-            Conserve este documento como soporte de la entrega.
-        </div>
+        ${generarFooterCorporativoHtml(brand, 'Documento interno de transferencia de materiales. Conserve este soporte.')}
     </div>
 </body>
 </html>

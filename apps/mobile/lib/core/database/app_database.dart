@@ -5,6 +5,8 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../storage/account_scope.dart';
+
 part 'app_database.g.dart';
 
 // ============================================================================
@@ -609,7 +611,10 @@ class OrdenesPendientesSync extends Table {
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  final int? scopedUserId;
+
+  AppDatabase({this.scopedUserId, QueryExecutor? executor})
+      : super(executor ?? _openConnection(scopedUserId));
 
   @override
   int get schemaVersion => 19; // v19: inputs declarativos // v18: autorizacion de edicion tecnica por orden // v17: Sistema Inteligente de Pendientes Técnicos
@@ -839,6 +844,12 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('''
         INSERT OR IGNORE INTO estados_orden (id, codigo, nombre, es_estado_final, last_synced_at)
         VALUES (-1, 'POR_SUBIR', 'Por Subir', 0, $nowMillis)
+      ''');
+
+      // ✅ SYNC RESILIENTE: Estado local para órdenes eliminadas en servidor pero con trabajo offline
+      await customStatement('''
+        INSERT OR IGNORE INTO estados_orden (id, codigo, nombre, es_estado_final, last_synced_at)
+        VALUES (-2, 'CONFLICTO_ELIMINADA', 'Conflicto (Eliminada en Servidor)', 0, $nowMillis)
       ''');
     },
   );
@@ -1511,11 +1522,59 @@ class AppDatabase extends _$AppDatabase {
             (o) =>
                 o.estadoSync.equals('PENDIENTE') |
                 o.estadoSync.equals('EN_PROCESO') |
+                o.estadoSync.equals('CONFLICTO_ELIMINADA') |
                 (o.estadoSync.equals('ERROR') &
                     o.intentos.isSmallerThanValue(5)),
           )
           ..orderBy([(o) => OrderingTerm.asc(o.fechaCreacion)]))
         .watch();
+  }
+
+  /// Asegura idempotencia de estados locales reservados (-1 POR_SUBIR, -2 CONFLICTO_ELIMINADA).
+  Future<void> asegurarEstadoLocal({
+    required int id,
+    required String codigo,
+    required String nombre,
+    bool esEstadoFinal = false,
+  }) async {
+    await upsertEstadoOrden(
+      EstadosOrdenCompanion(
+        id: Value(id),
+        codigo: Value(codigo),
+        nombre: Value(nombre),
+        esEstadoFinal: Value(esEstadoFinal),
+        lastSyncedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Cuenta cuántas órdenes locales tienen trabajo sin sincronizar
+  /// (dirty, en estado POR_SUBIR/CONFLICTO_ELIMINADA o en cola offline activa).
+  Future<int> countUnsyncedWork() async {
+    final ids = <int>{};
+    final dirtyOrdenes = await getOrdenesDirty();
+    for (final o in dirtyOrdenes) {
+      ids.add(o.idLocal);
+    }
+    final estadosPorSubir = await (select(ordenes)
+          ..where((o) => o.idEstado.equals(-1) | o.idEstado.equals(-2)))
+        .get();
+    for (final o in estadosPorSubir) {
+      ids.add(o.idLocal);
+    }
+    final colaActiva = await (select(ordenesPendientesSync)
+          ..where(
+            (o) =>
+                o.estadoSync.equals('PENDIENTE') |
+                o.estadoSync.equals('EN_PROCESO') |
+                o.estadoSync.equals('CONFLICTO_ELIMINADA') |
+                (o.estadoSync.equals('ERROR') & o.intentos.isSmallerThanValue(5)),
+          ))
+        .get();
+    for (final c in colaActiva) {
+      ids.add(c.idOrdenLocal);
+    }
+    return ids.length;
   }
 
   // ============================================================================
@@ -1670,10 +1729,10 @@ class AppDatabase extends _$AppDatabase {
 // CONNECTION
 // ============================================================================
 
-LazyDatabase _openConnection() {
+LazyDatabase _openConnection([int? userId]) {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'mekanos_local.db'));
+    final file = File(p.join(dbFolder.path, AccountScope.dbFileName(userId)));
     return NativeDatabase.createInBackground(file);
   });
 }

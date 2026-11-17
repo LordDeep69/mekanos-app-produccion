@@ -9,6 +9,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { cn } from '@/lib/utils';
 import type { KPIVariant } from '@/types/dashboard';
 import {
@@ -94,6 +95,7 @@ export function KPICard({
   trend,
   isLoading = false,
 }: KPICardProps) {
+  const { formatNumber } = useOrgFormatters();
   const IconComponent = iconMap[icon] || ClipboardList;
   const styles = variantStyles[variant];
 
@@ -115,22 +117,24 @@ export function KPICard({
 
   return (
     <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-6">
-        <div className="flex items-center gap-4">
-          {/* Icono */}
-          <div className={cn('p-3.5 rounded-xl', styles.bg)}>
-            <IconComponent className={cn('h-7 w-7', styles.icon)} />
-          </div>
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Icono */}
+            <div className={cn('p-3 rounded-xl shrink-0', styles.bg)}>
+              <IconComponent className={cn('h-6 w-6', styles.icon)} />
+            </div>
 
-          {/* Contenido */}
-          <div className="flex-1 min-w-0">
-            <p className="text-3xl font-bold tracking-tight">
-              {typeof value === 'number' ? value.toLocaleString('es-CO') : value}
-            </p>
-            <p className="text-sm text-gray-500 truncate">{title}</p>
-            {subtitle && (
-              <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
-            )}
+            {/* Contenido */}
+            <div className="min-w-0">
+              <p className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums leading-tight">
+                {typeof value === 'number' ? formatNumber(value, 0) : value}
+              </p>
+              <p className="text-sm text-gray-500 mt-0.5 leading-snug">{title}</p>
+              {subtitle && (
+                <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
+              )}
+            </div>
           </div>
 
           {/* Tendencia */}
@@ -138,7 +142,7 @@ export function KPICard({
             <Badge
               variant={trend.isPositive ? 'default' : 'destructive'}
               className={cn(
-                'flex items-center gap-1',
+                'flex items-center gap-1 shrink-0',
                 trend.isPositive
                   ? 'bg-green-100 text-green-700 hover:bg-green-100'
                   : 'bg-red-100 text-red-700 hover:bg-red-100'

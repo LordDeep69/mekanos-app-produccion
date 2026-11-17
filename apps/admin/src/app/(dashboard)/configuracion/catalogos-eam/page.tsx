@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { TabArquetiposEquipo } from '@/features/catalogos-eam/components/TabArquetiposEquipo';
 import { useResumenEjecutivoEam } from '@/features/catalogos-eam';
+import { useBranding } from '@/providers/branding-provider';
 
 const TabLoadingFallback = () => (
   <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
@@ -56,6 +57,7 @@ type EamTabKey = 'arquetipos' | 'modelos' | 'modulos' | 'diccionario' | 'magnitu
 export default function CatalogosEamHubPage() {
   const [activeTab, setActiveTab] = useState<EamTabKey>('arquetipos');
   const { data: resumen } = useResumenEjecutivoEam();
+  const { branding } = useBranding();
 
   // Orden Mental Humano (Top-Down: de lo General a lo Específico) en 1 Sola Barra Compacta
   const navTabs: Array<{
@@ -71,7 +73,7 @@ export default function CatalogosEamHubPage() {
       key: 'arquetipos',
       stepNum: 1,
       title: 'Tipos de Equipo',
-      metricBadge: `${resumen?.arquetipos ?? 4} Clases • ${resumen?.equipos_activos ?? 464} Equipos`,
+      metricBadge: `${resumen?.arquetipos ?? 0} Clases • ${resumen?.equipos_activos ?? 0} Equipos`,
       icon: Cpu,
       activeClasses: 'bg-slate-900 text-white border-slate-900 shadow-md',
       iconBgClass: 'bg-emerald-500/20 text-emerald-400',
@@ -80,7 +82,7 @@ export default function CatalogosEamHubPage() {
       key: 'modelos',
       stepNum: 2,
       title: 'Modelos de Fábrica y Kits BOM',
-      metricBadge: `${resumen?.modelos_oem ?? 4} Modelos Preconfigurados`,
+      metricBadge: `${resumen?.modelos_oem ?? 0} Modelos Preconfigurados`,
       icon: Factory,
       activeClasses: 'bg-slate-900 text-white border-slate-900 shadow-md',
       iconBgClass: 'bg-amber-500/20 text-amber-400',
@@ -89,7 +91,7 @@ export default function CatalogosEamHubPage() {
       key: 'modulos',
       stepNum: 3,
       title: 'Partes y Subsistemas',
-      metricBadge: `${resumen?.modulos ?? 5} Módulos Reutilizables`,
+      metricBadge: `${resumen?.modulos ?? 0} Módulos Reutilizables`,
       icon: Boxes,
       activeClasses: 'bg-slate-900 text-white border-slate-900 shadow-md',
       iconBgClass: 'bg-indigo-500/20 text-indigo-400',
@@ -98,7 +100,7 @@ export default function CatalogosEamHubPage() {
       key: 'diccionario',
       stepNum: 4,
       title: 'Catálogo de Campos Técnicos',
-      metricBadge: `${resumen?.atributos ?? 145} Campos de Ficha`,
+      metricBadge: `${resumen?.atributos ?? 0} Campos de Ficha`,
       icon: Database,
       activeClasses: 'bg-slate-900 text-white border-slate-900 shadow-md',
       iconBgClass: 'bg-purple-500/20 text-purple-400',
@@ -107,7 +109,7 @@ export default function CatalogosEamHubPage() {
       key: 'magnitudes',
       stepNum: 5,
       title: 'Unidades de Medida',
-      metricBadge: `${resumen?.magnitudes ?? 11} Magnitudes • Conversor`,
+      metricBadge: `${resumen?.magnitudes ?? 0} Magnitudes • Conversor`,
       icon: Scale,
       activeClasses: 'bg-slate-900 text-white border-slate-900 shadow-md',
       iconBgClass: 'bg-blue-500/20 text-blue-400',
@@ -133,8 +135,8 @@ export default function CatalogosEamHubPage() {
               <span>Configuración de Equipos Maestros y Fichas Técnicas</span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Define qué tipos de equipos atiende Mekanos, qué partes los componen, qué datos
-              técnicos se piden en sus fichas y qué repuestos usan sus modelos.
+              Define qué tipos de equipos atiende {branding.nombre_comercial}, qué partes los
+              componen, qué datos técnicos se piden en sus fichas y qué repuestos usan sus modelos.
             </p>
           </div>
         </div>
@@ -145,7 +147,7 @@ export default function CatalogosEamHubPage() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition-colors"
           >
             <Wrench className="h-3.5 w-3.5 text-blue-400" />
-            <span>Ir al Parque de Equipos ({resumen?.equipos_activos ?? 464})</span>
+            <span>Ir al Parque de Equipos ({resumen?.equipos_activos ?? 0})</span>
           </Link>
         </div>
       </div>

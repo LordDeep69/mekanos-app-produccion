@@ -9,6 +9,9 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AprobacionesCotizacionModule } from './aprobaciones-cotizacion/aprobaciones-cotizacion.module';
 import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { PermisosGuard } from './auth/guards/permisos.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
 import { BitacorasInformesModule } from './bitacoras-informes/bitacoras-informes.module';
 import { BitacorasModule } from './bitacoras/bitacoras.module';
 import { CatalogoActividadesModule } from './catalogo-actividades/catalogo-actividades.module';
@@ -97,6 +100,8 @@ import { InventarioModule } from './inventario/inventario.module';
 import { AgendaModule } from './agenda/agenda.module';
 // ✅ FLEXIBILIZACIÓN PARÁMETROS: Configuración personalizada por equipo (Sesión Ene 06)
 import { ConfigParametrosModule } from './config-parametros/config-parametros.module';
+// ✅ WHITE-LABEL CORE: Configuración corporativa global
+import { ConfiguracionOrganizacionModule } from './configuracion-organizacion/configuracion-organizacion.module';
 // ✅ MULTI-EMAIL re-habilitado - tabla cuentas_email existe en BD con 3 cuentas configuradas
 import { CuentasEmailModule } from './cuentas-email/cuentas-email.module';
 
@@ -200,6 +205,7 @@ import { CuentasEmailModule } from './cuentas-email/cuentas-email.module';
     AgendaModule, // ✅ GET /agenda/hoy, /semana, /mes, /metricas, /carga-tecnicos, /calendario
     // ✅ FLEXIBILIZACIÓN PARÁMETROS: Config personalizada por equipo (Sesión Ene 06)
     ConfigParametrosModule, // ✅ Servicio resolución cascada: equipo → plantilla → global
+    ConfiguracionOrganizacionModule, // ✅ Singleton configuración white-label de organización
     CuentasEmailModule, // ✅ MULTI-EMAIL re-habilitado (09-Feb-2026)
     // 🛡️ SEGURIDAD: Rate Limiting global contra fuerza bruta y DoS (120 reqs/min por IP)
     ThrottlerModule.forRoot([
@@ -216,6 +222,18 @@ import { CuentasEmailModule } from './cuentas-email/cuentas-email.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermisosGuard,
     },
   ],
 })

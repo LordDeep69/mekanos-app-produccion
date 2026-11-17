@@ -14,6 +14,10 @@ import {
 import { UpdateCatalogoComponenteDto } from './dto/update-catalogo-componente.dto';
 import { VincularProveedorDto, ActualizarPrecioProveedorDto } from './dto/sourcing-proveedor.dto';
 import { FiltrosArticulosDto } from './dto/filtros-articulos.dto';
+import {
+  formatCorrelativeCode,
+  reserveNextSequenceCounter,
+} from '../common/utils/sequence-counter.helper';
 import { destino_articulo_enum, origen_costo_enum, Prisma } from '@prisma/client';
 
 @Injectable()
@@ -48,49 +52,19 @@ export class ArticulosService {
    */
   private async generarSiguienteSku(tx: Prisma.TransactionClient): Promise<string> {
     const year = new Date().getFullYear();
-    const rows = await tx.$queryRaw<any[]>`
-      SELECT id, current_value FROM sequence_counter
-      WHERE type = 'ART' AND year = ${year}
-      FOR UPDATE;
-    `;
+    let reserved = await reserveNextSequenceCounter(tx, 'ART', year);
+    let candidato = formatCorrelativeCode('ART', year, reserved.sequence, 4);
 
-    let nextVal = 1;
-    if (rows && rows.length > 0) {
-      nextVal = Number(rows[0].current_value) + 1;
-      await tx.$executeRawUnsafe(`
-        UPDATE sequence_counter
-        SET current_value = ${nextVal}, updated_at = NOW()
-        WHERE id = ${rows[0].id};
-      `);
-    } else {
-      const maxRes = await tx.$queryRaw<any[]>`
-        SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM sequence_counter;
-      `;
-      const nextId = Number(maxRes[0]?.next_id || 100);
-      await tx.$executeRawUnsafe(`
-        INSERT INTO sequence_counter (id, type, year, current_value, created_at, updated_at)
-        VALUES (${nextId}, 'ART', ${year}, 1, NOW(), NOW());
-      `);
-      nextVal = 1;
-    }
-
-    // Zero-Trust: garantizar que no colisione con ningún código interno manual
-    let candidato = `ART-${year}-${String(nextVal).padStart(4, '0')}`;
     let existe = await tx.catalogo_componentes.findFirst({
       where: { codigo_interno: { equals: candidato, mode: 'insensitive' } },
     });
 
     while (existe) {
-      nextVal++;
-      candidato = `ART-${year}-${String(nextVal).padStart(4, '0')}`;
+      reserved = await reserveNextSequenceCounter(tx, 'ART', year);
+      candidato = formatCorrelativeCode('ART', year, reserved.sequence, 4);
       existe = await tx.catalogo_componentes.findFirst({
         where: { codigo_interno: { equals: candidato, mode: 'insensitive' } },
       });
-      await tx.$executeRawUnsafe(`
-        UPDATE sequence_counter
-        SET current_value = ${nextVal}, updated_at = NOW()
-        WHERE type = 'ART' AND year = ${year};
-      `);
     }
 
     return candidato;

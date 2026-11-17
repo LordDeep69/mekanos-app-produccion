@@ -80,7 +80,7 @@ export function OrdersStatsPanel() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <KPICard
             title="Total Órdenes"
             value={data.total}
@@ -119,7 +119,7 @@ function OrdersStatsSkeleton() {
         <Skeleton className="h-6 w-48" />
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="space-y-2">
               <Skeleton className="h-4 w-24" />

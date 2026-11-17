@@ -73,6 +73,13 @@ export class ClientesService implements OnModuleInit {
     tiene_bombas: boolean;
     total_equipos_plantas: number;
     total_equipos_bombas: number;
+    total_equipos: number;
+    resumen_equipos_por_tipo: Array<{
+      id_tipo_equipo: number | null;
+      codigo_tipo: string;
+      nombre_tipo: string;
+      cantidad: number;
+    }>;
     searchString: string;
     cleanNit: string;
     selectorData: {
@@ -85,11 +92,59 @@ export class ClientesService implements OnModuleInit {
       nit: string | null;
       tiene_plantas?: boolean;
       tiene_bombas?: boolean;
+      total_equipos?: number;
+      resumen_equipos_por_tipo?: Array<{
+        id_tipo_equipo: number | null;
+        codigo_tipo: string;
+        nombre_tipo: string;
+        cantidad: number;
+      }>;
     };
     fullCliente: any;
   }> | null = null;
   private cacheExpiresAt: number = 0;
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos de validez
+
+  private buildResumenEquipos(todosEquipos: any[]) {
+    const porTipoMap = new Map<
+      string,
+      { id_tipo_equipo: number | null; codigo_tipo: string; nombre_tipo: string; cantidad: number }
+    >();
+
+    for (const eq of todosEquipos) {
+      const te = eq?.tipos_equipo;
+      const codigo = (te?.codigo_tipo || 'SIN_TIPO').toString().trim().toUpperCase();
+      const nombre = (te?.nombre_tipo || codigo).toString().trim();
+      const idTipo = te?.id_tipo_equipo ?? eq?.id_tipo_equipo ?? null;
+      const key = `${idTipo ?? 'X'}:${codigo}`;
+      const existing = porTipoMap.get(key);
+      if (existing) {
+        existing.cantidad += 1;
+      } else {
+        porTipoMap.set(key, {
+          id_tipo_equipo: idTipo,
+          codigo_tipo: codigo,
+          nombre_tipo: nombre,
+          cantidad: 1,
+        });
+      }
+    }
+
+    const resumen_equipos_por_tipo = Array.from(porTipoMap.values()).sort(
+      (a, b) => b.cantidad - a.cantidad,
+    );
+    const total_equipos_plantas = todosEquipos.filter((e) => this.esEquipoPlanta(e)).length;
+    const total_equipos_bombas = todosEquipos.filter((e) => this.esEquipoBomba(e)).length;
+
+    return {
+      total_equipos: todosEquipos.length,
+      resumen_equipos_por_tipo,
+      tiene_plantas: total_equipos_plantas > 0,
+      tiene_bombas: total_equipos_bombas > 0,
+      total_equipos_plantas,
+      total_equipos_bombas,
+    };
+  }
 
   /**
    * Determina si un equipo corresponde a una Planta Eléctrica / Generador
@@ -204,18 +259,19 @@ export class ClientesService implements OnModuleInit {
         const cpp = cp?.persona;
         const sedes = c.sedes_cliente?.map((s) => s.nombre_sede).join(' ') || '';
 
-        // Detección de equipos (propios + de sedes para clientes principales)
+        // Detección dinámica EAM de equipos por arquetipo (propios + de sedes para clientes principales)
         const equiposPropios = (c as any).equipos || [];
         const equiposSedes = ((c as any).sedes || []).flatMap((s: any) => s.equipos || []);
         const todosEquipos = [...equiposPropios, ...equiposSedes];
 
-        const equiposPlantas = todosEquipos.filter((e) => this.esEquipoPlanta(e));
-        const equiposBombas = todosEquipos.filter((e) => this.esEquipoBomba(e));
-
-        const tiene_plantas = equiposPlantas.length > 0;
-        const tiene_bombas = equiposBombas.length > 0;
-        const total_equipos_plantas = equiposPlantas.length;
-        const total_equipos_bombas = equiposBombas.length;
+        const {
+          total_equipos,
+          resumen_equipos_por_tipo,
+          tiene_plantas,
+          tiene_bombas,
+          total_equipos_plantas,
+          total_equipos_bombas,
+        } = this.buildResumenEquipos(todosEquipos);
 
         const searchString = this.normalizeSearchText(
           [
@@ -251,6 +307,8 @@ export class ClientesService implements OnModuleInit {
         const fullCliente = {
           ...c,
           total_sedes: (c as any)._count?.sedes || 0,
+          total_equipos,
+          resumen_equipos_por_tipo,
           tiene_plantas,
           tiene_bombas,
           total_equipos_plantas,
@@ -271,6 +329,8 @@ export class ClientesService implements OnModuleInit {
           tiene_bombas,
           total_equipos_plantas,
           total_equipos_bombas,
+          total_equipos,
+          resumen_equipos_por_tipo,
           searchString,
           cleanNit,
           selectorData: {
@@ -283,6 +343,8 @@ export class ClientesService implements OnModuleInit {
             nit: p?.numero_identificacion || null,
             tiene_plantas,
             tiene_bombas,
+            total_equipos,
+            resumen_equipos_por_tipo,
           },
           fullCliente,
         };
@@ -345,7 +407,7 @@ export class ClientesService implements OnModuleInit {
         }
       }
 
-      // 2. Filtro por tipo de equipo (Plantas / Bombas)
+      // 2. Filtro dinámico por arquetipo / tipo de equipo (incluye aliases legacy + cualquier codigo_tipo o ID)
       if (filters?.tipo_equipo && filters.tipo_equipo !== 'TODOS') {
         const te = filters.tipo_equipo.toUpperCase().trim();
         if (te === 'PLANTAS' || te === 'GENERADOR' || te === 'PLANTA' || te === 'GENERADORES') {
@@ -355,7 +417,14 @@ export class ClientesService implements OnModuleInit {
         } else if (te === 'AMBOS') {
           if (!item.tiene_plantas || !item.tiene_bombas) return false;
         } else if (te === 'SIN_EQUIPOS') {
-          if (item.tiene_plantas || item.tiene_bombas) return false;
+          if (item.total_equipos > 0) return false;
+        } else {
+          const coincideTipo = item.resumen_equipos_por_tipo.some(
+            (r) =>
+              r.codigo_tipo === te ||
+              (r.id_tipo_equipo !== null && String(r.id_tipo_equipo) === te),
+          );
+          if (!coincideTipo) return false;
         }
       }
 
@@ -763,12 +832,49 @@ export class ClientesService implements OnModuleInit {
       ? index.filter((i) => i.id_asesor_asignado === idAsesorAsignado)
       : index;
 
+    const porTipoGlobal = new Map<
+      string,
+      {
+        id_tipo_equipo: number | null;
+        codigo_tipo: string;
+        nombre_tipo: string;
+        total_clientes: number;
+        total_equipos: number;
+      }
+    >();
+    const resumen_por_tipo_equipo: Record<string, number> = {};
+
+    for (const item of scopedIndex) {
+      for (const r of item.resumen_equipos_por_tipo) {
+        resumen_por_tipo_equipo[r.codigo_tipo] =
+          (resumen_por_tipo_equipo[r.codigo_tipo] || 0) + r.cantidad;
+        const key = `${r.id_tipo_equipo ?? 'X'}:${r.codigo_tipo}`;
+        const acc = porTipoGlobal.get(key);
+        if (acc) {
+          acc.total_clientes += 1;
+          acc.total_equipos += r.cantidad;
+        } else {
+          porTipoGlobal.set(key, {
+            id_tipo_equipo: r.id_tipo_equipo,
+            codigo_tipo: r.codigo_tipo,
+            nombre_tipo: r.nombre_tipo,
+            total_clientes: 1,
+            total_equipos: r.cantidad,
+          });
+        }
+      }
+    }
+
     const summary = {
       total: scopedIndex.length,
       con_plantas: scopedIndex.filter((i) => i.tiene_plantas).length,
       con_bombas: scopedIndex.filter((i) => i.tiene_bombas).length,
       con_ambos: scopedIndex.filter((i) => i.tiene_plantas && i.tiene_bombas).length,
-      sin_equipos: scopedIndex.filter((i) => !i.tiene_plantas && !i.tiene_bombas).length,
+      sin_equipos: scopedIndex.filter((i) => i.total_equipos === 0).length,
+      resumen_por_tipo_equipo,
+      por_tipo_equipo: Array.from(porTipoGlobal.values()).sort(
+        (a, b) => b.total_equipos - a.total_equipos,
+      ),
       corporativos: scopedIndex.filter((i) => i.es_cliente_principal).length,
       sedes: scopedIndex.filter((i) => !i.es_cliente_principal && i.id_cliente_principal).length,
       independientes: scopedIndex.filter((i) => !i.es_cliente_principal && !i.id_cliente_principal).length,
@@ -891,10 +997,14 @@ export class ClientesService implements OnModuleInit {
     const deSedes = (cliente.sedes || []).flatMap((s: any) => s.equipos || []);
     const todos = [...propios, ...deSedes];
 
-    const tiene_plantas = todos.some((e) => this.esEquipoPlanta(e));
-    const tiene_bombas = todos.some((e) => this.esEquipoBomba(e));
-    const total_equipos_plantas = todos.filter((e) => this.esEquipoPlanta(e)).length;
-    const total_equipos_bombas = todos.filter((e) => this.esEquipoBomba(e)).length;
+    const {
+      total_equipos,
+      resumen_equipos_por_tipo,
+      tiene_plantas,
+      tiene_bombas,
+      total_equipos_plantas,
+      total_equipos_bombas,
+    } = this.buildResumenEquipos(todos);
 
     return {
       ...cliente,
@@ -902,6 +1012,8 @@ export class ClientesService implements OnModuleInit {
       firma_administrativa,
       cuenta_email,
       total_ordenes,
+      total_equipos,
+      resumen_equipos_por_tipo,
       tiene_plantas,
       tiene_bombas,
       total_equipos_plantas,
@@ -1363,12 +1475,21 @@ export class ClientesService implements OnModuleInit {
       sedeFiltroNombre = s?.nombre_sede || undefined;
     }
 
+    const brand =
+      typeof (this.pdfService as any)?.resolveBranding === 'function'
+        ? await this.pdfService.resolveBranding()
+        : undefined;
+    const orgLocale = brand?.locale || 'es-CO';
+    const orgTz = brand?.zonaHoraria || 'America/Bogota';
+    const orgNombre = brand?.nombreComercial || 'Servicio Técnico';
+
     // 4. Formatear KPIs
     const totalPreventivos = ordenes.filter((o: any) => o.tipos_servicio?.categoria === 'PREVENTIVO').length;
     const totalCorrectivos = ordenes.filter((o: any) => o.tipos_servicio?.categoria === 'CORRECTIVO').length;
     const totalEmergencias = ordenes.filter((o: any) => o.tipos_servicio?.categoria === 'EMERGENCIA').length;
 
-    const fechaGen = new Intl.DateTimeFormat('es-CO', {
+    const fechaGen = new Intl.DateTimeFormat(orgLocale, {
+      timeZone: orgTz,
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -1407,14 +1528,19 @@ export class ClientesService implements OnModuleInit {
       if (parts.length > 0) {
         return parts.join(' ').replace(/\s+/g, ' ').trim();
       }
-      return p.razon_social || 'Especialista Mekanos';
+      return p.razon_social || `Especialista ${orgNombre}`;
     };
 
     // 5. Mapear órdenes
     const ordenesMapeadas = ordenes.map((o: any) => {
       const fechaOrd = o.fecha_programada || o.fecha_creacion;
       const fechaFormateada = fechaOrd
-        ? new Intl.DateTimeFormat('es-CO', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(fechaOrd))
+        ? new Intl.DateTimeFormat(orgLocale, {
+            timeZone: orgTz,
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+          }).format(new Date(fechaOrd))
         : 'N/A';
 
       // Lista de equipos de la orden
@@ -1424,7 +1550,7 @@ export class ClientesService implements OnModuleInit {
           nombre: o.equipos.nombre_equipo,
           codigo: o.equipos.codigo_equipo,
           tipo: o.equipos.tipos_equipo?.nombre_tipo,
-          horas: o.equipos.horas_actuales,
+          horas: o.equipos.lectura_uso_actual ?? o.equipos.horas_actuales,
         });
       }
       if (o.ordenes_equipos && o.ordenes_equipos.length > 0) {
@@ -1434,7 +1560,7 @@ export class ClientesService implements OnModuleInit {
               nombre: oe.equipos.nombre_equipo,
               codigo: oe.equipos.codigo_equipo,
               tipo: oe.equipos.tipos_equipo?.nombre_tipo,
-              horas: oe.equipos.horas_actuales,
+              horas: oe.equipos.lectura_uso_actual ?? oe.equipos.horas_actuales,
             });
           }
         });
@@ -1466,6 +1592,7 @@ export class ClientesService implements OnModuleInit {
     });
 
     const payload: DatosTrazabilidadClientePDF = {
+      branding: brand,
       cliente: {
         nombre: clienteDb?.persona?.razon_social || clienteDb?.persona?.nombre_comercial || clienteDb?.persona?.nombre_completo || 'Cliente',
         nit: clienteDb?.persona?.numero_identificacion || undefined,

@@ -25,6 +25,8 @@ import {
   generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
   MEKANOS_COLORS,
+  buildBrandCssVars,
+  generarFooterCorporativoHtml,
 } from './mekanos-base.template';
 
 /**
@@ -55,6 +57,7 @@ export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Informe Mantenimiento - ${datos.numeroOrden}</title>
   <style>
+    ${buildBrandCssVars(datos.branding)}
     ${baseStyles}
   </style>
 </head>
@@ -91,7 +94,7 @@ export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
     ${generarDatosModulo(datos)}
     
     <!-- SECCIÓN REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO (SI APLICA) -->
-    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, 'PREVENTIVO_A')}
+    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, 'PREVENTIVO_A', datos.branding)}
     
     <!-- GENERAL: Solo para órdenes de un solo equipo (ya está incluido en checklist multi-equipo) -->
     ${!esMultiEquipo ? generarSeccionGeneral(actividadesPorSistema['GENERAL'] || []) : ''}
@@ -124,7 +127,7 @@ export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
     ${generarFirmas(datos)}
     
     <!-- FOOTER -->
-    ${generarFooter()}
+    ${generarFooterCorporativoHtml(datos.branding)}
   </div>
 </body>
 </html>
@@ -136,6 +139,7 @@ const generarHeader = (datos: DatosOrdenPDF): string =>
     'MANTENIMIENTO PREVENTIVO TIPO A',
     'EQUIPOS GENERADORES ELÉCTRICOS',
     datos.numeroOrden,
+    datos.branding,
   );
 
 const generarSeccionActividades = (titulo: string, actividades: any[]): string => {
@@ -669,14 +673,6 @@ const generarFirmas = (datos: DatosOrdenPDF): string => `
       <div class="firma-cargo">${datos.cargoCliente || 'Cliente / Autorizador'}</div>
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
     </div>
-  </div>
-`;
-
-const generarFooter = (): string => `
-  <div class="footer">
-    <strong>MEKANOS S.A.S</strong><br/>
-    BARRIO LIBANO CRA 49C #31-35 DIAG. AL SENA - TEL: 6359384<br/>
-    CEL: 315-7083350 E-MAIL: mekanossas2@gmail.com
   </div>
 `;
 

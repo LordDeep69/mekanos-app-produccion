@@ -22,11 +22,13 @@
 
 import {
   EamSelect,
+  EamSelectWithCustom,
   EamUomSelect,
   MarcaCombobox,
   getModuloBadgeInfo,
   getTipoControlHumano,
   parseOpcionesSeguras,
+  permiteValorPersonalizado,
   useArquetipoEsquemaEam,
   useArquetiposEam,
   useMagnitudesEam,
@@ -123,6 +125,24 @@ const FACTORES_AFINES_FALLBACK: Record<string, { a: number; b: number }> = {
   C: { a: 1, b: 0 },
   F: { a: 0.55555556, b: -17.77777778 },
   K: { a: 1, b: -273.15 },
+  // POTENCIA APARENTE (Base: KVA_APA)
+  KVA_APA: { a: 1, b: 0 },
+  VA_APA: { a: 0.001, b: 0 },
+  MVA_APA: { a: 1000, b: 0 },
+  // TENSIÓN ELÉCTRICA (Base: V)
+  V: { a: 1, b: 0 },
+  VAC: { a: 1, b: 0 },
+  VDC: { a: 1, b: 0 },
+  KV: { a: 1000, b: 0 },
+  KV_VOLT: { a: 1000, b: 0 },
+  MV_VOLT: { a: 0.001, b: 0 },
+  // RESISTENCIA ELÉCTRICA (Base: OHM)
+  UOHM: { a: 0.000001, b: 0 },
+  MOHM: { a: 0.001, b: 0 },
+  OHM: { a: 1, b: 0 },
+  KOHM: { a: 1000, b: 0 },
+  MEOHM: { a: 1000000, b: 0 },
+  GOHM: { a: 1000000000, b: 0 },
   // LONGITUD (Base: MET)
   MET: { a: 1, b: 0 },
   M: { a: 1, b: 0 },
@@ -293,18 +313,64 @@ export function DynamicModularSpecsEditor({
           const a = Number(u.factor_a);
           const b = Number(u.factor_b);
           if (Number.isFinite(a) && a !== 0) {
-            map.set(u.codigo.toUpperCase(), {
+            const entry = {
               a,
               b: Number.isFinite(b) ? b : 0,
               simbolo: u.simbolo || u.codigo,
               nombre: u.nombre || u.codigo,
-            });
+            };
+            map.set(u.codigo.toUpperCase(), entry);
+            if (u.simbolo && !map.has(u.simbolo.toUpperCase())) {
+              map.set(u.simbolo.toUpperCase(), entry);
+            }
+          }
+        }
+      }
+    }
+    if (esquema?.modulos) {
+      for (const mod of esquema.modulos) {
+        for (const grp of mod.grupos || []) {
+          for (const attr of grp.atributos || []) {
+            for (const u of attr.unidades_disponibles || []) {
+              const codeKey = u.codigo.toUpperCase();
+              const existing = map.get(codeKey);
+              const rawA =
+                u.factor_a !== undefined && u.factor_a !== null ? Number(u.factor_a) : undefined;
+              const rawB =
+                u.factor_b !== undefined && u.factor_b !== null ? Number(u.factor_b) : undefined;
+              const entry =
+                rawA !== undefined && Number.isFinite(rawA) && rawA !== 0
+                  ? {
+                      a: rawA,
+                      b: rawB !== undefined && Number.isFinite(rawB) ? rawB : 0,
+                      simbolo: u.simbolo || u.codigo,
+                      nombre: u.nombre || u.simbolo || u.codigo,
+                    }
+                  : existing ??
+                    (u.es_base
+                      ? {
+                          a: 1,
+                          b: 0,
+                          simbolo: u.simbolo || u.codigo,
+                          nombre: u.nombre || u.codigo,
+                        }
+                      : undefined);
+
+              if (entry) {
+                if (!existing) {
+                  map.set(codeKey, entry);
+                }
+                if (u.simbolo && !map.has(u.simbolo.toUpperCase())) {
+                  map.set(u.simbolo.toUpperCase(), entry);
+                }
+              }
+            }
           }
         }
       }
     }
     return map;
-  }, [magnitudes]);
+  }, [magnitudes, esquema]);
 
   const convertirValorEnVivo = (
     valorActual: unknown,
@@ -765,7 +831,7 @@ export function DynamicModularSpecsEditor({
                               : String(valActual);
 
                           return (
-                            <EamSelect
+                            <EamSelectWithCustom
                               value={selectVal}
                               onChange={(val) =>
                                 onChangeValor(codigoMod, codigoAttr, val, 'CUSTOM')
@@ -774,6 +840,8 @@ export function DynamicModularSpecsEditor({
                                 value: op.value,
                                 label: op.label,
                               }))}
+                              allowCustom={permiteValorPersonalizado(attr.validacion_json)}
+                              customPlaceholder={`Especificar ${attr.nombre_atributo.toLowerCase()}...`}
                               placeholder="Seleccionar opción..."
                             />
                           );

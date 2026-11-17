@@ -67,7 +67,9 @@ import {
   useEnviarBitacora,
   useMesesDisponibles,
 } from '../hooks/use-bitacoras';
+import { useTiposServicio } from '@/features/catalogos/hooks/use-tipos-servicio';
 import { apiClient } from '@/lib/api';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { previsualizarInformeAutenticado } from '@/lib/pdf-naming';
 
 interface BitacoraTabProps {
@@ -92,8 +94,8 @@ const MESES = [
 
 const CATEGORIAS = [
   { value: '', label: 'Todas las categorías' },
-  { value: 'ENERGIA', label: 'Plantas Eléctricas' },
-  { value: 'HIDRAULICA', label: 'Bombas' },
+  { value: 'ENERGIA', label: 'Energía / Potencia' },
+  { value: 'HIDRAULICA', label: 'Hidráulica / Bombeo' },
   { value: 'CLIMATIZACION', label: 'Climatización' },
   { value: 'COMPRESION', label: 'Compresión' },
 ];
@@ -113,10 +115,11 @@ const TIPOS_SERVICIO = [
 ];
 
 export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
+  const { formatDate } = useOrgFormatters();
   const now = new Date();
   const [mes, setMes] = useState(now.getMonth() + 1);
   const [anio, setAnio] = useState(now.getFullYear());
-  const [categoria, setCategoria] = useState('ENERGIA');
+  const [categoria, setCategoria] = useState('');
   const [tipoServicio, setTipoServicio] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [nombresCustom, setNombresCustom] = useState<Record<number, string>>({});
@@ -173,6 +176,20 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   );
 
   const enviarMutation = useEnviarBitacora();
+  const { data: tiposServicioCatalog } = useTiposServicio({ activo: true });
+  const tiposServicioOpciones = useMemo(() => {
+    const base = [{ value: '', label: 'Todos los tipos' }];
+    if (Array.isArray(tiposServicioCatalog) && tiposServicioCatalog.length > 0) {
+      return [
+        ...base,
+        ...tiposServicioCatalog.map((t) => ({
+          value: t.codigo_tipo,
+          label: t.nombre_tipo,
+        })),
+      ];
+    }
+    return [...base, ...TIPOS_SERVICIO.slice(1)];
+  }, [tiposServicioCatalog]);
 
   // ✅ NUEVO: Efecto para inicializar documentos seleccionados cuando carga el preview
   const documentosDisponibles = useMemo(() => {
@@ -457,7 +474,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TIPOS_SERVICIO.map((t) => (
+                    {tiposServicioOpciones.map((t) => (
                       <SelectItem key={t.value} value={t.value || '_all'}>
                         {t.label}
                       </SelectItem>
@@ -535,7 +552,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TIPOS_SERVICIO.map((t) => (
+                    {tiposServicioOpciones.map((t) => (
                       <SelectItem key={t.value} value={t.value || '_all'}>
                         {t.label}
                       </SelectItem>
@@ -848,7 +865,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                     </Badge>
                     {b.enviada_cliente_fecha && (
                       <span className="text-xs text-muted-foreground">
-                        {new Date(b.enviada_cliente_fecha).toLocaleDateString('es-CO')}
+                        {formatDate(b.enviada_cliente_fecha)}
                       </span>
                     )}
                   </div>
@@ -1231,11 +1248,12 @@ function InformeRow({
   isSelected,
   onToggleSelect,
 }: InformeRowProps) {
+  const { formatDate } = useOrgFormatters();
   const [editValue, setEditValue] = useState(customName || informe.nombre_sugerido);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const displayName = customName || informe.nombre_sugerido;
   const fechaStr = informe.fecha_servicio
-    ? new Date(informe.fecha_servicio).toLocaleDateString('es-CO', {
+    ? formatDate(informe.fecha_servicio, {
         day: '2-digit',
         month: 'short',
       })

@@ -1,8 +1,11 @@
+import { Type } from 'class-transformer';
 import {
   IsString,
   IsInt,
   IsOptional,
   IsEnum,
+  IsNumber,
+  IsObject,
   Matches,
   MinLength,
   MaxLength,
@@ -57,6 +60,25 @@ export class CreateEquipoDto {
     message: 'criticidad debe ser un valor válido del enum',
   })
   criticidad?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'id_modelo_equipo debe ser un número entero' })
+  id_modelo_equipo?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'lectura_uso_actual debe ser un número válido' })
+  lectura_uso_actual?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'horas_actuales debe ser un número válido' })
+  horas_actuales?: number;
+
+  @IsOptional()
+  @IsObject({ message: 'especificaciones debe ser un objeto JSON modular' })
+  especificaciones?: Record<string, any>;
 
   // creado_por se obtiene del JWT, no del body
 }

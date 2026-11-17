@@ -16,13 +16,6 @@
 
 /* eslint-disable no-control-regex */
 
-const TIPO_EQUIPO_LABEL: Record<string, string> = {
-    GENERADOR: 'PLANTA',
-    PLANTA: 'PLANTA',
-    MOTOR: 'PLANTA',
-    BOMBA: 'BOMBA',
-};
-
 const TIPO_SERVICIO_TEXTO: Record<string, string> = {
     PREVENTIVO_A: 'MANTENIMIENTO PREVENTIVO TIPO A',
     PREVENTIVO_B: 'MANTENIMIENTO PREVENTIVO TIPO B',
@@ -203,17 +196,15 @@ function resolverTextoEquipo(
     codigo: string | null | undefined,
     nombre: string | null | undefined,
 ): string {
-    const candidato = sanitizar((codigo || nombre || '')).toUpperCase().trim();
+    const candidato = sanitizar((nombre || codigo || '')).toUpperCase().trim();
     if (!candidato) return '';
-    for (const key of Object.keys(TIPO_EQUIPO_LABEL)) {
-        if (candidato.includes(key)) return TIPO_EQUIPO_LABEL[key];
-    }
-    return candidato;
+    return candidato.replace(/_/g, ' ');
 }
 
 function sanitizar(s: string): string {
     return s
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')        // strip diacritics
+        .replace(/\.{2,}/g, '')                                   // strip path-traversal dot sequences
         .replace(/[\\/:*?"<>|\x00-\x1f]/g, '')                   // illegal filename chars
         .replace(/\s+/g, ' ')
         .trim();

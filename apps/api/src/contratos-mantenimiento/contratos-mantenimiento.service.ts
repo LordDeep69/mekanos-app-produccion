@@ -1,4 +1,5 @@
 import { PrismaService } from '@mekanos/database';
+import { Prisma } from '@prisma/client';
 import {
   Injectable,
   InternalServerErrorException,
@@ -23,7 +24,7 @@ export class ContratosMantenimientoService {
       
       return await this.prisma.contratos_mantenimiento.create({
         data: {
-          ...createDto as any,
+          ...(createDto as unknown as Prisma.contratos_mantenimientoUncheckedCreateInput),
           codigo_contrato: codigoContrato,
         },
       });
@@ -90,7 +91,7 @@ export class ContratosMantenimientoService {
 
       return await this.prisma.contratos_mantenimiento.update({
         where: { id_contrato: id },
-        data: updateDto as any,
+        data: updateDto as unknown as Prisma.contratos_mantenimientoUncheckedUpdateInput,
       });
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {

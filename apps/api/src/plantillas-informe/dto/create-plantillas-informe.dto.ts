@@ -1,13 +1,54 @@
-import { Prisma } from '@prisma/client';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { Allow, IsBoolean, IsDateString, IsInt, IsOptional, IsString } from 'class-validator';
 
 /**
- * DTO para crear plantillas_informe
- * 
- * ⚠️ TEMPORAL: Usando tipos de Prisma directamente para MVP
- * TODO: Agregar validaciones con class-validator en fase de refinamiento
- * TODO: Documentar campos con @ApiProperty cuando se definan validaciones
+ * DTO estrictamente validado para creación en plantillas_informe.
  */
-export class CreatePlantillasInformeDto implements Partial<Prisma.plantillas_informeCreateInput> {
-  // Permisivo para MVP - Prisma valida tipos en runtime
-  [key: string]: any;
+export class CreatePlantillasInformeDto {
+  @ApiProperty()
+  @IsString()
+  nombre_plantilla!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_tipo_servicio?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  texto_introduccion?: string;
+
+  @ApiProperty()
+  @Allow()
+  configuracion_secciones!: Record<string, unknown> | unknown[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  activa?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  creado_por?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  fecha_creacion?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  modificado_por?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  fecha_modificacion?: string;
 }

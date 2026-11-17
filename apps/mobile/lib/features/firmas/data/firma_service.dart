@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/storage/account_scope.dart';
 
 /// Provider para el servicio de firmas
 final firmaServiceProvider = Provider<FirmaService>((ref) {
@@ -44,12 +44,11 @@ class FirmaService {
     String? documentoFirmante,
   }) async {
     try {
-      // 1. Crear directorio de firmas si no existe
-      final appDir = await getApplicationDocumentsDirectory();
-      final firmasDir = Directory(p.join(appDir.path, 'firmas'));
-      if (!await firmasDir.exists()) {
-        await firmasDir.create(recursive: true);
-      }
+      // 1. Crear directorio de firmas aislado por cuenta si no existe
+      final firmasDir = await AccountScope.ensureMediaDirectory(
+        _db.scopedUserId,
+        AccountScope.mediaCategoryFirmas,
+      );
 
       // 2. Generar nombre de archivo único
       final timestamp = DateTime.now().millisecondsSinceEpoch;

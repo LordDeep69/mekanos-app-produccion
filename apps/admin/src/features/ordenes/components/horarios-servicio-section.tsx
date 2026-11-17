@@ -17,6 +17,7 @@
 import type { Orden } from '@/types/ordenes';
 import { AlertTriangle, Check, Clock, Edit2, Loader2, LogIn, LogOut, Timer, X } from 'lucide-react';
 import { useState } from 'react';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { useUpdateHorariosServicio } from '../hooks/use-ordenes';
 
 /** Límite de duración razonable: 24 horas (1440 min) */
@@ -24,26 +25,6 @@ const LIMITE_DURACION_MIN = 1440;
 
 interface HorariosServicioSectionProps {
   orden: Orden;
-}
-
-/**
- * Formatea un DateTime ISO a fecha legible en español
- */
-function formatFechaHora(isoStr?: string | null): string {
-  if (!isoStr) return '-';
-  try {
-    return new Date(isoStr).toLocaleString('es-CO', {
-      weekday: 'short',
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-  } catch {
-    return 'Fecha inválida';
-  }
 }
 
 /**
@@ -93,6 +74,7 @@ function calcularDuracionPreview(inicio?: string, fin?: string): string {
 }
 
 export function HorariosServicioSection({ orden }: HorariosServicioSectionProps) {
+  const { formatDateTime } = useOrgFormatters();
   const updateHorarios = useUpdateHorariosServicio();
   const [isEditing, setIsEditing] = useState(false);
   const [fechaInicio, setFechaInicio] = useState(() => toDatetimeLocal(orden.fecha_inicio_real));
@@ -311,7 +293,7 @@ export function HorariosServicioSection({ orden }: HorariosServicioSectionProps)
                   Hora de Entrada
                 </p>
                 <p className="text-sm font-medium text-gray-900">
-                  {formatFechaHora(orden.fecha_inicio_real)}
+                  {orden.fecha_inicio_real ? formatDateTime(orden.fecha_inicio_real) : '-'}
                 </p>
               </div>
             </div>
@@ -326,7 +308,7 @@ export function HorariosServicioSection({ orden }: HorariosServicioSectionProps)
                   Hora de Salida
                 </p>
                 <p className="text-sm font-medium text-gray-900">
-                  {formatFechaHora(orden.fecha_fin_real)}
+                  {orden.fecha_fin_real ? formatDateTime(orden.fecha_fin_real) : '-'}
                 </p>
               </div>
             </div>

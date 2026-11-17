@@ -14,7 +14,17 @@
  * - Términos y condiciones
  */
 
-import { baseStyles, MEKANOS_COLORS } from './mekanos-base.template';
+import {
+    baseStyles,
+    buildBrandCssVars,
+    escapeBrandHtml,
+    formatCurrencyOrg,
+    generarFooterCorporativoHtml,
+    MEKANOS_COLORS,
+    OrgBrandingContext,
+    renderOrgLogoHtml,
+    resolveOrgBranding,
+} from './mekanos-base.template';
 
 // Extender colores para este template
 const COLORS = {
@@ -23,6 +33,7 @@ const COLORS = {
 };
 
 export interface DatosPropuestaCorrectivoPDF {
+    branding?: OrgBrandingContext;
     // Identificación
     numeroPropuesta: string;
     fechaPropuesta: string;
@@ -132,6 +143,7 @@ export interface ItemManoObraPDF {
  * Genera el HTML completo de la propuesta de correctivo
  */
 export function generarPropuestaCorrectivoHTML(datos: DatosPropuestaCorrectivoPDF): string {
+    const brand = resolveOrgBranding(datos.branding);
     return `
 <!DOCTYPE html>
 <html lang="es">
@@ -139,6 +151,7 @@ export function generarPropuestaCorrectivoHTML(datos: DatosPropuestaCorrectivoPD
     <meta charset="UTF-8">
     <title>Propuesta Correctivo ${datos.numeroPropuesta}</title>
     <style>
+        ${buildBrandCssVars(brand)}
         ${baseStyles}
         
         /* Estilos específicos propuesta correctivo */
@@ -220,34 +233,32 @@ export function generarPropuestaCorrectivoHTML(datos: DatosPropuestaCorrectivoPD
 </head>
 <body>
     <div class="page">
-        ${generarHeader(datos)}
+        ${generarHeader(datos, brand)}
         ${generarInfoOrigenCliente(datos)}
         ${generarProblemaDetectado(datos)}
         ${generarDiagnostico(datos)}
-        ${generarSolucionPropuesta(datos)}
-        ${generarTablaRepuestos(datos)}
-        ${generarTablaManoObra(datos)}
-        ${generarResumenCostos(datos)}
+        ${generarSolucionPropuesta(datos, brand)}
+        ${generarTablaRepuestos(datos, brand)}
+        ${generarTablaManoObra(datos, brand)}
+        ${generarResumenCostos(datos, brand)}
         ${generarCondiciones(datos)}
-        ${generarFirmas(datos)}
-        ${generarFooter()}
+        ${generarFirmas(datos, brand)}
+        ${generarFooterCorporativoHtml(brand)}
     </div>
 </body>
 </html>
   `.trim();
 }
 
-function generarHeader(datos: DatosPropuestaCorrectivoPDF): string {
+function generarHeader(datos: DatosPropuestaCorrectivoPDF, brand = resolveOrgBranding(datos.branding)): string {
     return `
     <div class="header">
-        <div class="logo-section">
-            <div class="logo">
-                <span style="font-size: 16px; font-weight: bold; color: white;">MEKANOS</span>
-            </div>
+        <div class="logo-section" style="display: flex; align-items: center; gap: 12px;">
+            ${renderOrgLogoHtml(brand, 48, 'light')}
             <div class="company-info">
-                <h1 style="font-size: 20px; color: ${MEKANOS_COLORS.primary}; margin: 0;">MEKANOS S.A.S</h1>
-                <p style="font-size: 9px; color: ${COLORS.textLight}; margin: 2px 0;">Especialistas en Equipos Electrógenos</p>
-                <p style="font-size: 9px; color: ${COLORS.textLight}; margin: 0;">NIT: 900.123.456-7</p>
+                <h1 style="font-size: 18px; color: ${MEKANOS_COLORS.primary}; margin: 0;">${escapeBrandHtml(brand.nombreComercial)}</h1>
+                ${brand.eslogan ? `<p style="font-size: 9px; color: ${COLORS.textLight}; margin: 2px 0;">${escapeBrandHtml(brand.eslogan)}</p>` : ''}
+                ${brand.numeroIdFiscal ? `<p style="font-size: 9px; color: ${COLORS.textLight}; margin: 0;">${escapeBrandHtml(brand.tipoIdFiscal)}: ${escapeBrandHtml(brand.numeroIdFiscal)}</p>` : ''}
             </div>
         </div>
         <div class="quote-info" style="text-align: right;">
@@ -399,7 +410,10 @@ function generarDiagnostico(datos: DatosPropuestaCorrectivoPDF): string {
   `;
 }
 
-function generarSolucionPropuesta(datos: DatosPropuestaCorrectivoPDF): string {
+function generarSolucionPropuesta(
+    datos: DatosPropuestaCorrectivoPDF,
+    brand = resolveOrgBranding(datos.branding),
+): string {
     const s = datos.solucionPropuesta;
     return `
     <div class="section">
@@ -431,13 +445,13 @@ function generarSolucionPropuesta(datos: DatosPropuestaCorrectivoPDF): string {
                 </div>
                 
                 ${s.requiereParadaEquipo ? `
-                <div style="margin-top: 15px; background: ${MEKANOS_COLORS.warning}15; padding: 10px; border-radius: 8px;">
+                <div style="margin-top: 15px; background: ${brand.colores.warning}15; padding: 10px; border-radius: 8px;">
                     <span style="font-size: 9px; color: ${MEKANOS_COLORS.warning};">
                         ⚠️ Requiere parada del equipo
                     </span>
                 </div>
                 ` : `
-                <div style="margin-top: 15px; background: ${MEKANOS_COLORS.success}15; padding: 10px; border-radius: 8px;">
+                <div style="margin-top: 15px; background: ${brand.colores.success}15; padding: 10px; border-radius: 8px;">
                     <span style="font-size: 9px; color: ${MEKANOS_COLORS.success};">
                         ✓ Sin interrupción de servicio
                     </span>
@@ -449,10 +463,13 @@ function generarSolucionPropuesta(datos: DatosPropuestaCorrectivoPDF): string {
   `;
 }
 
-function generarTablaRepuestos(datos: DatosPropuestaCorrectivoPDF): string {
+function generarTablaRepuestos(
+    datos: DatosPropuestaCorrectivoPDF,
+    brand = resolveOrgBranding(datos.branding),
+): string {
     if (!datos.itemsRepuestos || datos.itemsRepuestos.length === 0) return '';
 
-    const formatNumber = (n: number) => n.toLocaleString('es-CO');
+    const formatMoney = (n: number) => formatCurrencyOrg(n, brand);
 
     return `
     <div class="section">
@@ -475,13 +492,13 @@ function generarTablaRepuestos(datos: DatosPropuestaCorrectivoPDF): string {
                     <td>${item.descripcion}</td>
                     <td>${item.referencia || '-'}</td>
                     <td class="text-center">${item.cantidad} ${item.unidad}</td>
-                    <td class="text-right">$ ${formatNumber(item.precioUnitario)}</td>
-                    <td class="text-right">$ ${formatNumber(item.subtotal)}</td>
+                    <td class="text-right">${formatMoney(item.precioUnitario)}</td>
+                    <td class="text-right">${formatMoney(item.subtotal)}</td>
                 </tr>
                 `).join('')}
-                <tr style="background: ${MEKANOS_COLORS.secondary}15;">
+                <tr style="background: ${brand.colores.secondary}15;">
                     <td colspan="5" class="text-right" style="font-weight: bold;">Subtotal Repuestos:</td>
-                    <td class="text-right" style="font-weight: bold;">$ ${formatNumber(datos.costos.subtotalRepuestos)}</td>
+                    <td class="text-right" style="font-weight: bold;">${formatMoney(datos.costos.subtotalRepuestos)}</td>
                 </tr>
             </tbody>
         </table>
@@ -489,10 +506,13 @@ function generarTablaRepuestos(datos: DatosPropuestaCorrectivoPDF): string {
   `;
 }
 
-function generarTablaManoObra(datos: DatosPropuestaCorrectivoPDF): string {
+function generarTablaManoObra(
+    datos: DatosPropuestaCorrectivoPDF,
+    brand = resolveOrgBranding(datos.branding),
+): string {
     if (!datos.itemsManoObra || datos.itemsManoObra.length === 0) return '';
 
-    const formatNumber = (n: number) => n.toLocaleString('es-CO');
+    const formatMoney = (n: number) => formatCurrencyOrg(n, brand);
 
     return `
     <div class="section">
@@ -513,13 +533,13 @@ function generarTablaManoObra(datos: DatosPropuestaCorrectivoPDF): string {
                     <td class="text-center">${item.orden}</td>
                     <td>${item.descripcion}</td>
                     <td class="text-center">${item.horas}</td>
-                    <td class="text-right">$ ${formatNumber(item.tarifaHora)}</td>
-                    <td class="text-right">$ ${formatNumber(item.subtotal)}</td>
+                    <td class="text-right">${formatMoney(item.tarifaHora)}</td>
+                    <td class="text-right">${formatMoney(item.subtotal)}</td>
                 </tr>
                 `).join('')}
-                <tr style="background: ${MEKANOS_COLORS.secondary}15;">
+                <tr style="background: ${brand.colores.secondary}15;">
                     <td colspan="4" class="text-right" style="font-weight: bold;">Subtotal Mano de Obra:</td>
-                    <td class="text-right" style="font-weight: bold;">$ ${formatNumber(datos.costos.subtotalManoObra)}</td>
+                    <td class="text-right" style="font-weight: bold;">${formatMoney(datos.costos.subtotalManoObra)}</td>
                 </tr>
             </tbody>
         </table>
@@ -527,8 +547,11 @@ function generarTablaManoObra(datos: DatosPropuestaCorrectivoPDF): string {
   `;
 }
 
-function generarResumenCostos(datos: DatosPropuestaCorrectivoPDF): string {
-    const formatNumber = (n: number) => n.toLocaleString('es-CO');
+function generarResumenCostos(
+    datos: DatosPropuestaCorrectivoPDF,
+    brand = resolveOrgBranding(datos.branding),
+): string {
+    const formatMoney = (n: number) => formatCurrencyOrg(n, brand);
     const c = datos.costos;
 
     return `
@@ -537,29 +560,29 @@ function generarResumenCostos(datos: DatosPropuestaCorrectivoPDF): string {
             <div style="width: 300px; background: ${MEKANOS_COLORS.background}; padding: 15px; border-radius: 8px;">
                 <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 10px;">
                     <span>Subtotal Repuestos:</span>
-                    <span>$ ${formatNumber(c.subtotalRepuestos)}</span>
+                    <span>${formatMoney(c.subtotalRepuestos)}</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 10px;">
                     <span>Subtotal Mano de Obra:</span>
-                    <span>$ ${formatNumber(c.subtotalManoObra)}</span>
+                    <span>${formatMoney(c.subtotalManoObra)}</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 10px; font-weight: 500;">
                     <span>Subtotal General:</span>
-                    <span>$ ${formatNumber(c.subtotalGeneral)}</span>
+                    <span>${formatMoney(c.subtotalGeneral)}</span>
                 </div>
                 ${c.descuentoValor > 0 ? `
                 <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 10px; color: ${MEKANOS_COLORS.success};">
                     <span>Descuento (${c.descuentoPorcentaje}%):</span>
-                    <span>- $ ${formatNumber(c.descuentoValor)}</span>
+                    <span>- ${formatMoney(c.descuentoValor)}</span>
                 </div>
                 ` : ''}
                 <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 10px;">
-                    <span>IVA (${c.ivaPorcentaje}%):</span>
-                    <span>$ ${formatNumber(c.ivaValor)}</span>
+                    <span>${escapeBrandHtml(brand.etiquetaImpuesto)} (${c.ivaPorcentaje}%):</span>
+                    <span>${formatMoney(c.ivaValor)}</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; padding: 12px 0 0 0; margin-top: 8px; border-top: 2px solid ${MEKANOS_COLORS.primary}; font-size: 14px; font-weight: bold; color: ${MEKANOS_COLORS.primary};">
                     <span>TOTAL PROPUESTA:</span>
-                    <span>$ ${formatNumber(c.totalPropuesta)}</span>
+                    <span>${formatMoney(c.totalPropuesta)}</span>
                 </div>
             </div>
         </div>
@@ -593,14 +616,17 @@ function generarCondiciones(datos: DatosPropuestaCorrectivoPDF): string {
   `;
 }
 
-function generarFirmas(datos: DatosPropuestaCorrectivoPDF): string {
+function generarFirmas(
+    datos: DatosPropuestaCorrectivoPDF,
+    brand = resolveOrgBranding(datos.branding),
+): string {
     return `
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 50px; margin-top: 40px;">
         <div style="text-align: center;">
             <div style="border-top: 1px solid ${MEKANOS_COLORS.text}; padding-top: 8px; margin-top: 50px;">
                 <div style="font-weight: bold; font-size: 10px;">${datos.elaboradoPor}</div>
                 <div style="font-size: 8px; color: ${COLORS.textLight};">${datos.cargoElaborador || 'Ingeniero de Servicio'}</div>
-                <div style="font-size: 8px; color: ${COLORS.textLight};">MEKANOS S.A.S</div>
+                <div style="font-size: 8px; color: ${COLORS.textLight};">${escapeBrandHtml(brand.nombreComercial)}</div>
             </div>
         </div>
         <div style="text-align: center;">
@@ -609,16 +635,6 @@ function generarFirmas(datos: DatosPropuestaCorrectivoPDF): string {
                 <div style="font-size: 8px; color: ${COLORS.textLight};">Aprobación de la Propuesta</div>
             </div>
         </div>
-    </div>
-  `;
-}
-
-function generarFooter(): string {
-    return `
-    <div class="footer">
-        <strong>MEKANOS S.A.S</strong> - NIT: 900.123.456-7<br>
-        BARRIO LIBANO CRA 49C #31-35 DIAG. AL SENA - Cartagena, Colombia<br>
-        TEL: 6359384 | CEL: 315-7083350 | EMAIL: mekanossas2@gmail.com
     </div>
   `;
 }

@@ -14,6 +14,7 @@ import {
   type ComponenteStock,
 } from '@/features/inventario/api/inventario-motor.service';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   AlertCircle,
   AlertTriangle,
@@ -44,12 +45,6 @@ import {
   type FichaLogisticaEquipo,
   type RolRepuestoBom,
 } from '../lib/equipos-bom.service';
-
-const cop = (v: number) => `$${Math.round(v || 0).toLocaleString('es-CO')}`;
-const fecha = (v?: string | null) =>
-  v
-    ? new Date(v).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
-    : '—';
 
 /**
  * Infiere automáticamente la categoría del BOM analizando el nombre/descripción del artículo.
@@ -195,6 +190,7 @@ function ModalVincularBom({
   metrica: MetricaUsoEquipoMeta;
   onClose: () => void;
 }) {
+  const { formatCurrency: cop } = useOrgFormatters();
   const [busqueda, setBusqueda] = useState('');
   const [debounced, setDebounced] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -753,6 +749,7 @@ export function EquipoRepuestosTab({
   metricaUso?: MetricaUsoEquipoMeta;
   onRetry: () => void;
 }) {
+  const { formatCurrency: cop, formatDate: fecha, formatNumber } = useOrgFormatters();
   const metrica = metricaUso ?? getMetricaUsoMeta();
   const [showVincular, setShowVincular] = useState(false);
   const [aEditar, setAEditar] = useState<BomItem | null>(null);
@@ -928,7 +925,7 @@ export function EquipoRepuestosTab({
                         </div>
                         {b.frecuencia_cambio_horas && (
                           <p className="text-[10px] text-slate-400 mt-1 whitespace-nowrap">
-                            Cada {b.frecuencia_cambio_horas.toLocaleString('es-CO')}{' '}
+                            Cada {formatNumber(b.frecuencia_cambio_horas, 0)}{' '}
                             {metrica.sufijoCorto}
                           </p>
                         )}
@@ -1009,7 +1006,7 @@ export function EquipoRepuestosTab({
               {instalados.length} {instalados.length === 1 ? 'registro' : 'registros'}
             </span>
             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-              Inversión acumulada Mekanos: {cop(ficha.resumen.total_inversion_repuestos)}
+              Inversión acumulada: {cop(ficha.resumen.total_inversion_repuestos)}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -1110,7 +1107,7 @@ export function EquipoRepuestosTab({
                         </span>
                       ) : r.origen_componente === 'CLIENTE' ? (
                         <span className="text-[11px] text-violet-700 font-medium whitespace-nowrap">
-                          Trazabilidad técnica (Sin costo Mekanos)
+                          Trazabilidad técnica (Sin costo)
                         </span>
                       ) : (
                         <span className="text-[11px] text-slate-500 italic whitespace-nowrap">

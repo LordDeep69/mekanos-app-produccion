@@ -12,7 +12,10 @@ import {
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermisosGuard } from '../auth/guards/permisos.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ActualizarTipoComponenteCommand } from './application/commands/actualizar-tipo-componente.command';
 import { CrearTipoComponenteCommand } from './application/commands/crear-tipo-componente.command';
@@ -24,8 +27,7 @@ import { FiltrosTiposComponenteDto } from './dto/filtros-tipos-componente.dto';
 import { UpdateTiposComponenteDto } from './dto/update-tipos-componente.dto';
 
 @Controller('tipos-componente')
-// @Public() // DESHABILITADO - Se require JWT para creado_por
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 export class TiposComponenteController {
   constructor(
     private readonly commandBus: CommandBus,
@@ -33,6 +35,8 @@ export class TiposComponenteController {
   ) {}
 
   @Post()
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   create(@Body() createDto: CreateTiposComponenteDto, @CurrentUser('id') userId: number) {
     const command = new CrearTipoComponenteCommand(
       createDto.codigo_tipo,
@@ -44,6 +48,8 @@ export class TiposComponenteController {
       createDto.es_inventariable,
       createDto.descripcion,
       userId,
+      createDto.aplica_todos_tipos,
+      createDto.tipos_equipo_ids,
     );
     return this.commandBus.execute(command);
   }
@@ -53,6 +59,7 @@ export class TiposComponenteController {
     const query = new GetTiposComponenteQuery(
       filtros.categoria,
       filtros.aplica_a,
+      filtros.id_tipo_equipo,
       filtros.es_consumible,
       filtros.es_inventariable,
       filtros.activo,
@@ -69,6 +76,8 @@ export class TiposComponenteController {
   }
 
   @Put(':id')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   update(@Param('id', ParseIntPipe) id: number, @Body() updateDto: UpdateTiposComponenteDto) {
     const command = new ActualizarTipoComponenteCommand(
       id,
@@ -82,11 +91,15 @@ export class TiposComponenteController {
       updateDto.descripcion,
       updateDto.activo,
       updateDto.modificado_por,
+      updateDto.aplica_todos_tipos,
+      updateDto.tipos_equipo_ids,
     );
     return this.commandBus.execute(command);
   }
 
   @Delete(':id')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   remove(@Param('id', ParseIntPipe) id: number) {
     const command = new DesactivarTipoComponenteCommand(id);
     return this.commandBus.execute(command);

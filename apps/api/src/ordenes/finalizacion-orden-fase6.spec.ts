@@ -339,4 +339,166 @@ describe('Fase 6.2: Preservación de respuestaJson, idActividadCatalogo y Lectur
     expect(res.mediciones.total).toBe(3);
     expect(mockPrisma.catalogo_actividades.count).not.toHaveBeenCalled();
   });
+
+  describe('Gate F2 — Atomicidad de FinalizacionOrdenService ante fallos externos en Fase A', () => {
+    const buildFinalizarDto = () => ({
+      idOrden: 2140,
+      evidencias: [{ tipo: 'ANTES' as any, base64: 'AAA=' }],
+      firmas: {
+        tecnico: { tipo: 'TECNICO' as any, base64: 'BBB=', idPersona: 10 },
+      },
+      actividades: [
+        {
+          sistema: 'GENERAL',
+          descripcion: 'Inspección general',
+          resultado: 'B' as any,
+          observaciones: '',
+        },
+      ],
+      observaciones: 'Cierre OK',
+      horaEntrada: '08:00',
+      horaSalida: '09:00',
+      usuarioId: 1,
+      modo: 'COMPLETO' as any,
+    });
+
+    const buildMockPrismaAtomic = () => ({
+      estados_orden: {
+        findFirst: jest.fn().mockResolvedValue({ id_estado: 4, codigo_estado: 'COMPLETADA' }),
+      },
+      ordenes_servicio: {
+        findUnique: jest.fn().mockResolvedValue({
+          id_orden_servicio: 2140,
+          numero_orden: 'OS-202611-0063',
+          id_estado_actual: 2,
+          id_tecnico_asignado: 1,
+          estados_orden: { codigo_estado: 'EN_PROCESO', nombre_estado: 'En Proceso' },
+          edicion_tecnico_habilitada: false,
+          clientes: {
+            id_persona: 20,
+            persona: { razon_social: 'Cliente Test', numero_identificacion: '900111222' },
+          },
+          sedes_cliente: { nombre_sede: 'Sede Norte', ciudad_sede: 'Bogotá' },
+          equipos: {
+            id_equipo: 484,
+            codigo_equipo: 'EQ-01',
+            nombre_equipo: 'Equipo Principal',
+            tipos_equipo: { id_tipo_equipo: 25, codigo_tipo: 'ASCENSOR', nombre_tipo: 'Ascensor' },
+          },
+          tipos_servicio: { id_tipo_servicio: 1, codigo_tipo: 'PREV', nombre_tipo: 'Preventivo' },
+          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+            id_empleado: 1,
+            id_persona: 10,
+            persona: { primer_nombre: 'Juan', primer_apellido: 'Perez', usuarios: [{ id_usuario: 1 }] },
+          },
+          ordenes_pendientes: [],
+          componentes_usados: [],
+          ordenes_equipos: [],
+        }),
+      },
+      catalogo_actividades: { findMany: jest.fn().mockResolvedValue([]) },
+      parametros_medicion: { findMany: jest.fn().mockResolvedValue([]) },
+      evidencias_fotograficas: { deleteMany: jest.fn() },
+      actividades_ejecutadas: { deleteMany: jest.fn() },
+      mediciones_servicio: { deleteMany: jest.fn() },
+      ordenes_pendientes: { deleteMany: jest.fn() },
+      lecturas_horometro: { deleteMany: jest.fn() },
+      $transaction: jest.fn(),
+    });
+
+    it('NO invoca $transaction ni deleteMany si pdfService.generarPDF falla en Fase A', async () => {
+      const mockPrisma = buildMockPrismaAtomic();
+      const mockCloudinary = {
+        uploadImage: jest.fn().mockResolvedValue({
+          success: true,
+          url: 'https://cdn.example.com/ev1.jpg',
+          publicId: 'ev1',
+        }),
+      };
+      const mockR2 = { uploadPDF: jest.fn() };
+      const mockPdf = {
+        generarPDF: jest.fn().mockRejectedValue(new Error('Chromium PDF timeout')),
+      };
+      const mockConfigParams = {
+        obtenerTodasLasUnidades: jest.fn().mockResolvedValue({}),
+      };
+      const mockConfigOrg = {
+        getContext: jest.fn().mockResolvedValue({ storage_prefijo_raiz: 'acme-media' }),
+      };
+
+      const service = new FinalizacionOrdenService(
+        mockPrisma as any,
+        mockCloudinary as any,
+        mockR2 as any,
+        mockPdf as any,
+        {} as any,
+        mockConfigParams as any,
+        mockConfigOrg as any,
+      );
+
+      await expect(service.finalizarOrden(buildFinalizarDto() as any)).rejects.toThrow(
+        /Chromium PDF timeout/,
+      );
+
+      expect(mockCloudinary.uploadImage).toHaveBeenCalledTimes(1);
+      expect(mockPdf.generarPDF).toHaveBeenCalledTimes(1);
+      expect(mockR2.uploadPDF).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.evidencias_fotograficas.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.actividades_ejecutadas.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.mediciones_servicio.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.ordenes_pendientes.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.lecturas_horometro.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('NO invoca $transaction ni deleteMany si r2Service.uploadPDF falla en Fase A', async () => {
+      const mockPrisma = buildMockPrismaAtomic();
+      const mockCloudinary = {
+        uploadImage: jest.fn().mockResolvedValue({
+          success: true,
+          url: 'https://cdn.example.com/ev1.jpg',
+          publicId: 'ev1',
+        }),
+      };
+      const mockR2 = {
+        uploadPDF: jest.fn().mockRejectedValue(new Error('R2 S3 upload failed')),
+      };
+      const mockPdf = {
+        generarPDF: jest.fn().mockResolvedValue({
+          buffer: Buffer.from('%PDF-1.4'),
+          filename: 'informe.pdf',
+          size: 8,
+        }),
+      };
+      const mockConfigParams = {
+        obtenerTodasLasUnidades: jest.fn().mockResolvedValue({}),
+      };
+      const mockConfigOrg = {
+        getContext: jest.fn().mockResolvedValue({ storage_prefijo_raiz: 'acme-media' }),
+      };
+
+      const service = new FinalizacionOrdenService(
+        mockPrisma as any,
+        mockCloudinary as any,
+        mockR2 as any,
+        mockPdf as any,
+        {} as any,
+        mockConfigParams as any,
+        mockConfigOrg as any,
+      );
+
+      await expect(service.finalizarOrden(buildFinalizarDto() as any)).rejects.toThrow(
+        /R2 S3 upload failed/,
+      );
+
+      expect(mockPdf.generarPDF).toHaveBeenCalledTimes(1);
+      expect(mockR2.uploadPDF).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.evidencias_fotograficas.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.actividades_ejecutadas.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.mediciones_servicio.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.ordenes_pendientes.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.lecturas_horometro.deleteMany).not.toHaveBeenCalled();
+    });
+  });
 });

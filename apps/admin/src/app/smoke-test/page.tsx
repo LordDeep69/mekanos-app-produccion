@@ -43,7 +43,7 @@ export default function SmokeTestPage() {
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="rounded-lg p-6 mb-8 text-white" style={{ backgroundColor: '#244673' }}>
-          <h1 className="text-3xl font-bold">🔬 MEKANOS Admin - Smoke Test</h1>
+          <h1 className="text-3xl font-bold">🔬 EAM Admin - Smoke Test</h1>
           <p className="mt-2 opacity-90">Verificación de conectividad Admin → Backend</p>
         </div>
 
@@ -142,7 +142,7 @@ export default function SmokeTestPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-gray-500">
-          <p>MEKANOS S.A.S - Portal Admin v0.1.0</p>
+          <p>EAM Platform - Portal Admin</p>
           <p>Esta página es temporal - eliminar después de verificar</p>
         </div>
       </div>

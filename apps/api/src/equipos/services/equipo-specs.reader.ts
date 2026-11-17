@@ -230,6 +230,77 @@ export class EquipoSpecsReader {
       : serie;
   }
 
+  private static readonly UNIT_CODE_SYMBOL_MAP: Record<string, string> = {
+    KVA_APA: 'kVA',
+    KVA: 'kVA',
+    VA_APA: 'VA',
+    VA: 'VA',
+    MVA_APA: 'MVA',
+    KV_VOLT: 'kV',
+    KV: 'kV',
+    MV_VOLT: 'mV',
+    VAC: 'VAC',
+    VDC: 'VDC',
+    V: 'V',
+    MEOHM: 'MΩ',
+    GOHM: 'GΩ',
+    KOHM: 'kΩ',
+    UOHM: 'µΩ',
+    MOHM: 'mΩ',
+    OHM: 'Ω',
+    DBA: 'dBA',
+    DB_LIN: 'dB',
+    DBC: 'dBC',
+    DBM: 'dBm',
+    DB_ATEN: 'dB',
+    C: '°C',
+    DELTA_C: '°C',
+    F: '°F',
+    DELTA_F: '°F',
+    K: 'K',
+    DELTA_K: 'K',
+    TR_ENF: 'TR',
+    TR: 'TR',
+    KW_TERM: 'kWt',
+    BTU_H_ENF: 'BTU/h',
+    BTU_H: 'BTU/h',
+    MW_TERM: 'MWt',
+    MMS_RMS: 'mm/s',
+    MS: 'm/s',
+    'M/S': 'm/s',
+    KG: 'kg',
+    KW: 'kW',
+    HP: 'HP',
+    HZ: 'Hz',
+    RPM: 'RPM',
+    M3H: 'm³/h',
+    MET: 'm',
+    LIT: 'L',
+    L: 'L',
+    MM: 'mm',
+    CM: 'cm',
+    GAL: 'Gal',
+    KVAR: 'kVAR',
+    VAR_RCT: 'VAR',
+    MVAR: 'MVAR',
+    FP_COS: 'cos φ',
+    PORC_FP: '%',
+    UND: '',
+    UNID: '',
+    UDS: '',
+  };
+
+  private static formatUnitDisplay(rawUnit?: string, key?: string): string {
+    const u = String(rawUnit || '').trim();
+    if (!u) {
+      if (key && key.includes('_vac')) return 'VAC';
+      return '';
+    }
+    const mapped = this.UNIT_CODE_SYMBOL_MAP[u.toUpperCase()];
+    if (mapped !== undefined) return mapped;
+    return u;
+  }
+
   /**
    * Resuelve la capacidad o potencia principal del activo (kVA, HP, m³/h, BTU...)
    */
@@ -238,8 +309,31 @@ export class EquipoSpecsReader {
 
     const catCanonica = this.getCategoriaCanonica(equipo);
 
-    // 1. JSONB dinámico si está presente
-    const capKeys = [
+    // 1. JSONB dinámico: priorizar atributos marcados con rol semántico principal en el arquetipo
+    const dynamicRoleKeys: string[] = [];
+    const dynamicUnitByKey = new Map<string, string>();
+    const tModulos = Array.isArray(equipo?.tipos_equipo?.tipo_equipo_modulos)
+      ? equipo.tipos_equipo.tipo_equipo_modulos
+      : [];
+    for (const tem of tModulos) {
+      const mAttrs = Array.isArray(tem?.modulo?.modulo_atributos)
+        ? tem.modulo.modulo_atributos
+        : [];
+      for (const ma of mAttrs) {
+        const attr = ma?.atributo;
+        if (!attr?.codigo_atributo) continue;
+        const unitSym = attr.unidad_defecto?.simbolo || attr.unidad_defecto_codigo;
+        if (unitSym) dynamicUnitByKey.set(attr.codigo_atributo, String(unitSym));
+        if (
+          attr.rol_semantico === 'POTENCIA_CAPACIDAD_PRINCIPAL' ||
+          attr.rol_semantico === 'CAPACIDAD_NOMINAL'
+        ) {
+          dynamicRoleKeys.push(attr.codigo_atributo);
+        }
+      }
+    }
+
+    const legacyCapKeys = [
       'capacidad_de_enfriamiento',
       'capacidad_enfriamiento',
       'capacidad_refrigeracion',
@@ -248,6 +342,8 @@ export class EquipoSpecsReader {
       'capacidad_principal',
       'capacidad',
     ];
+    const capKeys = Array.from(new Set([...dynamicRoleKeys, ...legacyCapKeys]));
+
     let specCap: string | undefined;
     let specCapKey: string | undefined;
     for (const ck of capKeys) {
@@ -256,6 +352,43 @@ export class EquipoSpecsReader {
         specCap = found;
         specCapKey = ck;
         break;
+      }
+    }
+    if (!specCap) {
+      const specs =
+        equipo.especificaciones ||
+        equipo.especificaciones_tecnicas ||
+        equipo.metadata?.especificaciones;
+      if (specs && typeof specs === 'object') {
+        const mapaModulos =
+          specs.modulos && typeof specs.modulos === 'object' ? specs.modulos : specs;
+        const candidateKeys: string[] = [];
+        for (const [mKey, mVal] of Object.entries(mapaModulos)) {
+          if (mKey.startsWith('_') || mKey === 'origen_atributos' || mKey === 'unidades') continue;
+          if (mVal && typeof mVal === 'object' && !Array.isArray(mVal)) {
+            for (const k of Object.keys(mVal as Record<string, any>)) {
+              const kl = k.toLowerCase();
+              if (
+                (kl.startsWith('potencia_') || kl.startsWith('capacidad_')) &&
+                !kl.includes('aceite') &&
+                !kl.includes('refrigerante') &&
+                !kl.includes('tanque') &&
+                !kl.includes('bateria') &&
+                !kl.includes('combustible')
+              ) {
+                candidateKeys.push(k);
+              }
+            }
+          }
+        }
+        for (const ck of candidateKeys) {
+          const found = this.buscarEnEspecificaciones(equipo, [ck]);
+          if (found) {
+            specCap = found;
+            specCapKey = ck;
+            break;
+          }
+        }
       }
     }
     if (specCap) {
@@ -268,21 +401,14 @@ export class EquipoSpecsReader {
             (unidadesSpec && typeof unidadesSpec === 'object'
               ? unidadesSpec[specCapKey]
               : undefined) ||
+            dynamicUnitByKey.get(specCapKey) ||
             (Array.isArray(equipo?.equipos_atributos_filtro)
               ? equipo.equipos_atributos_filtro.find((f: any) => f?.codigo_atributo === specCapKey)
                   ?.unidad_base_codigo
               : undefined);
-          if (rawUnit) {
-            const lowerU = String(rawUnit).trim().toLowerCase();
-            uom =
-              lowerU === 'kg'
-                ? 'kg'
-                : lowerU === 'ms' || lowerU === 'm/s'
-                  ? 'm/s'
-                  : lowerU === 'und'
-                    ? ''
-                    : String(rawUnit).trim();
-          }
+          uom = this.formatUnitDisplay(rawUnit, specCapKey);
+        } else if (uom) {
+          uom = this.formatUnitDisplay(uom, specCapKey);
         }
         if (!uom && catCanonica === 'HVAC') uom = 'TR';
         return {
@@ -476,25 +602,14 @@ export class EquipoSpecsReader {
         ? (unidadesSpec as Record<string, string>)
         : {};
 
-    const formatRawUnit = (rawUnit?: string, key?: string): string => {
-      const u = String(rawUnit || '').trim();
-      if (!u) {
-        if (key && key.includes('_vac')) return 'VAC';
-        return '';
-      }
-      const lower = u.toLowerCase();
-      if (lower === 'kg') return 'kg';
-      if (lower === 'ms' || lower === 'm/s') return 'm/s';
-      if (lower === 'und' || lower === 'unid') return '';
-      if (lower === 'vac') return 'VAC';
-      return u;
-    };
-
     const formatOptionOrValue = (
       val: any,
       opciones?: Array<{ valor: string; etiqueta?: string; label?: string }>,
     ): string => {
+      if (typeof val === 'boolean') return val ? 'Sí' : 'No';
       const rawStr = String(val).trim();
+      if (rawStr === 'true') return 'Sí';
+      if (rawStr === 'false') return 'No';
       if (opciones && opciones.length > 0) {
         const match = opciones.find((o) => String(o.valor).toUpperCase() === rawStr.toUpperCase());
         if (match?.etiqueta || match?.label) {
@@ -527,7 +642,7 @@ export class EquipoSpecsReader {
       if (meta && meta.visiblePdf === false && !meta.esKpi) continue;
 
       const unidadRaw = unidadesMap[key] || meta?.unidadSimbolo || filtroMap.get(key);
-      const unidadDisplay = formatRawUnit(unidadRaw, key);
+      const unidadDisplay = this.formatUnitDisplay(unidadRaw, key);
       const valorFormatted = formatOptionOrValue(val, meta?.opciones);
       const yaIncluyeUnidad =
         unidadDisplay !== '' &&
@@ -556,26 +671,31 @@ export class EquipoSpecsReader {
       });
     }
 
-    // KPI 4: Contador principal de uso (Horómetro / Odómetro / Ciclos / UPM) según unidad_uso
+    // KPI 4: Contador principal de uso (Horómetro / Odómetro / Ciclos / UPM / Personalizado) según unidad_uso
     const contadorActual = Number(equipo.horas_actuales || 0);
-    const unidadUso = String(equipo.tipos_equipo?.unidad_uso || 'HORAS').toUpperCase();
+    const unidadUsoRaw = String(equipo.tipos_equipo?.unidad_uso || 'HORAS').trim();
+    const unidadUso = unidadUsoRaw.toUpperCase();
+    const etiquetaContador = equipo.tipos_equipo?.etiqueta_contador?.trim();
     if (
       contadorActual > 0 &&
       unidadUso !== 'CAL' &&
-      equipo.tipos_equipo?.requiere_horometro !== false
+      equipo.tipos_equipo?.requiere_horometro !== false &&
+      etiquetaContador?.toUpperCase() !== 'N/A'
     ) {
-      const etiquetaContador = equipo.tipos_equipo?.etiqueta_contador?.trim();
       let etiquetaKpi = etiquetaContador || 'Horómetro';
       let sufijoKpi = 'hrs';
       if (unidadUso === 'CICLOS') {
         etiquetaKpi = etiquetaContador || 'Ciclos de Viaje';
         sufijoKpi = 'ciclos';
-      } else if (unidadUso === 'KM_ODO') {
+      } else if (unidadUso === 'KM_ODO' || unidadUso === 'KM') {
         etiquetaKpi = etiquetaContador || 'Odómetro';
         sufijoKpi = 'km';
       } else if (unidadUso === 'UPM') {
         etiquetaKpi = etiquetaContador || 'Producción';
         sufijoKpi = 'und';
+      } else if (unidadUso !== 'HORAS' && unidadUso !== 'HRS' && unidadUso !== 'H') {
+        etiquetaKpi = etiquetaContador || unidadUsoRaw;
+        sufijoKpi = unidadUsoRaw.toLowerCase();
       }
       kpis.push({
         codigo: 'horas_actuales',

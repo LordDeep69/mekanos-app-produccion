@@ -327,8 +327,8 @@ export default function EditarEmpleadoPage() {
           celular: persona.celular || '',
           direccion_principal: persona.direccion_principal || '',
           barrio_zona: persona.barrio_zona || '',
-          ciudad: persona.ciudad || 'CARTAGENA',
-          departamento: persona.departamento || 'BOLÍVAR',
+          ciudad: persona.ciudad || '',
+          departamento: persona.departamento || '',
           observaciones: persona.observaciones || '',
           activo: persona.activo !== false,
         });
@@ -1167,7 +1167,7 @@ export default function EditarEmpleadoPage() {
                           type="email"
                           value={nuevoEmail}
                           onChange={(e) => setNuevoEmail(e.target.value)}
-                          placeholder="nuevo.correo@mekanos.com"
+                          placeholder="nuevo.correo@empresa.com"
                           className="bg-white"
                         />
                         <div className="flex items-center space-x-2 pt-1">

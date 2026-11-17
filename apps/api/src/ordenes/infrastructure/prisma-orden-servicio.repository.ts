@@ -1,5 +1,6 @@
 import { PrismaService } from '@mekanos/database';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { reserveNextSequenceCounter } from '../../common/utils/sequence-counter.helper';
 import {
   ACCION_MODIFICAR_OBSERVACIONES_CIERRE,
   AuditoriaObservacionesCierre,
@@ -2505,28 +2506,28 @@ export class PrismaOrdenServicioRepository {
    */
   async getUltimoCorrelativoMes(anio: number, mes: number): Promise<number> {
     const prefix = `OS-${anio}${mes.toString().padStart(2, '0')}`;
+    const yearMonthKey = anio * 100 + mes;
 
-    const ultimaOrden = await this.prisma.ordenes_servicio.findFirst({
-      where: {
-        numero_orden: {
-          startsWith: prefix,
-        },
+    // Reserva atómicamente el siguiente correlativo mensual en sequence_counter (sembrado desde el máximo existente)
+    // Retorna (sequence - 1) para mantener compatibilidad con NumeroOrden.create(ultimoCorrelativo) sin colisiones concurrentes.
+    const reserved = await reserveNextSequenceCounter(
+      this.prisma,
+      'OS_MES',
+      yearMonthKey,
+      async () => {
+        const ultimaOrden = await this.prisma.ordenes_servicio.findFirst({
+          where: { numero_orden: { startsWith: prefix } },
+          orderBy: { numero_orden: 'desc' },
+          select: { numero_orden: true },
+        });
+        if (!ultimaOrden) return 0;
+        const parts = ultimaOrden.numero_orden.split('-');
+        const parsed = parseInt(parts[2], 10);
+        return Number.isFinite(parsed) ? parsed : 0;
       },
-      orderBy: {
-        numero_orden: 'desc',
-      },
-      select: {
-        numero_orden: true,
-      },
-    });
+    );
 
-    if (!ultimaOrden) {
-      return 0;
-    }
-
-    // Extraer correlativo: OS-YYYYMM-NNNN → NNNN
-    const parts = ultimaOrden.numero_orden.split('-');
-    return parseInt(parts[2], 10);
+    return Math.max(0, reserved.sequence - 1);
   }
 
   /**

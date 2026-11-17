@@ -217,8 +217,8 @@ export function EmpleadoFormV2({ onSuccess, onCancel }: EmpleadoFormV2Props) {
     defaultValues: {
       tipo_identificacion: 'CC',
       tipo_contrato: 'INDEFINIDO',
-      ciudad: 'CARTAGENA',
-      departamento_geo: 'BOLÍVAR',
+      ciudad: '',
+      departamento_geo: '',
       es_tecnico: false,
       es_asesor: false,
       puede_conducir: false,

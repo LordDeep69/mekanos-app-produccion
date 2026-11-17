@@ -12,7 +12,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permisos } from '../../auth/decorators/permisos.decorator';
+import { Roles } from '../../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PermisosGuard } from '../../auth/guards/permisos.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
 import {
   CreateArquetipoDto,
@@ -25,7 +29,7 @@ import {
 @ApiTags('EAM - Arquetipos y Tipos de Equipo')
 @ApiBearerAuth()
 @Controller('catalogos/arquetipos')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 export class ArquetiposController {
   constructor(private readonly eamService: CatalogosEamService) {}
 
@@ -36,9 +40,17 @@ export class ArquetiposController {
   }
 
   @Post()
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Crear una nueva clase / arquetipo de equipo' })
   async create(@Body() dto: CreateArquetipoDto) {
     return this.eamService.createArquetipo(dto);
+  }
+
+  @Get('categorias')
+  @ApiOperation({ summary: 'Listar categorías de activos configuradas para agrupar arquetipos' })
+  async getCategoriasActivo() {
+    return this.eamService.getCategoriasActivo();
   }
 
   @Get('tipos-servicio')
@@ -49,12 +61,16 @@ export class ArquetiposController {
   }
 
   @Post('tipos-servicio')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Crear un nuevo tipo de servicio en el catálogo para arquetipos' })
   async createTipoServicio(@Body() dto: CreateTipoServicioEamDto) {
     return this.eamService.createTipoServicioEam(dto);
   }
 
   @Patch(':id')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar propiedades de un arquetipo de equipo' })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -64,6 +80,8 @@ export class ArquetiposController {
   }
 
   @Put(':id')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar propiedades de un arquetipo de equipo (PUT)' })
   async updatePut(
     @Param('id', ParseIntPipe) id: number,
@@ -73,6 +91,8 @@ export class ArquetiposController {
   }
 
   @Delete(':id')
+  @Roles('ADMIN')
+  @Permisos('CONFIG_SYSTEM')
   @ApiOperation({ summary: 'Eliminar un tipo de equipo sin activos asociados' })
   async delete(@Param('id', ParseIntPipe) id: number) {
     return this.eamService.deleteArquetipo(id);
@@ -93,6 +113,8 @@ export class ArquetiposController {
   }
 
   @Post(':id/modulos')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Vincular un módulo técnico a un arquetipo (sincroniza alias gemelos)' })
   async vincularModulo(
     @Param('id', ParseIntPipe) id: number,
@@ -103,6 +125,8 @@ export class ArquetiposController {
   }
 
   @Delete(':id/modulos/:idModulo')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Desvincular módulo de un arquetipo (sincroniza alias gemelos)' })
   async desvincularModulo(
     @Param('id', ParseIntPipe) id: number,
@@ -112,6 +136,8 @@ export class ArquetiposController {
   }
 
   @Post(':id/planes')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Crear o actualizar plan de mantenimiento preventivo en un arquetipo' })
   async createPlan(
     @Param('id', ParseIntPipe) id: number,
@@ -121,6 +147,8 @@ export class ArquetiposController {
   }
 
   @Patch(':id/planes/:idPlan')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar intervalos de un plan preventivo de arquetipo' })
   async updatePlan(
     @Param('id', ParseIntPipe) id: number,
@@ -131,6 +159,8 @@ export class ArquetiposController {
   }
 
   @Delete(':id/planes/:idPlan')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Eliminar plan preventivo de un arquetipo' })
   async deletePlan(
     @Param('id', ParseIntPipe) id: number,

@@ -57,6 +57,7 @@ import {
 import { calculateSmartMatchScore } from '@/lib/search-utils';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   AlertTriangle,
   Building2,
@@ -233,6 +234,7 @@ function PasoContexto({
   data: WizardData;
   onChange: (updates: Partial<WizardData>) => void;
 }) {
+  const { formatDate } = useOrgFormatters();
   const [busquedaCliente, setBusquedaCliente] = useState('');
   const [busquedaEquipo, setBusquedaEquipo] = useState('');
   const [preselectEquipoId, setPreselectEquipoId] = useState<number | null>(null);
@@ -716,7 +718,7 @@ function PasoContexto({
                           </p>
                           {s.fecha_creacion && (
                             <span className="text-[8px] text-slate-400 font-bold shrink-0">
-                              {new Date(s.fecha_creacion).toLocaleDateString('es-CO')}
+                              {formatDate(s.fecha_creacion)}
                             </span>
                           )}
                         </div>
@@ -1587,6 +1589,15 @@ function PasoAlcance({
     [familiaEfectiva, data.equiposSeleccionados],
   );
 
+  const categoriasCorrectivoDisponibles = useMemo(() => {
+    const categoriasSet = new Set<string>();
+    for (const s of serviciosComerciales || []) {
+      const cat = clasificarServicioCorrectivo(s);
+      if (cat && cat !== 'GLOBAL') categoriasSet.add(cat);
+    }
+    return ['TODOS', ...Array.from(categoriasSet), 'SOLO_GLOBAL'];
+  }, [serviciosComerciales]);
+
   // Filtrar servicios comerciales correctivos/especializados inteligentemente
   const serviciosFiltrados = useMemo(() => {
     const list = (serviciosComerciales || []).filter((s) => {
@@ -1596,11 +1607,8 @@ function PasoAlcance({
       if (filtroTab === 'FAMILIA_Y_GLOBAL') return esFamiliaMatch || cat === 'GLOBAL';
       if (filtroTab === 'SOLO_FAMILIA') return esFamiliaMatch;
       if (filtroTab === 'SOLO_GLOBAL') return cat === 'GLOBAL';
-      if (filtroTab === 'GEN') return cat === 'GENERADOR';
-      if (filtroTab === 'BOM') return cat === 'BOMBA';
-      if (filtroTab === 'MOT') return cat === 'MOTOR';
-      if (filtroTab === 'HVAC') return cat === 'HVAC';
-      return true;
+      if (filtroTab === 'TODOS') return true;
+      return cat === filtroTab;
     });
 
     const query = busquedaCorrectivo.trim();
@@ -1833,7 +1841,7 @@ function PasoAlcance({
                 </>
               ) : (
                 <>
-                  {['TODOS', 'GEN', 'BOM', 'MOT', 'SOLO_GLOBAL'].map((cat) => (
+                  {categoriasCorrectivoDisponibles.map((cat) => (
                     <button
                       key={cat}
                       type="button"
@@ -1847,13 +1855,9 @@ function PasoAlcance({
                     >
                       {cat === 'TODOS'
                         ? 'Todos'
-                        : cat === 'GEN'
-                          ? 'Generador'
-                          : cat === 'BOM'
-                            ? 'Bomba'
-                            : cat === 'MOT'
-                              ? 'Motor'
-                              : 'Generales'}
+                        : cat === 'SOLO_GLOBAL'
+                          ? 'Generales'
+                          : obtenerEtiquetaFamilia(cat as FamiliaEquipo, data.equiposSeleccionados)}
                     </button>
                   ))}
                 </>

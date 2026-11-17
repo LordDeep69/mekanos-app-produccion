@@ -56,32 +56,41 @@ void main() {
       expect(unidadElev, isNull);
     });
 
-    test('mantiene retrocompatibilidad con config legacy de generador', () {
+    test('resuelve rangos directos por codigo_parametro sin diccionarios legacy de vertical', () {
       final configJson = jsonEncode({
-        'unidades': {'temperatura': '°F'},
         'rangos': {
-          'temperatura_refrigerante': {
-            'min_normal': 160,
-            'max_normal': 205,
-            'max_critico': 220,
+          'TEMP_TABLERO_PRINCIPAL': {
+            'unidad_medida': '°F',
+            'min_normal': 68,
+            'max_normal': 115,
+            'max_critico': 140,
           },
         },
       });
 
       final rangos = ParametroOverrideResolver.resolverOverride(
         configParametrosJson: configJson,
-        codigoParametro: 'GEN_TEMP_REFRIGERANTE',
+        codigoParametro: 'temp_tablero_principal',
       );
       final unidad = ParametroOverrideResolver.resolverUnidadPersonalizada(
         configParametrosJson: configJson,
-        codigoParametro: 'GEN_TEMP_REFRIGERANTE',
+        codigoParametro: 'TEMP_TABLERO_PRINCIPAL',
       );
 
       expect(rangos, isNotNull);
-      expect(rangos!.minNormal, 160.0);
-      expect(rangos.maxNormal, 205.0);
-      expect(rangos.maxCritico, 220.0);
+      expect(rangos!.minNormal, 68.0);
+      expect(rangos.maxNormal, 115.0);
+      expect(rangos.maxCritico, 140.0);
       expect(unidad, '°F');
+
+      // Asegurar que ya no resuelve diccionarios hardcoded legacy si no hay entrada explícita
+      expect(
+        ParametroOverrideResolver.resolverOverride(
+          configParametrosJson: configJson,
+          codigoParametro: 'GEN_TEMP_REFRIGERANTE',
+        ),
+        isNull,
+      );
     });
 
     test('soporta parametros_adicionales y rangos directos por codigo_parametro', () {

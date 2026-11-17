@@ -5,6 +5,7 @@ export class GetTiposComponenteQuery {
   constructor(
     public readonly categoria?: string,
     public readonly aplica_a?: string,
+    public readonly id_tipo_equipo?: number,
     public readonly es_consumible?: boolean,
     public readonly es_inventariable?: boolean,
     public readonly activo?: boolean,

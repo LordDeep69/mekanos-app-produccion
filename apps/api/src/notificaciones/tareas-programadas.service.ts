@@ -17,18 +17,56 @@
  */
 
 import { PrismaService } from '@mekanos/database';
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
+import { ProgramacionFacadeService } from '../common/services/programacion-facade.service';
+import { ConfiguracionOrganizacionService } from '../configuracion-organizacion/configuracion-organizacion.service';
 import { NotificacionesService } from './notificaciones.service';
 
 @Injectable()
-export class TareasProgramadasService {
+export class TareasProgramadasService implements OnModuleInit {
   private readonly logger = new Logger(TareasProgramadasService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificacionesService: NotificacionesService,
+    @Optional() private readonly programacionFacade?: ProgramacionFacadeService,
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
+    @Optional() private readonly schedulerRegistry?: SchedulerRegistry,
   ) {}
+
+  async onModuleInit() {
+    if (!this.schedulerRegistry || !this.configOrgService) return;
+    try {
+      const ctx = await this.configOrgService.getContext();
+      const zonaHoraria = ctx?.zona_horaria;
+      if (!zonaHoraria) return;
+
+      const nombresCron = [
+        'recordatorios-servicio',
+        'cotizaciones-vencidas',
+        'contratos-por-vencer',
+        'generar-ordenes-cronogramas',
+        'limpiar-notificaciones',
+        'ordenes-vencidas',
+      ];
+      for (const nombre of nombresCron) {
+        try {
+          const job = this.schedulerRegistry.getCronJob(nombre);
+          if (job?.cronTime) {
+            const CronTimeCtor = (job.cronTime as any).constructor;
+            const nextTime = new CronTimeCtor((job.cronTime as any).source, zonaHoraria);
+            job.setTime(nextTime);
+          }
+        } catch {
+          // Job might not be registered in isolated test environments
+        }
+      }
+      this.logger.log(`🕒 Zonas horarias de CRON sincronizadas a: ${zonaHoraria}`);
+    } catch {
+      // Non-blocking startup config lookup
+    }
+  }
 
   private getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -195,6 +233,21 @@ export class TareasProgramadasService {
 
       for (const contrato of contratos) {
         if (contrato.id_asesor_responsable) {
+          // Resolver id_asesor_responsable (empleados) -> persona -> usuarios.id_usuario
+          const idPersonaAsesor = contrato.empleados?.id_persona;
+          const usuarioAsesor = idPersonaAsesor
+            ? await this.prisma.usuarios.findFirst({
+                where: { id_persona: idPersonaAsesor, estado: 'ACTIVO' },
+                select: { id_usuario: true },
+              })
+            : null;
+          if (!usuarioAsesor) {
+            this.logger.warn(
+              `⚠️ CRON Job 3: Empleado asesor #${contrato.id_asesor_responsable} sin usuario activo; omitiendo contrato ${contrato.codigo_contrato}`,
+            );
+            continue;
+          }
+
           const diasRestantes = Math.ceil(
             (new Date(contrato.fecha_fin!).getTime() - new Date().getTime()) /
               (1000 * 60 * 60 * 24),
@@ -205,10 +258,9 @@ export class TareasProgramadasService {
             contrato.clientes.persona.nombre_completo ||
             'Cliente';
 
-          // Solo notificar una vez por contrato (verificar si ya existe notificación reciente)
           const notificacionExistente = await this.prisma.notificaciones.findFirst({
             where: {
-              id_usuario: contrato.id_asesor_responsable,
+              id_usuario: usuarioAsesor.id_usuario,
               tipo_notificacion: 'CONTRATO_POR_VENCER',
               id_entidad_relacionada: contrato.id_contrato,
               fecha_creacion: {
@@ -219,7 +271,7 @@ export class TareasProgramadasService {
 
           if (!notificacionExistente) {
             await this.notificacionesService.notificarContratoPorVencer(
-              contrato.id_asesor_responsable,
+              usuarioAsesor.id_usuario,
               contrato.codigo_contrato,
               contrato.id_contrato,
               nombreCliente,
@@ -245,20 +297,12 @@ export class TareasProgramadasService {
     this.logger.log('📦 CRON: Generando órdenes desde cronogramas...');
 
     try {
-      // Importar el servicio de programación dinámicamente
-      const { ProgramacionFacadeService } = await import(
-        '../common/services/programacion-facade.service'
-      );
+      if (!this.programacionFacade) {
+        throw new Error('ProgramacionFacadeService no inyectado en TareasProgramadasService');
+      }
 
-      // Obtener instancia del servicio
-      const programacionService = new ProgramacionFacadeService(
-        this.prisma,
-        // El NumeracionService se inyecta aquí si es necesario
-        null as any,
-      );
-
-      // Generar órdenes para los próximos 7 días
-      const resultado = await programacionService.generarOrdenesDesdeCronogramas(7);
+      // Generar órdenes para los próximos 7 días usando ProgramacionFacadeService inyectado por DI (con NumeracionService real)
+      const resultado = await this.programacionFacade.generarOrdenesDesdeCronogramas(7);
 
       if (resultado.success) {
         this.logger.log(`✅ CRON: ${resultado.data?.ordenesCreadas || 0} órdenes generadas`);
@@ -326,7 +370,10 @@ export class TareasProgramadasService {
           usuarios_roles: {
             some: {
               roles: {
-                nombre_rol: { in: ['SUPERVISOR', 'ADMINISTRADOR', 'GERENTE'] },
+                OR: [
+                  { codigo_rol: { in: ['SUPERVISOR', 'ADMIN', 'GERENTE'] } },
+                  { nombre_rol: { in: ['SUPERVISOR', 'ADMINISTRADOR', 'GERENTE'] } },
+                ],
               },
             },
           },

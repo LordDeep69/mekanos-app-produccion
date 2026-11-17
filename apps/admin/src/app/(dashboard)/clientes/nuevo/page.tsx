@@ -7,7 +7,7 @@ import { ClienteForm } from '@/features/clientes/components/cliente-form';
 import { UserPlus } from 'lucide-react';
 
 export const metadata = {
-  title: 'Nuevo Cliente | MEKANOS Admin',
+  title: 'Nuevo Cliente | EAM Admin',
   description: 'Registrar nuevo cliente',
 };
 

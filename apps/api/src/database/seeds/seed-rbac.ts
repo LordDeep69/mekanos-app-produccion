@@ -1,8 +1,9 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
-// Usar el pooler (6543) que funciona correctamente
-process.env.DATABASE_URL =
-  'postgresql://postgres.nemrrkaobdlwehfnetxs:Mekanos2025%23sas@aws-1-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connect_timeout=30';
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL es obligatorio en variables de entorno para ejecutar seed-rbac.');
+}
 
 const prisma = new PrismaClient({ log: ['error', 'warn'] });
 

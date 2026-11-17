@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { getNextTableId } from '../common/utils/next-id.helper';
 import { PrismaService } from '../database/prisma.service';
 import { CreatePermisosDto } from './dto/create-permisos.dto';
 import { UpdatePermisosDto } from './dto/update-permisos.dto';
@@ -18,12 +17,9 @@ export class PermisosService {
       throw new Error(`Permiso con código ${createDto.codigo_permiso} ya existe`);
     }
 
-    const nextId = await getNextTableId(this.prisma, 'permisos', 'id_permiso');
-
     return this.prisma.permisos.create({
       data: {
         ...createDto,
-        id_permiso: nextId,
         creado_por: userId,
         fecha_creacion: new Date(),
       },

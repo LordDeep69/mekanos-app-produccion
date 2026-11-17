@@ -6,12 +6,14 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/branding_provider.dart';
 import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/background_sync_worker.dart';
 import '../../../core/sync/offline_sync_service.dart';
 import '../../../core/sync/sync_lifecycle_manager.dart';
 import '../../../core/sync/sync_service.dart';
 import '../../auth/data/auth_provider.dart';
+import '../../auth/presentation/logout_guard_dialog.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../notificaciones/presentation/notificaciones_badge.dart';
 import '../../sync/presentation/pending_sync_screen.dart';
@@ -156,6 +158,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final branding = ref.watch(brandingProvider);
     final syncState = ref.watch(syncStateProvider);
     final user = authState.user;
 
@@ -164,8 +167,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('MEKANOS'),
-        backgroundColor: Colors.blue,
+        title: Text(branding.nombreComercial),
+        backgroundColor: branding.colorPrimario,
         foregroundColor: Colors.white,
         actions: [
           // Widget de estado de sincronización (siempre visible)
@@ -176,7 +179,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await ref.read(authStateProvider.notifier).logout();
+              await confirmarYCerrarSesion(context, ref);
             },
             tooltip: 'Cerrar sesión',
           ),
@@ -412,7 +415,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // Botón de logout alternativo
               OutlinedButton.icon(
                 onPressed: () async {
-                  await ref.read(authStateProvider.notifier).logout();
+                  await confirmarYCerrarSesion(context, ref);
                 },
                 icon: const Icon(Icons.logout),
                 label: const Text('Cerrar Sesión'),

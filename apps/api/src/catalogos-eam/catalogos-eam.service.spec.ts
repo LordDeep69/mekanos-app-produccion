@@ -292,26 +292,30 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
     expect(esquema.planes_mantenimiento.length).toBe(1);
   });
 
-  it('debe deduplicar pares canónicos en getArquetipos sumando equipos activos y totales (1↔3 y 2↔5)', async () => {
+  it('debe retornar todos los arquetipos activos 1:1 sin fusión ni ocultamiento de alias', async () => {
     const arquetipos = await service.getArquetipos();
-    expect(arquetipos.length).toBe(2);
+    expect(arquetipos.length).toBe(4);
 
     const gen = arquetipos.find((a) => a.id_tipo_equipo === 1);
     expect(gen).toBeDefined();
-    expect(gen._count.equipos).toBe(260); // 86 + 174
-    expect(gen.equipos_activos).toBe(259); // 86 + 173
-    expect(gen.ids_sincronizados).toEqual([1, 3]);
+    expect(gen._count.equipos).toBe(86);
+    expect(gen.equipos_activos).toBe(86);
+    expect(gen.ids_sincronizados).toEqual([1]);
+
+    const planta = arquetipos.find((a) => a.id_tipo_equipo === 3);
+    expect(planta).toBeDefined();
+    expect(planta.equipos_activos).toBe(173);
 
     const bom = arquetipos.find((a) => a.id_tipo_equipo === 2);
     expect(bom).toBeDefined();
-    expect(bom._count.equipos).toBe(204); // 22 + 182
-    expect(bom.equipos_activos).toBe(203); // 21 + 182
-    expect(bom.ids_sincronizados).toEqual([2, 5]);
+    expect(bom._count.equipos).toBe(22);
+    expect(bom.equipos_activos).toBe(21);
+    expect(bom.ids_sincronizados).toEqual([2]);
   });
 
-  it('debe sincronizar en espejo ambos IDs del par canónico al vincular módulos o crear planes preventivos', async () => {
+  it('debe vincular módulos y crear planes preventivos de forma independiente 1:1 para el arquetipo', async () => {
     await service.vincularModuloArquetipo(1, 2, true);
-    expect(mockPrisma.tipo_equipo_modulos.upsert).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.tipo_equipo_modulos.upsert).toHaveBeenCalledTimes(1);
 
     await service.createPlanArquetipo(1, {
       id_tipo_servicio: 3,
@@ -319,7 +323,7 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
       frecuencia_dias: 90,
       frecuencia_uso: 250,
     });
-    expect(mockPrisma.tipo_equipo_planes.upsert).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.tipo_equipo_planes.upsert).toHaveBeenCalledTimes(1);
   });
 
   it('debe actualizar en caliente las banderas de un atributo dentro de un módulo técnico', async () => {

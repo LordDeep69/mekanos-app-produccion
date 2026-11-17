@@ -23,19 +23,19 @@ export class R2StorageService implements OnModuleInit {
 
   // Clientes y buckets específicos
   private s3ClientPlantas: S3Client | null = null;
-  private bucketPlantas: string = 'mekanos-plantas-produccion';
+  private bucketPlantas: string = '';
   private configuredPlantas: boolean = false;
 
   private s3ClientBombas: S3Client | null = null;
-  private bucketBombas: string = 'mekanos-bombas-produccion';
+  private bucketBombas: string = '';
   private configuredBombas: boolean = false;
 
   constructor() {
-    // 1. Configurar perfil PLANTAS / Primario
+    // 1. Configurar perfil Primario (canónico R2_* y retrocompatible R2_PLANTAS_*)
     const endpointPlantas = process.env.R2_ENDPOINT || process.env.R2_PLANTAS_ENDPOINT;
     const accessKeyIdPlantas = process.env.R2_ACCESS_KEY_ID || process.env.R2_PLANTAS_ACCESS_KEY_ID || '';
     const secretAccessKeyPlantas = process.env.R2_SECRET_ACCESS_KEY || process.env.R2_PLANTAS_SECRET_ACCESS_KEY || '';
-    this.bucketPlantas = process.env.R2_BUCKET_NAME || process.env.R2_PLANTAS_BUCKET_NAME || 'mekanos-plantas-produccion';
+    this.bucketPlantas = process.env.R2_BUCKET_NAME || process.env.R2_PLANTAS_BUCKET_NAME || 'eam-storage';
 
     this.configuredPlantas = !!(endpointPlantas && accessKeyIdPlantas && secretAccessKeyPlantas);
 
@@ -50,11 +50,11 @@ export class R2StorageService implements OnModuleInit {
       });
     }
 
-    // 2. Configurar perfil BOMBAS
+    // 2. Configurar perfil Secundario (retrocompatible R2_BOMBAS_*)
     const endpointBombas = process.env.R2_BOMBAS_ENDPOINT;
     const accessKeyIdBombas = process.env.R2_BOMBAS_ACCESS_KEY_ID || '';
     const secretAccessKeyBombas = process.env.R2_BOMBAS_SECRET_ACCESS_KEY || '';
-    this.bucketBombas = process.env.R2_BOMBAS_BUCKET_NAME || 'mekanos-bombas-produccion';
+    this.bucketBombas = process.env.R2_BOMBAS_BUCKET_NAME || '';
 
     this.configuredBombas = !!(endpointBombas && accessKeyIdBombas && secretAccessKeyBombas);
 

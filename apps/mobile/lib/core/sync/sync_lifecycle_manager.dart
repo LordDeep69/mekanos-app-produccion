@@ -252,14 +252,13 @@ class SyncLifecycleManager with WidgetsBindingObserver {
 /// final manager = ref.watch(syncLifecycleManagerProvider(tecnicoId));
 /// manager.initialize();
 /// ```
-final syncLifecycleManagerProvider = Provider.family<SyncLifecycleManager, int>(
-  (ref, tecnicoId) {
-    final manager = SyncLifecycleManager(ref, tecnicoId);
+final syncLifecycleManagerProvider =
+    Provider.autoDispose.family<SyncLifecycleManager, int>((ref, tecnicoId) {
+      final manager = SyncLifecycleManager(ref, tecnicoId);
 
-    ref.onDispose(() {
-      manager.dispose();
+      ref.onDispose(() {
+        manager.dispose();
+      });
+
+      return manager;
     });
-
-    return manager;
-  },
-);

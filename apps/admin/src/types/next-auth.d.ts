@@ -18,6 +18,8 @@ declare module 'next-auth' {
         email: string;
         nombre: string;
         rol: string;
+        roles?: string[];
+        permisos?: string[];
         idEmpleado?: number;
         accessToken: string;
         refreshToken: string;
@@ -32,6 +34,8 @@ declare module 'next-auth' {
             email: string;
             nombre: string;
             rol: string;
+            roles?: string[];
+            permisos?: string[];
             idEmpleado?: number;
         } & DefaultSession['user'];
         accessToken: string;
@@ -47,6 +51,8 @@ declare module 'next-auth/jwt' {
         id: string;
         nombre: string;
         rol: string;
+        roles?: string[];
+        permisos?: string[];
         idEmpleado?: number;
         accessToken: string;
         refreshToken: string;

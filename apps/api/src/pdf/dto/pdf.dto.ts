@@ -11,13 +11,19 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString } from 'class-validator';
 
 /**
- * Tipos de informe disponibles
+ * Tipos de informe/documento soportados por el motor PDF universal
  */
 export enum TipoInformePdf {
+  UNIVERSAL_EAM = 'UNIVERSAL_EAM',
+  CORRECTIVO = 'CORRECTIVO',
+  COTIZACION = 'COTIZACION',
+  PROPUESTA_CORRECTIVO = 'PROPUESTA_CORRECTIVO',
+  REMISION = 'REMISION',
+  ORDEN_COMPRA = 'ORDEN_COMPRA',
+  TRAZABILIDAD = 'TRAZABILIDAD',
   GENERADOR_A = 'GENERADOR_A',
   GENERADOR_B = 'GENERADOR_B',
   BOMBA_A = 'BOMBA_A',
-  COTIZACION = 'COTIZACION',
 }
 
 /**
@@ -40,13 +46,14 @@ export class GenerarPdfOrdenQueryDto {
   @ApiPropertyOptional({
     description: 'Tipo de informe a generar',
     enum: TipoInformePdf,
-    default: TipoInformePdf.GENERADOR_A,
+    default: TipoInformePdf.UNIVERSAL_EAM,
   })
   @IsOptional()
-  @IsEnum(TipoInformePdf, { 
-    message: 'Tipo de informe inválido. Use: GENERADOR_A, GENERADOR_B, BOMBA_A, COTIZACION' 
+  @IsEnum(TipoInformePdf, {
+    message:
+      'Tipo de informe inválido. Use: UNIVERSAL_EAM, CORRECTIVO, COTIZACION, PROPUESTA_CORRECTIVO, REMISION, ORDEN_COMPRA, TRAZABILIDAD',
   })
-  tipo?: TipoInformePdf = TipoInformePdf.GENERADOR_A;
+  tipo?: TipoInformePdf = TipoInformePdf.UNIVERSAL_EAM;
 
   @ApiPropertyOptional({
     description: 'Si guardar automáticamente en la nube',

@@ -29,6 +29,7 @@ import {
   type ParametroOverrideEquipo,
 } from '@/features/equipos';
 import { cn, formatDateSafe } from '@/lib/utils';
+import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
   AlertCircle,
   AlertTriangle,
@@ -658,6 +659,7 @@ export default function EquipoDetallePage() {
   const params = useParams();
   const router = useRouter();
   const id = parseInt(params.id as string, 10);
+  const { formatCurrency, formatDate } = useOrgFormatters();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('ficha');
   const [modalEstadoOpen, setModalEstadoOpen] = useState(false);
@@ -1049,7 +1051,7 @@ export default function EquipoDetallePage() {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-xl font-black text-slate-900 font-mono">
-              $ {inversionRepuestos.toLocaleString('es-CO')}
+              {formatCurrency(inversionRepuestos)}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
@@ -1280,7 +1282,7 @@ export default function EquipoDetallePage() {
                 })}
               />
               <DataRow
-                label="Inicio Servicio Mekanos"
+                label="Inicio de Servicio"
                 value={formatDateSafe(equipo.fecha_inicio_servicio_mekanos, {
                   day: '2-digit',
                   month: 'short',
@@ -1698,20 +1700,15 @@ export default function EquipoDetallePage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                          {formatDateSafe(
+                          {formatDate(
                             ot.fecha_fin_real || ot.fecha_programada || ot.fecha_creacion,
-                            {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                            },
                           )}
                         </td>
                         <td className="px-4 py-3 text-slate-700">
                           {ot.tecnico || <span className="text-slate-400 italic">Sin asignar</span>}
                         </td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
-                          $ {Number(ot.total_general || 0).toLocaleString('es-CO')}
+                          {formatCurrency(Number(ot.total_general || 0))}
                         </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <Link

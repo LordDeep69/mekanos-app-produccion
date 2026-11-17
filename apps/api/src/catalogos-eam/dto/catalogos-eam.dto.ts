@@ -433,6 +433,11 @@ export class CreateArquetipoDto {
   categoria?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_categoria_activo?: number | null;
+
+  @IsOptional()
   @IsString()
   descripcion?: string;
 
@@ -491,6 +496,11 @@ export class UpdateArquetipoDto {
   @IsString()
   @MaxLength(100)
   categoria?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_categoria_activo?: number | null;
 
   @IsOptional()
   @IsString()

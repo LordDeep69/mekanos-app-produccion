@@ -22,10 +22,17 @@ export class FiltrosTiposComponenteDto {
   @IsString()
   categoria?: string;
 
-  @ApiPropertyOptional({ description: 'Filtrar por aplicación (EQUIPO, COMPONENTE, GENERAL)' })
+  @ApiPropertyOptional({ description: 'Filtrar por aplicabilidad heredada (GENERADOR, BOMBA, AMBOS)' })
   @IsOptional()
   @IsString()
   aplica_a?: string;
+
+  @ApiPropertyOptional({ description: 'Filtrar por compatibilidad con un tipo de equipo específico' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  id_tipo_equipo?: number;
 
   @ApiPropertyOptional({ description: 'Filtrar por es consumible' })
   @IsOptional()

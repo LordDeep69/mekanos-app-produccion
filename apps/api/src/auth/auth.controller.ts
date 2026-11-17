@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { Public } from './decorators/public.decorator';
 import { Roles } from './decorators/roles.decorator';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
@@ -30,6 +31,7 @@ export class AuthController {
    * Retorna access_token, refresh_token y datos del usuario
    * 🛡️ SEGURIDAD: Máximo 5 intentos por minuto por IP para prevenir ataques de fuerza bruta y DoS
    */
+  @Public()
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
@@ -40,6 +42,7 @@ export class AuthController {
    * POST /auth/refresh
    * Renueva el access token usando un refresh token válido
    */
+  @Public()
   @Post('refresh')
   async refresh(@Body() refreshTokenDto: RefreshTokenDto): Promise<{ access_token: string; refresh_token: string }> {
     return this.authService.refreshTokens(refreshTokenDto.refresh_token);

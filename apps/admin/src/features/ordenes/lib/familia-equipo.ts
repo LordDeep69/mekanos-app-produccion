@@ -1,12 +1,7 @@
 /**
- * MEKANOS S.A.S - Portal Admin
  * Motor Universal Zero-Trust de Clasificación de Arquetipos de Equipo y
  * Compatibilidad N:M con Tipos de Servicio y Catálogo Comercial.
- *
- * Lógica pura y determinista (sin React ni I/O).
- * Soporta los arquetipos históricos (GENERADOR, BOMBA, MOTOR, COMPRESOR, HVAC)
- * y cualquier nuevo arquetipo creado dinámicamente en el Hub EAM Universal
- * (ej. ELEV, CALD, TORRE, UPS, etc.), así como servicios multi-arquetipo (`aplica_a`).
+ * Lógica pura y determinista sin mapas estáticos por ID numérico.
  */
 
 import type { EquipoSelector } from '../api/catalogos.service';
@@ -61,22 +56,6 @@ const SINONIMOS_CODIGO_ARQUETIPO = new Map<string, FamiliaEquipo>([
   ['AIRE_ACONDICIONADO', 'HVAC'],
   ['ELEV', 'ELEV'],
   ['ASCENSOR', 'ELEV'],
-]);
-
-/**
- * Mapa de IDs primarios históricos en `tipos_equipo` por si un registro llega solo con `id_tipo_equipo`
- * sin la relación `tipos_equipo` expandida.
- */
-const FAMILIA_POR_ID_TIPO_EQUIPO = new Map<number, FamiliaEquipo>([
-  [1, 'GENERADOR'],
-  [3, 'GENERADOR'],
-  [2, 'BOMBA'],
-  [5, 'BOMBA'],
-  [4, 'MOTOR'],
-  [6, 'MOTOR'],
-  [20, 'COMPRESOR'],
-  [21, 'HVAC'],
-  [22, 'ELEV'],
 ]);
 
 /** Reglas de respaldo por nombre (solo cuando no existe código de arquetipo ni FK). */
@@ -137,8 +116,6 @@ export function canonicalizarArquetipo(
   }
 
   if (idTipoEquipo != null && !isNaN(Number(idTipoEquipo))) {
-    const porId = FAMILIA_POR_ID_TIPO_EQUIPO.get(Number(idTipoEquipo));
-    if (porId) return porId;
     return `ID_${Number(idTipoEquipo)}`;
   }
 
@@ -181,16 +158,11 @@ export function detectarFamiliaEquipo(equipo?: EquipoSelector | null): FamiliaEq
     if (canon) return canon;
   }
 
-  // 2. Mapeo directo por `id_tipo_equipo` conocido
-  if (idTipo != null && FAMILIA_POR_ID_TIPO_EQUIPO.has(Number(idTipo))) {
-    return FAMILIA_POR_ID_TIPO_EQUIPO.get(Number(idTipo))!;
-  }
-
-  // 3. Nombre del tipo de equipo
+  // 2. Nombre del tipo de equipo
   const familiaPorNombreTipo = detectarFamiliaPorNombre(tipoObj?.nombre_tipo || equipo.tipo);
   if (familiaPorNombreTipo) return familiaPorNombreTipo;
 
-  // 4. Si tiene `id_tipo_equipo` de un arquetipo nuevo pero sin `codigo_tipo` cargado
+  // 3. Si tiene `id_tipo_equipo` sin relación expandida
   if (idTipo != null && !isNaN(Number(idTipo))) {
     return `ID_${Number(idTipo)}`;
   }

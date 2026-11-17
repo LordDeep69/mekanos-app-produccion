@@ -1,5 +1,10 @@
 import { PrismaService } from '@mekanos/database';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import {
+  formatCorrelativeCode,
+  reserveNextSequenceCounter,
+} from '../../common/utils/sequence-counter.helper';
+import { ConfiguracionOrganizacionService } from '../../configuracion-organizacion/configuracion-organizacion.service';
 import {
   ArticuloSourcingResult,
   CostoComponenteResult,
@@ -13,7 +18,10 @@ import {
 
 @Injectable()
 export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
+  ) {}
 
   /**
    * Generación atómica del siguiente número correlativo determinista formal de Orden de Compra.
@@ -22,33 +30,8 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
    */
   private async generarSiguienteNumeroOrden(tx: any): Promise<string> {
     const year = new Date().getFullYear();
-    const rows = await tx.$queryRawUnsafe(`
-      SELECT id, current_value FROM sequence_counter
-      WHERE type = 'OC' AND year = ${year}
-      FOR UPDATE;
-    `);
-
-    let nextVal = 1;
-    if (rows && rows.length > 0) {
-      nextVal = Number(rows[0].current_value) + 1;
-      await tx.$executeRawUnsafe(`
-        UPDATE sequence_counter
-        SET current_value = ${nextVal}, updated_at = NOW()
-        WHERE id = ${rows[0].id};
-      `);
-    } else {
-      const maxRes = await tx.$queryRawUnsafe(`
-        SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM sequence_counter;
-      `);
-      const nextId = Number(maxRes[0]?.next_id || 100);
-      await tx.$executeRawUnsafe(`
-        INSERT INTO sequence_counter (id, type, year, current_value, created_at, updated_at)
-        VALUES (${nextId}, 'OC', ${year}, 1, NOW(), NOW());
-      `);
-      nextVal = 1;
-    }
-
-    return `OC-${year}-${String(nextVal).padStart(4, '0')}`;
+    const { sequence } = await reserveNextSequenceCounter(tx, 'OC', year);
+    return formatCorrelativeCode('OC', year, sequence, 4);
   }
 
   /**
@@ -668,13 +651,17 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
         }),
       ]);
 
+    const orgContext = await this.configOrgService?.getContext().catch(() => null);
+    const tasaImpuesto = Number(orgContext?.tasa_impuesto_defecto ?? 0);
+    const factorImpuesto = 1 + tasaImpuesto / 100;
+
     let montoTotal = 0;
     for (const oc of ordenesActivas) {
       for (const d of oc.ordenes_compra_detalle) {
         const sub = d.subtotal
           ? Number(d.subtotal)
           : Number(d.cantidad) * Number(d.precio_unitario);
-        montoTotal += sub * 1.19; // IVA 19%
+        montoTotal += sub * factorImpuesto;
       }
     }
 

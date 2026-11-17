@@ -11,7 +11,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Permisos } from '../../auth/decorators/permisos.decorator';
+import { Roles } from '../../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PermisosGuard } from '../../auth/guards/permisos.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
 import {
   AsignarAtributoModuloDto,
@@ -23,7 +27,7 @@ import {
 @ApiTags('EAM - Módulos Técnicos Funcionales')
 @ApiBearerAuth()
 @Controller('catalogos/modulos-tecnicos')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 export class ModulosTecnicosController {
   constructor(private readonly eamService: CatalogosEamService) {}
 
@@ -40,24 +44,32 @@ export class ModulosTecnicosController {
   }
 
   @Post()
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Crear un nuevo módulo técnico' })
   async create(@Body() dto: CreateModuloTecnicoDto) {
     return this.eamService.createModulo(dto);
   }
 
   @Patch(':codigo')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar propiedades de un módulo técnico' })
   async update(@Param('codigo') codigo: string, @Body() dto: UpdateModuloTecnicoDto) {
     return this.eamService.updateModulo(codigo, dto);
   }
 
   @Put(':codigo')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar propiedades de un módulo técnico (PUT)' })
   async updatePut(@Param('codigo') codigo: string, @Body() dto: UpdateModuloTecnicoDto) {
     return this.eamService.updateModulo(codigo, dto);
   }
 
   @Post(':codigo/atributos')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Asignar o actualizar atributo dentro de un módulo (grupo visual, banderas)' })
   async asignarAtributo(
     @Param('codigo') codigo: string,
@@ -67,6 +79,8 @@ export class ModulosTecnicosController {
   }
 
   @Patch(':codigo/atributos/:idAtributo')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Actualizar banderas o grupo visual de un atributo asignado en caliente' })
   async updateAtributoModulo(
     @Param('codigo') codigo: string,
@@ -77,6 +91,8 @@ export class ModulosTecnicosController {
   }
 
   @Delete(':codigo/atributos/:idAtributo')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @Permisos('EQUIPOS_UPDATE')
   @ApiOperation({ summary: 'Desasignar atributo de un módulo técnico' })
   async desasignarAtributo(
     @Param('codigo') codigo: string,
@@ -86,6 +102,8 @@ export class ModulosTecnicosController {
   }
 
   @Delete(':codigo')
+  @Roles('ADMIN')
+  @Permisos('CONFIG_SYSTEM')
   @ApiOperation({ summary: 'Eliminar una parte/subsistema funcional' })
   async delete(@Param('codigo') codigo: string) {
     return this.eamService.deleteModulo(codigo);

@@ -5,7 +5,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfiguracionOrganizacionService } from '../configuracion-organizacion/configuracion-organizacion.service';
 import { crearMetadataObservacionesCierre } from '../ordenes/domain/observaciones-cierre-audit';
 import { validarTransicion } from '../ordenes/domain/workflow-estados';
 import {
@@ -16,6 +18,7 @@ import {
   SyncOrdenResultDto,
   SyncParametroMedicionDto,
   SyncPendienteCatalogoDto,
+  SyncSistemaCatalogoDto,
 } from './dto/sync-response.dto';
 import { SyncBatchUploadDto, SyncMedicionDto, SyncOrdenDto } from './dto/sync-upload-orden.dto';
 import {
@@ -38,11 +41,143 @@ import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
  * - Mapeo de IDs locales → servidor
  * - Validación FSM en cambios de estado
  */
+export interface SyncAuthUser {
+  id?: number;
+  idEmpleado?: number | null;
+  esAdmin?: boolean;
+}
+
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
+  ) {}
+
+  private async resolverZonaHoraria(): Promise<string> {
+    const ctx = await this.configOrgService?.getContext().catch(() => null);
+    return ctx?.zona_horaria || 'America/Bogota';
+  }
+
+  private formatHoraEnZonaHoraria(
+    fecha: Date | null | undefined,
+    timeZone: string,
+  ): string | undefined {
+    if (!fecha) return undefined;
+    try {
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(fecha);
+    } catch {
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'UTC',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(fecha);
+    }
+  }
+
+  private async obtenerActividadesCatalogo(): Promise<SyncActividadCatalogoDto[]> {
+    const actividades = await this.prisma.catalogo_actividades.findMany({
+      where: { activo: true, id_tipo_servicio: { not: null } },
+      include: { catalogo_sistemas: true },
+      orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
+    });
+
+    return actividades.map((a) => ({
+      idActividadCatalogo: a.id_actividad_catalogo,
+      codigoActividad: a.codigo_actividad,
+      descripcionActividad: a.descripcion_actividad,
+      tipoActividad: a.tipo_actividad as string,
+      ordenEjecucion: a.orden_ejecucion,
+      esObligatoria: a.es_obligatoria || false,
+      tiempoEstimadoMinutos: a.tiempo_estimado_minutos ?? undefined,
+      instrucciones: a.instrucciones ?? undefined,
+      precauciones: a.precauciones ?? undefined,
+      idParametroMedicion: a.id_parametro_medicion ?? undefined,
+      idTipoServicio: a.id_tipo_servicio ?? undefined,
+      sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
+      naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
+      tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
+      configInputJson: a.config_input_json ?? undefined,
+      rolSemantico: a.rol_semantico ?? undefined,
+    }));
+  }
+
+  private async obtenerTiposServicioCatalogo() {
+    const tiposServicio = await this.prisma.tipos_servicio.findMany({
+      where: { activo: true },
+      orderBy: { nombre_tipo: 'asc' },
+    });
+    return tiposServicio.map((t) => ({
+      id: t.id_tipo_servicio,
+      codigo: t.codigo_tipo,
+      nombre: t.nombre_tipo,
+      descripcion: t.descripcion ?? undefined,
+    }));
+  }
+
+  private async obtenerSistemasCatalogo(): Promise<SyncSistemaCatalogoDto[]> {
+    if (typeof (this.prisma.catalogo_sistemas as any)?.findMany !== 'function') {
+      return [];
+    }
+    const sistemas = await this.prisma.catalogo_sistemas.findMany({
+      where: { activo: true },
+      orderBy: [{ orden_visualizacion: 'asc' }, { id_sistema: 'asc' }],
+    });
+    return sistemas.map((s) => ({
+      idSistema: s.id_sistema,
+      codigoSistema: s.codigo_sistema,
+      nombreSistema: s.nombre_sistema,
+      descripcion: s.descripcion ?? undefined,
+      aplicaA: Array.isArray(s.aplica_a) ? s.aplica_a : [],
+      ordenVisualizacion: s.orden_visualizacion ?? 0,
+      idModulo: s.id_modulo ?? undefined,
+    }));
+  }
+
+  /**
+   * Valida Zero-Trust que el usuario autenticado tenga autorización sobre el técnico solicitado.
+   */
+  assertCanAccessTecnicoSync(tecnicoId: number, user?: SyncAuthUser): void {
+    if (!user) {
+      throw new ForbiddenException('Usuario no autenticado para sincronización.');
+    }
+    if (user.esAdmin) {
+      return;
+    }
+    if (!user.idEmpleado || user.idEmpleado !== tecnicoId) {
+      throw new ForbiddenException(
+        'Acceso denegado: no puedes consultar o subir datos de otro técnico.',
+      );
+    }
+  }
+
+  /**
+   * Valida Zero-Trust que el usuario autenticado tenga autorización sobre la orden solicitada.
+   */
+  private assertCanAccessOrdenSync(
+    orden: { id_tecnico_asignado: number | null },
+    user?: SyncAuthUser,
+  ): void {
+    if (!user) {
+      throw new ForbiddenException('Usuario no autenticado para acceder a la orden.');
+    }
+    if (user.esAdmin) {
+      return;
+    }
+    if (!user.idEmpleado || orden.id_tecnico_asignado !== user.idEmpleado) {
+      throw new ForbiddenException(
+        'Acceso denegado: la orden no está asignada al técnico autenticado.',
+      );
+    }
+  }
 
   /**
    * UPLOAD: Sincronizar batch de órdenes desde móvil
@@ -601,26 +736,20 @@ export class SyncService {
             '[Sync Delta] includeCatalogs=true → enviando catálogos completos sin órdenes',
           );
 
-          const parametros = await this.prisma.parametros_medicion.findMany({
-            where: { activo: true },
-            orderBy: { categoria: 'asc' },
-          });
-
-          const actividades = await this.prisma.catalogo_actividades.findMany({
-            where: { activo: true, id_tipo_servicio: { not: null } },
-            include: { catalogo_sistemas: true },
-            orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
-          });
-
-          const estados = await this.prisma.estados_orden.findMany({
-            where: { activo: true },
-            orderBy: { orden_visualizacion: 'asc' },
-          });
-
-          const tiposServicio = await this.prisma.tipos_servicio.findMany({
-            where: { activo: true },
-            orderBy: { nombre_tipo: 'asc' },
-          });
+          const [parametros, actividadesDownload, estados, tiposServicioDownload, catalogoSistemas] =
+            await Promise.all([
+              this.prisma.parametros_medicion.findMany({
+                where: { activo: true },
+                orderBy: { categoria: 'asc' },
+              }),
+              this.obtenerActividadesCatalogo(),
+              this.prisma.estados_orden.findMany({
+                where: { activo: true },
+                orderBy: { orden_visualizacion: 'asc' },
+              }),
+              this.obtenerTiposServicioCatalogo(),
+              this.obtenerSistemasCatalogo(),
+            ]);
 
           return {
             serverTimestamp: new Date().toISOString(),
@@ -648,52 +777,24 @@ export class SyncService {
               esObligatorio: p.es_obligatorio || false,
               decimalesPrecision: p.decimales_precision || 2,
             })),
-            actividadesCatalogo: actividades.map((a) => ({
-              idActividadCatalogo: a.id_actividad_catalogo,
-              codigoActividad: a.codigo_actividad,
-              descripcionActividad: a.descripcion_actividad,
-              tipoActividad: a.tipo_actividad as string,
-              ordenEjecucion: a.orden_ejecucion,
-              esObligatoria: a.es_obligatoria || false,
-              tiempoEstimadoMinutos: a.tiempo_estimado_minutos ?? undefined,
-              instrucciones: a.instrucciones ?? undefined,
-              precauciones: a.precauciones ?? undefined,
-              idParametroMedicion: a.id_parametro_medicion ?? undefined,
-              idTipoServicio: a.id_tipo_servicio ?? undefined,
-              sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
-              naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
-              tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
-              configInputJson: a.config_input_json ?? undefined,
-              rolSemantico: a.rol_semantico ?? undefined,
-            })),
+            actividadesCatalogo: actividadesDownload,
             estadosOrden: estados.map((e) => ({
               id: e.id_estado,
               codigo: e.codigo_estado,
               nombre: e.nombre_estado,
               esEstadoFinal: e.es_estado_final || false,
             })),
-            tiposServicio: tiposServicio.map((t) => ({
-              id: t.id_tipo_servicio,
-              codigo: t.codigo_tipo,
-              nombre: t.nombre_tipo,
-              descripcion: t.descripcion ?? undefined,
-            })),
+            tiposServicio: tiposServicioDownload,
+            catalogoSistemas,
             catalogoPendientes: pendientesDelta,
           };
         }
 
-        // ✅ SIEMPRE enviar catálogo de actividades y tipos de servicio
-        // (son apenas ~180 registros / ~25 KB) para garantizar que los técnicos no sufran desincronización
-        const [actividadesDelta, tiposServicioDelta] = await Promise.all([
-          this.prisma.catalogo_actividades.findMany({
-            where: { activo: true, id_tipo_servicio: { not: null } },
-            include: { catalogo_sistemas: true },
-            orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
-          }),
-          this.prisma.tipos_servicio.findMany({
-            where: { activo: true },
-            orderBy: { nombre_tipo: 'asc' },
-          }),
+        // SIEMPRE enviar catálogo unificado de actividades, tipos de servicio y sistemas
+        const [actividadesDelta, tiposServicioDelta, sistemasDelta] = await Promise.all([
+          this.obtenerActividadesCatalogo(),
+          this.obtenerTiposServicioCatalogo(),
+          this.obtenerSistemasCatalogo(),
         ]);
 
         return {
@@ -704,31 +805,10 @@ export class SyncService {
           ordenes: [],
           ordenesEliminadas: ordenesEliminadasIds,
           parametrosMedicion: [],
-          actividadesCatalogo: actividadesDelta.map((a) => ({
-            idActividadCatalogo: a.id_actividad_catalogo,
-            codigoActividad: a.codigo_actividad,
-            descripcionActividad: a.descripcion_actividad,
-            tipoActividad: a.tipo_actividad as string,
-            ordenEjecucion: a.orden_ejecucion,
-            esObligatoria: a.es_obligatoria ?? true,
-            tiempoEstimadoMinutos: a.tiempo_estimado_minutos ?? undefined,
-            instrucciones: a.instrucciones ?? undefined,
-            precauciones: a.precauciones ?? undefined,
-            idParametroMedicion: a.id_parametro_medicion ?? undefined,
-            idTipoServicio: a.id_tipo_servicio ?? undefined,
-            sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
-            naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
-            tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
-            configInputJson: a.config_input_json ?? undefined,
-            rolSemantico: a.rol_semantico ?? undefined,
-          })),
+          actividadesCatalogo: actividadesDelta,
           estadosOrden: [],
-          tiposServicio: tiposServicioDelta.map((t) => ({
-            id: t.id_tipo_servicio,
-            codigo: t.codigo_tipo,
-            nombre: t.nombre_tipo,
-            descripcion: t.descripcion ?? undefined,
-          })),
+          tiposServicio: tiposServicioDelta,
+          catalogoSistemas: sistemasDelta,
           catalogoPendientes: pendientesDelta,
         };
       }
@@ -1023,6 +1103,11 @@ export class SyncService {
       `[Sync] Estadísticas: ${actividadesMap.size} órdenes con actividades, ${evidenciasMap.size} con evidencias, ${firmasMap.size} con firmas`,
     );
 
+    const [zonaHoraria, sistemasCatalogo] = await Promise.all([
+      this.resolverZonaHoraria(),
+      this.obtenerSistemasCatalogo(),
+    ]);
+
     // 3. Mapear a DTO de descarga
     const ordenesDownload: SyncOrdenDownloadDto[] = ordenes.map((o) => ({
       idOrdenServicio: o.id_orden_servicio,
@@ -1054,8 +1139,8 @@ export class SyncService {
       codigoEquipo: o.equipos?.codigo_equipo || '',
       nombreEquipo: o.equipos?.nombre_equipo || '',
       ubicacionEquipo: o.equipos?.ubicacion_texto,
-      // ✅ FLEXIBILIZACIÓN PARÁMETROS + METROLOGÍA EAM
-      configParametros: this.buildConfigParametrosConMetrologia(o.equipos),
+      // ✅ FLEXIBILIZACIÓN PARÁMETROS + METROLOGÍA EAM + SISTEMAS POR ARQUETIPO
+      configParametros: this.buildConfigParametrosConMetrologia(o.equipos, sistemasCatalogo),
       idTipoServicio: o.id_tipo_servicio!,
       codigoTipoServicio: o.tipos_servicio?.codigo_tipo || '',
       nombreTipoServicio: o.tipos_servicio?.nombre_tipo || '',
@@ -1083,29 +1168,8 @@ export class SyncService {
       // ✅ FIX: Incluir horarios reales del servicio
       fechaInicioReal: o.fecha_inicio_real?.toISOString(),
       fechaFinReal: o.fecha_fin_real?.toISOString(),
-      // ✅ FIX: Horas como TEXTO PLANO (HH:mm) - ajustadas a Colombia (UTC-5)
-      // El servidor está en UTC, pero las horas se guardaron como hora local Colombia
-      // Por eso getHours() devuelve +5 horas. Restamos 5 para obtener hora Colombia.
-      horaEntrada: o.fecha_inicio_real
-        ? (() => {
-            const h = o.fecha_inicio_real.getHours();
-            const m = o.fecha_inicio_real.getMinutes();
-            // Ajustar a Colombia UTC-5 (restar 5 horas al UTC)
-            let horaCol = h - 5;
-            if (horaCol < 0) horaCol += 24;
-            return `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-          })()
-        : undefined,
-      horaSalida: o.fecha_fin_real
-        ? (() => {
-            const h = o.fecha_fin_real.getHours();
-            const m = o.fecha_fin_real.getMinutes();
-            // Ajustar a Colombia UTC-5 (restar 5 horas al UTC)
-            let horaCol = h - 5;
-            if (horaCol < 0) horaCol += 24;
-            return `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-          })()
-        : undefined,
+      horaEntrada: this.formatHoraEnZonaHoraria(o.fecha_inicio_real, zonaHoraria),
+      horaSalida: this.formatHoraEnZonaHoraria(o.fecha_fin_real, zonaHoraria),
       duracionMinutos: o.duracion_minutos || undefined,
       // ✅ FIX: Incluir estadísticas de la orden (consulta directa, más confiable)
       // totalActividades incluye actividades + mediciones para coincidir con el móvil
@@ -1140,8 +1204,8 @@ export class SyncService {
             codigoEquipo: oe.equipos?.codigo_equipo || '',
             nombreEquipo: oe.equipos?.nombre_equipo || '',
             ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
-            // ✅ FLEXIBILIZACIÓN PARÁMETROS + METROLOGÍA EAM
-            configParametros: this.buildConfigParametrosConMetrologia(oe.equipos),
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS + METROLOGÍA EAM + SISTEMAS POR ARQUETIPO
+            configParametros: this.buildConfigParametrosConMetrologia(oe.equipos, sistemasCatalogo),
           })) || [];
         // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos tienen el mismo valor
         if (mapped.length > 1) {
@@ -1202,31 +1266,8 @@ export class SyncService {
         decimalesPrecision: p.decimales_precision || 2,
       }));
 
-      // 4. Obtener catálogo de actividades activas con sistema incluido (solo las asignadas a servicios)
-      const actividades = await this.prisma.catalogo_actividades.findMany({
-        where: { activo: true, id_tipo_servicio: { not: null } },
-        include: { catalogo_sistemas: true },
-        orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
-      });
-
-      actividadesDownload = actividades.map((a) => ({
-        idActividadCatalogo: a.id_actividad_catalogo,
-        codigoActividad: a.codigo_actividad,
-        descripcionActividad: a.descripcion_actividad,
-        tipoActividad: a.tipo_actividad as string,
-        ordenEjecucion: a.orden_ejecucion,
-        esObligatoria: a.es_obligatoria || false,
-        tiempoEstimadoMinutos: a.tiempo_estimado_minutos ?? undefined,
-        instrucciones: a.instrucciones ?? undefined,
-        precauciones: a.precauciones ?? undefined,
-        idParametroMedicion: a.id_parametro_medicion ?? undefined,
-        idTipoServicio: a.id_tipo_servicio ?? undefined,
-        sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
-        naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
-        tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
-        configInputJson: a.config_input_json ?? undefined,
-        rolSemantico: a.rol_semantico ?? undefined,
-      }));
+      // 4. Obtener catálogo unificado de actividades activas
+      actividadesDownload = await this.obtenerActividadesCatalogo();
 
       // 5. Obtener estados de orden
       const estados = await this.prisma.estados_orden.findMany({
@@ -1242,58 +1283,15 @@ export class SyncService {
       }));
 
       // 6. Obtener tipos de servicio
-      const tiposServicio = await this.prisma.tipos_servicio.findMany({
-        where: { activo: true },
-        orderBy: { nombre_tipo: 'asc' },
-      });
-
-      tiposServicioDownload = tiposServicio.map((t) => ({
-        id: t.id_tipo_servicio,
-        codigo: t.codigo_tipo,
-        nombre: t.nombre_tipo,
-        descripcion: t.descripcion ?? undefined,
-      }));
+      tiposServicioDownload = await this.obtenerTiposServicioCatalogo();
     } else {
       this.logger.log(
-        '[Sync Delta] Incluyendo catálogo de actividades y tipos de servicio para consistencia',
+        '[Sync Delta] Incluyendo catálogo unificado de actividades y tipos de servicio',
       );
-      const [actividades, tiposServicio] = await Promise.all([
-        this.prisma.catalogo_actividades.findMany({
-          where: { activo: true },
-          include: { catalogo_sistemas: true },
-          orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
-        }),
-        this.prisma.tipos_servicio.findMany({
-          where: { activo: true },
-          orderBy: { nombre_tipo: 'asc' },
-        }),
+      [actividadesDownload, tiposServicioDownload] = await Promise.all([
+        this.obtenerActividadesCatalogo(),
+        this.obtenerTiposServicioCatalogo(),
       ]);
-
-      actividadesDownload = actividades.map((a) => ({
-        idActividadCatalogo: a.id_actividad_catalogo,
-        codigoActividad: a.codigo_actividad,
-        descripcionActividad: a.descripcion_actividad,
-        tipoActividad: a.tipo_actividad as string,
-        ordenEjecucion: a.orden_ejecucion,
-        esObligatoria: a.es_obligatoria || false,
-        tiempoEstimadoMinutos: a.tiempo_estimado_minutos ?? undefined,
-        instrucciones: a.instrucciones ?? undefined,
-        precauciones: a.precauciones ?? undefined,
-        idParametroMedicion: a.id_parametro_medicion ?? undefined,
-        idTipoServicio: a.id_tipo_servicio ?? undefined,
-        sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
-        naturalezaPersonalizada: a.naturaleza_personalizada ?? undefined,
-        tipoControlInput: a.tipo_control_input ?? 'ESCALA_ESTADO',
-        configInputJson: a.config_input_json ?? undefined,
-        rolSemantico: a.rol_semantico ?? undefined,
-      }));
-
-      tiposServicioDownload = tiposServicio.map((t) => ({
-        id: t.id_tipo_servicio,
-        codigo: t.codigo_tipo,
-        nombre: t.nombre_tipo,
-        descripcion: t.descripcion ?? undefined,
-      }));
     }
 
     // 7. Obtener SIEMPRE catálogo de pendientes frecuentes activos para mantener mobile 100% sincronizado
@@ -1329,6 +1327,7 @@ export class SyncService {
       actividadesCatalogo: actividadesDownload,
       estadosOrden: estadosDownload,
       tiposServicio: tiposServicioDownload,
+      catalogoSistemas: sistemasCatalogo,
       catalogoPendientes: pendientesDownload,
       ordenesEliminadas: since ? ordenesEliminadasIds : undefined,
       idsOrdenesValidas: since ? undefined : idsOrdenesValidas,
@@ -1379,10 +1378,9 @@ export class SyncService {
       throw new NotFoundException(`Orden ${ordenId} no existe`);
     }
 
-    const esTecnicoAsignado =
-      !orden.id_tecnico_asignado ||
-      !user?.idEmpleado ||
-      orden.id_tecnico_asignado === user.idEmpleado;
+    const esTecnicoAsignado = Boolean(
+      user?.idEmpleado && orden.id_tecnico_asignado === user.idEmpleado,
+    );
 
     const estadoCodigo = orden.estados_orden?.codigo_estado || 'DESCONOCIDO';
     const esEstadoFinal = orden.estados_orden?.es_estado_final === true;
@@ -1560,16 +1558,18 @@ export class SyncService {
    * Fusiona la configuración de parámetros del modelo/equipo con los metadatos
    * metrológicos del arquetipo (`_metrologia`) para consumo offline en Mobile.
    */
-  private buildConfigParametrosConMetrologia(eq: any): Record<string, unknown> | undefined {
+  private buildConfigParametrosConMetrologia(
+    eq: any,
+    sistemasCatalogo: SyncSistemaCatalogoDto[] = [],
+  ): Record<string, unknown> | undefined {
     if (!eq) return undefined;
     const pModelo =
       (eq.modelos_equipo?.plantilla_parametros_config as Record<string, unknown>) || {};
     const pEquipo = (eq.config_parametros as Record<string, unknown>) || {};
     const tipo = eq.tipos_equipo;
+    const rawLectura = eq.lectura_uso_actual ?? eq.horas_actuales;
     const lecturaActualNum =
-      eq.horas_actuales != null && Number.isFinite(Number(eq.horas_actuales))
-        ? Number(eq.horas_actuales)
-        : undefined;
+      rawLectura != null && Number.isFinite(Number(rawLectura)) ? Number(rawLectura) : undefined;
     const metrologia =
       tipo || lecturaActualNum !== undefined
         ? {
@@ -1579,10 +1579,31 @@ export class SyncService {
             ...(lecturaActualNum !== undefined ? { lecturaActual: lecturaActualNum } : {}),
           }
         : undefined;
+
+    const codigoTipo = tipo?.codigo_tipo?.toString().trim().toUpperCase();
+    const sistemasAplicables =
+      codigoTipo && sistemasCatalogo.length > 0
+        ? sistemasCatalogo
+            .filter(
+              (s) =>
+                s.aplicaA.length === 0 ||
+                s.aplicaA.some((a) => a.toUpperCase() === codigoTipo || a.toUpperCase() === 'TODOS'),
+            )
+            .map((s) => ({
+              idSistema: s.idSistema,
+              codigoSistema: s.codigoSistema,
+              nombreSistema: s.nombreSistema,
+              ordenVisualizacion: s.ordenVisualizacion,
+            }))
+        : undefined;
+
     const merged: Record<string, unknown> = {
       ...pModelo,
       ...pEquipo,
       ...(metrologia ? { _metrologia: metrologia } : {}),
+      ...(sistemasAplicables && sistemasAplicables.length > 0
+        ? { _sistemas_disponibles: sistemasAplicables }
+        : {}),
     };
     return Object.keys(merged).length > 0 ? merged : undefined;
   }
@@ -1591,7 +1612,7 @@ export class SyncService {
    * Obtiene una orden completa por ID para sincronización individual.
    * Usado cuando el móvil detecta que necesita actualizar una orden específica.
    */
-  async getOrdenCompleta(ordenId: number): Promise<any> {
+  async getOrdenCompleta(ordenId: number, user?: SyncAuthUser): Promise<any> {
     this.logger.log(`[Sync Inteligente] Descargando orden completa ID: ${ordenId}`);
 
     const orden = await this.prisma.ordenes_servicio.findUnique({
@@ -1642,6 +1663,10 @@ export class SyncService {
     if (!orden) {
       this.logger.warn(`[Sync Inteligente] Orden ${ordenId} no encontrada`);
       return null;
+    }
+
+    if (user) {
+      this.assertCanAccessOrdenSync(orden, user);
     }
 
     // 🔐 19-OCT-2026: Una orden final solo se entrega al móvil cuando es
@@ -1746,25 +1771,12 @@ export class SyncService {
 
     this.logger.log(`[Sync Inteligente] Orden ${ordenId} - urlPdf: ${urlPdf || 'NULL'}`);
 
-    // Calcular horas de entrada/salida para Colombia (UTC-5)
-    let horaEntrada: string | undefined;
-    let horaSalida: string | undefined;
-
-    if (orden.fecha_inicio_real) {
-      const h = orden.fecha_inicio_real.getHours();
-      const m = orden.fecha_inicio_real.getMinutes();
-      let horaCol = h - 5;
-      if (horaCol < 0) horaCol += 24;
-      horaEntrada = `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    }
-
-    if (orden.fecha_fin_real) {
-      const h = orden.fecha_fin_real.getHours();
-      const m = orden.fecha_fin_real.getMinutes();
-      let horaCol = h - 5;
-      if (horaCol < 0) horaCol += 24;
-      horaSalida = `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    }
+    const [zonaHoraria, sistemasCatalogo] = await Promise.all([
+      this.resolverZonaHoraria(),
+      this.obtenerSistemasCatalogo(),
+    ]);
+    const horaEntrada = this.formatHoraEnZonaHoraria(orden.fecha_inicio_real, zonaHoraria);
+    const horaSalida = this.formatHoraEnZonaHoraria(orden.fecha_fin_real, zonaHoraria);
 
     return {
       idOrdenServicio: orden.id_orden_servicio,
@@ -1799,7 +1811,7 @@ export class SyncService {
       serieEquipo: orden.equipos ? EquipoSpecsReader.getSerie(orden.equipos) : undefined,
       tipoEquipo: orden.equipos ? EquipoSpecsReader.getCategoriaCanonica(orden.equipos) : undefined,
       ubicacionEquipo: orden.equipos?.ubicacion_texto ?? undefined,
-      configParametros: this.buildConfigParametrosConMetrologia(orden.equipos),
+      configParametros: this.buildConfigParametrosConMetrologia(orden.equipos, sistemasCatalogo),
       idTipoServicio: orden.id_tipo_servicio ?? undefined,
       codigoTipoServicio: orden.tipos_servicio?.codigo_tipo ?? undefined,
       nombreTipoServicio: orden.tipos_servicio?.nombre_tipo ?? undefined,
@@ -1854,7 +1866,7 @@ export class SyncService {
             serieEquipo: oe.equipos ? EquipoSpecsReader.getSerie(oe.equipos) : undefined,
             tipoEquipo: oe.equipos ? EquipoSpecsReader.getCategoriaCanonica(oe.equipos) : undefined,
             ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
-            configParametros: this.buildConfigParametrosConMetrologia(oe.equipos),
+            configParametros: this.buildConfigParametrosConMetrologia(oe.equipos, sistemasCatalogo),
           })) || [];
         // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos iguales
         if (mapped.length > 1) {

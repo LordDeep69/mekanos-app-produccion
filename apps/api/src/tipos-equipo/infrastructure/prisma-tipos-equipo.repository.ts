@@ -23,7 +23,7 @@ export class PrismaTiposEquipoRepository implements ITiposEquipoRepository {
       codigo_tipo: tipo.codigo_tipo,
       nombre_tipo: tipo.nombre_tipo,
       descripcion: tipo.descripcion ?? undefined,
-      categoria: tipo.categoria,
+      categoria: tipo.categoria ?? 'OTRO',
       tiene_motor: tipo.tiene_motor ?? false,
       tiene_generador: tipo.tiene_generador ?? false,
       tiene_bomba: tipo.tiene_bomba ?? false,

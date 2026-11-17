@@ -1740,7 +1740,7 @@ export function TrazabilidadServiciosCliente({
             {/* Footer con Acciones */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
               <span className="text-[11px] text-slate-500">
-                Auditoría técnica registrada en plataforma Mekanos
+                Auditoría técnica registrada en plataforma
               </span>
               <div className="flex items-center gap-2">
                 {getPdfUrl(modalOrden) && (

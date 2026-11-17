@@ -4,11 +4,11 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 import '../../../core/errors/user_friendly_error.dart';
+import '../../../core/storage/account_scope.dart';
 
 /// ============================================================================
 /// EVIDENCIA SERVICE - RUTA 7
@@ -72,27 +72,15 @@ class EvidenciaService {
   static const int _maxHeight = 1080; // Full HD
   static const int _imageQuality = 80; // Balance calidad/tamaño
 
-  // Directorio de evidencias
-  static const String _evidenciasDir = 'evidencias';
-
   EvidenciaService(this._db);
 
-  // ============================================================================
-  // GESTIÓN DE DIRECTORIO PERMANENTE
-  // ============================================================================
-
-  /// Obtiene o crea el directorio permanente de evidencias
-  /// NUNCA usa carpeta temporal/cache
+  /// Obtiene o crea el directorio permanente de evidencias aislado por cuenta
+  /// (`Documents/media/user_<userId>/evidencias/`). Nunca usa carpeta temporal/cache.
   Future<Directory> _getEvidenciasDirectory() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final evidenciasPath = path.join(appDir.path, _evidenciasDir);
-    final dir = Directory(evidenciasPath);
-
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-
-    return dir;
+    return AccountScope.ensureMediaDirectory(
+      _db.scopedUserId,
+      AccountScope.mediaCategoryEvidencias,
+    );
   }
 
   /// Genera nombre de archivo con convención forense

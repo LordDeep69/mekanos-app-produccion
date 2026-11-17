@@ -283,7 +283,7 @@ class ApiClient {
       previousHostname: Environment.currentState.serverHostname,
     );
     if (discovered == null) {
-      debugPrint('❌ [API-LOCAL] No se encontró ningún servidor Mekanos local activo.');
+      debugPrint('❌ [API-LOCAL] No se encontró ningún servidor API local activo.');
       return null;
     }
 

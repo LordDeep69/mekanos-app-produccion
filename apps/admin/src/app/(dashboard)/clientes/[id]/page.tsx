@@ -12,7 +12,7 @@ interface Props {
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
   return {
-    title: `Cliente #${id} | MEKANOS Admin`,
+    title: `Cliente #${id} | EAM Admin`,
     description: 'Detalle del cliente',
   };
 }

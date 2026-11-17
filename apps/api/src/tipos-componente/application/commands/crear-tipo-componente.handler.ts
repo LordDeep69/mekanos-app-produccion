@@ -19,6 +19,8 @@ export class CrearTipoComponenteHandler
       nombre_componente: command.nombre_componente,
       categoria: command.categoria,
       aplica_a: command.aplica_a,
+      aplica_todos_tipos: command.aplica_todos_tipos,
+      tipos_equipo_ids: command.tipos_equipo_ids,
       subcategoria: command.subcategoria,
       es_consumible: command.es_consumible,
       es_inventariable: command.es_inventariable,

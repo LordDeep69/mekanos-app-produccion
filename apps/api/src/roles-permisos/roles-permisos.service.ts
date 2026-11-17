@@ -1,10 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../database/prisma.service';
 import { AsignarPermisoDto } from './dto/asignar-permiso.dto';
 
 @Injectable()
 export class RolesPermisosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly authService?: AuthService,
+  ) {}
 
   async asignarPermiso(asignarDto: AsignarPermisoDto, userId: number) {
     // Validar que rol existe
@@ -39,7 +43,7 @@ export class RolesPermisosService {
       throw new Error('El permiso ya está asignado a este rol');
     }
 
-    return this.prisma.roles_permisos.create({
+    const created = await this.prisma.roles_permisos.create({
       data: {
         id_rol: asignarDto.id_rol,
         id_permiso: asignarDto.id_permiso,
@@ -51,6 +55,8 @@ export class RolesPermisosService {
         permisos: true,
       },
     });
+    this.authService?.clearAllValidationCache();
+    return created;
   }
 
   async listarPermisosPorRol(idRol: number) {
@@ -76,7 +82,7 @@ export class RolesPermisosService {
       throw new Error('La asignación no existe');
     }
 
-    return this.prisma.roles_permisos.delete({
+    const deleted = await this.prisma.roles_permisos.delete({
       where: {
         id_rol_id_permiso: {
           id_rol: idRol,
@@ -84,5 +90,7 @@ export class RolesPermisosService {
         },
       },
     });
+    this.authService?.clearAllValidationCache();
+    return deleted;
   }
 }

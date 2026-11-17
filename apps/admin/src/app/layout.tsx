@@ -14,13 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MEKANOS Admin | Portal de Gestión",
-  description: "Portal de Administración - MEKANOS S.A.S - Sistema de Gestión de Órdenes de Servicio",
-  icons: {
-    icon: "/ISOTIPO - MEKANOS LOGO.png",
-    shortcut: "/ISOTIPO - MEKANOS LOGO.png",
-    apple: "/ISOTIPO - MEKANOS LOGO.png",
-  },
+  title: "Portal Admin | EAM Suite",
+  description: "Sistema de Gestión Técnica de Activos, Mantenimiento y Órdenes de Servicio",
 };
 
 export default function RootLayout({
