@@ -14,7 +14,7 @@ export const BRANDING_QUERY_KEY = ['configuracion', 'publica'] as const;
 interface BrandingContextValue {
   branding: ConfiguracionPublica;
   isLoading: boolean;
-  refreshBranding: () => Promise<void>;
+  refreshBranding: (nextBranding?: Partial<ConfiguracionPublica>) => Promise<void>;
 }
 
 const BrandingContext = createContext<BrandingContextValue>({
@@ -67,7 +67,11 @@ function applyBrandingCssVariables(branding: ConfiguracionPublica) {
 function applyBrandingHeadMetadata(branding: ConfiguracionPublica) {
   if (typeof document === 'undefined') return;
   const nombre = branding.nombre_comercial || DEFAULT_BRANDING.nombre_comercial;
-  if (!document.title || document.title.includes('Portal Admin') || document.title.includes('Mi Organización')) {
+  if (
+    !document.title ||
+    document.title.includes('Portal Admin') ||
+    document.title.includes('Mi Organización')
+  ) {
     document.title = `${nombre} | Portal Admin`;
   } else {
     const parts = document.title.split('|');
@@ -108,9 +112,19 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     applyBrandingHeadMetadata(branding);
   }, [branding]);
 
-  const refreshBranding = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: BRANDING_QUERY_KEY });
-  }, [queryClient]);
+  const refreshBranding = useCallback(
+    async (nextBranding?: Partial<ConfiguracionPublica>) => {
+      if (nextBranding) {
+        queryClient.setQueryData<ConfiguracionPublica>(BRANDING_QUERY_KEY, (prev) => ({
+          ...DEFAULT_BRANDING,
+          ...(prev || {}),
+          ...nextBranding,
+        }));
+      }
+      await queryClient.invalidateQueries({ queryKey: BRANDING_QUERY_KEY });
+    },
+    [queryClient],
+  );
 
   const value = useMemo(
     () => ({ branding, isLoading, refreshBranding }),

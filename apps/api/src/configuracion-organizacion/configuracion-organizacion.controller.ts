@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Permisos } from '../auth/decorators/permisos.decorator';
@@ -17,6 +17,7 @@ export class ConfiguracionOrganizacionController {
 
   @Public()
   @Get('publica')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
   @ApiOperation({
     summary: 'Obtener branding y parametrización regional pública (sin credenciales)',
   })

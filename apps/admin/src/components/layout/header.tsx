@@ -48,7 +48,7 @@ export function Header() {
     <header
       className={cn(
         'fixed right-0 top-0 z-30 h-16 border-b bg-white/95 backdrop-blur-sm transition-all duration-300 ease-in-out',
-        isCollapsed ? 'left-[72px]' : 'left-64',
+        isCollapsed ? 'left-[72px]' : 'left-[272px]',
       )}
     >
       <div className="flex h-full items-center justify-between px-6">
@@ -79,17 +79,6 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-3">
-          <span
-            className="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border"
-            style={{
-              backgroundColor: `${branding.color_primario}10`,
-              borderColor: `${branding.color_primario}30`,
-              color: branding.color_primario,
-            }}
-          >
-            {branding.codigo_moneda} · {branding.zona_horaria}
-          </span>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 px-2">
@@ -105,9 +94,7 @@ export function Header() {
                   <span className="text-sm font-medium text-slate-800">
                     {sanitizeUserName(session?.user?.nombre)}
                   </span>
-                  <span className="text-xs text-slate-500">
-                    {session?.user?.rol || 'Sin rol'}
-                  </span>
+                  <span className="text-xs text-slate-500">{session?.user?.rol || 'Sin rol'}</span>
                 </div>
               </Button>
             </DropdownMenuTrigger>

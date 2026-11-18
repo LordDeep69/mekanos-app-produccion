@@ -71,7 +71,7 @@ const RAW_NAV_SECTIONS: NavSection[] = [
     label: 'Principal',
     items: [
       { title: 'Dashboard', href: '/dashboard', icon: LayoutGrid },
-      { title: 'Órdenes de Servicio', href: '/ordenes', icon: ClipboardList, badge: 'Core' },
+      { title: 'Órdenes de Servicio', href: '/ordenes', icon: ClipboardList },
       { title: 'Agenda Operativa', href: '/agenda', icon: Calendar },
     ],
   },
@@ -100,7 +100,7 @@ const RAW_NAV_SECTIONS: NavSection[] = [
       { title: 'Inventario WMS', href: '/inventario', icon: Package },
       { title: 'Remisiones', href: '/inventario/remisiones', icon: PackageCheck },
       {
-        title: 'Compras y Abastecimiento',
+        title: 'Gestión de Compras',
         href: '/compras',
         icon: ShoppingCart,
         children: [
@@ -124,13 +124,11 @@ const RAW_NAV_SECTIONS: NavSection[] = [
         title: 'Empresa y Marca',
         href: '/configuracion/empresa',
         icon: Palette,
-        badge: 'White-Label',
       },
       {
-        title: 'Catálogo Equipos Maestros',
+        title: 'Catálogo Equipos EAM',
         href: '/configuracion/catalogos-eam',
         icon: Cpu,
-        badge: 'EAM',
       },
       {
         title: 'Catálogos Operativos',
@@ -253,7 +251,8 @@ export function Sidebar() {
       ? pathname === '/configuracion'
       : pathname === href || pathname.startsWith(`${href}/`);
 
-  const brandLogoUrl = branding.logo_claro_url || branding.isotipo_url || branding.logo_principal_url;
+  const brandLogoUrl =
+    branding.logo_claro_url || branding.isotipo_url || branding.logo_principal_url;
   const brandInitials = (branding.nombre_comercial || 'EA')
     .split(/\s+/)
     .filter(Boolean)
@@ -265,7 +264,7 @@ export function Sidebar() {
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 h-screen flex flex-col border-r border-white/10 transition-all duration-300 ease-in-out select-none shadow-xl text-white',
-        isCollapsed ? 'w-[72px]' : 'w-64',
+        isCollapsed ? 'w-[72px]' : 'w-[272px]',
       )}
       style={{ backgroundColor: branding.color_secundario }}
     >
@@ -322,7 +321,11 @@ export function Sidebar() {
         </div>
       ) : (
         <div className="flex-shrink-0 py-3.5 border-b border-white/10 flex flex-col items-center justify-center gap-2.5">
-          <Link href="/dashboard" className="group" title={`${branding.nombre_comercial} · Portal Admin`}>
+          <Link
+            href="/dashboard"
+            className="group"
+            title={`${branding.nombre_comercial} · Portal Admin`}
+          >
             {brandLogoUrl ? (
               <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center p-1 overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -472,13 +475,13 @@ export function Sidebar() {
                         type="button"
                         onClick={() => toggleMenu(item.href)}
                         className={cn(
-                          'group w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                          'group w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-lg text-[13.5px] font-medium transition-all duration-150',
                           isActive || isExpanded
                             ? 'bg-white/15 text-white'
                             : 'text-white/70 hover:bg-white/10 hover:text-white',
                         )}
                       >
-                        <span className="flex items-center gap-3 min-w-0">
+                        <span className="flex items-center gap-2.5 min-w-0">
                           <div
                             className={cn(
                               'w-8 h-8 rounded-lg flex items-center justify-center transition-colors shrink-0',
@@ -536,7 +539,7 @@ export function Sidebar() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                      'group flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13.5px] font-medium transition-all duration-150',
                       isActive
                         ? 'text-white shadow-lg'
                         : 'text-white/70 hover:bg-white/10 hover:text-white',

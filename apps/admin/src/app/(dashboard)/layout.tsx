@@ -3,7 +3,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Dashboard Layout - Rutas Protegidas
- * 
+ *
  * Este layout envuelve todas las páginas del dashboard
  * Incluye: Sidebar (izquierda) + Header (arriba) + Content (centro)
  * Soporta barra lateral colapsable / desplegable de forma prémium y fluida.
@@ -26,7 +26,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     <div
       className={cn(
         'min-h-screen bg-gray-50 transition-all duration-300 ease-in-out',
-        isCollapsed ? 'pl-[72px]' : 'pl-64'
+        isCollapsed ? 'pl-[72px]' : 'pl-[272px]',
       )}
     >
       {/* Header - Fixed Top */}

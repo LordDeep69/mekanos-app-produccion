@@ -33,6 +33,7 @@ interface DashboardCache {
 
 interface EstadosCache {
   ordenes: Map<number, string>;
+  ordenesCodigos: Map<number, string>;
   cotizaciones: Map<number, string>;
   expiresAt: number;
 }
@@ -42,6 +43,7 @@ let dashboardCache: DashboardCache | null = null;
 let estadosCache: EstadosCache | null = null;
 
 const DASHBOARD_CACHE_TTL = 60 * 1000; // 60 segundos
+const FINAL_ORDER_STATE_CODES = ['COMPLETADA', 'CANCELADA'];
 const ESTADOS_CACHE_TTL = 30 * 60 * 1000; // 30 minutos (catálogos estáticos)
 
 @Injectable()
@@ -160,7 +162,7 @@ export class DashboardService {
 
     const [estadosOrden, estadosCotizacion] = await Promise.all([
       this.prisma.estados_orden.findMany({
-        select: { id_estado: true, nombre_estado: true },
+        select: { id_estado: true, codigo_estado: true, nombre_estado: true },
       }),
       this.prisma.estados_cotizacion.findMany({
         select: { id_estado: true, nombre_estado: true },
@@ -169,6 +171,9 @@ export class DashboardService {
 
     estadosCache = {
       ordenes: new Map(estadosOrden.map((e) => [e.id_estado, e.nombre_estado])),
+      ordenesCodigos: new Map(
+        estadosOrden.map((e) => [e.id_estado, (e.codigo_estado || '').toUpperCase()]),
+      ),
       cotizaciones: new Map(estadosCotizacion.map((e) => [e.id_estado, e.nombre_estado])),
       expiresAt: Date.now() + ESTADOS_CACHE_TTL,
     };
@@ -203,10 +208,12 @@ export class DashboardService {
       _count: { id_orden_servicio: true },
     });
 
-    // IDs de estados no finales para contar pendientes
-    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial (orden recién creada)
+    // IDs de estados no finales para contar pendientes (comparando por codigo_estado normalizado)
     const estadosPendientes = Array.from(estadosCache!.ordenes.entries())
-      .filter(([_, nombre]) => !['COMPLETADA', 'CANCELADA'].includes(nombre))
+      .filter(([id, nombre]) => {
+        const codigo = estadosCache!.ordenesCodigos.get(id) || (nombre || '').toUpperCase();
+        return !FINAL_ORDER_STATE_CODES.includes(codigo);
+      })
       .map(([id]) => id);
 
     const pendientes = ordenesCount
@@ -241,33 +248,29 @@ export class DashboardService {
     )?.[0];
 
     // ✅ Ejecutar todas las queries de conteo agregado en paralelo
-    const [
-      contratosPorVencer,
-      ordenesVencidas,
-      equiposCriticos,
-      alertasStockCriticas,
-    ] = await Promise.all([
-      this.prisma.contratos_mantenimiento.count({
-        where: {
-          estado_contrato: 'ACTIVO',
-          fecha_fin: { lte: fechaLimite, gte: new Date() },
-        },
-      }),
-      estadoProgramadaId
-        ? this.prisma.ordenes_servicio.count({
-            where: {
-              id_estado_actual: estadoProgramadaId,
-              fecha_programada: { lt: ayer },
-            },
-          })
-        : Promise.resolve(0),
-      this.prisma.mediciones_servicio.count({
-        where: { nivel_alerta: 'CRITICO' },
-      }),
-      this.prisma.alertas_stock.count({
-        where: { estado: 'PENDIENTE', nivel: 'CRITICO' },
-      }),
-    ]);
+    const [contratosPorVencer, ordenesVencidas, equiposCriticos, alertasStockCriticas] =
+      await Promise.all([
+        this.prisma.contratos_mantenimiento.count({
+          where: {
+            estado_contrato: 'ACTIVO',
+            fecha_fin: { lte: fechaLimite, gte: new Date() },
+          },
+        }),
+        estadoProgramadaId
+          ? this.prisma.ordenes_servicio.count({
+              where: {
+                id_estado_actual: estadoProgramadaId,
+                fecha_programada: { lt: ayer },
+              },
+            })
+          : Promise.resolve(0),
+        this.prisma.mediciones_servicio.count({
+          where: { nivel_alerta: 'CRITICO' },
+        }),
+        this.prisma.alertas_stock.count({
+          where: { estado: 'PENDIENTE', nivel: 'CRITICO' },
+        }),
+      ]);
 
     return {
       contratosPorVencer,
@@ -288,9 +291,9 @@ export class DashboardService {
       _count: { id_orden_servicio: true },
     });
 
-    // Obtener nombres de estados
+    // Obtener catálogo de estados (nombre y código normalizado)
     const estados = await this.prisma.estados_orden.findMany({
-      select: { id_estado: true, nombre_estado: true },
+      select: { id_estado: true, codigo_estado: true, nombre_estado: true },
     });
 
     const estadosMap = new Map(estados.map((e) => [e.id_estado, e.nombre_estado]));
@@ -314,13 +317,15 @@ export class DashboardService {
       },
     });
 
-    // Órdenes pendientes (no completadas ni canceladas)
-    const estadosPendientes = await this.prisma.estados_orden.findMany({
-      // ✅ FIX 09-ABR-2026: APROBADA NO es estado final
-      where: { nombre_estado: { notIn: ['COMPLETADA', 'CANCELADA'] } },
-      select: { id_estado: true },
-    });
-    const idsPendientes = estadosPendientes.map((e) => e.id_estado);
+    // Órdenes pendientes (no completadas ni canceladas; APROBADA tampoco es estado final)
+    const idsPendientes = estados
+      .filter(
+        (e) =>
+          !FINAL_ORDER_STATE_CODES.includes(
+            (e.codigo_estado || e.nombre_estado || '').toUpperCase(),
+          ),
+      )
+      .map((e) => e.id_estado);
 
     const pendientes = await this.prisma.ordenes_servicio.count({
       where: { id_estado_actual: { in: idsPendientes } },

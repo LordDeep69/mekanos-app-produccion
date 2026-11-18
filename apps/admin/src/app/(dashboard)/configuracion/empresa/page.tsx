@@ -4,6 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,15 +38,15 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 const ZONAS_HORARIAS_COMUNES = [
-  'America/Bogota',
-  'America/Mexico_City',
-  'America/Lima',
-  'America/Santiago',
-  'America/Argentina/Buenos_Aires',
-  'America/New_York',
-  'America/Los_Angeles',
-  'Europe/Madrid',
-  'UTC',
+  { value: 'America/Bogota', label: 'Colombia — Bogotá (UTC-5)' },
+  { value: 'America/Mexico_City', label: 'México — Ciudad de México (UTC-6)' },
+  { value: 'America/Lima', label: 'Perú — Lima (UTC-5)' },
+  { value: 'America/Santiago', label: 'Chile — Santiago (UTC-4/-3)' },
+  { value: 'America/Argentina/Buenos_Aires', label: 'Argentina — Buenos Aires (UTC-3)' },
+  { value: 'America/New_York', label: 'EE. UU. Este — Nueva York (UTC-5/-4)' },
+  { value: 'America/Los_Angeles', label: 'EE. UU. Pacífico — Los Ángeles (UTC-8/-7)' },
+  { value: 'Europe/Madrid', label: 'España — Madrid (UTC+1/+2)' },
+  { value: 'UTC', label: 'Tiempo Universal Coordinado (UTC)' },
 ];
 
 const LOCALES_COMUNES = [
@@ -172,7 +179,7 @@ export default function ConfiguracionEmpresaPage() {
 
       const updated = await updateConfiguracionEmpresa(payload);
       setForm(updated);
-      await refreshBranding();
+      await refreshBranding(updated);
       toast.success('Identidad White-Label y parámetros guardados y aplicados en vivo');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Error al guardar configuración corporativa'));
@@ -282,7 +289,7 @@ export default function ConfiguracionEmpresaPage() {
       </Card>
 
       <Tabs defaultValue="identidad" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto p-1">
+        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 h-auto p-1 gap-1">
           <TabsTrigger value="identidad" className="py-2 gap-1.5">
             <Building2 className="h-4 w-4" /> Identidad y Contacto
           </TabsTrigger>
@@ -478,9 +485,7 @@ export default function ConfiguracionEmpresaPage() {
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
-                        value={
-                          /^#[0-9A-Fa-f]{6}$/.test(form[field]) ? form[field] : '#1E40AF'
-                        }
+                        value={/^#[0-9A-Fa-f]{6}$/.test(form[field]) ? form[field] : '#1E40AF'}
                         onChange={(e) => updateField(field, e.target.value.toUpperCase())}
                         className="h-9 w-12 rounded border border-slate-200 cursor-pointer bg-white p-0.5"
                       />
@@ -507,60 +512,69 @@ export default function ConfiguracionEmpresaPage() {
                 Gobierna el formato de moneda, fechas y zona horaria en reportes, PDFs y crons.
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label>Zona Horaria (IANA)</Label>
-                <select
+                <Label className="whitespace-nowrap">Zona Horaria (IANA)</Label>
+                <Select
                   value={form.zona_horaria}
-                  onChange={(e) => updateField('zona_horaria', e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  onValueChange={(value) => updateField('zona_horaria', value)}
                 >
-                  {ZONAS_HORARIAS_COMUNES.map((tz) => (
-                    <option key={tz} value={tz}>
-                      {tz}
-                    </option>
-                  ))}
-                  {!ZONAS_HORARIAS_COMUNES.includes(form.zona_horaria) && (
-                    <option value={form.zona_horaria}>{form.zona_horaria}</option>
-                  )}
-                </select>
+                  <SelectTrigger className="w-full h-9 bg-white">
+                    <SelectValue placeholder="Seleccionar zona horaria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ZONAS_HORARIAS_COMUNES.map((tz) => (
+                      <SelectItem key={tz.value} value={tz.value}>
+                        {tz.label}
+                      </SelectItem>
+                    ))}
+                    {!ZONAS_HORARIAS_COMUNES.some((tz) => tz.value === form.zona_horaria) && (
+                      <SelectItem value={form.zona_horaria}>{form.zona_horaria}</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
-                <Label>Locale (Formato Regional)</Label>
-                <select
-                  value={form.locale}
-                  onChange={(e) => updateField('locale', e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  {LOCALES_COMUNES.map((loc) => (
-                    <option key={loc.value} value={loc.value}>
-                      {loc.label} ({loc.value})
-                    </option>
-                  ))}
-                </select>
+                <Label className="whitespace-nowrap">Formato Regional (Locale)</Label>
+                <Select value={form.locale} onValueChange={(value) => updateField('locale', value)}>
+                  <SelectTrigger className="w-full h-9 bg-white">
+                    <SelectValue placeholder="Seleccionar formato regional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCALES_COMUNES.map((loc) => (
+                      <SelectItem key={loc.value} value={loc.value}>
+                        {loc.label} ({loc.value})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
-                <Label>Moneda Predefinida</Label>
-                <select
+                <Label className="whitespace-nowrap">Moneda Predefinida</Label>
+                <Select
                   value={form.codigo_moneda}
-                  onChange={(e) => {
-                    const found = MONEDAS_COMUNES.find((m) => m.code === e.target.value);
-                    updateField('codigo_moneda', e.target.value);
+                  onValueChange={(value) => {
+                    const found = MONEDAS_COMUNES.find((m) => m.code === value);
+                    updateField('codigo_moneda', value);
                     if (found) {
                       updateField('simbolo_moneda', found.symbol);
                       updateField('decimales_moneda', found.decimals);
                     }
                   }}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  {MONEDAS_COMUNES.map((m) => (
-                    <option key={m.code} value={m.code}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full h-9 bg-white">
+                    <SelectValue placeholder="Seleccionar moneda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MONEDAS_COMUNES.map((m) => (
+                      <SelectItem key={m.code} value={m.code}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
@@ -750,9 +764,7 @@ export default function ConfiguracionEmpresaPage() {
                       <div className="text-sm font-medium flex items-center gap-1.5">
                         <CheckCircle2 className="h-4 w-4 text-slate-600" /> Módulo Inventario Activo
                       </div>
-                      <p className="text-xs text-slate-500">
-                        WMS, bodegas, compras y remisiones
-                      </p>
+                      <p className="text-xs text-slate-500">WMS, bodegas, compras y remisiones</p>
                     </div>
                     <Switch
                       checked={form.modulo_inventario_activo}
