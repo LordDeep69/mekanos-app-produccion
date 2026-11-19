@@ -14,6 +14,7 @@ import {
   generarFooterCorporativoHtml,
   renderOrgLogoHtml,
   resolveOrgBranding,
+  sanitizeRichTextHtml,
 } from '../org-branding.types';
 
 export {
@@ -27,6 +28,7 @@ export {
   generarFooterCorporativoHtml,
   renderOrgLogoHtml,
   resolveOrgBranding,
+  sanitizeRichTextHtml,
 };
 
 export const MEKANOS_COLORS = {

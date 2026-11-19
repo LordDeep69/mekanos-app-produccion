@@ -202,6 +202,13 @@ export interface TipoComponente {
   nombre_componente: string;
   categoria?: string;
   subcategoria?: string | null;
+  aplica_todos_tipos?: boolean;
+  tipos_equipo_ids?: number[];
+  tipos_equipo?: Array<{
+    id_tipo_equipo: number;
+    codigo_tipo: string;
+    nombre_tipo: string;
+  }>;
 }
 
 export interface ArticuloMaestro {

@@ -32,6 +32,7 @@ import {
   generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
   resolveOrgBranding,
+  sanitizeRichTextHtml,
 } from './mekanos-base.template';
 import { EquipoSpecsReader, DatosPlacaUniversal } from '../../equipos/services/equipo-specs.reader';
 
@@ -274,10 +275,7 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
 // SUB-RENDERIZADORES ATÓMICOS DEL TEMPLATE UNIVERSAL
 // ════════════════════════════════════════════════════════════════════════════
 
-function generarChecklistUniversal(
-  actividades: any[],
-  brand = resolveOrgBranding(),
-): string {
+function generarChecklistUniversal(actividades: any[], brand = resolveOrgBranding()): string {
   // Filtrar estrictamente actividades de inspección/mantenimiento (las mediciones van separadas)
   const actividadesInspeccion = (actividades || []).filter((act) => !esActividadMedicion(act));
 
@@ -507,9 +505,7 @@ function generarChecklistUniversal(
                             ? 'und'
                             : prefUpper.includes('HORA') || prefUpper.startsWith('HR')
                               ? 'hrs'
-                              : prefUpper &&
-                                  prefUpper !== 'CONTADOR' &&
-                                  prefUpper !== 'RESPUESTA'
+                              : prefUpper && prefUpper !== 'CONTADOR' && prefUpper !== 'RESPUESTA'
                                 ? prefUpper.toLowerCase()
                                 : '');
                     const chipPrefix =
@@ -963,11 +959,23 @@ function generarObservacionesUniversal(datos: DatosOrdenPDF): string {
     datos.observaciones_tecnico ||
     'Servicio ejecutado a satisfacción sin novedades extraordinarias.';
 
+  const safeObs = sanitizeRichTextHtml(obs);
+  const hasRichBlockHtml = /<(p|ul|ol|li|h3|h4|hr|br)\b/i.test(safeObs);
+
   return `
   <div class="section" style="page-break-inside: avoid;">
     <div class="section-title">📝 OBSERVACIONES, RECOMENDACIONES Y DIAGNÓSTICO FINAL</div>
-    <div style="padding: 10px 12px; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 9px; line-height: 1.5; color: #1E293B; white-space: pre-wrap;">
-${escapeBrandHtml(obs)}
+    <style>
+      .obs-rich-html p { margin: 0 0 4px 0; }
+      .obs-rich-html p:last-child { margin-bottom: 0; }
+      .obs-rich-html ul, .obs-rich-html ol { margin: 3px 0 5px 16px; padding: 0; }
+      .obs-rich-html li { margin-bottom: 2px; }
+      .obs-rich-html li p { margin: 0; }
+      .obs-rich-html hr { border: none; border-top: 1px solid #CBD5E1; margin: 6px 0; }
+      .obs-rich-html h3, .obs-rich-html h4 { margin: 4px 0 2px 0; font-size: 9.5px; font-weight: 700; }
+    </style>
+    <div class="obs-rich-html" style="padding: 10px 12px; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 9px; line-height: 1.5; color: #1E293B;${hasRichBlockHtml ? '' : ' white-space: pre-wrap;'}">
+${safeObs}
     </div>
   </div>
   `;

@@ -249,6 +249,23 @@ export const comprasService = {
   },
 
   /**
+   * Actualizar aplicabilidad multi-tipo N:M (tipos_componente_tipo_equipo)
+   */
+  async updateTipoComponenteAplicabilidad(
+    idTipoComponente: number,
+    payload: {
+      aplica_todos_tipos: boolean;
+      tipos_equipo_ids: number[];
+    },
+  ): Promise<TipoComponente> {
+    const response = await apiClient.put<TipoComponente>(
+      `/tipos-componente/${idTipoComponente}`,
+      payload,
+    );
+    return response.data;
+  },
+
+  /**
    * Obtener marcas (búsqueda rápida con ?q=...)
    */
   async getMarcas(q?: string, limit = 20): Promise<Marca[]> {

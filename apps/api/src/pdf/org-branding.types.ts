@@ -113,7 +113,8 @@ export function buildOrgBranding(
 
   return {
     nombreComercial: org.nombre_comercial?.trim() || DEFAULT_ORG_BRANDING.nombreComercial,
-    razonSocial: org.razon_social?.trim() || org.nombre_comercial?.trim() || DEFAULT_ORG_BRANDING.razonSocial,
+    razonSocial:
+      org.razon_social?.trim() || org.nombre_comercial?.trim() || DEFAULT_ORG_BRANDING.razonSocial,
     tipoIdFiscal: org.tipo_id_fiscal?.trim() || DEFAULT_ORG_BRANDING.tipoIdFiscal,
     numeroIdFiscal: org.numero_id_fiscal?.trim() || null,
     eslogan: org.eslogan?.trim() || null,
@@ -126,7 +127,8 @@ export function buildOrgBranding(
     departamentoDefecto: org.departamento_defecto?.trim() || null,
     paisDefecto: org.pais_defecto?.trim() || '',
     codigoPaisIso: org.codigo_pais_iso?.trim() || 'CO',
-    logoUrl: resolvedLogoUri !== undefined ? resolvedLogoUri : org.logo_principal_url?.trim() || null,
+    logoUrl:
+      resolvedLogoUri !== undefined ? resolvedLogoUri : org.logo_principal_url?.trim() || null,
     logoClaroUrl: org.logo_claro_url?.trim() || null,
     isotipoUrl: org.isotipo_url?.trim() || null,
     zonaHoraria: org.zona_horaria?.trim() || DEFAULT_ORG_BRANDING.zonaHoraria,
@@ -191,6 +193,26 @@ export function escapeBrandHtml(raw: string | null | undefined): string {
 }
 
 /**
+ * Sanitiza HTML enriquecido (p.ej. Tiptap en observaciones_cierre) con enfoque Zero-Trust:
+ * 1. Escapa TODOS los caracteres HTML peligrosos primero (neutralizando <script>, <img>,
+ *    event handlers on*, atributos arbitrarios y URLs javascript:).
+ * 2. Restaura únicamente una lista blanca estricta de etiquetas de formato SIN atributos
+ *    (<p>, <br>, <strong>, <b>, <em>, <i>, <u>, <ul>, <ol>, <li>, <hr>, <h3>, <h4>).
+ * 3. Elimina etiquetas vacías residuales (<p></p>, <h3></h3>, <h4></h4>).
+ */
+export function sanitizeRichTextHtml(raw: string | null | undefined): string {
+  const escaped = escapeBrandHtml(raw);
+  return escaped
+    .replace(
+      /&lt;(\/?)(p|strong|b|em|i|u|ul|ol|li|h3|h4)&gt;/gi,
+      (_, slash: string, tag: string) => `<${slash}${tag.toLowerCase()}>`,
+    )
+    .replace(/&lt;(br|hr)\s*\/?&gt;/gi, (_, tag: string) => `<${tag.toLowerCase()} />`)
+    .replace(/<(h3|h4|p)>\s*<\/\1>/gi, '')
+    .trim();
+}
+
+/**
  * Renderiza el logo oficial de la organización o, si no existe URL/DataURI configurada,
  * un monograma vectorial limpio generado con el nombre comercial y paleta de la instancia.
  */
@@ -249,7 +271,8 @@ export function generarFooterCorporativoHtml(
       ? `${escapeBrandHtml(brand.tipoIdFiscal || 'NIT')}: ${escapeBrandHtml(brand.numeroIdFiscal)}`
       : null,
     brand.direccionLinea1 ? escapeBrandHtml(brand.direccionLinea1) : null,
-    [brand.ciudadDefecto, brand.paisDefecto].filter(Boolean).map(escapeBrandHtml).join(', ') || null,
+    [brand.ciudadDefecto, brand.paisDefecto].filter(Boolean).map(escapeBrandHtml).join(', ') ||
+      null,
   ].filter(Boolean);
 
   const partesContacto = [
@@ -278,8 +301,7 @@ export function formatNumberOrg(
   const brand = resolveOrgBranding(branding);
   const num = Number(value);
   const safeNum = Number.isFinite(num) ? num : 0;
-  const digits =
-    typeof fractionDigits === 'number' ? fractionDigits : brand.decimalesMoneda;
+  const digits = typeof fractionDigits === 'number' ? fractionDigits : brand.decimalesMoneda;
   try {
     return safeNum.toLocaleString(brand.locale || 'es-CO', {
       minimumFractionDigits: digits,

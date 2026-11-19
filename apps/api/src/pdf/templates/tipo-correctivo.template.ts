@@ -33,6 +33,7 @@ import {
   generarMedicionesMultiEquipo,
   generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
+  sanitizeRichTextHtml,
   MedicionesPorEquipoPDF,
   MEKANOS_COLORS,
   OrgBrandingContext,
@@ -1465,7 +1466,7 @@ const generarObservaciones = (datos: DatosCorrectivoOrdenPDF): string => {
     <div class="section">
         <div class="section-title">OBSERVACIONES ADICIONALES</div>
         <div class="corr-narrative-box">
-            ${escapeBrandHtml(datos.observacionesGenerales)}
+            ${sanitizeRichTextHtml(datos.observacionesGenerales)}
         </div>
     </div>
   `;

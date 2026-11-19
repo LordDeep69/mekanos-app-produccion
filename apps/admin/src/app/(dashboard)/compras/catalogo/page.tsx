@@ -25,6 +25,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Cpu,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -36,6 +37,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ComboboxWithCreate } from '@/components/ui/combobox-with-create';
 import { HierarchicalCategorySelect } from '@/components/compras/hierarchical-category-select';
+import { AplicabilidadTiposComponenteDialog } from '@/components/compras/aplicabilidad-tipos-componente-dialog';
 
 function CatalogoComprasContent() {
   const router = useRouter();
@@ -47,6 +49,7 @@ function CatalogoComprasContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [aplicabilidadOpen, setAplicabilidadOpen] = useState(false);
 
   // Conteos globales de arquetipos para micro-contadores certificados
   const [conteoArquetipos, setConteoArquetipos] = useState({
@@ -269,6 +272,15 @@ function CatalogoComprasContent() {
           </Button>
 
           <Button
+            variant="outline"
+            onClick={() => setAplicabilidadOpen(true)}
+            className="h-10 text-xs"
+          >
+            <Cpu className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
+            Aplicabilidad por Equipos
+          </Button>
+
+          <Button
             asChild
             className="h-10 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm"
           >
@@ -278,6 +290,11 @@ function CatalogoComprasContent() {
           </Button>
         </div>
       </div>
+
+      <AplicabilidadTiposComponenteDialog
+        open={aplicabilidadOpen}
+        onOpenChange={setAplicabilidadOpen}
+      />
 
       {/* METRICAS FLASH */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

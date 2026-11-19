@@ -10,7 +10,11 @@ import { IS_PUBLIC_KEY } from './auth/decorators/public.decorator';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermisosGuard } from './auth/guards/permisos.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
-import { decryptSecret, encryptSecret, isEncryptedSecret } from './common/utils/crypto-secrets.util';
+import {
+  decryptSecret,
+  encryptSecret,
+  isEncryptedSecret,
+} from './common/utils/crypto-secrets.util';
 import { EquipoSpecsReader } from './equipos/services/equipo-specs.reader';
 import { HealthController } from './health/health.controller';
 import { FinalizarOrdenCompletoDto } from './ordenes/dto/finalizar-orden-completo.dto';
@@ -73,7 +77,9 @@ function makeInMemorySeedPrisma() {
       findMany: jest.fn(async () => Array.from(store.categorias_activo.values())),
     },
     estados_orden: {
-      findFirst: jest.fn(async ({ where }: any) => store.estados_orden.get(where.codigo_estado) ?? null),
+      findFirst: jest.fn(
+        async ({ where }: any) => store.estados_orden.get(where.codigo_estado) ?? null,
+      ),
       create: jest.fn(async ({ data }: any) => {
         const rec = { id_estado: seq++, ...data };
         store.estados_orden.set(data.codigo_estado, rec);
@@ -81,7 +87,9 @@ function makeInMemorySeedPrisma() {
       }),
     },
     estados_cotizacion: {
-      findFirst: jest.fn(async ({ where }: any) => store.estados_cotizacion.get(where.codigo_estado) ?? null),
+      findFirst: jest.fn(
+        async ({ where }: any) => store.estados_cotizacion.get(where.codigo_estado) ?? null,
+      ),
       create: jest.fn(async ({ data }: any) => {
         const rec = { id_estado: seq++, ...data };
         store.estados_cotizacion.set(data.codigo_estado, rec);
@@ -97,7 +105,9 @@ function makeInMemorySeedPrisma() {
       }),
     },
     permisos: {
-      findFirst: jest.fn(async ({ where }: any) => store.permisos.get(where.codigo_permiso) ?? null),
+      findFirst: jest.fn(
+        async ({ where }: any) => store.permisos.get(where.codigo_permiso) ?? null,
+      ),
       create: jest.fn(async ({ data }: any) => {
         const rec = { id_permiso: seq++, ...data };
         store.permisos.set(data.codigo_permiso, rec);
@@ -168,7 +178,9 @@ function makeInMemorySeedPrisma() {
       }),
     },
     tipos_equipo: {
-      findFirst: jest.fn(async ({ where }: any) => store.tipos_equipo.get(where.codigo_tipo) ?? null),
+      findFirst: jest.fn(
+        async ({ where }: any) => store.tipos_equipo.get(where.codigo_tipo) ?? null,
+      ),
       create: jest.fn(async ({ data }: any) => {
         const rec = { id_tipo_equipo: seq++, ...data };
         store.tipos_equipo.set(data.codigo_tipo, rec);
@@ -176,7 +188,9 @@ function makeInMemorySeedPrisma() {
       }),
     },
     tipos_servicio: {
-      findFirst: jest.fn(async ({ where }: any) => store.tipos_servicio.get(where.codigo_tipo) ?? null),
+      findFirst: jest.fn(
+        async ({ where }: any) => store.tipos_servicio.get(where.codigo_tipo) ?? null,
+      ),
       create: jest.fn(async ({ data }: any) => {
         const rec = { id_tipo_servicio: seq++, ...data };
         store.tipos_servicio.set(data.codigo_tipo, rec);
@@ -286,7 +300,13 @@ describe('Fase 6 - Empaquetado Comercial White-Label, Matriz V1-V8 x S1-S5 y Seg
           (s: any) => s.categoria,
         );
         expect(categoriasServicios).toEqual(
-          expect.arrayContaining(['PREVENTIVO', 'CORRECTIVO', 'INSPECCION', 'EMERGENCIA', 'DIAGNOSTICO']),
+          expect.arrayContaining([
+            'PREVENTIVO',
+            'CORRECTIVO',
+            'INSPECCION',
+            'EMERGENCIA',
+            'DIAGNOSTICO',
+          ]),
         );
 
         const createdBefore = {
@@ -449,11 +469,13 @@ describe('Fase 6 - Empaquetado Comercial White-Label, Matriz V1-V8 x S1-S5 y Seg
         expect(placa.bloques.length).toBeGreaterThan(0);
 
         // S1 Preventivo & S3 Predictivo -> UNIVERSAL_EAM
-        expect(pdfService.determinarTipoInforme(v.code, 'PREV_A', { categoriaServicio: 'PREVENTIVO' })).toBe(
-          'UNIVERSAL_EAM',
-        );
         expect(
-          pdfService.determinarTipoInforme(v.code, 'PREDICTIVO', { categoriaServicio: 'INSPECCION' }),
+          pdfService.determinarTipoInforme(v.code, 'PREV_A', { categoriaServicio: 'PREVENTIVO' }),
+        ).toBe('UNIVERSAL_EAM');
+        expect(
+          pdfService.determinarTipoInforme(v.code, 'PREDICTIVO', {
+            categoriaServicio: 'INSPECCION',
+          }),
         ).toBe('UNIVERSAL_EAM');
 
         // S2 Correctivo, S4 Emergencia, S5 Diagnóstico -> CORRECTIVO
@@ -655,7 +677,8 @@ describe('Fase 6 - Empaquetado Comercial White-Label, Matriz V1-V8 x S1-S5 y Seg
     });
 
     it('escapa cargas XSS en observaciones y nombres de firmantes dentro de HTML para Puppeteer', () => {
-      const xss = '<script>alert("xss")</script><img src=x onerror="fetch(1)">';
+      const xss =
+        '<p><strong>ESTADO:</strong> <em>Operativo</em></p><p onclick="evil()">X</p><script>alert("xss")</script><img src=x onerror="fetch(1)">';
       const htmlUniversal = generarTipoUniversalEamHTML({
         numeroOrden: 'OT-XSS-1',
         cliente: 'Cliente',
@@ -693,8 +716,12 @@ describe('Fase 6 - Empaquetado Comercial White-Label, Matriz V1-V8 x S1-S5 y Seg
 
       expect(htmlUniversal).not.toContain('<script>');
       expect(htmlUniversal).toContain('&lt;script&gt;');
+      expect(htmlUniversal).not.toContain('onclick="evil()"');
+      expect(htmlUniversal).toContain('<p><strong>ESTADO:</strong> <em>Operativo</em></p>');
       expect(htmlCorrectivo).not.toContain('<script>');
       expect(htmlCorrectivo).toContain('&lt;script&gt;');
+      expect(htmlCorrectivo).not.toContain('onclick="evil()"');
+      expect(htmlCorrectivo).toContain('<p><strong>ESTADO:</strong> <em>Operativo</em></p>');
     });
 
     it('sanitiza nombres de archivo contra Path Traversal y valida cifrado AES-256-GCM', () => {
