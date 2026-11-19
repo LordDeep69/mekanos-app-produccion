@@ -32,6 +32,10 @@ export class GetEquiposQueryDto {
   tipo?: string;
 
   @IsOptional()
+  @IsString({ message: 'tipos debe ser una lista separada por comas' })
+  tipos?: string;
+
+  @IsOptional()
   @IsString({ message: 'search debe ser una cadena de texto' })
   search?: string;
 
@@ -139,5 +143,5 @@ export class GetEquiposQuery {
     public readonly page?: number,
     public readonly limit?: number,
     public readonly idAsesorAsignado?: number, // ✅ MULTI-ASESOR
-  ) { }
+  ) {}
 }

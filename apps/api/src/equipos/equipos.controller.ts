@@ -9,7 +9,7 @@ import {
   Post,
   Put,
   Query,
-  UseGuards
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -45,25 +45,22 @@ export class EquiposController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
-    private readonly equiposGestionService: EquiposGestionService
-  ) { }
+    private readonly equiposGestionService: EquiposGestionService,
+  ) {}
 
   /**
    * POST /api/equipos
    * Crear un nuevo equipo
    */
   @Post()
-  async create(
-    @Body() dto: CreateEquipoDto,
-    @UserId() userId: number
-  ) {
+  async create(@Body() dto: CreateEquipoDto, @UserId() userId: number) {
     const command = new CreateEquipoCommand(dto, userId);
     const equipo = await this.commandBus.execute(command);
 
     return {
       success: true,
       message: 'Equipo creado exitosamente',
-      data: equipo
+      data: equipo,
     };
   }
 
@@ -102,10 +99,7 @@ export class EquiposController {
    * Listar equipos con filtrado jerárquico enterprise (Cliente -> Sede)
    */
   @Get()
-  async findAll(
-    @CurrentUser() user: any,
-    @Query() queryDto: GetEquiposQueryDto,
-  ) {
+  async findAll(@CurrentUser() user: any, @Query() queryDto: GetEquiposQueryDto) {
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
 
     const query = new GetEquiposQuery(
@@ -125,14 +119,16 @@ export class EquiposController {
       success: true,
       message: queryDto.id_sede
         ? `Equipos filtrados por sede ${queryDto.id_sede}`
-        : (queryDto.id_cliente ? `Equipos filtrados por cliente ${queryDto.id_cliente}` : 'Listado de equipos obtenido'),
+        : queryDto.id_cliente
+          ? `Equipos filtrados por cliente ${queryDto.id_cliente}`
+          : 'Listado de equipos obtenido',
       data: result.items,
       pagination: {
         total: result.total,
         page: result.page,
         limit: result.limit,
-        totalPages: result.totalPages
-      }
+        totalPages: result.totalPages,
+      },
     };
   }
 
@@ -145,11 +141,10 @@ export class EquiposController {
    * Crear equipo con datos polimórficos (padre + hijo + JSONB + B-Tree + BOM OEM en transacción)
    */
   @Post('gestion-completa')
-  @ApiOperation({ summary: 'Crear equipo completo con datos específicos según tipo y metamodelo EAM' })
-  async crearEquipoCompleto(
-    @Body() dto: CreateEquipoCompletoDto,
-    @UserId() userId: number
-  ) {
+  @ApiOperation({
+    summary: 'Crear equipo completo con datos específicos según tipo y metamodelo EAM',
+  })
+  async crearEquipoCompleto(@Body() dto: CreateEquipoCompletoDto, @UserId() userId: number) {
     return this.equiposGestionService.crearEquipoCompleto(dto, userId);
   }
 
@@ -159,10 +154,7 @@ export class EquiposController {
    */
   @Get('listado-completo')
   @ApiOperation({ summary: 'Listar equipos con datos específicos según tipo y filtros B-Tree' })
-  async listarEquiposCompletos(
-    @CurrentUser() user: any,
-    @Query() queryDto: GetEquiposQueryDto,
-  ) {
+  async listarEquiposCompletos(@CurrentUser() user: any, @Query() queryDto: GetEquiposQueryDto) {
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
 
     return this.equiposGestionService.listarEquiposCompletos({
@@ -170,6 +162,7 @@ export class EquiposController {
       id_sede: queryDto.id_sede,
       id_tipo_equipo: queryDto.id_tipo_equipo,
       tipo: queryDto.tipo,
+      tipos: queryDto.tipos,
       estado_equipo: queryDto.estado_equipo,
       search: queryDto.search,
       sortBy: queryDto.sortBy,
@@ -262,7 +255,8 @@ export class EquiposController {
   @ApiOperation({ summary: 'Vincular repuesto compatible al BOM del equipo' })
   async vincularComponenteCompatible(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: {
+    @Body()
+    body: {
       id_componente: number;
       categoria_aplicacion?: string;
       cantidad_requerida?: number;
@@ -293,7 +287,12 @@ export class EquiposController {
     },
     @UserId() userId: number,
   ) {
-    const data = await this.equiposGestionService.actualizarComponenteCompatible(id, idRelacion, body, userId);
+    const data = await this.equiposGestionService.actualizarComponenteCompatible(
+      id,
+      idRelacion,
+      body,
+      userId,
+    );
     return { success: true, message: 'Repuesto del BOM actualizado correctamente', data };
   }
 
@@ -308,7 +307,11 @@ export class EquiposController {
     @Param('idRelacion', ParseIntPipe) idRelacion: number,
     @UserId() userId: number,
   ) {
-    const data = await this.equiposGestionService.desvincularComponenteCompatible(id, idRelacion, userId);
+    const data = await this.equiposGestionService.desvincularComponenteCompatible(
+      id,
+      idRelacion,
+      userId,
+    );
     return { success: true, message: 'Repuesto desvinculado del BOM', data };
   }
 
@@ -323,7 +326,7 @@ export class EquiposController {
 
     return {
       success: true,
-      data: equipo
+      data: equipo,
     };
   }
 
@@ -335,7 +338,7 @@ export class EquiposController {
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateEquipoDto,
-    @UserId() userId: number
+    @UserId() userId: number,
   ) {
     const command = new UpdateEquipoCommand(id, dto, userId);
     const equipo = await this.commandBus.execute(command);
@@ -343,7 +346,7 @@ export class EquiposController {
     return {
       success: true,
       message: 'Equipo actualizado exitosamente',
-      data: equipo
+      data: equipo,
     };
   }
 
@@ -352,16 +355,13 @@ export class EquiposController {
    * Eliminar un equipo (soft delete - marca como inactivo)
    */
   @Delete(':id')
-  async remove(
-    @Param('id', ParseIntPipe) id: number,
-    @UserId() userId: number
-  ) {
+  async remove(@Param('id', ParseIntPipe) id: number, @UserId() userId: number) {
     const command = new DeleteEquipoCommand(id, userId);
     await this.commandBus.execute(command);
 
     return {
       success: true,
-      message: 'Equipo eliminado exitosamente'
+      message: 'Equipo eliminado exitosamente',
     };
   }
 
@@ -372,19 +372,20 @@ export class EquiposController {
   @Delete(':id/hard-delete')
   @ApiOperation({
     summary: 'Eliminar completamente un equipo del sistema',
-    description: '⚠️ HARD DELETE: Elimina permanentemente el equipo y todos sus datos relacionados.'
+    description:
+      '⚠️ HARD DELETE: Elimina permanentemente el equipo y todos sus datos relacionados.',
   })
   async hardDelete(
     @Param('id', ParseIntPipe) id: number,
     @Body('confirmacion') confirmacion: string,
-    @UserId() userId: number
+    @UserId() userId: number,
   ) {
     const command = new HardDeleteEquipoCommand(id, userId, confirmacion);
     await this.commandBus.execute(command);
 
     return {
       success: true,
-      message: 'Equipo eliminado completamente del sistema'
+      message: 'Equipo eliminado completamente del sistema',
     };
   }
 
@@ -401,7 +402,7 @@ export class EquiposController {
   async cambiarEstado(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CambiarEstadoEquipoDto,
-    @UserId() userId: number
+    @UserId() userId: number,
   ) {
     const resultado = await this.equiposGestionService.cambiarEstadoEquipo(id, dto, userId);
     return {
@@ -416,11 +417,13 @@ export class EquiposController {
    * Actualizar datos específicos del equipo (JSONB modular + Motor + Generador + Bomba + B-Tree)
    */
   @Patch(':id/datos-especificos')
-  @ApiOperation({ summary: 'Actualizar datos específicos del equipo (JSONB modular, Motor, Generador, Bomba)' })
+  @ApiOperation({
+    summary: 'Actualizar datos específicos del equipo (JSONB modular, Motor, Generador, Bomba)',
+  })
   async actualizarDatosEspecificos(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDatosEspecificosDto,
-    @UserId() userId: number
+    @UserId() userId: number,
   ) {
     return this.equiposGestionService.actualizarDatosEspecificos(id, dto, userId);
   }
@@ -434,7 +437,7 @@ export class EquiposController {
   async registrarLecturaHorometro(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RegistrarLecturaHorometroDto,
-    @UserId() userId: number
+    @UserId() userId: number,
   ) {
     const resultado = await this.equiposGestionService.registrarLecturaHorometro(id, dto, userId);
     return {

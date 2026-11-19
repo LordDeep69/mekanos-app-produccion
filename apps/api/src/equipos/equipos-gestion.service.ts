@@ -234,10 +234,17 @@ export class EquiposGestionService {
               ? Number(mComb.ano_fabricacion_motor)
               : undefined,
         };
-      } else if (mElec && Object.keys(mElec).length > 0 && (mElec.marca_motor_electrico || mElec.marca_motor)) {
+      } else if (
+        mElec &&
+        Object.keys(mElec).length > 0 &&
+        (mElec.marca_motor_electrico || mElec.marca_motor)
+      ) {
         const fasesRaw = String(mElec.numero_fases_motor || mElec.numero_fases || '').toUpperCase();
-        const numeroFases =
-          fasesRaw ? (fasesRaw === '1' || fasesRaw.includes('MONO') ? 'MONOFASICO' : 'TRIFASICO') : undefined;
+        const numeroFases = fasesRaw
+          ? fasesRaw === '1' || fasesRaw.includes('MONO')
+            ? 'MONOFASICO'
+            : 'TRIFASICO'
+          : undefined;
         datosMotor = {
           tipo_motor: TipoMotorEnum.ELECTRICO,
           marca_motor: mElec.marca_motor_electrico || mElec.marca_motor,
@@ -284,7 +291,12 @@ export class EquiposGestionService {
     }
 
     let datosGenerador = datosGeneradorExplicito ? { ...datosGeneradorExplicito } : undefined;
-    if (!datosGenerador && mGen && Object.keys(mGen).length > 0 && (mGen.marca_generador || mGen.marca_alternador)) {
+    if (
+      !datosGenerador &&
+      mGen &&
+      Object.keys(mGen).length > 0 &&
+      (mGen.marca_generador || mGen.marca_alternador)
+    ) {
       const fasesGen = mGen.numero_fases !== undefined ? Number(mGen.numero_fases) : undefined;
       const voltajeSalida = mGen.voltaje_salida ?? mGen.voltaje_salida_vac;
       datosGenerador = {
@@ -296,11 +308,16 @@ export class EquiposGestionService {
         numero_serie_alternador: mGen.numero_serie_alternador,
         potencia_kva: mGen.potencia_kva !== undefined ? Number(mGen.potencia_kva) : undefined,
         potencia_kw: mGen.potencia_kw !== undefined ? Number(mGen.potencia_kw) : undefined,
-        factor_potencia: mGen.factor_potencia !== undefined ? Number(mGen.factor_potencia) : undefined,
+        factor_potencia:
+          mGen.factor_potencia !== undefined ? Number(mGen.factor_potencia) : undefined,
         voltaje_salida: voltajeSalida !== undefined ? String(voltajeSalida) : undefined,
         numero_fases: fasesGen !== undefined ? (fasesGen === 1 ? 1 : 3) : undefined,
         frecuencia_hz:
-          mGen.frecuencia_hz !== undefined ? (Number(mGen.frecuencia_hz) === 50 ? 50 : 60) : undefined,
+          mGen.frecuencia_hz !== undefined
+            ? Number(mGen.frecuencia_hz) === 50
+              ? 50
+              : 60
+            : undefined,
         amperaje_nominal_salida:
           mGen.amperaje_nominal_salida !== undefined
             ? Number(mGen.amperaje_nominal_salida)
@@ -930,13 +947,19 @@ export class EquiposGestionService {
         let datosEspecificos: Record<string, any> = {};
 
         // 4.3. Dual-Write opcional a tabla satélite solo cuando existan datos reales (sin valores inventados)
-        if ((tipoNorm === TipoEquipoDiscriminator.GENERADOR || tipoNorm === 'GEN') && datosGenerador && datosGenerador.marca_generador) {
+        if (
+          (tipoNorm === TipoEquipoDiscriminator.GENERADOR || tipoNorm === 'GEN') &&
+          datosGenerador &&
+          datosGenerador.marca_generador
+        ) {
           const dg = datosGenerador;
           const pf = dg.factor_potencia ? Number(dg.factor_potencia) : null;
           const kva =
-            dg.potencia_kva ?? (dg.potencia_kw && pf ? Number((dg.potencia_kw / pf).toFixed(2)) : null);
+            dg.potencia_kva ??
+            (dg.potencia_kw && pf ? Number((dg.potencia_kw / pf).toFixed(2)) : null);
           const kw =
-            dg.potencia_kw ?? (dg.potencia_kva && pf ? Number((dg.potencia_kva * pf).toFixed(2)) : null);
+            dg.potencia_kw ??
+            (dg.potencia_kva && pf ? Number((dg.potencia_kva * pf).toFixed(2)) : null);
 
           const generador = await tx.equipos_generador.create({
             data: {
@@ -978,7 +1001,11 @@ export class EquiposGestionService {
             tabla: 'equipos_generador',
             ...generador,
           };
-        } else if ((tipoNorm === TipoEquipoDiscriminator.BOMBA || tipoNorm === 'BOM') && datosBomba && datosBomba.marca_bomba) {
+        } else if (
+          (tipoNorm === TipoEquipoDiscriminator.BOMBA || tipoNorm === 'BOM') &&
+          datosBomba &&
+          datosBomba.marca_bomba
+        ) {
           const db = datosBomba;
           const tiposBombaValidos = [
             'CENTRIFUGA',
@@ -1149,6 +1176,7 @@ export class EquiposGestionService {
     id_sede?: number;
     id_tipo_equipo?: number;
     tipo?: string;
+    tipos?: string;
     estado_equipo?: string;
     search?: string;
     sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';
@@ -1177,6 +1205,7 @@ export class EquiposGestionService {
         id_sede,
         id_tipo_equipo,
         tipo,
+        tipos,
         estado_equipo,
         search,
         sortBy = 'codigo',
@@ -1209,8 +1238,27 @@ export class EquiposGestionService {
         };
       }
 
-      // Filtro por tipo (GENERADOR, BOMBA, COMPRESOR, MOTOR, OTRO o cualquier nuevo arquetipo del Hub)
-      if (tipo && !id_tipo_equipo) {
+      // Filtro por tipo(s): soporta multi-selección explícita (`tipos=BOM,ELEV,HVAC`)
+      // o filtro simple retrocompatible (`tipo=ELEV` o legacy `GENERADOR/BOMBA`).
+      const rawTiposList =
+        tipos && tipos.trim()
+          ? tipos
+              .split(',')
+              .map((t) => t.trim().toUpperCase())
+              .filter(Boolean)
+          : tipo && tipo.includes(',')
+            ? tipo
+                .split(',')
+                .map((t) => t.trim().toUpperCase())
+                .filter(Boolean)
+            : [];
+
+      if (rawTiposList.length > 0 && !id_tipo_equipo) {
+        const uniqueCodes = Array.from(new Set(rawTiposList));
+        where.tipos_equipo = {
+          codigo_tipo: { in: uniqueCodes },
+        };
+      } else if (tipo && !id_tipo_equipo) {
         const tipoUp = tipo.trim().toUpperCase();
         if (tipoUp === 'GENERADOR' || tipoUp === 'GEN') {
           where.tipos_equipo = { codigo_tipo: { in: ['GENERADOR', 'GEN'] } };
@@ -1441,6 +1489,11 @@ export class EquiposGestionService {
         totalCriticidadAlta,
         conteosPorTipo,
         tiposEquipoCat,
+        filteredOperativos,
+        filteredEnReparacion,
+        filteredFueraServicio,
+        filteredCriticidadAlta,
+        filteredConteosPorTipo,
       ] = await Promise.all([
         this.prisma.equipos.findMany({
           where,
@@ -1510,27 +1563,44 @@ export class EquiposGestionService {
               },
             })
           : Promise.resolve([]),
+        this.prisma.equipos.count({ where: { ...where, estado_equipo: 'OPERATIVO' } }),
+        this.prisma.equipos.count({ where: { ...where, estado_equipo: 'EN_REPARACION' } }),
+        this.prisma.equipos.count({ where: { ...where, estado_equipo: 'FUERA_SERVICIO' } }),
+        this.prisma.equipos.count({
+          where: { ...where, criticidad: { in: ['ALTA', 'CRITICA'] } },
+        }),
+        typeof this.prisma.equipos.groupBy === 'function'
+          ? this.prisma.equipos.groupBy({
+              by: ['id_tipo_equipo'],
+              where,
+              _count: { _all: true },
+            })
+          : Promise.resolve([]),
       ]);
 
       const tiposById = new Map<number, any>(
         (tiposEquipoCat as any[]).map((t) => [t.id_tipo_equipo, t]),
       );
-      const por_tipo = (conteosPorTipo as any[])
-        .map((grp) => {
-          const meta = tiposById.get(grp.id_tipo_equipo);
-          const cnt = Number(grp._count?._all ?? 0);
-          if (!meta || cnt <= 0) return null;
-          return {
-            id_tipo_equipo: meta.id_tipo_equipo,
-            codigo_tipo: meta.codigo_tipo,
-            nombre_tipo: meta.nombre_tipo,
-            color_hex: meta.color_hex ?? null,
-            icono_ui: meta.icono_ui ?? null,
-            cantidad: cnt,
-          };
-        })
-        .filter(Boolean)
-        .sort((a: any, b: any) => b.cantidad - a.cantidad);
+      const mapConteosPorTipo = (rows: any[]) =>
+        rows
+          .map((grp) => {
+            const meta = tiposById.get(grp.id_tipo_equipo);
+            const cnt = Number(grp._count?._all ?? 0);
+            if (!meta || cnt <= 0) return null;
+            return {
+              id_tipo_equipo: meta.id_tipo_equipo,
+              codigo_tipo: meta.codigo_tipo,
+              nombre_tipo: meta.nombre_tipo,
+              color_hex: meta.color_hex ?? null,
+              icono_ui: meta.icono_ui ?? null,
+              cantidad: cnt,
+            };
+          })
+          .filter(Boolean)
+          .sort((a: any, b: any) => b.cantidad - a.cantidad);
+
+      const por_tipo = mapConteosPorTipo(conteosPorTipo as any[]);
+      const por_tipo_filtrado = mapConteosPorTipo(filteredConteosPorTipo as any[]);
 
       const data = equipos.map((eq) => {
         const persona = eq.clientes?.persona;
@@ -1581,6 +1651,14 @@ export class EquiposGestionService {
           en_reparacion: totalEnReparacion,
           fuera_servicio: totalFueraServicio,
           criticidad_alta: totalCriticidadAlta,
+          filtrado: {
+            total,
+            operativos: filteredOperativos,
+            en_reparacion: filteredEnReparacion,
+            fuera_servicio: filteredFueraServicio,
+            criticidad_alta: filteredCriticidadAlta,
+            por_tipo: por_tipo_filtrado,
+          },
         },
         pagination: {
           total,
@@ -3140,7 +3218,10 @@ export class EquiposGestionService {
         });
       }
       const st = statsPorCodigo.get(f.codigo_atributo)!;
-      if (f.valor_texto && !['N/A', 'NULL', 'GENERICO'].includes(f.valor_texto.trim().toUpperCase())) {
+      if (
+        f.valor_texto &&
+        !['N/A', 'NULL', 'GENERICO'].includes(f.valor_texto.trim().toUpperCase())
+      ) {
         st.textos.add(f.valor_texto.trim());
       }
       if (f.valor_num_base !== null && f.valor_num_base !== undefined) {
@@ -3215,7 +3296,10 @@ export class EquiposGestionService {
         ...(maxVal !== undefined ? { maxSugerido: maxVal } : {}),
       });
 
-      if (codigo.startsWith('marca') || (textos.length > 0 && tipoCtrl !== 'NUMERICO' && tipoCtrl !== 'DECIMAL')) {
+      if (
+        codigo.startsWith('marca') ||
+        (textos.length > 0 && tipoCtrl !== 'NUMERICO' && tipoCtrl !== 'DECIMAL')
+      ) {
         if (textos.length > 0) {
           marcasDinamicas.push({
             campo: codigo,

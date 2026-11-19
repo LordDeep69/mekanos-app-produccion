@@ -40,6 +40,7 @@ export interface ListarEquiposParams {
   id_tipo_equipo?: number;
   estado_equipo?: string;
   tipo?: string;
+  tipos?: string;
   search?: string;
   sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';
   sortOrder?: 'asc' | 'desc';
@@ -75,6 +76,7 @@ export const equiposService = {
       searchParams.append('id_tipo_equipo', params.id_tipo_equipo.toString());
     if (params?.estado_equipo) searchParams.append('estado_equipo', params.estado_equipo);
     if (params?.tipo) searchParams.append('tipo', params.tipo);
+    if (params?.tipos) searchParams.append('tipos', params.tipos);
     if (params?.search) searchParams.append('search', params.search);
     if (params?.sortBy) searchParams.append('sortBy', params.sortBy);
     if (params?.sortOrder) searchParams.append('sortOrder', params.sortOrder);

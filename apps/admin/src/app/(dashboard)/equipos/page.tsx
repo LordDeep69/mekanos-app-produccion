@@ -1060,12 +1060,36 @@ export default function EquiposPage() {
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [tipoFiltro, setTipoFiltro] = useState<string>('');
+  const [tiposFiltro, setTiposFiltro] = useState<string[]>([]);
+  const [tipoDropdownOpen, setTipoDropdownOpen] = useState(false);
+  const [tipoDropdownSearch, setTipoDropdownSearch] = useState('');
+  const tipoDropdownRef = useRef<HTMLDivElement>(null);
   const [estadoFiltro, setEstadoFiltro] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortBy>('codigo');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (tipoDropdownRef.current && !tipoDropdownRef.current.contains(e.target as Node)) {
+        setTipoDropdownOpen(false);
+      }
+    }
+    if (tipoDropdownOpen) {
+      document.addEventListener('mousedown', handleOutside);
+      return () => document.removeEventListener('mousedown', handleOutside);
+    }
+  }, [tipoDropdownOpen]);
+
+  const toggleTipoFiltro = useCallback((codigo: string) => {
+    const code = codigo.toUpperCase().trim();
+    if (!code) return;
+    setTiposFiltro((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
+    );
+    setPage(1);
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CONEXIÓN AL HUB EAM UNIVERSAL (Tipos de Equipo, Módulos y Unidades SI)
@@ -1178,17 +1202,16 @@ export default function EquiposPage() {
     }
 
     const todos = Array.from(mapa.values());
-    if (!tipoFiltro) return todos;
+    if (tiposFiltro.length === 0) return todos;
 
-    // Si hay un tipo seleccionado, mostrar primero los aplicables a ese tipo
-    const normTipo = tipoFiltro ? String(tipoFiltro).toUpperCase().trim() : '';
+    // Si hay uno o varios tipos seleccionados, mostrar los campos aplicables a cualquiera de ellos
     return todos.filter(
       (c) =>
         !c.aplica_tipos ||
         c.aplica_tipos.length === 0 ||
-        (normTipo && c.aplica_tipos.includes(normTipo)),
+        tiposFiltro.some((normTipo) => c.aplica_tipos!.includes(normTipo)),
     );
-  }, [modulosHub, magnitudesHub, tipoFiltro]);
+  }, [modulosHub, magnitudesHub, tiposFiltro]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ESTADO DEL FILTRO B-TREE CON CONVERSIÓN DE UNIDADES SI
@@ -1324,7 +1347,7 @@ export default function EquiposPage() {
     return () => clearTimeout(timer);
   }, [filtroValorMin, filtroValorMax, filtroValorExacto]);
 
-  const { data: facetasData } = useFacetasEquipos(tipoFiltro);
+  const { data: facetasData } = useFacetasEquipos(tiposFiltro.length === 1 ? tiposFiltro[0] : '');
   const marcasDisponibles = useMemo(() => facetasData?.marcas || [], [facetasData]);
 
   // Sugerencias de marcas para el campo seleccionado (tanto en B-Tree como en facetas)
@@ -1429,7 +1452,7 @@ export default function EquiposPage() {
   const { data, isLoading, isError, refetch, isFetching } = useEquipos({
     page,
     limit: 12,
-    tipo: tipoFiltro || undefined,
+    tipos: tiposFiltro.length > 0 ? tiposFiltro.join(',') : undefined,
     estado_equipo: estadoFiltro || undefined,
     search: debouncedSearch || undefined,
     sortBy,
@@ -1461,7 +1484,7 @@ export default function EquiposPage() {
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
-    if (tipoFiltro) count++;
+    if (tiposFiltro.length > 0) count += tiposFiltro.length;
     if (estadoFiltro) count++;
     if (debouncedSearch) count++;
     if (hasActiveBTreeFilter) count++;
@@ -1473,7 +1496,7 @@ export default function EquiposPage() {
       count++;
     return count;
   }, [
-    tipoFiltro,
+    tiposFiltro,
     estadoFiltro,
     debouncedSearch,
     hasActiveBTreeFilter,
@@ -1488,7 +1511,7 @@ export default function EquiposPage() {
   const clearFilters = useCallback(() => {
     setSearchInput('');
     setDebouncedSearch('');
-    setTipoFiltro('');
+    setTiposFiltro([]);
     setEstadoFiltro('');
     clearAdvancedFacets();
     setPage(1);
@@ -1512,10 +1535,88 @@ export default function EquiposPage() {
     refetch();
   }, [refetch]);
 
-  const totalParque = resumen?.total_parque ?? pagination?.total ?? 0;
-  const topTiposResumen = (resumen?.por_tipo || []).slice(0, 2);
-  const totalOperativos = resumen?.operativos ?? 0;
-  const pctOperativo = totalParque > 0 ? Math.round((totalOperativos / totalParque) * 100) : 100;
+  const totalParqueGlobal = resumen?.total_parque ?? pagination?.total ?? 0;
+  const usaResumenFiltrado = activeFiltersCount > 0 && Boolean(resumen?.filtrado);
+  const kpiPorTipo = usaResumenFiltrado
+    ? (resumen?.filtrado?.por_tipo ?? [])
+    : (resumen?.por_tipo ?? []);
+  const totalVisible = usaResumenFiltrado
+    ? (resumen?.filtrado?.total ?? pagination?.total ?? 0)
+    : totalParqueGlobal;
+  const topTiposResumen = kpiPorTipo.slice(0, 2);
+  const extraTiposCount = Math.max(0, kpiPorTipo.length - 2);
+  const totalOperativos = usaResumenFiltrado
+    ? (resumen?.filtrado?.operativos ?? 0)
+    : (resumen?.operativos ?? 0);
+  const totalEnReparacion = usaResumenFiltrado
+    ? (resumen?.filtrado?.en_reparacion ?? 0)
+    : (resumen?.en_reparacion ?? 0);
+  const totalFueraServicio = usaResumenFiltrado
+    ? (resumen?.filtrado?.fuera_servicio ?? 0)
+    : (resumen?.fuera_servicio ?? 0);
+  const totalCriticidadAlta = usaResumenFiltrado
+    ? (resumen?.filtrado?.criticidad_alta ?? 0)
+    : (resumen?.criticidad_alta ?? 0);
+  const pctOperativo = totalVisible > 0 ? Math.round((totalOperativos / totalVisible) * 100) : 0;
+
+  // Opciones multi-check enriquecidas con conteos reales globales de BD y ordenadas por volumen
+  const tiposCheckOpciones = useMemo(() => {
+    const countMap = new Map<
+      string,
+      {
+        cantidad: number;
+        color_hex?: string | null;
+        icono_ui?: string | null;
+        nombre_tipo?: string;
+      }
+    >();
+    for (const st of resumen?.por_tipo || []) {
+      countMap.set(st.codigo_tipo.toUpperCase().trim(), {
+        cantidad: st.cantidad,
+        color_hex: st.color_hex,
+        icono_ui: st.icono_ui,
+        nombre_tipo: st.nombre_tipo,
+      });
+    }
+
+    const baseList =
+      tiposEquipoOpciones.length > 0
+        ? tiposEquipoOpciones.map((op) => {
+            const meta = countMap.get(op.value);
+            return {
+              value: op.value,
+              label: op.label,
+              cantidad: meta?.cantidad ?? 0,
+              color_hex: meta?.color_hex ?? null,
+              icono_ui: meta?.icono_ui ?? null,
+            };
+          })
+        : (resumen?.por_tipo || []).map((st) => ({
+            value: st.codigo_tipo.toUpperCase().trim(),
+            label: `${st.nombre_tipo} (${st.codigo_tipo})`,
+            cantidad: st.cantidad,
+            color_hex: st.color_hex ?? null,
+            icono_ui: st.icono_ui ?? null,
+          }));
+
+    return baseList.sort((a, b) => {
+      if (b.cantidad !== a.cantidad) return b.cantidad - a.cantidad;
+      return a.label.localeCompare(b.label, 'es');
+    });
+  }, [tiposEquipoOpciones, resumen?.por_tipo]);
+
+  const tiposCheckFiltrados = useMemo(() => {
+    const q = tipoDropdownSearch.trim().toLowerCase();
+    if (!q) return tiposCheckOpciones;
+    return tiposCheckOpciones.filter(
+      (op) => op.label.toLowerCase().includes(q) || op.value.toLowerCase().includes(q),
+    );
+  }, [tiposCheckOpciones, tipoDropdownSearch]);
+
+  const tiposConActivosCodigos = useMemo(
+    () => tiposCheckOpciones.filter((op) => op.cantidad > 0).map((op) => op.value),
+    [tiposCheckOpciones],
+  );
 
   return (
     <div className="space-y-5">
@@ -1523,8 +1624,15 @@ export default function EquiposPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-4 lg:p-5 rounded-xl border border-slate-200 shadow-2xs">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg text-blue-600">
-              <Zap className="h-5 w-5" />
+            <div
+              className="p-2 rounded-lg border"
+              style={{
+                backgroundColor: 'color-mix(in srgb, var(--org-primary, #1E40AF) 10%, white)',
+                borderColor: 'color-mix(in srgb, var(--org-primary, #1E40AF) 28%, white)',
+                color: 'var(--org-primary, #1E40AF)',
+              }}
+            >
+              <Layers className="h-5 w-5" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900">
@@ -1549,7 +1657,8 @@ export default function EquiposPage() {
           </Link>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-2xs text-xs font-semibold shrink-0 cursor-pointer"
+            style={{ backgroundColor: 'var(--org-primary, #1E40AF)' }}
+            className="inline-flex items-center gap-2 px-4 py-2 text-white rounded-lg hover:opacity-90 transition-opacity shadow-2xs text-xs font-semibold shrink-0 cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             Nuevo Equipo
@@ -1557,73 +1666,77 @@ export default function EquiposPage() {
         </div>
       </div>
 
-      {/* 4 Tarjetas KPI Ejecutivas del Parque */}
+      {/* 4 Tarjetas KPI Ejecutivas del Parque (Reactivas al Filtro Activo) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <button
           type="button"
           onClick={() => {
-            setTipoFiltro('');
+            setTiposFiltro([]);
             setEstadoFiltro('');
             setPage(1);
           }}
           className={cn(
             'text-left bg-white p-4 rounded-xl border transition-all shadow-2xs cursor-pointer',
-            !tipoFiltro && !estadoFiltro
+            tiposFiltro.length === 0 && !estadoFiltro
               ? 'border-blue-300 ring-1 ring-blue-100'
               : 'border-slate-200 hover:border-slate-300',
           )}
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Total Parque Activo
+              {usaResumenFiltrado ? 'Selección Filtrada' : 'Total Parque Activo'}
             </span>
             <div className="p-1.5 bg-slate-100 text-slate-700 rounded-lg">
               <Layers className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">
-              {totalParque.toLocaleString()}
+            <span className="text-2xl font-black text-slate-900 tabular-nums">
+              {totalVisible.toLocaleString()}
             </span>
-            <span className="text-xs font-medium text-slate-500">equipos</span>
+            <span className="text-xs font-medium text-slate-500">
+              {usaResumenFiltrado ? `de ${totalParqueGlobal.toLocaleString()} totales` : 'equipos'}
+            </span>
           </div>
           <p
             className="text-[11px] text-slate-500 mt-1 truncate"
             title={
-              (resumen?.por_tipo || [])
-                .map((t) => `${t.cantidad} ${t.nombre_tipo}`)
-                .join(' • ') || `Total: ${totalParque}`
+              kpiPorTipo.map((t) => `${t.cantidad} ${t.nombre_tipo}`).join(' • ') ||
+              `Total: ${totalVisible}`
             }
           >
-            {(resumen?.por_tipo || []).length > 0 ? (
-              (resumen?.por_tipo || []).slice(0, 2).map((t, i) => (
-                <span key={t.id_tipo_equipo}>
-                  {i > 0 ? ' • ' : ''}
-                  <strong>{t.cantidad}</strong> {t.nombre_tipo}
-                </span>
-              ))
+            {kpiPorTipo.length > 0 ? (
+              <>
+                {kpiPorTipo.slice(0, 2).map((t, i) => (
+                  <span key={t.id_tipo_equipo}>
+                    {i > 0 ? ' • ' : ''}
+                    <strong>{t.cantidad}</strong> {t.codigo_tipo}
+                  </span>
+                ))}
+                {extraTiposCount > 0 && (
+                  <span className="text-slate-400 font-semibold">
+                    {' '}
+                    • +{extraTiposCount} {extraTiposCount === 1 ? 'clase' : 'clases'}
+                  </span>
+                )}
+              </>
             ) : (
-              <span>{totalParque} activos registrados</span>
+              <span>{totalVisible} activos coincidentes</span>
             )}
           </p>
         </button>
 
         {topTiposResumen.map((tipoStat, idx) => {
-          const isSelected =
-            tipoFiltro.toUpperCase() === tipoStat.codigo_tipo.toUpperCase() ||
-            tipoFiltro === String(tipoStat.id_tipo_equipo);
+          const codeUp = tipoStat.codigo_tipo.toUpperCase().trim();
+          const isSelected = tiposFiltro.includes(codeUp);
           const TipoIcon = resolveEquipoLucideIcon(tipoStat.icono_ui, tipoStat.codigo_tipo);
           const accent = tipoStat.color_hex || (idx === 0 ? '#D97706' : '#2563EB');
-          const pct =
-            totalParque > 0 ? Math.round((tipoStat.cantidad / totalParque) * 100) : 0;
+          const pct = totalVisible > 0 ? Math.round((tipoStat.cantidad / totalVisible) * 100) : 0;
           return (
             <button
               key={tipoStat.id_tipo_equipo}
               type="button"
-              onClick={() => {
-                setTipoFiltro(isSelected ? '' : tipoStat.codigo_tipo);
-                setPage(1);
-              }}
+              onClick={() => toggleTipoFiltro(codeUp)}
               className={cn(
                 'text-left bg-white p-4 rounded-xl border transition-all shadow-2xs cursor-pointer',
                 isSelected
@@ -1631,7 +1744,7 @@ export default function EquiposPage() {
                   : 'border-slate-200 hover:border-slate-300',
               )}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate">
                   {tipoStat.nombre_tipo}
                 </span>
@@ -1647,7 +1760,7 @@ export default function EquiposPage() {
                 </div>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-slate-900">
+                <span className="text-2xl font-black text-slate-900 tabular-nums">
                   {tipoStat.cantidad.toLocaleString()}
                 </span>
                 <span className="text-xs font-semibold truncate" style={{ color: accent }}>
@@ -1655,7 +1768,9 @@ export default function EquiposPage() {
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 mt-1 truncate">
-                {totalParque > 0 ? `${pct}% del parque` : 'Sin unidades'}
+                {totalVisible > 0
+                  ? `${pct}% ${usaResumenFiltrado ? 'de la selección' : 'del parque'}`
+                  : 'Sin unidades'}
               </p>
             </button>
           );
@@ -1684,13 +1799,13 @@ export default function EquiposPage() {
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">
-                {(resumen?.en_reparacion ?? 0).toLocaleString()}
+              <span className="text-2xl font-black text-slate-900 tabular-nums">
+                {totalEnReparacion.toLocaleString()}
               </span>
               <span className="text-xs font-semibold text-amber-700">en taller / reparación</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Criticidad alta: <strong>{resumen?.criticidad_alta ?? 0}</strong>
+              Criticidad alta: <strong>{totalCriticidadAlta}</strong>
             </p>
           </button>
         )}
@@ -1706,8 +1821,8 @@ export default function EquiposPage() {
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">
-                {(resumen?.criticidad_alta ?? 0).toLocaleString()}
+              <span className="text-2xl font-black text-slate-900 tabular-nums">
+                {totalCriticidadAlta.toLocaleString()}
               </span>
               <span className="text-xs font-semibold text-rose-700">críticos</span>
             </div>
@@ -1737,7 +1852,7 @@ export default function EquiposPage() {
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-emerald-700">
+            <span className="text-2xl font-black text-emerald-700 tabular-nums">
               {totalOperativos.toLocaleString()}
             </span>
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
@@ -1745,8 +1860,8 @@ export default function EquiposPage() {
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            En reparación: <strong className="text-amber-700">{resumen?.en_reparacion ?? 0}</strong>{' '}
-            • Fuera serv.: <strong className="text-rose-700">{resumen?.fuera_servicio ?? 0}</strong>
+            En reparación: <strong className="text-amber-700">{totalEnReparacion}</strong> • Fuera
+            serv.: <strong className="text-rose-700">{totalFueraServicio}</strong>
           </p>
         </button>
       </div>
@@ -1775,24 +1890,164 @@ export default function EquiposPage() {
 
         {/* Fila 2: Filtros y ordenación */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Filtro Tipo Dinámico (Conectado al Hub EAM) */}
-          <div className="w-64">
-            <EamSelect
-              size="sm"
-              value={tipoFiltro}
-              onChange={(val) => {
-                setTipoFiltro(val);
-                setPage(1);
-              }}
-              placeholder={`Todos los tipos de equipo (${totalParque})`}
-              options={[
-                { value: '', label: `Todos los tipos de equipo (${totalParque})` },
-                ...tiposEquipoOpciones.map((op) => ({
-                  value: op.value,
-                  label: op.label,
-                })),
-              ]}
-            />
+          {/* Filtro Multi-Check Dinámico de Tipos de Equipo (Conectado al Hub EAM) */}
+          <div ref={tipoDropdownRef} className="relative w-72">
+            <button
+              type="button"
+              onClick={() => setTipoDropdownOpen((prev) => !prev)}
+              className={cn(
+                'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-semibold rounded-full border transition-all bg-white cursor-pointer',
+                tipoDropdownOpen || tiposFiltro.length > 0
+                  ? 'border-blue-500 ring-2 ring-blue-100 text-slate-900'
+                  : 'border-slate-300 text-slate-700 hover:border-slate-400',
+              )}
+            >
+              <span className="truncate flex items-center gap-1.5">
+                {tiposFiltro.length === 0 ? (
+                  `Todos los tipos de equipo (${totalParqueGlobal})`
+                ) : tiposFiltro.length === 1 ? (
+                  tiposCheckOpciones.find((o) => o.value === tiposFiltro[0])?.label ||
+                  tiposFiltro[0]
+                ) : (
+                  <>
+                    <span>{tiposFiltro.length} tipos seleccionados</span>
+                    <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                      {tiposFiltro.length}
+                    </span>
+                  </>
+                )}
+              </span>
+              {tipoDropdownOpen ? (
+                <ChevronUp className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+              )}
+            </button>
+
+            {tipoDropdownOpen && (
+              <div className="absolute z-40 left-0 mt-1.5 w-80 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+                <div className="p-2 border-b border-slate-100 space-y-1.5">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={tipoDropdownSearch}
+                      onChange={(e) => setTipoDropdownSearch(e.target.value)}
+                      placeholder="Buscar tipo de equipo..."
+                      className="w-full pl-8 pr-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] px-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTiposFiltro([]);
+                        setPage(1);
+                      }}
+                      className="text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                    >
+                      Todos los tipos ({totalParqueGlobal})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTiposFiltro(
+                          tiposFiltro.length === tiposConActivosCodigos.length
+                            ? []
+                            : tiposConActivosCodigos,
+                        );
+                        setPage(1);
+                      }}
+                      className="text-slate-600 hover:text-slate-900 font-semibold cursor-pointer"
+                    >
+                      {tiposFiltro.length === tiposConActivosCodigos.length
+                        ? 'Desmarcar'
+                        : `Seleccionar todos (${tiposConActivosCodigos.length})`}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto p-1.5 space-y-0.5">
+                  {!tipoDropdownSearch.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTiposFiltro([]);
+                        setPage(1);
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-left text-xs transition-colors cursor-pointer border-b border-slate-100 mb-1',
+                        tiposFiltro.length === 0
+                          ? 'bg-blue-50/80 text-slate-900 font-semibold'
+                          : 'text-slate-700 hover:bg-slate-50',
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={cn(
+                            'flex h-4 w-4 items-center justify-center rounded border shrink-0 transition-colors',
+                            tiposFiltro.length === 0
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'border-slate-300 bg-white',
+                          )}
+                        >
+                          {tiposFiltro.length === 0 && <Check className="h-3 w-3 stroke-[3]" />}
+                        </span>
+                        <span className="truncate">Todos los tipos de equipo</span>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold shrink-0 tabular-nums bg-slate-100 text-slate-700">
+                        {totalParqueGlobal}
+                      </span>
+                    </button>
+                  )}
+                  {tiposCheckFiltrados.map((op) => {
+                    const checked = tiposFiltro.includes(op.value);
+                    return (
+                      <button
+                        key={op.value}
+                        type="button"
+                        onClick={() => toggleTipoFiltro(op.value)}
+                        className={cn(
+                          'w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-left text-xs transition-colors cursor-pointer',
+                          checked
+                            ? 'bg-blue-50/80 text-slate-900 font-semibold'
+                            : 'text-slate-700 hover:bg-slate-50',
+                        )}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={cn(
+                              'flex h-4 w-4 items-center justify-center rounded border shrink-0 transition-colors',
+                              checked
+                                ? 'bg-blue-600 border-blue-600 text-white'
+                                : 'border-slate-300 bg-white',
+                            )}
+                          >
+                            {checked && <Check className="h-3 w-3 stroke-[3]" />}
+                          </span>
+                          <span className="truncate">{op.label}</span>
+                        </div>
+                        <span
+                          className={cn(
+                            'px-1.5 py-0.5 rounded-md text-[10px] font-bold shrink-0 tabular-nums',
+                            op.cantidad > 0
+                              ? 'bg-slate-100 text-slate-700'
+                              : 'bg-slate-50 text-slate-400',
+                          )}
+                        >
+                          {op.cantidad}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {tiposCheckFiltrados.length === 0 && (
+                    <p className="py-4 text-center text-xs text-slate-400">
+                      Sin tipos coincidentes
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Filtro Estado */}
@@ -1946,9 +2201,9 @@ export default function EquiposPage() {
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
                       Buscador Técnico por Especificaciones e Ingeniería
-                      {tipoFiltro && (
+                      {tiposFiltro.length > 0 && (
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                          {tipoFiltro}
+                          {tiposFiltro.join(' · ')}
                         </span>
                       )}
                     </h4>
@@ -2393,21 +2648,21 @@ export default function EquiposPage() {
           <div className="flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-slate-100 text-xs">
             <span className="text-[11px] font-semibold text-slate-400 mr-1">Filtros activos:</span>
 
-            {tipoFiltro && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[11px] font-semibold">
-                Tipo: {tipoFiltro}
+            {tiposFiltro.map((code) => (
+              <span
+                key={code}
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[11px] font-semibold"
+              >
+                Tipo: {code}
                 <button
                   type="button"
-                  onClick={() => {
-                    setTipoFiltro('');
-                    setPage(1);
-                  }}
+                  onClick={() => toggleTipoFiltro(code)}
                   className="hover:text-blue-900 cursor-pointer"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
-            )}
+            ))}
 
             {estadoFiltro && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[11px] font-semibold">
