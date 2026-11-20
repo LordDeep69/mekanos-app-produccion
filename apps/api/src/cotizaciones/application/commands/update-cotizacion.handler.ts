@@ -1,14 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { PrismaService } from '@mekanos/database';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { UpdateCotizacionCommand } from './update-cotizacion.command';
-import { CotizacionesRepository } from '../../domain/cotizaciones.repository.interface';
 import { Cotizacion } from '../../domain/cotizacion.entity';
+import { CotizacionesRepository } from '../../domain/cotizaciones.repository.interface';
+import { CotizacionCalculoService } from '../../services/cotizacion-calculo.service';
+import { UpdateCotizacionCommand } from './update-cotizacion.command';
 
 /**
- * UPDATE COTIZACION HANDLER
- * 
+ * UPDATE COTIZACION HANDLER (EAM-CPQ Universal)
+ *
  * Solo permite modificar cotizaciones en estado BORRADOR.
- * Si se cambia porcentaje_descuento o porcentaje_iva, recalcula totales.
+ * Recalcula totales, AIU, IVA y rentabilidad usando CotizacionCalculoService.
  */
 @Injectable()
 @CommandHandler(UpdateCotizacionCommand)
@@ -16,26 +18,53 @@ export class UpdateCotizacionHandler implements ICommandHandler<UpdateCotizacion
   constructor(
     @Inject('CotizacionesRepository')
     private readonly repository: CotizacionesRepository,
+    private readonly calculoService: CotizacionCalculoService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async execute(command: UpdateCotizacionCommand): Promise<Cotizacion> {
-    // 1. Verificar que existe
     const cotizacionExistente = await this.repository.findById(command.id_cotizacion);
     if (!cotizacionExistente) {
       throw new NotFoundException(`Cotización ${command.id_cotizacion} no encontrada`);
     }
 
-    // 2. Verificar que está en BORRADOR (solo BORRADOR puede modificarse)
     if (cotizacionExistente.id_estado !== 1) {
       throw new BadRequestException(
         'Solo cotizaciones en estado BORRADOR pueden ser modificadas',
       );
     }
 
-    // 3. Actualizar datos
-    const cotizacionActualizada = await this.repository.update(command.id_cotizacion, {
-      id_sede: command.id_sede,
-      id_equipo: command.id_equipo,
+    const extras = command.extras || {};
+
+    // Sincronizar equipos N:M si se envían
+    let idEquipoPrincipal: number | null | undefined = command.id_equipo;
+    if (extras.equipos_ids !== undefined) {
+      const cleanIds = Array.from(
+        new Set<number>(extras.equipos_ids.filter((id) => Number.isInteger(id) && id > 0)),
+      );
+      idEquipoPrincipal = cleanIds.length > 0 ? cleanIds[0] : null;
+      await this.prisma.$transaction(async (tx) => {
+        await tx.cotizaciones_equipos.deleteMany({
+          where: { id_cotizacion: command.id_cotizacion },
+        });
+        if (cleanIds.length > 0) {
+          await tx.cotizaciones_equipos.createMany({
+            data: cleanIds.map((idEquipo, idx) => ({
+              id_cotizacion: command.id_cotizacion,
+              id_equipo: idEquipo,
+              orden_secuencia: idx + 1,
+            })),
+          });
+        }
+      });
+    }
+
+    await this.repository.update(command.id_cotizacion, {
+      id_sede: command.id_sede ?? undefined,
+      id_equipo: idEquipoPrincipal ?? undefined,
+      tipo_cotizacion: extras.tipo_cotizacion,
+      moneda: extras.moneda,
+      fecha_cotizacion: extras.fecha_cotizacion,
       fecha_vencimiento: command.fecha_vencimiento,
       asunto: command.asunto,
       descripcion_general: command.descripcion_general,
@@ -43,6 +72,12 @@ export class UpdateCotizacionHandler implements ICommandHandler<UpdateCotizacion
       exclusiones: command.exclusiones,
       descuento_porcentaje: command.descuento_porcentaje,
       iva_porcentaje: command.iva_porcentaje,
+      usa_aiu: extras.usa_aiu,
+      aiu_admin_porcentaje: extras.aiu_admin_porcentaje,
+      aiu_imprevistos_porcentaje: extras.aiu_imprevistos_porcentaje,
+      aiu_utilidad_porcentaje: extras.aiu_utilidad_porcentaje,
+      iva_sobre_utilidad_aiu: extras.iva_sobre_utilidad_aiu,
+      modo_agrupacion_pdf: extras.modo_agrupacion_pdf,
       tiempo_estimado_dias: command.tiempo_estimado_dias,
       forma_pago: command.forma_pago,
       terminos_condiciones: command.terminos_condiciones,
@@ -51,29 +86,27 @@ export class UpdateCotizacionHandler implements ICommandHandler<UpdateCotizacion
       modificado_por: command.modificado_por,
     });
 
-    // 4. Si cambió descuento o IVA, recalcular totales
-    if (
+    const requiereRecalculo =
       command.descuento_porcentaje !== undefined ||
-      command.iva_porcentaje !== undefined
-    ) {
-      const totalesRecalculados = Cotizacion.calcularTotales(
-        cotizacionActualizada.subtotal_servicios,
-        cotizacionActualizada.subtotal_componentes,
-        command.descuento_porcentaje ?? cotizacionActualizada.descuento_porcentaje,
-        command.iva_porcentaje ?? cotizacionActualizada.iva_porcentaje,
-      );
+      command.iva_porcentaje !== undefined ||
+      extras.usa_aiu !== undefined ||
+      extras.aiu_admin_porcentaje !== undefined ||
+      extras.aiu_imprevistos_porcentaje !== undefined ||
+      extras.aiu_utilidad_porcentaje !== undefined ||
+      extras.iva_sobre_utilidad_aiu !== undefined;
 
-      return await this.repository.updateTotales(command.id_cotizacion, {
-        subtotal_servicios: cotizacionActualizada.subtotal_servicios,
-        subtotal_componentes: cotizacionActualizada.subtotal_componentes,
-        subtotal_general: totalesRecalculados.subtotalGeneral,
-        descuento_valor: totalesRecalculados.descuentoValor,
-        subtotal_con_descuento: totalesRecalculados.subtotalConDescuento,
-        iva_valor: totalesRecalculados.ivaValor,
-        total_cotizacion: totalesRecalculados.totalCotizacion,
-      });
+    if (requiereRecalculo) {
+      await this.calculoService.recalcularTotales(command.id_cotizacion);
     }
 
-    return cotizacionActualizada;
+    return (await this.repository.findById(command.id_cotizacion, {
+      cliente: true,
+      sede: true,
+      equipo: true,
+      estado: true,
+      items_servicios: true,
+      items_componentes: true,
+      aprobaciones: true,
+    }))!;
   }
 }

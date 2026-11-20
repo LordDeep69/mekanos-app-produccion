@@ -386,13 +386,41 @@ export class EnviarCotizacionHandler implements ICommandHandler<EnviarCotizacion
           <th>Concepto</th>
           <th style="text-align: right;">Valor</th>
         </tr>
-        <tr>
+        ${
+          datos.totales.subtotalServicios > 0
+            ? `<tr>
           <td>Subtotal Servicios</td>
           <td style="text-align: right;">${escapeBrandHtml(formatCurrencyOrg(datos.totales.subtotalServicios, brand))}</td>
-        </tr>
-        <tr>
-          <td>Subtotal Componentes</td>
+        </tr>`
+            : ''
+        }
+        ${
+          datos.totales.subtotalComponentes > 0
+            ? `<tr>
+          <td>Subtotal Repuestos e Insumos</td>
           <td style="text-align: right;">${escapeBrandHtml(formatCurrencyOrg(datos.totales.subtotalComponentes, brand))}</td>
+        </tr>`
+            : ''
+        }
+        ${
+          (datos.totales.subtotalOtros || 0) > 0
+            ? `<tr>
+          <td>Logística, Viáticos y Otros</td>
+          <td style="text-align: right;">${escapeBrandHtml(formatCurrencyOrg(datos.totales.subtotalOtros || 0, brand))}</td>
+        </tr>`
+            : ''
+        }
+        ${
+          datos.totales.usaAiu && (datos.totales.aiuValorTotal || 0) > 0
+            ? `<tr>
+          <td>AIU</td>
+          <td style="text-align: right;">${escapeBrandHtml(formatCurrencyOrg(datos.totales.aiuValorTotal || 0, brand))}</td>
+        </tr>`
+            : ''
+        }
+        <tr>
+          <td>${escapeBrandHtml(brand.etiquetaImpuesto)} (${datos.totales.ivaPorcentaje}%)</td>
+          <td style="text-align: right;">${escapeBrandHtml(formatCurrencyOrg(datos.totales.ivaValor, brand))}</td>
         </tr>
         <tr>
           <td><strong>TOTAL</strong></td>

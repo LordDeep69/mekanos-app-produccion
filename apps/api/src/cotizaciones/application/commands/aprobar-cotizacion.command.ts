@@ -5,5 +5,6 @@ export class AprobarCotizacionCommand {
     public readonly idCotizacion: number,
     public readonly aprobadoPor: number,
     public readonly observaciones?: string,
+    public readonly ordenCompraCliente?: string,
   ) {}
 }

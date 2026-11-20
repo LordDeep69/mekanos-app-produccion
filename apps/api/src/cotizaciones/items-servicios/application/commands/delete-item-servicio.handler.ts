@@ -1,10 +1,11 @@
-// Command Handler - Eliminar Item Servicio
+// Command Handler - Eliminar Item Servicio (Fuente Única de Verdad: CotizacionCalculoService)
 
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { DeleteItemServicioCommand } from './delete-item-servicio.command';
 import { ItemsCotizacionServiciosRepository } from '../../domain/items-cotizacion-servicios.repository.interface';
 import { CotizacionesRepository } from '../../../domain/cotizaciones.repository.interface';
+import { CotizacionCalculoService } from '../../../services/cotizacion-calculo.service';
 
 @Injectable()
 @CommandHandler(DeleteItemServicioCommand)
@@ -16,20 +17,19 @@ export class DeleteItemServicioHandler
     private readonly itemsRepository: ItemsCotizacionServiciosRepository,
     @Inject('CotizacionesRepository')
     private readonly cotizacionesRepository: CotizacionesRepository,
+    private readonly calculoService: CotizacionCalculoService,
   ) {}
 
   async execute(command: DeleteItemServicioCommand): Promise<void> {
-    // 1. Validar que el item exista
     const itemExistente = await this.itemsRepository.findById(
       command.idItemServicio,
     );
-    if (!itemExistente) {
+    if (!itemExistente || itemExistente.id_cotizacion !== command.idCotizacion) {
       throw new BadRequestException(
-        `Item servicio ${command.idItemServicio} no encontrado`,
+        `Item servicio ${command.idItemServicio} no pertenece a la cotización ${command.idCotizacion}`,
       );
     }
 
-    // 2. Validar que la cotización esté en estado BORRADOR
     const cotizacion = await this.cotizacionesRepository.findById(
       command.idCotizacion,
     );
@@ -45,46 +45,7 @@ export class DeleteItemServicioHandler
       );
     }
 
-    // 3. Eliminar item servicio
     await this.itemsRepository.delete(command.idItemServicio);
-
-    // 4. Recalcular subtotal_servicios de la cotización
-    const nuevoSubtotalServicios =
-      await this.itemsRepository.calcularSubtotalServicios(
-        command.idCotizacion,
-      );
-
-    // 5. Actualizar totales de la cotización
-    await this.cotizacionesRepository.update(command.idCotizacion, {
-      subtotal_servicios: nuevoSubtotalServicios,
-    });
-
-    // 6. Recalcular totales generales cotización
-    const cotizacionActualizada = await this.cotizacionesRepository.findById(
-      command.idCotizacion,
-    );
-
-    const { Cotizacion } = await import('../../../domain/cotizacion.entity');
-    const totalesCalc = Cotizacion.calcularTotales(
-      nuevoSubtotalServicios,
-      cotizacionActualizada!.subtotal_componentes || 0,
-      cotizacionActualizada!.descuento_porcentaje || 0,
-      cotizacionActualizada!.iva_porcentaje || 0,
-    );
-
-    const totalesRepository = {
-      subtotal_servicios: nuevoSubtotalServicios,
-      subtotal_componentes: cotizacionActualizada!.subtotal_componentes || 0,
-      subtotal_general: totalesCalc.subtotalGeneral,
-      descuento_valor: totalesCalc.descuentoValor,
-      subtotal_con_descuento: totalesCalc.subtotalConDescuento,
-      iva_valor: totalesCalc.ivaValor,
-      total_cotizacion: totalesCalc.totalCotizacion,
-    };
-
-    await this.cotizacionesRepository.updateTotales(
-      command.idCotizacion,
-      totalesRepository,
-    );
+    await this.calculoService.recalcularTotales(command.idCotizacion);
   }
 }

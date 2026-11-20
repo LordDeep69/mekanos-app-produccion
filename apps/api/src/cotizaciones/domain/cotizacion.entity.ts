@@ -25,21 +25,46 @@ export class Cotizacion {
   observaciones_rechazo?: string;
   
   // Información comercial
-  asunto!: string; // ← NUEVO: Título cotización
+  asunto!: string; // Título cotización
+  tipo_cotizacion?: string;
+  id_plantilla_origen?: number;
+  id_propuesta_origen?: number;
+  moneda?: string;
   descripcion_general?: string;
-  alcance_trabajo?: string; // ← NUEVO: Scope detallado
-  exclusiones?: string; // ← NUEVO: Qué NO incluye
-  
+  alcance_trabajo?: string; // Scope detallado
+  exclusiones?: string; // Qué NO incluye
+
   // Totales calculados
-  subtotal_servicios!: number; // ← CORREGIDO: era total_servicios
-  subtotal_componentes!: number; // ← CORREGIDO: era total_componentes
-  subtotal_general!: number; // ← CORREGIDO: era subtotal
-  descuento_porcentaje?: number; // ← CORREGIDO: era porcentaje_descuento
-  descuento_valor!: number; // ← CORREGIDO: era valor_descuento
-  subtotal_con_descuento!: number; // ← CORREGIDO: era total_antes_iva
-  iva_porcentaje!: number; // ← CORREGIDO: era porcentaje_iva (default 0, no 19)
-  iva_valor!: number; // ← CORREGIDO: era valor_iva
-  total_cotizacion!: number; // ← CORREGIDO: era total_general
+  subtotal_servicios!: number;
+  subtotal_componentes!: number;
+  subtotal_otros?: number;
+  subtotal_general!: number;
+  subtotal_opcionales?: number;
+  descuento_porcentaje?: number;
+  descuento_valor!: number;
+  subtotal_con_descuento!: number;
+  usa_aiu?: boolean;
+  aiu_admin_porcentaje?: number;
+  aiu_imprevistos_porcentaje?: number;
+  aiu_utilidad_porcentaje?: number;
+  aiu_admin_valor?: number;
+  aiu_imprevistos_valor?: number;
+  aiu_utilidad_valor?: number;
+  aiu_valor_total?: number;
+  iva_sobre_utilidad_aiu?: boolean;
+  iva_porcentaje!: number;
+  iva_valor!: number;
+  total_cotizacion!: number;
+
+  // Rentabilidad interna (privada)
+  costo_total_estimado?: number;
+  utilidad_bruta_estimada?: number;
+  margen_bruto_porcentaje?: number;
+
+  // Aprobación cliente y PDF
+  observaciones_aprobacion_cliente?: string;
+  orden_compra_cliente?: string;
+  modo_agrupacion_pdf?: string;
   
   // Condiciones comerciales
   forma_pago?: string; // ← NUEVO: CONTADO, CREDITO, ANTICIPADO
@@ -71,10 +96,14 @@ export class Cotizacion {
   cliente?: any;
   sede?: any;
   equipo?: any;
+  equipos_vinculados?: any[];
   estado?: any;
   items_servicios?: any[];
   items_componentes?: any[];
+  items_otros?: any[];
+  plantilla_origen?: any;
   aprobaciones?: any[];
+  versiones?: any[];
   historial_envios?: any[];
   elaborador?: any;
   modificador?: any;

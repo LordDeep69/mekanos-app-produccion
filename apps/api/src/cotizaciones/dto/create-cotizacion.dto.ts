@@ -1,153 +1,187 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, IsDateString, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 /**
- * CREATE COTIZACION DTO
- * 
- * Validaciones para crear una nueva cotización.
+ * CREATE COTIZACION DTO (EAM-CPQ Universal)
  */
 export class CreateCotizacionDto {
-  @ApiProperty({
-    description: 'ID del cliente',
-    example: 5,
-  })
+  @ApiProperty({ description: 'ID del cliente', example: 5 })
   @IsNotEmpty({ message: 'id_cliente es requerido' })
   @IsNumber({}, { message: 'id_cliente debe ser un número' })
   id_cliente!: number;
 
-  @ApiPropertyOptional({
-    description: 'ID de la sede del cliente (opcional)',
-    example: 12,
-  })
+  @ApiPropertyOptional({ description: 'ID de la sede del cliente (opcional)', example: 12 })
   @IsOptional()
   @IsNumber({}, { message: 'id_sede debe ser un número' })
   id_sede?: number;
 
-  @ApiPropertyOptional({
-    description: 'ID del equipo al que aplica la cotización (opcional)',
-    example: 45,
-  })
+  @ApiPropertyOptional({ description: 'ID del equipo principal (legacy/compatibilidad)', example: 45 })
   @IsOptional()
   @IsNumber({}, { message: 'id_equipo debe ser un número' })
   id_equipo?: number;
 
-  @ApiProperty({
-    description: 'Fecha de cotización',
-    example: '2025-11-14',
+  @ApiPropertyOptional({
+    description: 'Lista N:M de IDs de equipos cubiertos por esta cotización',
+    type: [Number],
+    example: [45, 46],
   })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  equipos_ids?: number[];
+
+  @ApiPropertyOptional({
+    description: 'Tipo de cotización (SERVICIO_TECNICO, SUMINISTRO, CORRECTIVO, PROYECTO, CONTRATO, etc.)',
+    default: 'SERVICIO_TECNICO',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  tipo_cotizacion?: string;
+
+  @ApiPropertyOptional({ description: 'ID de plantilla de origen si aplica' })
+  @IsOptional()
+  @IsInt()
+  id_plantilla_origen?: number;
+
+  @ApiPropertyOptional({ description: 'ID de propuesta correctiva de origen si aplica' })
+  @IsOptional()
+  @IsInt()
+  id_propuesta_origen?: number;
+
+  @ApiPropertyOptional({ description: 'Código ISO de moneda (hereda configuración de organización si se omite)', example: 'COP' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  moneda?: string;
+
+  @ApiProperty({ description: 'Fecha de cotización', example: '2026-11-20' })
   @IsNotEmpty({ message: 'fecha_cotizacion es requerida' })
   @IsDateString({}, { message: 'fecha_cotizacion debe ser una fecha válida (ISO 8601)' })
   fecha_cotizacion!: string;
 
-  @ApiProperty({
-    description: 'Fecha de vencimiento de la cotización',
-    example: '2025-12-14',
-  })
+  @ApiProperty({ description: 'Fecha de vencimiento de la cotización', example: '2026-12-20' })
   @IsNotEmpty({ message: 'fecha_vencimiento es requerida' })
   @IsDateString({}, { message: 'fecha_vencimiento debe ser una fecha válida (ISO 8601)' })
   fecha_vencimiento!: string;
 
   @ApiProperty({
     description: 'Asunto/título de la cotización',
-    example: 'Mantenimiento preventivo tipo A - Planta emergencia',
+    example: 'Suministro e instalación de bancos de baterías',
   })
   @IsNotEmpty({ message: 'asunto es requerido' })
   @IsString({ message: 'asunto debe ser texto' })
+  @MaxLength(300)
   asunto!: string;
 
-  @ApiPropertyOptional({
-    description: 'Descripción general del servicio',
-    example: 'Mantenimiento completo sistemas eléctricos',
-  })
+  @ApiPropertyOptional({ description: 'Descripción general del servicio' })
   @IsOptional()
-  @IsString({ message: 'descripcion_general debe ser texto' })
+  @IsString()
   descripcion_general?: string;
 
-  @ApiPropertyOptional({
-    description: 'Alcance del trabajo',
-    example: 'Revisión completa planta eléctrica 500kVA',
-  })
+  @ApiPropertyOptional({ description: 'Alcance del trabajo' })
   @IsOptional()
-  @IsString({ message: 'alcance_trabajo debe ser texto' })
+  @IsString()
   alcance_trabajo?: string;
 
-  @ApiPropertyOptional({
-    description: 'Exclusiones del servicio',
-    example: 'No incluye cambio de baterías',
-  })
+  @ApiPropertyOptional({ description: 'Exclusiones del servicio' })
   @IsOptional()
-  @IsString({ message: 'exclusiones debe ser texto' })
+  @IsString()
   exclusiones?: string;
 
-  @ApiPropertyOptional({
-    description: 'Porcentaje de descuento (0-100)',
-    example: 10,
-    default: 0,
-  })
+  @ApiPropertyOptional({ description: 'Porcentaje de descuento global (0-100)', default: 0 })
   @IsOptional()
-  @IsNumber({}, { message: 'descuento_porcentaje debe ser un número' })
-  @Min(0, { message: 'descuento_porcentaje no puede ser negativo' })
-  @Max(100, { message: 'descuento_porcentaje no puede ser mayor a 100' })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
   descuento_porcentaje?: number;
 
-  @ApiPropertyOptional({
-    description: 'Porcentaje de IVA (0-100)',
-    example: 0,
-    default: 0,
-  })
+  @ApiPropertyOptional({ description: 'Porcentaje de IVA (0-100). Si se omite hereda tasa de la organización.' })
   @IsOptional()
-  @IsNumber({}, { message: 'iva_porcentaje debe ser un número' })
-  @Min(0, { message: 'iva_porcentaje no puede ser negativo' })
-  @Max(100, { message: 'iva_porcentaje no puede ser mayor a 100' })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
   iva_porcentaje?: number;
 
-  @ApiPropertyOptional({
-    description: 'Tiempo estimado en días',
-    example: 5,
-  })
+  @ApiPropertyOptional({ description: 'Activar estructura opcional AIU (Administración, Imprevistos, Utilidad)', default: false })
   @IsOptional()
-  @IsNumber({}, { message: 'tiempo_estimado_dias debe ser un número' })
-  @Min(0, { message: 'tiempo_estimado_dias no puede ser negativo' })
+  @IsBoolean()
+  usa_aiu?: boolean;
+
+  @ApiPropertyOptional({ description: 'Porcentaje Administración AIU (0-100)', default: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  aiu_admin_porcentaje?: number;
+
+  @ApiPropertyOptional({ description: 'Porcentaje Imprevistos AIU (0-100)', default: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  aiu_imprevistos_porcentaje?: number;
+
+  @ApiPropertyOptional({ description: 'Porcentaje Utilidad AIU (0-100)', default: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  aiu_utilidad_porcentaje?: number;
+
+  @ApiPropertyOptional({ description: 'Si true y usa_aiu=true, el IVA se calcula únicamente sobre Utilidad AIU', default: false })
+  @IsOptional()
+  @IsBoolean()
+  iva_sobre_utilidad_aiu?: boolean;
+
+  @ApiPropertyOptional({ description: 'Modo de agrupación visual en PDF (POR_CATEGORIA | POR_EQUIPO)', default: 'POR_CATEGORIA' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  modo_agrupacion_pdf?: string;
+
+  @ApiPropertyOptional({ description: 'Tiempo estimado en días', example: 5 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   tiempo_estimado_dias?: number;
 
-  @ApiPropertyOptional({
-    description: 'Forma de pago (CONTADO/CREDITO)',
-    example: 'CONTADO',
-  })
+  @ApiPropertyOptional({ description: 'Forma de pago', example: 'CONTADO' })
   @IsOptional()
-  @IsString({ message: 'forma_pago debe ser texto' })
+  @IsString()
+  @MaxLength(100)
   forma_pago?: string;
 
-  @ApiPropertyOptional({
-    description: 'Términos y condiciones',
-    example: 'Aplican condiciones generales de contratación',
-  })
+  @ApiPropertyOptional({ description: 'Términos y condiciones' })
   @IsOptional()
-  @IsString({ message: 'terminos_condiciones debe ser texto' })
+  @IsString()
   terminos_condiciones?: string;
 
-  @ApiPropertyOptional({
-    description: 'Garantía en meses',
-    example: 12,
-  })
+  @ApiPropertyOptional({ description: 'Garantía en meses', example: 12 })
   @IsOptional()
-  @IsNumber({}, { message: 'meses_garantia debe ser un número' })
-  @Min(0, { message: 'meses_garantia no puede ser negativo' })
+  @IsNumber()
+  @Min(0)
   meses_garantia?: number;
 
-  @ApiPropertyOptional({
-    description: 'Observaciones de garantía',
-    example: 'Garantía válida con mantenimientos periódicos',
-  })
+  @ApiPropertyOptional({ description: 'Observaciones de garantía' })
   @IsOptional()
-  @IsString({ message: 'observaciones_garantia debe ser texto' })
+  @IsString()
   observaciones_garantia?: string;
 
-  @ApiProperty({
-    description: 'ID del empleado que elabora la cotización',
-    example: 1,
-  })
-  @IsNotEmpty({ message: 'elaborada_por es requerido' })
-  @IsInt({ message: 'elaborada_por debe ser un entero' })
-  elaborada_por!: number;
+  @ApiPropertyOptional({ description: 'ID del empleado que elabora (opcional: se infiere del usuario autenticado)' })
+  @IsOptional()
+  @IsInt()
+  elaborada_por?: number;
 }

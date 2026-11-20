@@ -57,6 +57,12 @@ export interface ConfiguracionEmpresa extends ConfiguracionPublica {
   requiere_firma_cliente_defecto: boolean;
   storage_prefijo_raiz: string;
   politica_retencion_mobile_dias: number;
+  umbral_aprobacion_supervisor?: number;
+  umbral_aprobacion_gerente?: number;
+  descuento_max_sin_aprobacion?: number;
+  margen_minimo_alerta?: number;
+  margen_minimo_aprobacion?: number;
+  terminos_cotizacion_defecto?: string | null;
 }
 
 export const DEFAULT_BRANDING: ConfiguracionPublica = {

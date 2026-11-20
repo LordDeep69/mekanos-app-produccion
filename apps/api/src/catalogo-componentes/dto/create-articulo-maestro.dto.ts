@@ -321,4 +321,39 @@ export class CreateArticuloMaestroDto {
   @IsOptional()
   @IsString()
   notas_instalacion?: string;
+
+  // ==========================================
+  // 7. APLICABILIDAD DIRECTA POR TIPOS DE EQUIPO (N:M)
+  // ==========================================
+  @ApiPropertyOptional({
+    description:
+      'Si es true (por defecto), el artículo aplica universalmente a todos los tipos de equipo (presentes y futuros). Si es false, aplica únicamente a los tipos indicados en tipos_equipo_ids.',
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  aplica_todos_tipos?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Lista de IDs de tipos_equipo a los que aplica el artículo (relación N:M)',
+    type: [Number],
+    example: [1, 2, 22],
+  })
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  tipos_equipo_ids?: number[];
+
+  @ApiPropertyOptional({
+    description:
+      'Lista opcional de IDs de modulos_tecnicos (partes/subsistemas EAM) a los que pertenece el artículo dentro de los tipos de equipo seleccionados (relación N:M). Si se omite o está vacía, aplica a todas las partes de los equipos seleccionados.',
+    type: [Number],
+    example: [1, 19],
+  })
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  modulos_tecnicos_ids?: number[];
 }

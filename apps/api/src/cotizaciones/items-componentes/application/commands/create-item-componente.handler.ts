@@ -1,4 +1,4 @@
-// Command Handler - Crear Item Componente
+// Command Handler - Crear Item Componente (Fuente Única de Verdad: CotizacionCalculoService)
 
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
@@ -6,6 +6,7 @@ import { CreateItemComponenteCommand } from './create-item-componente.command';
 import { ItemsCotizacionComponentesRepository } from '../../domain/items-cotizacion-componentes.repository.interface';
 import { ItemCotizacionComponente } from '../../domain/item-cotizacion-componente.entity';
 import { CotizacionesRepository } from '../../../domain/cotizaciones.repository.interface';
+import { CotizacionCalculoService } from '../../../services/cotizacion-calculo.service';
 
 @Injectable()
 @CommandHandler(CreateItemComponenteCommand)
@@ -17,6 +18,7 @@ export class CreateItemComponenteHandler
     private readonly itemsRepository: ItemsCotizacionComponentesRepository,
     @Inject('CotizacionesRepository')
     private readonly cotizacionesRepository: CotizacionesRepository,
+    private readonly calculoService: CotizacionCalculoService,
   ) {}
 
   async execute(
@@ -42,6 +44,7 @@ export class CreateItemComponenteHandler
       id_tipo_componente: command.idTipoComponente,
       descripcion: command.descripcion,
       cantidad: command.cantidad,
+      costo_unitario: command.costoUnitario,
       precio_unitario: command.precioUnitario,
       descuento_porcentaje: command.descuentoPorcentaje,
     });
@@ -56,13 +59,18 @@ export class CreateItemComponenteHandler
       id_cotizacion: command.idCotizacion,
       id_componente: command.idComponente,
       id_tipo_componente: command.idTipoComponente,
+      id_equipo: command.idEquipo,
       descripcion: command.descripcion,
       referencia_manual: command.referenciaManual,
       marca_manual: command.marcaManual,
       cantidad: command.cantidad,
       unidad: command.unidad,
+      costo_unitario: command.costoUnitario,
       precio_unitario: command.precioUnitario,
       descuento_porcentaje: command.descuentoPorcentaje,
+      es_opcional: command.esOpcional,
+      iva_aplicable: command.ivaAplicable,
+      seccion_titulo: command.seccionTitulo,
       garantia_meses: command.garantiaMeses,
       observaciones_garantia: command.observacionesGarantia,
       observaciones: command.observaciones,
@@ -70,41 +78,7 @@ export class CreateItemComponenteHandler
       registrado_por: command.registradoPor,
     });
 
-    const nuevoSubtotalComponentes =
-      await this.itemsRepository.calcularSubtotalComponentes(
-        command.idCotizacion,
-      );
-
-    await this.cotizacionesRepository.update(command.idCotizacion, {
-      subtotal_componentes: nuevoSubtotalComponentes,
-    });
-
-    const cotizacionActualizada = await this.cotizacionesRepository.findById(
-      command.idCotizacion,
-    );
-
-    const { Cotizacion } = await import('../../../domain/cotizacion.entity');
-    const totalesCalc = Cotizacion.calcularTotales(
-      cotizacionActualizada!.subtotal_servicios || 0,
-      nuevoSubtotalComponentes,
-      cotizacionActualizada!.descuento_porcentaje || 0,
-      cotizacionActualizada!.iva_porcentaje || 0,
-    );
-
-    const totalesRepository = {
-      subtotal_servicios: cotizacionActualizada!.subtotal_servicios || 0,
-      subtotal_componentes: nuevoSubtotalComponentes,
-      subtotal_general: totalesCalc.subtotalGeneral,
-      descuento_valor: totalesCalc.descuentoValor,
-      subtotal_con_descuento: totalesCalc.subtotalConDescuento,
-      iva_valor: totalesCalc.ivaValor,
-      total_cotizacion: totalesCalc.totalCotizacion,
-    };
-
-    await this.cotizacionesRepository.updateTotales(
-      command.idCotizacion,
-      totalesRepository,
-    );
+    await this.calculoService.recalcularTotales(command.idCotizacion);
 
     return itemCreado;
   }

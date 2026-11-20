@@ -46,6 +46,126 @@ export class ArticulosService {
     return null;
   }
 
+  private readonly includeAplicabilidadTiposEquipo = {
+    catalogo_componentes_tipo_equipo: {
+      include: {
+        tipos_equipo: {
+          select: {
+            id_tipo_equipo: true,
+            codigo_tipo: true,
+            nombre_tipo: true,
+            color_hex: true,
+            icono_ui: true,
+          },
+        },
+      },
+    },
+    catalogo_componentes_modulo_tecnico: {
+      include: {
+        modulos_tecnicos: {
+          select: {
+            id_modulo: true,
+            codigo_modulo: true,
+            nombre_modulo: true,
+            icono: true,
+            color_ui: true,
+          },
+        },
+      },
+    },
+  } as const;
+
+  private async normalizarAplicabilidadTiposEquipo(
+    aplicaTodos?: boolean,
+    tiposIds?: number[],
+    modulosIds?: number[],
+  ): Promise<{ aplicaTodos: boolean; uniqueIds: number[]; uniqueModuloIds: number[] }> {
+    const cleanIds = Array.isArray(tiposIds)
+      ? Array.from(new Set(tiposIds.map((id) => Number(id)).filter((n) => Number.isInteger(n) && n > 0)))
+      : [];
+
+    // Si el usuario selecciona explícitamente tipos específicos y no marca "aplica_todos_tipos: true"
+    const esUniversal =
+      aplicaTodos === true
+        ? true
+        : aplicaTodos === false
+          ? cleanIds.length === 0
+          : cleanIds.length === 0;
+
+    if (esUniversal) {
+      return { aplicaTodos: true, uniqueIds: [], uniqueModuloIds: [] };
+    }
+
+    const existentes = await this.prisma.tipos_equipo.findMany({
+      where: { id_tipo_equipo: { in: cleanIds } },
+      select: { id_tipo_equipo: true },
+    });
+    const setExistentes = new Set(existentes.map((t) => t.id_tipo_equipo));
+    const faltantes = cleanIds.filter((id) => !setExistentes.has(id));
+    if (faltantes.length > 0) {
+      throw new NotFoundException(
+        `Los siguientes tipos de equipo no existen: ${faltantes.join(', ')}`,
+      );
+    }
+
+    const cleanModIds = Array.isArray(modulosIds)
+      ? Array.from(
+          new Set(modulosIds.map((id) => Number(id)).filter((n) => Number.isInteger(n) && n > 0)),
+        )
+      : [];
+
+    if (cleanModIds.length > 0) {
+      const modsExistentes = await this.prisma.modulos_tecnicos.findMany({
+        where: { id_modulo: { in: cleanModIds } },
+        select: { id_modulo: true },
+      });
+      const setMods = new Set(modsExistentes.map((m) => m.id_modulo));
+      const faltantesMod = cleanModIds.filter((id) => !setMods.has(id));
+      if (faltantesMod.length > 0) {
+        throw new NotFoundException(
+          `Las siguientes partes/subsistemas técnicos no existen: ${faltantesMod.join(', ')}`,
+        );
+      }
+    }
+
+    return { aplicaTodos: false, uniqueIds: cleanIds, uniqueModuloIds: cleanModIds };
+  }
+
+  private enriquecerAplicabilidad<T extends Record<string, any>>(item: T): T {
+    if (!item) return item;
+    const relaciones = Array.isArray(item.catalogo_componentes_tipo_equipo)
+      ? item.catalogo_componentes_tipo_equipo
+      : [];
+    const tiposEquipo = relaciones
+      .map((r: any) => r?.tipos_equipo)
+      .filter(Boolean)
+      .sort((a: any, b: any) =>
+        String(a.nombre_tipo || '').localeCompare(String(b.nombre_tipo || ''), 'es'),
+      );
+    const tiposEquipoIds = tiposEquipo.map((t: any) => t.id_tipo_equipo);
+    const aplicaTodos = item.aplica_todos_tipos !== false && tiposEquipoIds.length === 0;
+
+    const relModulos = Array.isArray(item.catalogo_componentes_modulo_tecnico)
+      ? item.catalogo_componentes_modulo_tecnico
+      : [];
+    const modulosTecnicos = relModulos
+      .map((r: any) => r?.modulos_tecnicos)
+      .filter(Boolean)
+      .sort((a: any, b: any) =>
+        String(a.nombre_modulo || '').localeCompare(String(b.nombre_modulo || ''), 'es'),
+      );
+    const modulosTecnicosIds = modulosTecnicos.map((m: any) => m.id_modulo);
+
+    return {
+      ...item,
+      aplica_todos_tipos: aplicaTodos,
+      tipos_equipo_ids: tiposEquipoIds,
+      tipos_equipo: tiposEquipo,
+      modulos_tecnicos_ids: modulosTecnicosIds,
+      modulos_tecnicos: modulosTecnicos,
+    };
+  }
+
   /**
    * Generación atómica del siguiente SKU formal vía sequence_counter.
    * Formato industrial estandarizado: ART-{YYYY}-{0001} (ej: ART-2026-0001).
@@ -234,6 +354,13 @@ export class ArticulosService {
     // 1. Resolución del tipo legacy (opcional desde el cliente)
     const idTipoComponente = await this.resolverTipoComponente(dto.id_tipo_componente);
 
+    // 1b. Resolución de aplicabilidad directa N:M por tipos_equipo y modulos_tecnicos (partes/subsistemas)
+    const aplicabilidad = await this.normalizarAplicabilidadTiposEquipo(
+      dto.aplica_todos_tipos,
+      dto.tipos_equipo_ids,
+      dto.modulos_tecnicos_ids,
+    );
+
     // 2. Verificación y resolución de llaves foráneas normalizadas
     let marcaTexto = dto.marca?.trim() || null;
     if (dto.id_marca) {
@@ -381,12 +508,32 @@ export class ArticulosService {
             unidad_medida: unidadTexto,
             observaciones: dto.observaciones?.trim() || null,
             notas_instalacion: dto.notas_instalacion?.trim() || null,
+            aplica_todos_tipos: aplicabilidad.aplicaTodos,
             activo: true,
             creado_por: idUsuario || null,
           },
         });
 
         const idComponente = componenteCreado.id_componente;
+
+        if (!aplicabilidad.aplicaTodos && aplicabilidad.uniqueIds.length > 0) {
+          await tx.catalogo_componentes_tipo_equipo.createMany({
+            data: aplicabilidad.uniqueIds.map((idTipoEquipo) => ({
+              id_componente: idComponente,
+              id_tipo_equipo: idTipoEquipo,
+            })),
+            skipDuplicates: true,
+          });
+          if (aplicabilidad.uniqueModuloIds.length > 0) {
+            await tx.catalogo_componentes_modulo_tecnico.createMany({
+              data: aplicabilidad.uniqueModuloIds.map((idModulo) => ({
+                id_componente: idComponente,
+                id_modulo: idModulo,
+              })),
+              skipDuplicates: true,
+            });
+          }
+        }
 
         // Stock inicial = movimiento auditable en Kardex (el stock nunca se "digita")
         if (stockInicial > 0) {
@@ -459,13 +606,14 @@ export class ArticulosService {
         }
 
         // Recuperar y retornar la entidad completa con todas sus relaciones taxonómicas
-        return await tx.catalogo_componentes.findUnique({
+        const completo = await tx.catalogo_componentes.findUnique({
           where: { id_componente: idComponente },
           include: {
             tipos_componente: true,
             marcas: true,
             unidades_medida: true,
             categorias_componente: true,
+            ...this.includeAplicabilidadTiposEquipo,
             articulos_proveedores: {
               include: {
                 marcas: true,
@@ -499,6 +647,7 @@ export class ArticulosService {
             },
           },
         });
+        return this.enriquecerAplicabilidad(completo as any);
       });
     } catch (error: any) {
       this.logger.error(
@@ -949,6 +1098,19 @@ export class ArticulosService {
       }
     }
 
+    // 6b. Validar aplicabilidad N:M por tipos_equipo y modulos_tecnicos si se modifica
+    const actualizaAplicabilidad =
+      dto.aplica_todos_tipos !== undefined ||
+      dto.tipos_equipo_ids !== undefined ||
+      dto.modulos_tecnicos_ids !== undefined;
+    const nuevaAplicabilidad = actualizaAplicabilidad
+      ? await this.normalizarAplicabilidadTiposEquipo(
+          dto.aplica_todos_tipos,
+          dto.tipos_equipo_ids,
+          dto.modulos_tecnicos_ids,
+        )
+      : null;
+
     // 7. Ejecutar actualización atómica en transacción
     return await this.prisma.$transaction(async (tx) => {
       const data: Prisma.catalogo_componentesUpdateInput = {
@@ -957,7 +1119,9 @@ export class ArticulosService {
       };
 
       if (dto.id_tipo_componente !== undefined) {
-        data.tipos_componente = { connect: { id_tipo_componente: dto.id_tipo_componente } };
+        data.tipos_componente = dto.id_tipo_componente
+          ? { connect: { id_tipo_componente: dto.id_tipo_componente } }
+          : { disconnect: true };
       }
 
       if (dto.id_marca !== undefined) {
@@ -1048,19 +1212,50 @@ export class ArticulosService {
       if (dto.observaciones !== undefined) data.observaciones = dto.observaciones?.trim() || null;
       if (dto.notas_instalacion !== undefined)
         data.notas_instalacion = dto.notas_instalacion?.trim() || null;
+      if (nuevaAplicabilidad) {
+        data.aplica_todos_tipos = nuevaAplicabilidad.aplicaTodos;
+      }
 
       await tx.catalogo_componentes.update({
         where: { id_componente: id },
         data,
       });
 
-      return await tx.catalogo_componentes.findUnique({
+      if (nuevaAplicabilidad) {
+        await tx.catalogo_componentes_tipo_equipo.deleteMany({
+          where: { id_componente: id },
+        });
+        await tx.catalogo_componentes_modulo_tecnico.deleteMany({
+          where: { id_componente: id },
+        });
+        if (!nuevaAplicabilidad.aplicaTodos && nuevaAplicabilidad.uniqueIds.length > 0) {
+          await tx.catalogo_componentes_tipo_equipo.createMany({
+            data: nuevaAplicabilidad.uniqueIds.map((idTipoEquipo) => ({
+              id_componente: id,
+              id_tipo_equipo: idTipoEquipo,
+            })),
+            skipDuplicates: true,
+          });
+          if (nuevaAplicabilidad.uniqueModuloIds.length > 0) {
+            await tx.catalogo_componentes_modulo_tecnico.createMany({
+              data: nuevaAplicabilidad.uniqueModuloIds.map((idModulo) => ({
+                id_componente: id,
+                id_modulo: idModulo,
+              })),
+              skipDuplicates: true,
+            });
+          }
+        }
+      }
+
+      const actualizado = await tx.catalogo_componentes.findUnique({
         where: { id_componente: id },
         include: {
           tipos_componente: true,
           marcas: true,
           unidades_medida: true,
           categorias_componente: true,
+          ...this.includeAplicabilidadTiposEquipo,
           proveedores: {
             include: {
               persona: true,
@@ -1079,6 +1274,7 @@ export class ArticulosService {
           },
         },
       });
+      return this.enriquecerAplicabilidad(actualizado as any);
     });
   }
 
@@ -1108,6 +1304,62 @@ export class ArticulosService {
       // Incluye la categoría seleccionada y TODAS sus subcategorías (coherente con el árbol)
       const idsCategoria = await this.obtenerIdsCategoriaConDescendientes(filtros.id_categoria);
       where.id_categoria = { in: idsCategoria };
+    }
+
+    const filterEquipoIds: number[] = [];
+    if (filtros.id_tipo_equipo) {
+      filterEquipoIds.push(Number(filtros.id_tipo_equipo));
+    }
+    if (filtros.tipos_equipo_ids && filtros.tipos_equipo_ids.trim() !== '') {
+      for (const raw of filtros.tipos_equipo_ids.split(',')) {
+        const n = Number(raw.trim());
+        if (Number.isInteger(n) && n > 0) filterEquipoIds.push(n);
+      }
+    }
+    if (filterEquipoIds.length > 0) {
+      const uniqueEquipoIds = Array.from(new Set(filterEquipoIds));
+      const equipoCond: Prisma.catalogo_componentesWhereInput = {
+        OR: [
+          { aplica_todos_tipos: true },
+          {
+            catalogo_componentes_tipo_equipo: {
+              some: { id_tipo_equipo: { in: uniqueEquipoIds } },
+            },
+          },
+        ],
+      };
+      if (where.AND) {
+        if (Array.isArray(where.AND)) {
+          (where.AND as any[]).push(equipoCond);
+        } else {
+          where.AND = [where.AND, equipoCond];
+        }
+      } else {
+        where.AND = [equipoCond];
+      }
+    }
+
+    if (filtros.id_modulo) {
+      const moduloCond: Prisma.catalogo_componentesWhereInput = {
+        OR: [
+          { aplica_todos_tipos: true },
+          { catalogo_componentes_modulo_tecnico: { none: {} } },
+          {
+            catalogo_componentes_modulo_tecnico: {
+              some: { id_modulo: Number(filtros.id_modulo) },
+            },
+          },
+        ],
+      };
+      if (where.AND) {
+        if (Array.isArray(where.AND)) {
+          (where.AND as any[]).push(moduloCond);
+        } else {
+          where.AND = [where.AND, moduloCond];
+        }
+      } else {
+        where.AND = [moduloCond];
+      }
     }
 
     if (filtros.codigo_unidad_medida) {
@@ -1182,6 +1434,7 @@ export class ArticulosService {
           marcas: true,
           unidades_medida: true,
           categorias_componente: true,
+          ...this.includeAplicabilidadTiposEquipo,
           proveedores: {
             include: {
               persona: {
@@ -1211,7 +1464,7 @@ export class ArticulosService {
     const totalPages = Math.ceil(total / limit);
 
     return {
-      items,
+      items: items.map((it) => this.enriquecerAplicabilidad(it as any)),
       total,
       skip,
       limit,
@@ -1231,6 +1484,7 @@ export class ArticulosService {
         marcas: true,
         unidades_medida: true,
         categorias_componente: true,
+        ...this.includeAplicabilidadTiposEquipo,
         proveedores: {
           include: {
             persona: true,
@@ -1292,7 +1546,7 @@ export class ArticulosService {
       throw new NotFoundException(`El artículo maestro ID ${idComponente} no fue encontrado.`);
     }
 
-    return item;
+    return this.enriquecerAplicabilidad(item as any);
   }
 
   /**

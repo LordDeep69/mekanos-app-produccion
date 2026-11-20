@@ -40,6 +40,9 @@ function applyBrandingCssVariables(branding: ConfiguracionPublica) {
   root.style.setProperty('--brand-success', success);
   root.style.setProperty('--brand-warning', warning);
   root.style.setProperty('--brand-danger', danger);
+  root.style.setProperty('--org-primary', primary);
+  root.style.setProperty('--org-secondary', secondary);
+  root.style.setProperty('--org-accent', accent);
 
   // Sincronizar variables Tailwind / shadcn
   root.style.setProperty('--primary', hexToHslComponents(primary));

@@ -1,5 +1,5 @@
 import { DatabaseModule } from '@mekanos/database';
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 
 // Controller
@@ -12,6 +12,9 @@ import { CreatePropuestaHandler } from '../commands/propuestas/create-propuesta.
 // Query Handlers
 import { GetPropuestasPendientesHandler } from '../queries/propuestas/get-propuestas-pendientes.handler';
 
+// Cotizaciones CPQ
+import { CotizacionesModule } from '../cotizaciones.module';
+
 const CommandHandlers = [
   CreatePropuestaHandler,
   ConvertirPropuestaOrdenHandler,
@@ -21,12 +24,8 @@ const QueryHandlers = [
   GetPropuestasPendientesHandler,
 ];
 
-/**
- * PropuestasCorrectivoModule
- * FASE 4.9: Módulo propuestas correctivo desde mantenimiento
- */
 @Module({
-  imports: [CqrsModule, DatabaseModule],
+  imports: [CqrsModule, DatabaseModule, forwardRef(() => CotizacionesModule)],
   controllers: [PropuestasCorrectivoController],
   providers: [
     ...CommandHandlers,

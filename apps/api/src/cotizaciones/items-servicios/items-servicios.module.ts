@@ -10,6 +10,7 @@ import { UpdateItemServicioHandler } from './application/commands/update-item-se
 import { DeleteItemServicioHandler } from './application/commands/delete-item-servicio.handler';
 import { GetItemsServiciosHandler } from './application/queries/get-items-servicios.handler';
 import { PrismaCotizacionesRepository } from '../infrastructure/prisma-cotizaciones.repository';
+import { CotizacionCalculoService } from '../services/cotizacion-calculo.service';
 
 const CommandHandlers = [
   CreateItemServicioHandler,
@@ -23,6 +24,7 @@ const QueryHandlers = [GetItemsServiciosHandler];
   imports: [CqrsModule, DatabaseModule],
   controllers: [ItemsServiciosController],
   providers: [
+    CotizacionCalculoService,
     {
       provide: 'ItemsServiciosRepository',
       useClass: PrismaItemsServiciosRepository,

@@ -31,6 +31,9 @@ export default function NuevoArticuloPage() {
       // Sanitizar payloads y tipos numéricos
       const payload: CreateArticuloMaestroPayload = {
         ...values,
+        aplica_todos_tipos: values.aplica_todos_tipos ?? true,
+        tipos_equipo_ids: values.aplica_todos_tipos ? [] : values.tipos_equipo_ids || [],
+        modulos_tecnicos_ids: values.aplica_todos_tipos ? [] : values.modulos_tecnicos_ids || [],
         id_marca: values.id_marca ? Number(values.id_marca) : undefined,
         id_categoria: values.id_categoria ? Number(values.id_categoria) : undefined,
         codigo_unidad_medida: values.codigo_unidad_medida || undefined,

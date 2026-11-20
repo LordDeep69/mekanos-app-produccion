@@ -51,6 +51,12 @@ export interface ConfiguracionOrganizacionContext {
   politica_retencion_mobile_dias: number;
   modulo_comercial_activo: boolean;
   modulo_inventario_activo: boolean;
+  umbral_aprobacion_supervisor: number;
+  umbral_aprobacion_gerente: number;
+  descuento_max_sin_aprobacion: number;
+  margen_minimo_alerta: number;
+  margen_minimo_aprobacion: number;
+  terminos_cotizacion_defecto: string | null;
   fecha_modificacion: Date;
 }
 
@@ -103,6 +109,12 @@ const DEFAULT_ORG_CONTEXT: ConfiguracionOrganizacionContext = {
   politica_retencion_mobile_dias: 30,
   modulo_comercial_activo: true,
   modulo_inventario_activo: true,
+  umbral_aprobacion_supervisor: 5000000,
+  umbral_aprobacion_gerente: 15000000,
+  descuento_max_sin_aprobacion: 15,
+  margen_minimo_alerta: 25,
+  margen_minimo_aprobacion: 18,
+  terminos_cotizacion_defecto: null,
   fecha_modificacion: new Date(0),
 };
 
@@ -140,6 +152,21 @@ export class ConfiguracionOrganizacionService {
       ),
       politica_retencion_mobile_dias: Number(
         row.politica_retencion_mobile_dias ?? DEFAULT_ORG_CONTEXT.politica_retencion_mobile_dias,
+      ),
+      umbral_aprobacion_supervisor: Number(
+        row.umbral_aprobacion_supervisor ?? DEFAULT_ORG_CONTEXT.umbral_aprobacion_supervisor,
+      ),
+      umbral_aprobacion_gerente: Number(
+        row.umbral_aprobacion_gerente ?? DEFAULT_ORG_CONTEXT.umbral_aprobacion_gerente,
+      ),
+      descuento_max_sin_aprobacion: Number(
+        row.descuento_max_sin_aprobacion ?? DEFAULT_ORG_CONTEXT.descuento_max_sin_aprobacion,
+      ),
+      margen_minimo_alerta: Number(
+        row.margen_minimo_alerta ?? DEFAULT_ORG_CONTEXT.margen_minimo_alerta,
+      ),
+      margen_minimo_aprobacion: Number(
+        row.margen_minimo_aprobacion ?? DEFAULT_ORG_CONTEXT.margen_minimo_aprobacion,
       ),
     };
   }

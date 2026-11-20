@@ -175,6 +175,12 @@ export default function ConfiguracionEmpresaPage() {
         politica_retencion_mobile_dias: Number(form.politica_retencion_mobile_dias) || 30,
         modulo_comercial_activo: Boolean(form.modulo_comercial_activo),
         modulo_inventario_activo: Boolean(form.modulo_inventario_activo),
+        umbral_aprobacion_supervisor: Number(form.umbral_aprobacion_supervisor ?? 5000000),
+        umbral_aprobacion_gerente: Number(form.umbral_aprobacion_gerente ?? 15000000),
+        descuento_max_sin_aprobacion: Number(form.descuento_max_sin_aprobacion ?? 15),
+        margen_minimo_alerta: Number(form.margen_minimo_alerta ?? 25),
+        margen_minimo_aprobacion: Number(form.margen_minimo_aprobacion ?? 18),
+        terminos_cotizacion_defecto: normalizeOptionalStr(form.terminos_cotizacion_defecto),
       };
 
       const updated = await updateConfiguracionEmpresa(payload);
@@ -771,6 +777,94 @@ export default function ConfiguracionEmpresaPage() {
                       onCheckedChange={(v) => updateField('modulo_inventario_activo', v)}
                     />
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Gobernanza Comercial y Rentabilidad de Cotizaciones (CPQ)</CardTitle>
+                <CardDescription>
+                  Umbrales dinámicos de aprobación interna, pisos de margen bruto y términos por defecto para el Hub de Cotizaciones.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Umbral Supervisor ({form.codigo_moneda})</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.umbral_aprobacion_supervisor ?? 5000000}
+                      onChange={(e) =>
+                        updateField('umbral_aprobacion_supervisor', Number(e.target.value))
+                      }
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Umbral Gerente ({form.codigo_moneda})</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.umbral_aprobacion_gerente ?? 15000000}
+                      onChange={(e) =>
+                        updateField('umbral_aprobacion_gerente', Number(e.target.value))
+                      }
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Desc. Máx. Sin Aprob. (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.5"
+                      value={form.descuento_max_sin_aprobacion ?? 15}
+                      onChange={(e) =>
+                        updateField('descuento_max_sin_aprobacion', Number(e.target.value))
+                      }
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Margen Mín. Alerta (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.5"
+                      value={form.margen_minimo_alerta ?? 25}
+                      onChange={(e) =>
+                        updateField('margen_minimo_alerta', Number(e.target.value))
+                      }
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Margen Mín. Gerente (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.5"
+                      value={form.margen_minimo_aprobacion ?? 18}
+                      onChange={(e) =>
+                        updateField('margen_minimo_aprobacion', Number(e.target.value))
+                      }
+                      className="font-mono"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Términos y Condiciones por Defecto de Cotizaciones</Label>
+                  <Textarea
+                    rows={3}
+                    value={form.terminos_cotizacion_defecto ?? ''}
+                    onChange={(e) => updateField('terminos_cotizacion_defecto', e.target.value)}
+                    placeholder="Se precargarán automáticamente en toda nueva cotización comercial..."
+                  />
                 </div>
               </CardContent>
             </Card>

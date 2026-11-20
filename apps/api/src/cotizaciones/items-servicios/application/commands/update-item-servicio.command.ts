@@ -1,4 +1,4 @@
-// Command - Actualizar Item Servicio
+// Command - Actualizar Item Servicio (EAM-CPQ Universal)
 
 export class UpdateItemServicioCommand {
   constructor(
@@ -12,5 +12,10 @@ export class UpdateItemServicioCommand {
     public readonly observaciones?: string,
     public readonly justificacionPrecio?: string,
     public readonly ordenItem?: number,
+    public readonly idEquipo?: number | null,
+    public readonly costoUnitario?: number,
+    public readonly esOpcional?: boolean,
+    public readonly ivaAplicable?: boolean,
+    public readonly seccionTitulo?: string,
   ) {}
 }

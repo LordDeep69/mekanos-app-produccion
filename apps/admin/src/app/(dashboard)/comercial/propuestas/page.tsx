@@ -25,8 +25,10 @@ import type { PropuestaCorrectivoItem } from '@/features/comercial/api/comercial
 import {
   useConvertirPropuesta,
   useCreatePropuesta,
+  useEscalarPropuesta,
   usePropuestasPendientes,
 } from '@/features/comercial/hooks/use-comercial';
+import { useRouter } from 'next/navigation';
 import { getNombreCompleto, useEmpleados } from '@/features/empleados';
 import { useOrdenes } from '@/features/ordenes/hooks/use-ordenes';
 import { useOrgFormatters } from '@/hooks/use-org-formatters';
@@ -76,8 +78,10 @@ export default function PropuestasCorrectivoPage() {
   const { data: ordenesData } = useOrdenes({ estado: 'EN_PROCESO', limit: 50 });
   const { data: empleadosData } = useEmpleados({ empleado_activo: true, take: 100 });
 
+  const router = useRouter();
   const createMut = useCreatePropuesta();
   const convertirMut = useConvertirPropuesta();
+  const escalarMut = useEscalarPropuesta();
 
   const propuestas = data?.propuestas || [];
   const ordenesEnProceso = ordenesData?.data || [];
@@ -320,25 +324,42 @@ export default function PropuestasCorrectivoPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-wrap gap-2">
             <Button variant="outline" onClick={() => setSelectedPropuesta(null)}>
               Cerrar
             </Button>
             {selectedPropuesta && (
-              <Button
-                disabled={convertirMut.isPending}
-                onClick={async () => {
-                  const empId = empleados[0]?.id_empleado || 1;
-                  await convertirMut.mutateAsync({
-                    id: selectedPropuesta.id_propuesta,
-                    convertida_por: empId,
-                  });
-                  setSelectedPropuesta(null);
-                }}
-              >
-                <ArrowRightCircle className="h-4 w-4 mr-1.5" />
-                Convertir a Orden de Servicio
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  disabled={escalarMut.isPending}
+                  onClick={async () => {
+                    const res = await escalarMut.mutateAsync(selectedPropuesta.id_propuesta);
+                    setSelectedPropuesta(null);
+                    if (res?.cotizacion?.id_cotizacion) {
+                      router.push(`/comercial/cotizaciones/${res.cotizacion.id_cotizacion}`);
+                    }
+                  }}
+                >
+                  {escalarMut.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+                  <FilePlus2 className="h-4 w-4 mr-1.5" />
+                  Escalar a Cotización
+                </Button>
+                <Button
+                  disabled={convertirMut.isPending}
+                  onClick={async () => {
+                    const empId = empleados[0]?.id_empleado || 1;
+                    await convertirMut.mutateAsync({
+                      id: selectedPropuesta.id_propuesta,
+                      convertida_por: empId,
+                    });
+                    setSelectedPropuesta(null);
+                  }}
+                >
+                  <ArrowRightCircle className="h-4 w-4 mr-1.5" />
+                  Convertir a Orden de Servicio
+                </Button>
+              </>
             )}
           </DialogFooter>
         </DialogContent>

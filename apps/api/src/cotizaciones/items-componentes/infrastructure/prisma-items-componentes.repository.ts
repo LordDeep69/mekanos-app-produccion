@@ -1,4 +1,4 @@
-// Infrastructure Repository - Prisma Items Componentes
+// Infrastructure Repository - Prisma Items Componentes (EAM-CPQ Universal)
 
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
@@ -14,15 +14,20 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
       id_item_componente: item.id_item_componente,
       id_cotizacion: item.id_cotizacion,
       id_componente: item.id_componente ?? undefined,
-      id_tipo_componente: item.id_tipo_componente,
+      id_tipo_componente: item.id_tipo_componente ?? undefined,
+      id_equipo: item.id_equipo ?? undefined,
       descripcion: item.descripcion,
       referencia_manual: item.referencia_manual ?? undefined,
       marca_manual: item.marca_manual ?? undefined,
       cantidad: item.cantidad ? Number(item.cantidad) : 1,
       unidad: item.unidad ?? undefined,
+      costo_unitario: item.costo_unitario !== null && item.costo_unitario !== undefined ? Number(item.costo_unitario) : 0,
       precio_unitario: Number(item.precio_unitario),
       descuento_porcentaje: item.descuento_porcentaje ? Number(item.descuento_porcentaje) : 0,
-      subtotal: item.subtotal ? Number(item.subtotal) : undefined,
+      subtotal: item.subtotal !== null && item.subtotal !== undefined ? Number(item.subtotal) : undefined,
+      es_opcional: Boolean(item.es_opcional),
+      iva_aplicable: item.iva_aplicable !== false,
+      seccion_titulo: item.seccion_titulo ?? undefined,
       garantia_meses: item.garantia_meses ?? undefined,
       observaciones_garantia: item.observaciones_garantia ?? undefined,
       observaciones: item.observaciones ?? undefined,
@@ -32,6 +37,7 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
       cotizacion: item.cotizaciones ?? item.cotizacion ?? undefined,
       componente: item.catalogo_componentes ?? undefined,
       tipo_componente: item.tipos_componente ?? undefined,
+      equipo: item.equipos ?? undefined,
       usuario: item.usuarios ?? undefined,
     });
   }
@@ -40,24 +46,50 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
     const itemTemp = new ItemCotizacionComponente(data);
     const subtotalCalculado = itemTemp.calcularSubtotal();
 
+    let costoUnitario = data.costo_unitario;
+    let idTipoComponente = data.id_tipo_componente ?? null;
+    if (data.id_componente && (costoUnitario === undefined || idTipoComponente === null)) {
+      const comp = await this.prisma.catalogo_componentes.findUnique({
+        where: { id_componente: data.id_componente },
+        select: { precio_compra: true, id_tipo_componente: true },
+      });
+      if (comp) {
+        if (costoUnitario === undefined && comp.precio_compra !== null) {
+          costoUnitario = Number(comp.precio_compra);
+        }
+        if (idTipoComponente === null && comp.id_tipo_componente) {
+          idTipoComponente = comp.id_tipo_componente;
+        }
+      }
+    }
+
     const itemCreado = await this.prisma.items_cotizacion_componentes.create({
       data: {
         id_cotizacion: data.id_cotizacion!,
-        id_componente: data.id_componente,
-        id_tipo_componente: data.id_tipo_componente!,
+        id_componente: data.id_componente ?? null,
+        id_tipo_componente: idTipoComponente,
+        id_equipo: data.id_equipo ?? null,
         descripcion: data.descripcion!,
         referencia_manual: data.referencia_manual,
         marca_manual: data.marca_manual,
         cantidad: data.cantidad ?? 1,
         unidad: data.unidad ?? 'unidad',
-        precio_unitario: data.precio_unitario!,
+        costo_unitario: costoUnitario ?? 0,
+        precio_unitario: data.precio_unitario ?? 0,
         descuento_porcentaje: data.descuento_porcentaje ?? 0,
         subtotal: subtotalCalculado,
+        es_opcional: Boolean(data.es_opcional),
+        iva_aplicable: data.iva_aplicable !== false,
+        seccion_titulo: data.seccion_titulo,
         garantia_meses: data.garantia_meses,
         observaciones_garantia: data.observaciones_garantia,
         observaciones: data.observaciones,
         orden_item: data.orden_item,
         registrado_por: data.registrado_por,
+      },
+      include: {
+        catalogo_componentes: true,
+        equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
       },
     });
 
@@ -79,6 +111,7 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
         cotizaciones: includeRelations?.includeCotizacion ?? false,
         catalogo_componentes: includeRelations?.includeComponente ?? false,
         tipos_componente: includeRelations?.includeTipoComponente ?? false,
+        equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
       },
     });
 
@@ -107,8 +140,9 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
       include: {
         catalogo_componentes: includeRelations?.includeComponente ?? false,
         tipos_componente: includeRelations?.includeTipoComponente ?? false,
+        equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
       },
-      orderBy: { orden_item: 'asc' },
+      orderBy: [{ orden_item: 'asc' }, { id_item_componente: 'asc' }],
     });
 
     if (includeRelations?.includeUsuario) {
@@ -134,15 +168,12 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
     id: number,
     data: Partial<ItemCotizacionComponente>,
   ): Promise<ItemCotizacionComponente> {
-    // Obtener item existente SIEMPRE para tener valores actuales
     const itemExistente = await this.findById(id);
     if (!itemExistente) {
       throw new Error(`Item componente ${id} no encontrado`);
     }
 
-    // Si se actualizan campos que afectan el subtotal, recalcular
     let subtotalCalculado: number;
-
     if (
       data.cantidad !== undefined ||
       data.precio_unitario !== undefined ||
@@ -157,19 +188,24 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
       subtotalCalculado = itemExistente.subtotal || 0;
     }
 
-    // Construir objeto update solo con campos definidos
     const updateData: any = {
-      subtotal: subtotalCalculado, // SIEMPRE actualizar
+      subtotal: subtotalCalculado,
     };
 
+    if (data.id_equipo !== undefined) updateData.id_equipo = data.id_equipo;
+    if (data.id_tipo_componente !== undefined) updateData.id_tipo_componente = data.id_tipo_componente;
     if (data.descripcion !== undefined) updateData.descripcion = data.descripcion;
     if (data.referencia_manual !== undefined) updateData.referencia_manual = data.referencia_manual;
     if (data.marca_manual !== undefined) updateData.marca_manual = data.marca_manual;
     if (data.cantidad !== undefined) updateData.cantidad = data.cantidad;
     if (data.unidad !== undefined) updateData.unidad = data.unidad;
+    if (data.costo_unitario !== undefined) updateData.costo_unitario = data.costo_unitario;
     if (data.precio_unitario !== undefined) updateData.precio_unitario = data.precio_unitario;
     if (data.descuento_porcentaje !== undefined)
       updateData.descuento_porcentaje = data.descuento_porcentaje;
+    if (data.es_opcional !== undefined) updateData.es_opcional = data.es_opcional;
+    if (data.iva_aplicable !== undefined) updateData.iva_aplicable = data.iva_aplicable;
+    if (data.seccion_titulo !== undefined) updateData.seccion_titulo = data.seccion_titulo;
     if (data.garantia_meses !== undefined) updateData.garantia_meses = data.garantia_meses;
     if (data.observaciones_garantia !== undefined)
       updateData.observaciones_garantia = data.observaciones_garantia;
@@ -179,6 +215,10 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
     const itemActualizado = await this.prisma.items_cotizacion_componentes.update({
       where: { id_item_componente: id },
       data: updateData,
+      include: {
+        catalogo_componentes: true,
+        equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
+      },
     });
 
     return this.mapToEntity(itemActualizado);
@@ -192,7 +232,7 @@ export class PrismaItemsComponentesRepository implements ItemsCotizacionComponen
 
   async calcularSubtotalComponentes(idCotizacion: number): Promise<number> {
     const result = await this.prisma.items_cotizacion_componentes.aggregate({
-      where: { id_cotizacion: idCotizacion },
+      where: { id_cotizacion: idCotizacion, es_opcional: false },
       _sum: {
         subtotal: true,
       },

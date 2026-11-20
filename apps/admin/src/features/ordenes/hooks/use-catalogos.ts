@@ -443,10 +443,11 @@ export function useEquiposSelector(params?: {
     idCliente?: number;
     idSede?: number;
     busqueda?: string;
+    limit?: number;
 }, enabled = true) {
     return useQuery({
         queryKey: [...CATALOGOS_KEYS.equipos, params],
-        queryFn: () => getEquiposSelector({ ...params, limit: 50 }),
+        queryFn: () => getEquiposSelector({ ...params, limit: params?.limit ?? 100 }),
         enabled,
         ...CacheStrategy.SEMI_STATIC, // Selector semi-estático - 15 min cache
     });

@@ -43,6 +43,32 @@ export class FiltrosArticulosDto {
   @IsInt()
   id_categoria?: number;
 
+  @ApiPropertyOptional({
+    description:
+      'Filtrar por aplicabilidad a un tipo de equipo específico (incluye artículos universales y los vinculados a este tipo)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_tipo_equipo?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Filtrar por aplicabilidad a varios tipos de equipo (lista CSV de id_tipo_equipo, ej: 1,2,22)',
+  })
+  @IsOptional()
+  @IsString()
+  tipos_equipo_ids?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Filtrar por parte/subsistema EAM (id_modulo en modulos_tecnicos; incluye artículos sin restricción de subsistema y los vinculados a ese módulo)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_modulo?: number;
+
   @ApiPropertyOptional({ description: 'Filtrar por código de unidad de medida normalizada' })
   @IsOptional()
   @IsString()

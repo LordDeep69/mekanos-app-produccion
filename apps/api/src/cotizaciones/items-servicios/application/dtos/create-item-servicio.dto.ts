@@ -1,26 +1,36 @@
-// DTO - Crear Item Servicio Cotización
+// DTO - Crear Item Servicio Cotización (EAM-CPQ Universal)
 
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
 export class CreateItemServicioDto {
-  @ApiProperty({
-    description: 'ID del servicio del catálogo',
+  @ApiPropertyOptional({
+    description: 'ID del servicio del catálogo (opcional si se ingresa descripcion_personalizada)',
     example: 1,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsInt()
-  id_servicio!: number;
+  id_servicio?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'ID del equipo específico al que aplica esta línea (opcional)',
+    example: 42,
+  })
+  @IsOptional()
+  @IsInt()
+  id_equipo?: number;
+
+  @ApiPropertyOptional({
     description: 'Cantidad de servicios',
     example: 1,
     default: 1,
@@ -30,17 +40,26 @@ export class CreateItemServicioDto {
   @Min(0.01)
   cantidad?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Unidad de medida',
     example: 'servicio',
-    required: false,
   })
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   unidad?: string;
 
+  @ApiPropertyOptional({
+    description: 'Costo unitario interno de ejecución (horas hombre / cuadrilla)',
+    example: 250000,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  costo_unitario?: number;
+
   @ApiProperty({
-    description: 'Precio unitario del servicio',
+    description: 'Precio unitario de venta (permite 0 para cortesías/incluidos)',
     example: 500000,
   })
   @IsNotEmpty()
@@ -48,10 +67,9 @@ export class CreateItemServicioDto {
   @Min(0)
   precio_unitario!: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Porcentaje de descuento aplicado (0-100)',
     example: 0,
-    required: false,
   })
   @IsOptional()
   @IsNumber()
@@ -59,45 +77,64 @@ export class CreateItemServicioDto {
   @Max(100)
   descuento_porcentaje?: number;
 
-  @ApiProperty({
-    description: 'Descripción personalizada del servicio',
-    example: 'Mantenimiento preventivo completo incluye cambio filtros',
-    required: false,
+  @ApiPropertyOptional({
+    description: 'Ítem opcional (no suma al total principal)',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  es_opcional?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Indica si grava impuesto/IVA',
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  iva_aplicable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Sección editorial para agrupación en PDF',
+    maxLength: 120,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  seccion_titulo?: string;
+
+  @ApiPropertyOptional({
+    description: 'Descripción personalizada del servicio (obligatoria si no se selecciona id_servicio)',
+    example: 'Instalación, pruebas de carga y puesta en marcha de banco de baterías',
   })
   @IsOptional()
   @IsString()
   descripcion_personalizada?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Observaciones adicionales',
-    required: false,
   })
   @IsOptional()
   @IsString()
   observaciones?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Justificación del precio (si difiere del catálogo)',
-    required: false,
   })
   @IsOptional()
   @IsString()
   justificacion_precio?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Orden de visualización en cotización',
     example: 1,
-    required: false,
   })
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(0)
   orden_item?: number;
 
-  @ApiProperty({
-    description: 'ID usuario que registra el item',
-    example: 1,
-    required: false,
+  @ApiPropertyOptional({
+    description: 'ID usuario que registra el item (se resuelve del JWT)',
   })
   @IsOptional()
   @IsInt()

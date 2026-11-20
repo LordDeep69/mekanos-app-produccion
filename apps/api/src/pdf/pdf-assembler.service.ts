@@ -422,7 +422,8 @@ export class PdfAssemblerService {
   }
 
   /**
-   * Ensambla por completo el payload tipado DatosCotizacionPDF para una cotización comercial.
+   * Ensambla por completo el payload tipado DatosCotizacionPDF para una cotización comercial
+   * (soporte Multi-Equipo N:M, Logística/Viáticos/Pólizas visibles, Ítems Opcionales y AIU).
    */
   async assembleCotizacionPdf(idOrCotizacion: number | any): Promise<AssembledCotizacionPdf> {
     const brand = await this.resolveBranding();
@@ -433,16 +434,42 @@ export class PdfAssemblerService {
             include: {
               clientes: { include: { persona: true } },
               sedes_cliente: true,
-              equipos: { include: { tipos_equipo: true } },
+              equipos: { include: { tipos_equipo: true, modelos_equipo: true } },
+              cotizaciones_equipos: {
+                orderBy: { orden_secuencia: 'asc' },
+                include: {
+                  equipos: {
+                    include: {
+                      tipos_equipo: true,
+                      modelos_equipo: true,
+                      equipos_generador: true,
+                      equipos_motor: true,
+                      equipos_bomba: true,
+                    },
+                  },
+                },
+              },
               empleados: { include: { persona: true } },
               estados_cotizacion: true,
               items_cotizacion_servicios: {
-                include: { catalogo_servicios: true },
-                orderBy: { orden_item: 'asc' },
+                include: {
+                  catalogo_servicios: true,
+                  equipos: { select: { codigo_equipo: true, nombre_equipo: true } },
+                },
+                orderBy: [{ orden_item: 'asc' }, { id_item_servicio: 'asc' }],
               },
               items_cotizacion_componentes: {
-                include: { catalogo_componentes: true },
-                orderBy: { orden_item: 'asc' },
+                include: {
+                  catalogo_componentes: true,
+                  equipos: { select: { codigo_equipo: true, nombre_equipo: true } },
+                },
+                orderBy: [{ orden_item: 'asc' }, { id_item_componente: 'asc' }],
+              },
+              items_cotizacion_otros: {
+                include: {
+                  equipos: { select: { codigo_equipo: true, nombre_equipo: true } },
+                },
+                orderBy: [{ orden_item: 'asc' }, { id_item_otro: 'asc' }],
               },
             },
           })) as any)
@@ -453,26 +480,86 @@ export class PdfAssemblerService {
       throw new NotFoundException(`Cotización con ID ${idRef ?? ''} no encontrada`);
     }
 
+    const serviciosActivos = (cot.items_cotizacion_servicios || []).filter((i: any) => !i.es_opcional);
+    const componentesActivos = (cot.items_cotizacion_componentes || []).filter((i: any) => !i.es_opcional);
+    const otrosVisiblesActivos = (cot.items_cotizacion_otros || []).filter(
+      (i: any) => !i.es_opcional && i.visible_cliente !== false,
+    );
+
+    const itemsOpcionales = [
+      ...(cot.items_cotizacion_servicios || [])
+        .filter((i: any) => i.es_opcional)
+        .map((i: any) => ({
+          tipo: 'SERVICIO' as const,
+          descripcion:
+            i.descripcion_personalizada || i.catalogo_servicios?.nombre_servicio || 'Servicio',
+          cantidad: Number(i.cantidad) || 1,
+          unidad: i.unidad || 'servicio',
+          precioUnitario: Number(i.precio_unitario) || 0,
+          subtotal: Number(i.subtotal) || 0,
+        })),
+      ...(cot.items_cotizacion_componentes || [])
+        .filter((i: any) => i.es_opcional)
+        .map((i: any) => ({
+          tipo: 'REPUESTO' as const,
+          descripcion:
+            i.descripcion || i.catalogo_componentes?.descripcion_corta || 'Componente',
+          referencia:
+            i.catalogo_componentes?.codigo_interno || i.referencia_manual || undefined,
+          cantidad: Number(i.cantidad) || 1,
+          unidad: i.unidad || 'unidad',
+          precioUnitario: Number(i.precio_unitario) || 0,
+          subtotal: Number(i.subtotal) || 0,
+        })),
+      ...(cot.items_cotizacion_otros || [])
+        .filter((i: any) => i.es_opcional && i.visible_cliente !== false)
+        .map((i: any) => ({
+          tipo: 'OTRO' as const,
+          descripcion: i.descripcion,
+          cantidad: Number(i.cantidad) || 1,
+          unidad: i.unidad || 'global',
+          precioUnitario: Number(i.precio_unitario) || 0,
+          subtotal: Number(i.subtotal) || 0,
+        })),
+    ];
+
     const subtotalServicios =
-      cot.items_cotizacion_servicios?.reduce(
-        (acc: number, item: any) => acc + (Number(item.subtotal) || 0),
-        0,
-      ) || 0;
+      cot.subtotal_servicios != null
+        ? Number(cot.subtotal_servicios)
+        : serviciosActivos.reduce((acc: number, item: any) => acc + (Number(item.subtotal) || 0), 0);
     const subtotalComponentes =
-      cot.items_cotizacion_componentes?.reduce(
-        (acc: number, item: any) => acc + (Number(item.subtotal) || 0),
-        0,
-      ) || 0;
+      cot.subtotal_componentes != null
+        ? Number(cot.subtotal_componentes)
+        : componentesActivos.reduce((acc: number, item: any) => acc + (Number(item.subtotal) || 0), 0);
+    const subtotalOtros =
+      cot.subtotal_otros != null
+        ? Number(cot.subtotal_otros)
+        : otrosVisiblesActivos.reduce((acc: number, item: any) => acc + (Number(item.subtotal) || 0), 0);
     const subtotalGeneral =
       cot.subtotal_general != null
         ? Number(cot.subtotal_general)
-        : subtotalServicios + subtotalComponentes;
+        : subtotalServicios + subtotalComponentes + subtotalOtros;
+    const subtotalOpcionales =
+      cot.subtotal_opcionales != null
+        ? Number(cot.subtotal_opcionales)
+        : itemsOpcionales.reduce((acc, item) => acc + item.subtotal, 0);
     const descuentoPorcentaje = Number(cot.descuento_porcentaje) || 0;
     const descuentoValor = Number(cot.descuento_valor) || 0;
     const subtotalConDescuento =
       cot.subtotal_con_descuento != null
         ? Number(cot.subtotal_con_descuento)
         : subtotalGeneral - descuentoValor;
+
+    const usaAiu = Boolean(cot.usa_aiu);
+    const aiuAdminPorcentaje = Number(cot.aiu_admin_porcentaje || 0);
+    const aiuAdminValor = Number(cot.aiu_admin_valor || 0);
+    const aiuImprevistosPorcentaje = Number(cot.aiu_imprevistos_porcentaje || 0);
+    const aiuImprevistosValor = Number(cot.aiu_imprevistos_valor || 0);
+    const aiuUtilidadPorcentaje = Number(cot.aiu_utilidad_porcentaje || 0);
+    const aiuUtilidadValor = Number(cot.aiu_utilidad_valor || 0);
+    const aiuValorTotal = Number(cot.aiu_valor_total || 0);
+    const ivaSobreUtilidadAiu = Boolean(cot.iva_sobre_utilidad_aiu);
+
     const ivaPorcentaje =
       cot.iva_porcentaje != null ? Number(cot.iva_porcentaje) : brand.tasaImpuestoDefecto;
     const ivaValor =
@@ -480,7 +567,9 @@ export class PdfAssemblerService {
         ? Number(cot.iva_valor)
         : (subtotalConDescuento * ivaPorcentaje) / 100;
     const totalCotizacion =
-      cot.total_cotizacion != null ? Number(cot.total_cotizacion) : subtotalConDescuento + ivaValor;
+      cot.total_cotizacion != null
+        ? Number(cot.total_cotizacion)
+        : subtotalConDescuento + aiuValorTotal + ivaValor;
 
     const diasValidez = cot.dias_validez ?? brand.validezCotizacionDiasDefecto;
     const fechaBase = cot.fecha_cotizacion ? new Date(cot.fecha_cotizacion) : new Date();
@@ -501,13 +590,37 @@ export class PdfAssemblerService {
     const elaboradoPor =
       this.resolverNombrePersona(empleadoPersona) || `Equipo ${brand.nombreComercial}`;
 
+    const mapEquipoPdf = (eq: any, notasAlcance?: string) => ({
+      codigoEquipo: eq.codigo_equipo || undefined,
+      nombreEquipo: eq.nombre_equipo || undefined,
+      tipoEquipo: eq.tipos_equipo?.nombre_tipo || 'EQUIPO',
+      marca: eq.modelos_equipo?.marca || EquipoSpecsReader.getMarca(eq),
+      modelo: eq.modelos_equipo?.modelo || EquipoSpecsReader.getModelo(eq),
+      serie: EquipoSpecsReader.getSerie(eq),
+      ubicacion: eq.ubicacion_texto || undefined,
+      notasAlcance: notasAlcance || undefined,
+    });
+
+    const equiposMulti = (cot.cotizaciones_equipos || [])
+      .filter((ce: any) => ce.equipos)
+      .map((ce: any) => mapEquipoPdf(ce.equipos, ce.notas_alcance));
+    const equipoUnico =
+      equiposMulti.length > 0
+        ? equiposMulti[0]
+        : cot.equipos
+          ? mapEquipoPdf(cot.equipos)
+          : undefined;
+
     const datosCotizacion: DatosCotizacionPDF = {
       branding: brand,
       numeroCotizacion: cot.numero_cotizacion || `COT-${idRef ?? ''}`,
+      tipoCotizacion: cot.tipo_cotizacion || undefined,
+      moneda: cot.moneda || brand.codigoMoneda,
       fechaCotizacion: formatDateOrg(fechaBase, brand),
       fechaVencimiento: formatDateOrg(fechaVencBase, brand),
       diasValidez,
       version: cot.version || 1,
+      ordenCompraCliente: cot.orden_compra_cliente || undefined,
       cliente: {
         nombre: clienteNombre,
         nit: clientePersona?.numero_identificacion || undefined,
@@ -524,52 +637,75 @@ export class PdfAssemblerService {
         email: cot.sedes_cliente?.email_sede || clientePersona?.email_principal || undefined,
         contacto: cot.sedes_cliente?.contacto_sede || undefined,
       },
-      equipo: cot.equipos
-        ? {
-            tipoEquipo: cot.equipos.tipos_equipo?.nombre_tipo || 'EQUIPO',
-            marca: EquipoSpecsReader.getMarca(cot.equipos),
-            modelo: EquipoSpecsReader.getModelo(cot.equipos),
-            serie: EquipoSpecsReader.getSerie(cot.equipos),
-            ubicacion: cot.equipos.ubicacion_texto || undefined,
-          }
-        : undefined,
+      equipo: equipoUnico,
+      equipos: equiposMulti.length > 0 ? equiposMulti : equipoUnico ? [equipoUnico] : [],
       asunto: cot.asunto || `Cotización ${cot.numero_cotizacion || ''}`.trim(),
       descripcionGeneral: cot.descripcion_general || undefined,
       alcanceTrabajo: cot.alcance_trabajo || undefined,
       exclusiones: cot.exclusiones || undefined,
-      itemsServicios:
-        cot.items_cotizacion_servicios?.map((item: any, idx: number) => ({
-          orden: item.orden_item ?? idx + 1,
-          descripcion:
-            item.descripcion_personalizada ||
-            item.catalogo_servicios?.nombre_servicio ||
-            'Servicio',
-          cantidad: Number(item.cantidad) || 1,
-          unidad: item.unidad || 'UND',
-          precioUnitario: Number(item.precio_unitario) || 0,
-          descuentoPorcentaje: Number(item.descuento_porcentaje) || 0,
-          subtotal: Number(item.subtotal) || 0,
-        })) || [],
-      itemsComponentes:
-        cot.items_cotizacion_componentes?.map((item: any, idx: number) => ({
-          orden: item.orden_item ?? idx + 1,
-          descripcion:
-            item.descripcion || item.catalogo_componentes?.descripcion_corta || 'Componente',
-          referencia:
-            item.catalogo_componentes?.codigo_interno || item.referencia_manual || undefined,
-          cantidad: Number(item.cantidad) || 1,
-          unidad: item.unidad || 'UND',
-          precioUnitario: Number(item.precio_unitario) || 0,
-          descuentoPorcentaje: Number(item.descuento_porcentaje) || 0,
-          subtotal: Number(item.subtotal) || 0,
-        })) || [],
+      itemsServicios: serviciosActivos.map((item: any, idx: number) => ({
+        orden: item.orden_item ?? idx + 1,
+        descripcion:
+          item.descripcion_personalizada ||
+          item.catalogo_servicios?.nombre_servicio ||
+          'Servicio',
+        equipoEtiqueta: item.equipos?.codigo_equipo || undefined,
+        cantidad: Number(item.cantidad) || 1,
+        unidad: item.unidad || 'UND',
+        precioUnitario: Number(item.precio_unitario) || 0,
+        descuentoPorcentaje: Number(item.descuento_porcentaje) || 0,
+        subtotal: Number(item.subtotal) || 0,
+        ivaAplicable: item.iva_aplicable !== false,
+        observaciones: item.observaciones || undefined,
+      })),
+      itemsComponentes: componentesActivos.map((item: any, idx: number) => ({
+        orden: item.orden_item ?? idx + 1,
+        descripcion:
+          item.descripcion || item.catalogo_componentes?.descripcion_corta || 'Componente',
+        referencia:
+          item.catalogo_componentes?.codigo_interno || item.referencia_manual || undefined,
+        marca: item.marca_manual || item.catalogo_componentes?.marca || undefined,
+        equipoEtiqueta: item.equipos?.codigo_equipo || undefined,
+        garantiaMeses: item.garantia_meses ?? undefined,
+        cantidad: Number(item.cantidad) || 1,
+        unidad: item.unidad || 'UND',
+        precioUnitario: Number(item.precio_unitario) || 0,
+        descuentoPorcentaje: Number(item.descuento_porcentaje) || 0,
+        subtotal: Number(item.subtotal) || 0,
+        ivaAplicable: item.iva_aplicable !== false,
+      })),
+      itemsOtros: otrosVisiblesActivos.map((item: any, idx: number) => ({
+        orden: item.orden_item ?? idx + 1,
+        categoriaRubro: item.categoria_rubro || 'OTRO',
+        descripcion: item.descripcion,
+        detalleCalculo: item.detalle_calculo || undefined,
+        equipoEtiqueta: item.equipos?.codigo_equipo || undefined,
+        cantidad: Number(item.cantidad) || 1,
+        unidad: item.unidad || 'global',
+        precioUnitario: Number(item.precio_unitario) || 0,
+        descuentoPorcentaje: Number(item.descuento_porcentaje) || 0,
+        subtotal: Number(item.subtotal) || 0,
+        ivaAplicable: item.iva_aplicable !== false,
+      })),
+      itemsOpcionales,
       totales: {
         subtotalServicios,
         subtotalComponentes,
+        subtotalOtros,
         subtotalGeneral,
+        subtotalOpcionales,
         descuentoPorcentaje,
         descuentoValor,
         subtotalConDescuento,
+        usaAiu,
+        aiuAdminPorcentaje,
+        aiuAdminValor,
+        aiuImprevistosPorcentaje,
+        aiuImprevistosValor,
+        aiuUtilidadPorcentaje,
+        aiuUtilidadValor,
+        aiuValorTotal,
+        ivaSobreUtilidadAiu,
         ivaPorcentaje,
         ivaValor,
         totalCotizacion,

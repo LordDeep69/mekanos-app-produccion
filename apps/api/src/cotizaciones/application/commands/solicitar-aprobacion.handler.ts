@@ -2,71 +2,100 @@ import { PrismaService } from '@mekanos/database';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { CotizacionesRepository } from '../../domain/cotizaciones.repository.interface';
+import { CotizacionCalculoService } from '../../services/cotizacion-calculo.service';
 import { SolicitarAprobacionCommand } from './solicitar-aprobacion.command';
 
 /**
- * SOLICITAR APROBACION HANDLER
+ * SOLICITAR APROBACION HANDLER (Gobernanza Comercial White-Label Dinámica)
  *
- * Flujo:
- * 1. Verificar cotización existe
- * 2. Validar estado BORRADOR (id_estado = 1)
- * 3. Determinar nivel aprobación según total + descuento
- * 4. Crear solicitud aprobaciones_cotizacion
- * 5. Cambiar estado → EN_REVISION (id_estado = 2)
- * 6. TODO: Notificar aprobador (Fase 7 - email/app)
+ * Lee umbrales de monto, descuento y margen mínimo desde `configuracion_organizacion`:
+ * - Total > umbral_aprobacion_gerente OR Descuento > descuento_max_sin_aprobacion + 10%
+ *   OR Margen Bruto < margen_minimo_aprobacion (cuando hay costos registrados) => GERENTE
+ * - Total > umbral_aprobacion_supervisor OR Descuento > descuento_max_sin_aprobacion => SUPERVISOR
+ * - De lo contrario => APROBADA_INTERNA automática (id_estado = 3)
  */
 @Injectable()
 @CommandHandler(SolicitarAprobacionCommand)
 export class SolicitarAprobacionHandler implements ICommandHandler<SolicitarAprobacionCommand> {
-  // Umbrales aprobación configurables (TODO Fase 7: mover a tabla config)
-  private static readonly UMBRALES = {
-    SUPERVISOR_TOTAL: 5000000, // $5M COP
-    GERENTE_TOTAL: 15000000, // $15M COP
-    SUPERVISOR_DESCUENTO: 15.0, // 15%
-    GERENTE_DESCUENTO: 25.0, // 25%
-  };
-
   constructor(
     @Inject('CotizacionesRepository')
     private readonly repository: CotizacionesRepository,
     private readonly prisma: PrismaService,
+    private readonly calculoService: CotizacionCalculoService,
   ) {}
 
   async execute(command: SolicitarAprobacionCommand): Promise<any> {
-    // 1. Verificar cotización existe
-    const cotizacion = await this.repository.findById(command.idCotizacion);
-    if (!cotizacion) {
+    const cotizacionInicial = await this.repository.findById(command.idCotizacion);
+    if (!cotizacionInicial) {
       throw new NotFoundException(`Cotización ${command.idCotizacion} no encontrada`);
     }
 
-    // 2. Validar estado BORRADOR (id_estado = 1)
-    if (cotizacion.id_estado !== 1) {
+    if (cotizacionInicial.id_estado !== 1) {
       throw new BadRequestException(
-        `Solo cotizaciones BORRADOR pueden solicitar aprobación. Estado actual: ${cotizacion.id_estado}`,
+        `Solo cotizaciones BORRADOR pueden solicitar aprobación. Estado actual: ${cotizacionInicial.id_estado}`,
       );
     }
 
-    // 3. Determinar nivel aprobación
+    // Recalcular totales para garantizar evaluación con cifras exactas
+    const totales = await this.calculoService.recalcularTotales(command.idCotizacion);
+    const cotizacion = (await this.repository.findById(command.idCotizacion))!;
+
+    const org = await this.prisma.configuracion_organizacion
+      .findUnique({
+        where: { id_configuracion: 1 },
+        select: {
+          codigo_moneda: true,
+          simbolo_moneda: true,
+          umbral_aprobacion_supervisor: true,
+          umbral_aprobacion_gerente: true,
+          descuento_max_sin_aprobacion: true,
+          margen_minimo_aprobacion: true,
+        },
+      })
+      .catch(() => null);
+
+    const umbrales = {
+      moneda: cotizacion.moneda || org?.codigo_moneda || 'COP',
+      simbolo: org?.simbolo_moneda || '$',
+      supervisorTotal: Number(org?.umbral_aprobacion_supervisor ?? 5000000),
+      gerenteTotal: Number(org?.umbral_aprobacion_gerente ?? 15000000),
+      supervisorDescuento: Number(org?.descuento_max_sin_aprobacion ?? 15),
+      gerenteDescuento: Math.min(100, Number(org?.descuento_max_sin_aprobacion ?? 15) + 10),
+      margenMinimoAprobacion: Number(org?.margen_minimo_aprobacion ?? 18),
+    };
+
     const nivelAprobacion = this.determinarNivelAprobacion(
-      cotizacion.total_cotizacion,
+      Number(totales.total_cotizacion),
       cotizacion.descuento_porcentaje ?? 0,
+      Number(totales.costo_total_estimado),
+      Number(totales.margen_bruto_porcentaje),
+      umbrales,
     );
 
-    // Si no requiere aprobación, cambiar directo a APROBADA_INTERNA
     if (nivelAprobacion.nivel === 'NINGUNO') {
       await this.repository.update(command.idCotizacion, {
         id_estado: 3, // APROBADA_INTERNA
+        aprobada_internamente_por: command.solicitadaPor,
+        fecha_aprobacion_interna: new Date(),
+        modificado_por: command.solicitadaPor,
       });
 
       return {
-        message: 'Cotización dentro de umbrales, aprobada automáticamente',
-        cotizacion: await this.repository.findById(command.idCotizacion),
+        message: 'Cotización dentro de políticas comerciales, aprobada automáticamente',
+        cotizacion: await this.repository.findById(command.idCotizacion, {
+          cliente: true,
+          sede: true,
+          equipo: true,
+          estado: true,
+          items_servicios: true,
+          items_componentes: true,
+          aprobaciones: true,
+        }),
         requiere_aprobacion: false,
         razon: nivelAprobacion.razon,
       };
     }
 
-    // 4. Crear solicitud aprobaciones_cotizacion
     const aprobacion = await this.prisma.aprobaciones_cotizacion.create({
       data: {
         id_cotizacion: command.idCotizacion,
@@ -76,8 +105,11 @@ export class SolicitarAprobacionHandler implements ICommandHandler<SolicitarApro
         solicitada_por: command.solicitadaPor,
         observaciones_solicitante: command.observacionesSolicitante,
         metadata: {
-          total_cotizacion: cotizacion.total_cotizacion,
+          total_cotizacion: Number(totales.total_cotizacion),
           descuento_porcentaje: cotizacion.descuento_porcentaje,
+          costo_total_estimado: Number(totales.costo_total_estimado),
+          margen_bruto_porcentaje: Number(totales.margen_bruto_porcentaje),
+          moneda: umbrales.moneda,
           notificacion_enviada: false,
         },
       },
@@ -91,52 +123,81 @@ export class SolicitarAprobacionHandler implements ICommandHandler<SolicitarApro
       },
     });
 
-    // 5. Cambiar estado → EN_REVISION (id_estado = 2)
     await this.repository.update(command.idCotizacion, {
       id_estado: 2, // EN_REVISION
+      modificado_por: command.solicitadaPor,
     });
 
-    // 6. TODO: Notificar aprobador (Fase 7)
-    // await this.notificacionesService.notificarAprobador(aprobacion)
-
     return {
-      message: 'Solicitud aprobación creada exitosamente',
-      cotizacion: await this.repository.findById(command.idCotizacion),
+      message: `Solicitud de aprobación (${nivelAprobacion.nivel}) creada exitosamente`,
+      cotizacion: await this.repository.findById(command.idCotizacion, {
+        cliente: true,
+        sede: true,
+        equipo: true,
+        estado: true,
+        items_servicios: true,
+        items_componentes: true,
+        aprobaciones: true,
+      }),
       aprobacion,
       requiere_aprobacion: true,
+      razon: nivelAprobacion.razon,
     };
   }
 
-  /**
-   * Determinar nivel aprobación según reglas negocio
-   */
   private determinarNivelAprobacion(
     total: number,
     descuento: number,
-  ): { nivel: string; razon: string } {
-    const { SUPERVISOR_TOTAL, GERENTE_TOTAL, SUPERVISOR_DESCUENTO, GERENTE_DESCUENTO } =
-      SolicitarAprobacionHandler.UMBRALES;
+    costoTotal: number,
+    margenPct: number,
+    umbrales: {
+      moneda: string;
+      simbolo: string;
+      supervisorTotal: number;
+      gerenteTotal: number;
+      supervisorDescuento: number;
+      gerenteDescuento: number;
+      margenMinimoAprobacion: number;
+    },
+  ): { nivel: 'GERENTE' | 'SUPERVISOR' | 'NINGUNO'; razon: string } {
+    const fmt = (n: number) => `${umbrales.simbolo}${n.toLocaleString('es-CO')} ${umbrales.moneda}`;
+    const razonesGerente: string[] = [];
 
-    // GERENTE: Total > $15M O Descuento > 25%
-    if (total > GERENTE_TOTAL || descuento > GERENTE_DESCUENTO) {
-      return {
-        nivel: 'GERENTE',
-        razon: `Total $${total.toLocaleString()} COP supera umbral GERENTE $${GERENTE_TOTAL.toLocaleString()} COP o descuento ${descuento}% supera límite ${GERENTE_DESCUENTO}%`,
-      };
+    if (total > umbrales.gerenteTotal) {
+      razonesGerente.push(`Total ${fmt(total)} supera umbral gerencial (${fmt(umbrales.gerenteTotal)})`);
+    }
+    if (descuento > umbrales.gerenteDescuento) {
+      razonesGerente.push(`Descuento ${descuento}% supera límite gerencial (${umbrales.gerenteDescuento}%)`);
+    }
+    if (costoTotal > 0 && margenPct < umbrales.margenMinimoAprobacion) {
+      razonesGerente.push(
+        `Margen bruto estimado (${margenPct.toFixed(1)}%) está por debajo del piso gerencial (${umbrales.margenMinimoAprobacion}%)`,
+      );
     }
 
-    // SUPERVISOR: Total > $5M O Descuento > 15%
-    if (total > SUPERVISOR_TOTAL || descuento > SUPERVISOR_DESCUENTO) {
-      return {
-        nivel: 'SUPERVISOR',
-        razon: `Total $${total.toLocaleString()} COP supera umbral SUPERVISOR $${SUPERVISOR_TOTAL.toLocaleString()} COP o descuento ${descuento}% supera límite ${SUPERVISOR_DESCUENTO}%`,
-      };
+    if (razonesGerente.length > 0) {
+      return { nivel: 'GERENTE', razon: razonesGerente.join(' · ') };
     }
 
-    // No requiere aprobación
+    const razonesSupervisor: string[] = [];
+    if (total > umbrales.supervisorTotal) {
+      razonesSupervisor.push(
+        `Total ${fmt(total)} supera umbral de supervisión (${fmt(umbrales.supervisorTotal)})`,
+      );
+    }
+    if (descuento > umbrales.supervisorDescuento) {
+      razonesSupervisor.push(
+        `Descuento ${descuento}% supera límite sin aprobación (${umbrales.supervisorDescuento}%)`,
+      );
+    }
+
+    if (razonesSupervisor.length > 0) {
+      return { nivel: 'SUPERVISOR', razon: razonesSupervisor.join(' · ') };
+    }
+
     return {
       nivel: 'NINGUNO',
-      razon: `Total $${total.toLocaleString()} COP y descuento ${descuento}% dentro de umbrales automáticos`,
+      razon: `Total ${fmt(total)}, descuento ${descuento}% y rentabilidad dentro de políticas automáticas`,
     };
   }
 }

@@ -25,7 +25,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Cpu,
+  Globe2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -37,7 +37,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ComboboxWithCreate } from '@/components/ui/combobox-with-create';
 import { HierarchicalCategorySelect } from '@/components/compras/hierarchical-category-select';
-import { AplicabilidadTiposComponenteDialog } from '@/components/compras/aplicabilidad-tipos-componente-dialog';
+import { TiposEquipoMultiSelect } from '@/components/compras/tipos-equipo-multi-select';
 
 function CatalogoComprasContent() {
   const router = useRouter();
@@ -49,7 +49,6 @@ function CatalogoComprasContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [aplicabilidadOpen, setAplicabilidadOpen] = useState(false);
 
   // Conteos globales de arquetipos para micro-contadores certificados
   const [conteoArquetipos, setConteoArquetipos] = useState({
@@ -98,6 +97,15 @@ function CatalogoComprasContent() {
     : searchParams.get('proveedor')
       ? Number(searchParams.get('proveedor'))
       : undefined;
+  const currentEquiposRaw = searchParams.get('equipos') || '';
+  const currentEquiposIds = useMemo(
+    () =>
+      currentEquiposRaw
+        .split(',')
+        .map((v) => Number(v.trim()))
+        .filter((n) => Number.isInteger(n) && n > 0),
+    [currentEquiposRaw],
+  );
 
   const [searchTerm, setSearchTerm] = useState(currentSearch);
 
@@ -116,6 +124,7 @@ function CatalogoComprasContent() {
             id_marca: currentMarca,
             id_categoria: currentCategoria,
             id_proveedor: currentProveedor,
+            tipos_equipo_ids: currentEquiposIds.length > 0 ? currentEquiposIds.join(',') : undefined,
             page: currentPage,
             limit: currentLimit,
           }),
@@ -146,6 +155,7 @@ function CatalogoComprasContent() {
       currentMarca,
       currentCategoria,
       currentProveedor,
+      currentEquiposIds,
       currentPage,
       currentLimit,
       cargarConteosGlobales,
@@ -164,6 +174,7 @@ function CatalogoComprasContent() {
     marca?: string | null;
     categoria?: string | null;
     proveedor?: string | null;
+    equipos?: string | null;
     page?: number;
     limit?: number;
   }) => {
@@ -225,6 +236,12 @@ function CatalogoComprasContent() {
       sp.delete('page');
     }
 
+    if (params.equipos !== undefined) {
+      if (params.equipos) sp.set('equipos', params.equipos);
+      else sp.delete('equipos');
+      sp.delete('page');
+    }
+
     router.replace(`/compras/catalogo?${sp.toString()}`, { scroll: false });
   };
 
@@ -272,17 +289,9 @@ function CatalogoComprasContent() {
           </Button>
 
           <Button
-            variant="outline"
-            onClick={() => setAplicabilidadOpen(true)}
-            className="h-10 text-xs"
-          >
-            <Cpu className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
-            Aplicabilidad por Equipos
-          </Button>
-
-          <Button
             asChild
-            className="h-10 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm"
+            style={{ backgroundColor: 'var(--org-primary, #1E40AF)' }}
+            className="h-10 text-white hover:opacity-90 font-semibold text-xs shadow-sm"
           >
             <Link href="/compras/catalogo/nuevo">
               <Plus className="mr-1.5 h-4 w-4" />+ Nuevo Recurso / Artículo
@@ -290,11 +299,6 @@ function CatalogoComprasContent() {
           </Button>
         </div>
       </div>
-
-      <AplicabilidadTiposComponenteDialog
-        open={aplicabilidadOpen}
-        onOpenChange={setAplicabilidadOpen}
-      />
 
       {/* METRICAS FLASH */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -403,7 +407,7 @@ function CatalogoComprasContent() {
       <div className="space-y-2">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12 items-center">
           {/* Búsqueda por texto */}
-          <div className="relative lg:col-span-5">
+          <div className="relative lg:col-span-4">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <Input
               placeholder="Buscar por SKU, referencia, nombre o marca..."
@@ -430,7 +434,7 @@ function CatalogoComprasContent() {
           </div>
 
           {/* Filtro por Categoría Taxonómica Jerárquica */}
-          <div className="lg:col-span-4">
+          <div className="lg:col-span-3">
             <HierarchicalCategorySelect
               value={currentCategoria}
               onChange={(idCat) => actualizarFiltro({ categoria: idCat ? String(idCat) : '' })}
@@ -440,12 +444,27 @@ function CatalogoComprasContent() {
             />
           </div>
 
-          {/* Filtro por Marca Normalizada */}
+          {/* Filtro Multi-Check por Tipos de Equipo */}
           <div className="lg:col-span-3">
+            <TiposEquipoMultiSelect
+              compact
+              aplicaTodos={currentEquiposIds.length === 0}
+              selectedIds={currentEquiposIds}
+              placeholderUniversal="Todos los tipos de equipo"
+              onChange={({ aplicaTodos, selectedIds }) =>
+                actualizarFiltro({
+                  equipos: aplicaTodos || selectedIds.length === 0 ? '' : selectedIds.join(','),
+                })
+              }
+            />
+          </div>
+
+          {/* Filtro por Marca Normalizada */}
+          <div className="lg:col-span-2">
             <ComboboxWithCreate
               value={currentMarca}
               onChange={(idMarca) => actualizarFiltro({ marca: idMarca ? String(idMarca) : '' })}
-              placeholder="Filtrar por marca..."
+              placeholder="Marca..."
             />
           </div>
         </div>
@@ -455,7 +474,8 @@ function CatalogoComprasContent() {
           currentSearch ||
           currentMarca ||
           currentCategoria ||
-          currentProveedor) && (
+          currentProveedor ||
+          currentEquiposIds.length > 0) && (
           <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-gray-500">
             <span className="font-medium text-gray-600">Filtros aplicados:</span>
             {currentSearch && (
@@ -502,6 +522,21 @@ function CatalogoComprasContent() {
                 </button>
               </Badge>
             )}
+            {currentEquiposIds.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="text-[11px] gap-1 bg-indigo-50 text-indigo-800 border-indigo-200"
+              >
+                Equipos: {currentEquiposIds.length} tipo(s)
+                <button
+                  onClick={() => actualizarFiltro({ equipos: '' })}
+                  className="hover:text-red-600 ml-1 cursor-pointer"
+                  title="Quitar filtro de tipos de equipo"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
             {currentMarca && (
               <Badge
                 variant="secondary"
@@ -527,6 +562,7 @@ function CatalogoComprasContent() {
                   marca: '',
                   categoria: '',
                   proveedor: '',
+                  equipos: '',
                 });
               }}
               className="text-xs text-blue-600 hover:text-blue-800 underline font-medium ml-2 cursor-pointer"
@@ -633,6 +669,44 @@ function CatalogoComprasContent() {
                               <span className="text-[9px] text-gray-400 font-mono hidden md:inline truncate">
                                 ({art.categorias_componente.ruta_jerarquica})
                               </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {art.aplica_todos_tipos !== false ||
+                            !art.tipos_equipo ||
+                            art.tipos_equipo.length === 0 ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[9px] font-semibold">
+                                <Globe2 className="h-2.5 w-2.5" />
+                                Todos los equipos
+                              </span>
+                            ) : (
+                              <>
+                                {art.tipos_equipo.slice(0, 3).map((te) => (
+                                  <span
+                                    key={te.id_tipo_equipo}
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[9px] font-mono font-semibold"
+                                    title={te.nombre_tipo}
+                                  >
+                                    {te.codigo_tipo}
+                                  </span>
+                                ))}
+                                {art.tipos_equipo.length > 3 && (
+                                  <span className="text-[9px] font-semibold text-slate-400">
+                                    +{art.tipos_equipo.length - 3}
+                                  </span>
+                                )}
+                                {art.modulos_tecnicos && art.modulos_tecnicos.length > 0 && (
+                                  <span
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/80 text-[9px] font-semibold"
+                                    title={art.modulos_tecnicos.map((m) => m.nombre_modulo).join(', ')}
+                                  >
+                                    {art.modulos_tecnicos[0].nombre_modulo}
+                                    {art.modulos_tecnicos.length > 1
+                                      ? ` +${art.modulos_tecnicos.length - 1}`
+                                      : ''}
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>

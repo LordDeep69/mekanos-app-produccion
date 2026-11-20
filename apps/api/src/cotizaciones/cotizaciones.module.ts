@@ -2,14 +2,17 @@ import { DatabaseModule } from '@mekanos/database';
 import { Module, forwardRef } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 
-// Controller
+// Controllers (PlantillasController ANTES de CotizacionesController para prioridad de ruta estática)
 import { CotizacionesController } from './cotizaciones.controller';
+import { PlantillasCotizacionController } from './plantillas/plantillas-cotizacion.controller';
 
 // Repository
 import { PrismaCotizacionesRepository } from './infrastructure/prisma-cotizaciones.repository';
 
 // Services
+import { PlantillasCotizacionService } from './plantillas/plantillas-cotizacion.service';
 import { CotizacionCalculoService } from './services/cotizacion-calculo.service';
+import { CotizacionesCpqService } from './services/cotizaciones-cpq.service';
 
 // Módulos externos necesarios para envío de cotización
 import { EmailModule } from '../email/email.module';
@@ -29,7 +32,7 @@ import { GetAprobacionesPendientesHandler } from './application/queries/get-apro
 import { GetCotizacionByIdHandler } from './application/queries/get-cotizacion-by-id.handler';
 import { GetCotizacionesHandler } from './application/queries/get-cotizaciones.handler';
 
-// FASE 4.8: Versiones Cotización
+// Versiones Cotización
 import { CreateVersionHandler } from './commands/versiones/create-version.handler';
 import { GetVersionDetalleHandler } from './queries/versiones/get-version-detalle.handler';
 import { GetVersionesHandler } from './queries/versiones/get-versiones.handler';
@@ -42,27 +45,29 @@ const CommandHandlers = [
   RechazarCotizacionHandler,
   SolicitarAprobacionHandler,
   ProcesarAprobacionHandler,
-  CreateVersionHandler, // FASE 4.8
+  CreateVersionHandler,
 ];
 
 const QueryHandlers = [
   GetCotizacionByIdHandler,
   GetCotizacionesHandler,
   GetAprobacionesPendientesHandler,
-  GetVersionesHandler, // FASE 4.8
-  GetVersionDetalleHandler, // FASE 4.8
+  GetVersionesHandler,
+  GetVersionDetalleHandler,
 ];
 
 @Module({
   imports: [
-    CqrsModule, 
+    CqrsModule,
     DatabaseModule,
-    forwardRef(() => PdfModule),    // Para generar PDF de cotización
-    forwardRef(() => EmailModule),  // Para enviar email con cotización
+    forwardRef(() => PdfModule),
+    forwardRef(() => EmailModule),
   ],
-  controllers: [CotizacionesController],
+  controllers: [PlantillasCotizacionController, CotizacionesController],
   providers: [
-    CotizacionCalculoService, // FASE 4 - Cálculo automático totales
+    CotizacionCalculoService,
+    CotizacionesCpqService,
+    PlantillasCotizacionService,
     {
       provide: 'CotizacionesRepository',
       useClass: PrismaCotizacionesRepository,
@@ -70,6 +75,11 @@ const QueryHandlers = [
     ...CommandHandlers,
     ...QueryHandlers,
   ],
-  exports: ['CotizacionesRepository', CotizacionCalculoService],
+  exports: [
+    'CotizacionesRepository',
+    CotizacionCalculoService,
+    CotizacionesCpqService,
+    PlantillasCotizacionService,
+  ],
 })
 export class CotizacionesModule {}

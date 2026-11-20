@@ -53,6 +53,8 @@ export const comprasService = {
     if (filtros.marca) params.append('marca', filtros.marca);
     if (filtros.id_marca) params.append('id_marca', String(filtros.id_marca));
     if (filtros.id_categoria) params.append('id_categoria', String(filtros.id_categoria));
+    if (filtros.id_tipo_equipo) params.append('id_tipo_equipo', String(filtros.id_tipo_equipo));
+    if (filtros.tipos_equipo_ids) params.append('tipos_equipo_ids', filtros.tipos_equipo_ids);
     if (filtros.codigo_unidad_medida)
       params.append('codigo_unidad_medida', filtros.codigo_unidad_medida);
     if (filtros.es_comprable !== undefined)

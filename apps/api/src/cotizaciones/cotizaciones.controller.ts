@@ -1,22 +1,24 @@
 import {
-    Body,
-    Controller,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import {
-    ApiBearerAuth,
-    ApiOperation,
-    ApiQuery,
-    ApiResponse,
-    ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AprobarCotizacionCommand } from './application/commands/aprobar-cotizacion.command';
 import { CreateCotizacionCommand } from './application/commands/create-cotizacion.command';
@@ -34,30 +36,38 @@ import { GetAprobacionesPendientesQuery } from './application/queries/get-aproba
 import { GetCotizacionByIdQuery } from './application/queries/get-cotizacion-by-id.query';
 import { GetCotizacionesQuery } from './application/queries/get-cotizaciones.query';
 import { CreateVersionCommand } from './commands/versiones/create-version.command';
+import {
+  ConvertirCotizacionOrdenDto,
+  CreateItemOtroDto,
+  GuardarStudioCompletoDto,
+  ReabrirBorradorDto,
+  SyncEquiposCotizacionDto,
+  UpdateItemOtroDto,
+} from './dto/cpq-studio.dto';
 import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { CreateVersionDto } from './dto/versiones/create-version.dto';
+import {
+  AplicarPlantillaDto,
+  GuardarComoPlantillaDto,
+  ImportarBomModeloDto,
+} from './plantillas/plantillas-cotizacion.dto';
+import { PlantillasCotizacionService } from './plantillas/plantillas-cotizacion.service';
 import { GetVersionDetalleQuery } from './queries/versiones/get-version-detalle.query';
 import { GetVersionesQuery } from './queries/versiones/get-versiones.query';
 import { CotizacionCalculoService } from './services/cotizacion-calculo.service';
+import { CotizacionesCpqService } from './services/cotizaciones-cpq.service';
+
+interface AuthUser {
+  id: number;
+  idEmpleado?: number | null;
+}
 
 /**
- * COTIZACIONES CONTROLLER
- * 
- * Endpoints:
- * POST   /cotizaciones                  - Crear cotización
- * GET    /cotizaciones/:id              - Obtener cotización por ID
- * PUT    /cotizaciones/:id              - Actualizar cotización (solo BORRADOR)
- * GET    /cotizaciones                  - Listar cotizaciones con filtros
- * PUT    /cotizaciones/:id/enviar       - Enviar cotización a cliente (APROBADA_INTERNA → ENVIADA)
- * PUT    /cotizaciones/:id/aprobar      - Aprobar cotización cliente (ENVIADA → APROBADA_CLIENTE)
- * PUT    /cotizaciones/:id/rechazar     - Rechazar cotización (ENVIADA → RECHAZADA)
- * POST   /cotizaciones/:id/solicitar-aprobacion - Solicitar aprobación interna (BORRADOR → EN_REVISION)
- * GET    /cotizaciones/aprobaciones/pendientes - Listar aprobaciones pendientes
- * PUT    /cotizaciones/aprobaciones/:id        - Procesar aprobación (APROBAR/RECHAZAR)
- * POST   /cotizaciones/:id/versiones           - Crear versión snapshot cotización (auditoría)
- * GET    /cotizaciones/:id/versiones           - Listar versiones históricas cotización
- * GET    /cotizaciones/versiones/:idVersion    - Obtener detalle versión específica (JSONB completo)
+ * COTIZACIONES CONTROLLER (Hub Comercial EAM-CPQ)
+ *
+ * IMPORTANTE: Todas las rutas estáticas (`sugerencias`, `aprobaciones/*`, `versiones/*`)
+ * están declaradas ANTES de las rutas paramétricas `:id` para evitar colisiones de enrutamiento.
  */
 @ApiTags('Cotizaciones')
 @ApiBearerAuth()
@@ -68,13 +78,75 @@ export class CotizacionesController {
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
     private readonly calculoService: CotizacionCalculoService,
+    private readonly cpqService: CotizacionesCpqService,
+    private readonly plantillasService: PlantillasCotizacionService,
   ) {}
+
+  // ==================== RUTAS ESTÁTICAS (SIEMPRE ANTES DE :id) ====================
+
+  @Get('sugerencias')
+  @ApiOperation({
+    summary: 'Smart Match CPQ: detecta equipos gemelos OEM, plantillas sugeridas, BOM y recursos compatibles',
+  })
+  @ApiQuery({ name: 'equiposIds', required: false, description: 'IDs separados por coma (ej. 12,13,14)' })
+  @ApiQuery({ name: 'tipoCotizacion', required: false })
+  async obtenerSugerencias(
+    @Query('equiposIds') equiposIdsRaw?: string,
+    @Query('tipoCotizacion') tipoCotizacion?: string,
+  ) {
+    const ids = (equiposIdsRaw || '')
+      .split(',')
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => Number.isInteger(n) && n > 0);
+    return this.cpqService.obtenerSugerenciasContextuales(ids, tipoCotizacion);
+  }
+
+  @Get('aprobaciones/pendientes')
+  @ApiOperation({ summary: 'Listar aprobaciones pendientes (Dashboard supervisor/gerente)' })
+  @ApiQuery({ name: 'nivelAprobacion', required: false, enum: ['SUPERVISOR', 'GERENTE'] })
+  @ApiQuery({ name: 'skip', required: false, type: Number, example: 0 })
+  @ApiQuery({ name: 'take', required: false, type: Number, example: 50 })
+  async listarAprobacionesPendientes(
+    @Query('nivelAprobacion') nivelAprobacion?: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+  ) {
+    const query = new GetAprobacionesPendientesQuery(
+      nivelAprobacion,
+      skip ? parseInt(skip, 10) : 0,
+      take ? parseInt(take, 10) : 50,
+    );
+    return await this.queryBus.execute(query);
+  }
+
+  @Put('aprobaciones/:id')
+  @ApiOperation({ summary: 'Procesar aprobación interna (APROBAR/RECHAZAR)' })
+  async procesarAprobacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ProcesarAprobacionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const command = new ProcesarAprobacionCommand(
+      id,
+      dto.decision,
+      user.id,
+      dto.observaciones_aprobador,
+    );
+    return await this.commandBus.execute(command);
+  }
+
+  @Get('versiones/:idVersion')
+  @ApiOperation({ summary: 'Obtener detalle completo de una versión histórica (JSONB completo)' })
+  async obtenerVersionDetalle(@Param('idVersion', ParseIntPipe) idVersion: number) {
+    return await this.queryBus.execute(new GetVersionDetalleQuery(idVersion));
+  }
+
+  // ==================== CRUD CORE ====================
 
   @Post()
   @ApiOperation({ summary: 'Crear nueva cotización en estado BORRADOR' })
   @ApiResponse({ status: 201, description: 'Cotización creada exitosamente' })
-  @ApiResponse({ status: 400, description: 'Datos inválidos' })
-  async create(@Body() dto: CreateCotizacionDto) {
+  async create(@Body() dto: CreateCotizacionDto, @CurrentUser() user: AuthUser) {
     const command = new CreateCotizacionCommand(
       dto.id_cliente,
       new Date(dto.fecha_cotizacion),
@@ -93,57 +165,85 @@ export class CotizacionesController {
       dto.terminos_condiciones,
       dto.meses_garantia,
       dto.observaciones_garantia,
+      {
+        equipos_ids: dto.equipos_ids,
+        tipo_cotizacion: dto.tipo_cotizacion,
+        id_plantilla_origen: dto.id_plantilla_origen,
+        id_propuesta_origen: dto.id_propuesta_origen,
+        moneda: dto.moneda,
+        usa_aiu: dto.usa_aiu,
+        aiu_admin_porcentaje: dto.aiu_admin_porcentaje,
+        aiu_imprevistos_porcentaje: dto.aiu_imprevistos_porcentaje,
+        aiu_utilidad_porcentaje: dto.aiu_utilidad_porcentaje,
+        iva_sobre_utilidad_aiu: dto.iva_sobre_utilidad_aiu,
+        modo_agrupacion_pdf: dto.modo_agrupacion_pdf,
+        user_id: user.id,
+        user_empleado_id: user.idEmpleado,
+      },
     );
 
     return await this.commandBus.execute(command);
   }
 
+  @Get()
+  @ApiOperation({ summary: 'Listar cotizaciones con filtros' })
+  @ApiQuery({ name: 'clienteId', required: false, type: Number })
+  @ApiQuery({ name: 'estadoId', required: false, type: Number })
+  @ApiQuery({ name: 'skip', required: false, type: Number, example: 0 })
+  @ApiQuery({ name: 'take', required: false, type: Number, example: 50 })
+  async findAll(
+    @Query('clienteId') clienteId?: string,
+    @Query('estadoId') estadoId?: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+  ) {
+    const query = new GetCotizacionesQuery(
+      clienteId ? parseInt(clienteId, 10) : undefined,
+      undefined,
+      estadoId ? parseInt(estadoId, 10) : undefined,
+      undefined,
+      undefined,
+      undefined,
+      skip ? parseInt(skip, 10) : 0,
+      take ? parseInt(take, 10) : 50,
+    );
+
+    return await this.queryBus.execute(query);
+  }
+
   @Get(':id')
-  @ApiOperation({ summary: 'Obtener cotización por ID con relaciones' })
-  @ApiResponse({ status: 200, description: 'Cotización encontrada' })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
-  @ApiQuery({
-    name: 'includeCliente',
-    required: false,
-    type: Boolean,
-    description: 'Incluir datos del cliente',
-  })
-  @ApiQuery({
-    name: 'includeItems',
-    required: false,
-    type: Boolean,
-    description: 'Incluir items de servicios y componentes',
-  })
+  @ApiOperation({ summary: 'Obtener cotización por ID con relaciones completas CPQ' })
+  @ApiQuery({ name: 'includeCliente', required: false, type: Boolean })
+  @ApiQuery({ name: 'includeItems', required: false, type: Boolean })
   async findById(
     @Param('id', ParseIntPipe) id: number,
     @Query('includeCliente') includeCliente?: string,
     @Query('includeItems') includeItems?: string,
   ) {
     const query = new GetCotizacionByIdQuery(id, {
-      cliente: includeCliente === 'true',
-      sede: includeCliente === 'true',
-      equipo: includeCliente === 'true',
+      cliente: includeCliente !== 'false',
+      sede: includeCliente !== 'false',
+      equipo: true,
       estado: true,
-      items_servicios: includeItems === 'true',
-      items_componentes: includeItems === 'true',
+      items_servicios: includeItems !== 'false',
+      items_componentes: includeItems !== 'false',
       aprobaciones: true,
+      historial_envios: includeItems === 'true',
     });
 
     return await this.queryBus.execute(query);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Actualizar cotización (solo BORRADOR)' })
-  @ApiResponse({ status: 200, description: 'Cotización actualizada' })
-  @ApiResponse({ status: 400, description: 'Cotización no puede ser modificada' })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  @ApiOperation({ summary: 'Actualizar cabecera de cotización (solo BORRADOR)' })
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateCotizacionDto,
+    @CurrentUser() user: AuthUser,
   ) {
     const command = new UpdateCotizacionCommand(
       id,
-      dto.modificado_por || 1, // TODO: Obtener de JWT token
+      user.id,
       dto.id_sede,
       dto.id_equipo,
       dto.fecha_vencimiento ? new Date(dto.fecha_vencimiento) : undefined,
@@ -158,181 +258,226 @@ export class CotizacionesController {
       dto.terminos_condiciones,
       dto.meses_garantia,
       dto.observaciones_garantia,
+      {
+        equipos_ids: dto.equipos_ids,
+        tipo_cotizacion: dto.tipo_cotizacion,
+        moneda: dto.moneda,
+        fecha_cotizacion: dto.fecha_cotizacion ? new Date(dto.fecha_cotizacion) : undefined,
+        usa_aiu: dto.usa_aiu,
+        aiu_admin_porcentaje: dto.aiu_admin_porcentaje,
+        aiu_imprevistos_porcentaje: dto.aiu_imprevistos_porcentaje,
+        aiu_utilidad_porcentaje: dto.aiu_utilidad_porcentaje,
+        iva_sobre_utilidad_aiu: dto.iva_sobre_utilidad_aiu,
+        modo_agrupacion_pdf: dto.modo_agrupacion_pdf,
+      },
     );
 
     return await this.commandBus.execute(command);
   }
 
-  @Get()
-  @ApiOperation({ summary: 'Listar cotizaciones con filtros' })
-  @ApiResponse({ status: 200, description: 'Listado de cotizaciones' })
-  @ApiQuery({ name: 'clienteId', required: false, type: Number })
-  @ApiQuery({ name: 'estadoId', required: false, type: Number })
-  @ApiQuery({ name: 'skip', required: false, type: Number, example: 0 })
-  @ApiQuery({ name: 'take', required: false, type: Number, example: 50 })
-  async findAll(
-    @Query('clienteId') clienteId?: string,
-    @Query('estadoId') estadoId?: string,
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
-  ) {
-    const query = new GetCotizacionesQuery(
-      clienteId ? parseInt(clienteId) : undefined,
-      undefined,
-      estadoId ? parseInt(estadoId) : undefined,
-      undefined,
-      undefined,
-      undefined,
-      skip ? parseInt(skip) : 0,
-      take ? parseInt(take) : 50,
-    );
+  // ==================== STUDIO CPQ ATÓMICO, EQUIPOS N:M Y OTROS RUBROS ====================
 
-    return await this.queryBus.execute(query);
+  @Put(':id/studio')
+  @ApiOperation({
+    summary: 'Guardado atómico completo del Studio CPQ (cabecera + equipos + servicios + repuestos + otros rubros + recálculo)',
+  })
+  async guardarStudio(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: GuardarStudioCompletoDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.cpqService.guardarStudioCompleto(id, dto, user.id);
   }
 
-  // ==================== FASE 4.6 - CAMBIO ESTADOS COTIZACION ====================
+  @Put(':id/equipos')
+  @ApiOperation({ summary: 'Sincronizar equipos N:M asociados a la cotización' })
+  async syncEquipos(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SyncEquiposCotizacionDto,
+  ) {
+    return this.cpqService.syncEquipos(id, dto);
+  }
+
+  @Get(':id/otros')
+  @ApiOperation({ summary: 'Listar otros rubros (Transporte, Viáticos, Pólizas, Disposición, etc.)' })
+  async listarOtros(@Param('id', ParseIntPipe) id: number) {
+    return this.cpqService.listarItemsOtros(id);
+  }
+
+  @Post(':id/otros')
+  @ApiOperation({ summary: 'Agregar rubro de logística, viáticos, póliza u otro costo' })
+  async crearOtro(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateItemOtroDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.cpqService.crearItemOtro(id, dto, user.id);
+  }
+
+  @Put(':id/otros/:idItem')
+  @ApiOperation({ summary: 'Actualizar rubro de logística/viáticos/póliza' })
+  async actualizarOtro(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idItem', ParseIntPipe) idItem: number,
+    @Body() dto: UpdateItemOtroDto,
+  ) {
+    return this.cpqService.actualizarItemOtro(id, idItem, dto);
+  }
+
+  @Delete(':id/otros/:idItem')
+  @ApiOperation({ summary: 'Eliminar rubro de logística/viáticos/póliza' })
+  async eliminarOtro(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idItem', ParseIntPipe) idItem: number,
+  ) {
+    return this.cpqService.eliminarItemOtro(id, idItem);
+  }
+
+  // ==================== PLANTILLAS & BOM OEM EN COTIZACIÓN ====================
+
+  @Post(':id/aplicar-plantilla/:idPlantilla')
+  @ApiOperation({ summary: 'Aplicar plantilla estándar CPQ con auto-escalado N equipos y precios vivos' })
+  async aplicarPlantilla(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idPlantilla', ParseIntPipe) idPlantilla: number,
+    @Body() dto: AplicarPlantillaDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.plantillasService.aplicarPlantilla(id, idPlantilla, dto || {}, user.id);
+  }
+
+  @Post(':id/importar-bom/:idModelo')
+  @ApiOperation({ summary: 'Importar Kit BOM OEM de un modelo de equipo multiplicado por equipos gemelos' })
+  async importarBom(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idModelo', ParseIntPipe) idModelo: number,
+    @Body() dto: ImportarBomModeloDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.plantillasService.importarBomModelo(id, idModelo, dto || {}, user.id);
+  }
+
+  @Post(':id/guardar-como-plantilla')
+  @ApiOperation({ summary: 'Guardar esta cotización como una nueva plantilla estándar reutilizable' })
+  async guardarComoPlantilla(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: GuardarComoPlantillaDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.plantillasService.guardarCotizacionComoPlantilla(id, dto, user.id);
+  }
+
+  // ==================== WORKFLOW COMERCIAL & VERSIONADO & Q2O ====================
+
+  @Post(':id/duplicar')
+  @ApiOperation({ summary: 'Clonar cotización completa a un nuevo borrador consecutivo' })
+  async duplicar(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.cpqService.duplicarCotizacion(id, user.id, user.idEmpleado);
+  }
+
+  @Post(':id/reabrir-borrador')
+  @ApiOperation({ summary: 'Archivar snapshot de versión y reabrir cotización a BORRADOR para renegociar' })
+  async reabrirBorrador(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReabrirBorradorDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.cpqService.reabrirBorrador(id, dto?.motivo_cambio, user.id);
+  }
+
+  @Post(':id/solicitar-aprobacion')
+  @ApiOperation({ summary: 'Solicitar aprobación interna según políticas dinámicas (BORRADOR → EN_REVISION / APROBADA_INTERNA)' })
+  async solicitarAprobacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SolicitarAprobacionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const command = new SolicitarAprobacionCommand(
+      id,
+      dto.observaciones_solicitante,
+      user.id,
+    );
+    return await this.commandBus.execute(command);
+  }
 
   @Put(':id/enviar')
-  @ApiOperation({ summary: 'Enviar cotización a cliente (APROBADA_INTERNA → ENVIADA)' })
-  @ApiResponse({ status: 200, description: 'Cotización enviada exitosamente' })
-  @ApiResponse({ status: 400, description: 'Estado actual no permite envío' })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  @ApiOperation({ summary: 'Enviar cotización a cliente con PDF corporativo (APROBADA_INTERNA → ENVIADA)' })
   async enviar(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: EnviarCotizacionDto,
+    @CurrentUser() user: AuthUser,
   ) {
     const command = new EnviarCotizacionCommand(
       id,
       dto.destinatario_email,
       dto.destinatario_nombre,
       dto.emails_copia || [],
-      1, // TODO: Obtener enviadoPor de JWT token
+      user.id,
     );
-
     return await this.commandBus.execute(command);
   }
 
   @Put(':id/aprobar')
-  @ApiOperation({ summary: 'Aprobar cotización cliente (ENVIADA → APROBADA_CLIENTE)' })
-  @ApiResponse({ status: 200, description: 'Cotización aprobada exitosamente' })
-  @ApiResponse({ status: 400, description: 'Estado actual no permite aprobación' })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  @ApiOperation({ summary: 'Registrar aprobación del cliente y orden de compra PO (ENVIADA → APROBADA_CLIENTE)' })
   async aprobar(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AprobarCotizacionDto,
+    @CurrentUser() user: AuthUser,
   ) {
     const command = new AprobarCotizacionCommand(
       id,
-      1, // TODO: Obtener aprobadoPor de JWT token
+      user.id,
       dto.observaciones,
+      dto.orden_compra_cliente,
     );
-
     return await this.commandBus.execute(command);
   }
 
   @Put(':id/rechazar')
-  @ApiOperation({ summary: 'Rechazar cotización (ENVIADA → RECHAZADA)' })
-  @ApiResponse({ status: 200, description: 'Cotización rechazada exitosamente' })
-  @ApiResponse({ status: 400, description: 'Estado actual no permite rechazo' })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  @ApiOperation({ summary: 'Registrar rechazo del cliente con motivo (ENVIADA → RECHAZADA)' })
   async rechazar(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RechazarCotizacionDto,
+    @CurrentUser() user: AuthUser,
   ) {
     const command = new RechazarCotizacionCommand(
       id,
       dto.id_motivo_rechazo,
       dto.observaciones_rechazo,
-      1, // TODO: Obtener rechazadoPor de JWT token
+      user.id,
     );
-
     return await this.commandBus.execute(command);
   }
 
-  // ==================== FASE 4.7 - APROBACIONES INTERNAS ====================
-
-  @Post(':id/solicitar-aprobacion')
-  @ApiOperation({ summary: 'Solicitar aprobación interna (BORRADOR → EN_REVISION)' })
-  @ApiResponse({ status: 200, description: 'Aprobación solicitada exitosamente' })
-  @ApiResponse({ status: 400, description: 'Estado actual no permite solicitar aprobación' })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
-  async solicitarAprobacion(
+  @Post(':id/convertir-a-orden')
+  @ApiOperation({
+    summary: 'Quote-to-Order: convertir cotización APROBADA_CLIENTE en Orden de Servicio multi-equipo con diagnóstico WMS',
+  })
+  async convertirAOrden(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: SolicitarAprobacionDto,
+    @Body() dto: ConvertirCotizacionOrdenDto,
+    @CurrentUser() user: AuthUser,
   ) {
-    const command = new SolicitarAprobacionCommand(
-      id,
-      dto.observaciones_solicitante,
-      1, // TODO: Obtener solicitadaPor de JWT token
-    );
-
-    return await this.commandBus.execute(command);
+    return this.cpqService.convertirAOrdenServicio(id, dto || {}, user.id);
   }
-
-  @Get('aprobaciones/pendientes')
-  @ApiOperation({ summary: 'Listar aprobaciones pendientes (Dashboard supervisor/gerente)' })
-  @ApiResponse({ status: 200, description: 'Listado de aprobaciones pendientes' })
-  @ApiQuery({ name: 'nivelAprobacion', required: false, enum: ['SUPERVISOR', 'GERENTE'] })
-  @ApiQuery({ name: 'skip', required: false, type: Number, example: 0 })
-  @ApiQuery({ name: 'take', required: false, type: Number, example: 50 })
-  async listarAprobacionesPendientes(
-    @Query('nivelAprobacion') nivelAprobacion?: string,
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
-  ) {
-    const query = new GetAprobacionesPendientesQuery(
-      nivelAprobacion,
-      skip ? parseInt(skip) : 0,
-      take ? parseInt(take) : 50,
-    );
-
-    return await this.queryBus.execute(query);
-  }
-
-  @Put('aprobaciones/:id')
-  @ApiOperation({ summary: 'Procesar aprobación interna (APROBAR/RECHAZAR)' })
-  @ApiResponse({ status: 200, description: 'Aprobación procesada exitosamente' })
-  @ApiResponse({ status: 400, description: 'Aprobación ya procesada' })
-  @ApiResponse({ status: 404, description: 'Aprobación no encontrada' })
-  async procesarAprobacion(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ProcesarAprobacionDto,
-  ) {
-    const command = new ProcesarAprobacionCommand(
-      id,
-      dto.decision,
-      1, // TODO: Obtener aprobadaPor de JWT token
-      dto.observaciones_aprobador,
-    );
-
-    return await this.commandBus.execute(command);
-  }
-
-  /**
-   * FASE 4.8: VERSIONES COTIZACIÓN
-   */
 
   @Post(':id/versiones')
-  @ApiOperation({ summary: 'Crear snapshot versión cotización (auditoría cambios)' })
-  @ApiResponse({ status: 201, description: 'Versión creada exitosamente' })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  @ApiOperation({ summary: 'Crear snapshot manual de versión de cotización (auditoría cambios)' })
   async crearVersion(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CreateVersionDto,
+    @CurrentUser() user: AuthUser,
   ) {
     const command = new CreateVersionCommand(
       id,
       dto.motivo_cambio,
-      dto.creada_por, // TODO: Obtener de JWT token
+      user.id ?? dto.creada_por,
     );
-
     return await this.commandBus.execute(command);
   }
 
   @Get(':id/versiones')
-  @ApiOperation({ summary: 'Listar versiones históricas cotización (más reciente primero)' })
-  @ApiResponse({ status: 200, description: 'Listado versiones' })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  @ApiOperation({ summary: 'Listar versiones históricas de la cotización' })
   @ApiQuery({ name: 'skip', required: false, type: Number, example: 0 })
   @ApiQuery({ name: 'take', required: false, type: Number, example: 50 })
   async listarVersiones(
@@ -340,80 +485,49 @@ export class CotizacionesController {
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ) {
-    const query = new GetVersionesQuery(
-      id,
-      skip ? parseInt(skip) : 0,
-      take ? parseInt(take) : 50,
+    return await this.queryBus.execute(
+      new GetVersionesQuery(id, skip ? parseInt(skip, 10) : 0, take ? parseInt(take, 10) : 50),
     );
-
-    return await this.queryBus.execute(query);
   }
 
-  @Get('versiones/:idVersion')
-  @ApiOperation({ summary: 'Obtener detalle completo versión específica (incluye JSONB datos + items)' })
-  @ApiResponse({ status: 200, description: 'Detalle versión con snapshot completo' })
-  @ApiResponse({ status: 404, description: 'Versión no encontrada' })
-  async obtenerVersionDetalle(
-    @Param('idVersion', ParseIntPipe) idVersion: number,
-  ) {
-    const query = new GetVersionDetalleQuery(idVersion);
-
-    return await this.queryBus.execute(query);
-  }
-
-  // ==================== FASE 4 - CALCULO AUTOMATICO TOTALES ====================
+  // ==================== MOTOR FINANCIERO ====================
 
   @Post(':id/recalcular')
-  @ApiOperation({ 
-    summary: 'Recalcular todos los totales de la cotización',
-    description: 'Recalcula subtotales de items, descuentos, IVA y total. Actualiza la BD automáticamente.'
+  @ApiOperation({
+    summary: 'Recalcular todos los totales, AIU, IVA y rentabilidad privada de la cotización',
   })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Totales recalculados exitosamente',
-    schema: {
-      properties: {
-        subtotal_servicios: { type: 'string', example: '1500000.00' },
-        subtotal_componentes: { type: 'string', example: '500000.00' },
-        subtotal_general: { type: 'string', example: '2000000.00' },
-        descuento_valor: { type: 'string', example: '200000.00' },
-        subtotal_con_descuento: { type: 'string', example: '1800000.00' },
-        iva_valor: { type: 'string', example: '342000.00' },
-        total_cotizacion: { type: 'string', example: '2142000.00' },
-        cantidad_items_servicios: { type: 'number', example: 3 },
-        cantidad_items_componentes: { type: 'number', example: 5 },
-      }
-    }
-  })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
-  async recalcularTotales(
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  async recalcularTotales(@Param('id', ParseIntPipe) id: number) {
     const result = await this.calculoService.recalcularTotales(id);
     return {
       message: 'Totales recalculados exitosamente',
-      ...result,
-      // Convertir Decimal a string para serialización JSON
       subtotal_servicios: result.subtotal_servicios.toString(),
       subtotal_componentes: result.subtotal_componentes.toString(),
+      subtotal_otros: result.subtotal_otros.toString(),
       subtotal_general: result.subtotal_general.toString(),
+      subtotal_opcionales: result.subtotal_opcionales.toString(),
       descuento_valor: result.descuento_valor.toString(),
       subtotal_con_descuento: result.subtotal_con_descuento.toString(),
+      usa_aiu: result.usa_aiu,
+      aiu_admin_valor: result.aiu_admin_valor.toString(),
+      aiu_imprevistos_valor: result.aiu_imprevistos_valor.toString(),
+      aiu_utilidad_valor: result.aiu_utilidad_valor.toString(),
+      aiu_valor_total: result.aiu_valor_total.toString(),
+      iva_sobre_utilidad_aiu: result.iva_sobre_utilidad_aiu,
+      iva_porcentaje: result.iva_porcentaje.toString(),
       iva_valor: result.iva_valor.toString(),
       total_cotizacion: result.total_cotizacion.toString(),
+      costo_total_estimado: result.costo_total_estimado.toString(),
+      utilidad_bruta_estimada: result.utilidad_bruta_estimada.toString(),
+      margen_bruto_porcentaje: result.margen_bruto_porcentaje.toString(),
+      cantidad_items_servicios: result.cantidad_items_servicios,
+      cantidad_items_componentes: result.cantidad_items_componentes,
+      cantidad_items_otros: result.cantidad_items_otros,
     };
   }
 
   @Get(':id/totales')
-  @ApiOperation({ 
-    summary: 'Obtener totales actuales de la cotización (sin recalcular)',
-    description: 'Retorna los valores guardados en BD. Use POST /recalcular para actualizar.'
-  })
-  @ApiResponse({ status: 200, description: 'Totales actuales' })
-  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
-  async obtenerTotales(
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  @ApiOperation({ summary: 'Obtener totales actuales de la cotización (sin recalcular)' })
+  async obtenerTotales(@Param('id', ParseIntPipe) id: number) {
     const result = await this.calculoService.obtenerTotalesActuales(id);
     if (!result) {
       return { error: 'Cotización no encontrada' };
@@ -421,13 +535,21 @@ export class CotizacionesController {
     return {
       subtotal_servicios: result.subtotal_servicios.toString(),
       subtotal_componentes: result.subtotal_componentes.toString(),
+      subtotal_otros: result.subtotal_otros.toString(),
       subtotal_general: result.subtotal_general.toString(),
+      subtotal_opcionales: result.subtotal_opcionales.toString(),
       descuento_valor: result.descuento_valor.toString(),
       subtotal_con_descuento: result.subtotal_con_descuento.toString(),
+      usa_aiu: result.usa_aiu,
+      aiu_valor_total: result.aiu_valor_total.toString(),
       iva_valor: result.iva_valor.toString(),
       total_cotizacion: result.total_cotizacion.toString(),
+      costo_total_estimado: result.costo_total_estimado.toString(),
+      utilidad_bruta_estimada: result.utilidad_bruta_estimada.toString(),
+      margen_bruto_porcentaje: result.margen_bruto_porcentaje.toString(),
       cantidad_items_servicios: result.cantidad_items_servicios,
       cantidad_items_componentes: result.cantidad_items_componentes,
+      cantidad_items_otros: result.cantidad_items_otros,
     };
   }
 }

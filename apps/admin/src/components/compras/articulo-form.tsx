@@ -17,6 +17,7 @@ import * as z from 'zod';
 import {
   Boxes,
   Check,
+  Cpu,
   DollarSign,
   HardHat,
   Info,
@@ -36,6 +37,7 @@ import {
 import { toast } from 'sonner';
 import { comprasService } from '@/lib/api/compras.service';
 import { ArticuloMaestro, DestinoArticulo, ProveedorCompleto } from '@/types/compras.types';
+import { useBranding } from '@/providers/branding-provider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -45,6 +47,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { ComboboxWithCreate } from '@/components/ui/combobox-with-create';
 import { HierarchicalCategorySelect } from '@/components/compras/hierarchical-category-select';
+import { TiposEquipoMultiSelect } from '@/components/compras/tipos-equipo-multi-select';
 import { cn } from '@/lib/utils';
 import { UnidadesMedidaSelect } from '@/components/compras/unidades-medida-select';
 
@@ -75,6 +78,9 @@ const proveedorInicialSchema = z.object({
 export const articuloFormSchema = z
   .object({
     id_categoria: z.coerce.number().min(1, 'Selecciona una categoría taxonómica'),
+    aplica_todos_tipos: z.boolean().default(true),
+    tipos_equipo_ids: z.array(z.coerce.number().int().positive()).default([]),
+    modulos_tecnicos_ids: z.array(z.coerce.number().int().positive()).default([]),
     codigo_interno: z.string().optional(),
     referencia_fabricante: z.string().min(2, 'La referencia neutral del fabricante es obligatoria'),
     marca: z.string().optional(),
@@ -226,6 +232,10 @@ export function ArticuloForm({
   isSubmitting = false,
 }: ArticuloFormProps) {
   // Catálogos auxiliares
+  const { branding } = useBranding();
+  const monedaActiva = branding.codigo_moneda || 'COP';
+  const simboloMoneda = branding.simbolo_moneda || '$';
+
   const [proveedores, setProveedores] = useState<ProveedorCompleto[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -260,6 +270,15 @@ export function ArticuloForm({
     defaultValues: {
       destino_articulo: initialData?.destino_articulo || 'INSUMO_SERVICIO',
       id_categoria: initialData?.id_categoria || undefined,
+      aplica_todos_tipos: initialData?.aplica_todos_tipos ?? true,
+      tipos_equipo_ids:
+        initialData?.tipos_equipo_ids ??
+        initialData?.tipos_equipo?.map((t) => t.id_tipo_equipo) ??
+        [],
+      modulos_tecnicos_ids:
+        initialData?.modulos_tecnicos_ids ??
+        initialData?.modulos_tecnicos?.map((m) => m.id_modulo) ??
+        [],
       codigo_interno: initialData?.codigo_interno || '',
       referencia_fabricante: initialData?.referencia_fabricante || '',
       marca: initialData?.marca || '',
@@ -284,7 +303,7 @@ export function ArticuloForm({
       margen_utilidad_porcentaje: initialData?.margen_utilidad_porcentaje
         ? Number(initialData.margen_utilidad_porcentaje)
         : 40,
-      moneda: initialData?.moneda || 'COP',
+      moneda: initialData?.moneda || monedaActiva,
       observaciones: initialData?.observaciones || '',
       notas_instalacion: initialData?.notas_instalacion || '',
       proveedores_iniciales: [],
@@ -297,6 +316,9 @@ export function ArticuloForm({
   });
 
   const destinoActual = watch('destino_articulo');
+  const aplicaTodosTipos = watch('aplica_todos_tipos') ?? true;
+  const tiposEquipoIds = watch('tipos_equipo_ids') || [];
+  const modulosTecnicosIds = watch('modulos_tecnicos_ids') || [];
   const esInventariable = watch('es_inventariable');
   const requiereSerializacion = watch('requiere_serializacion');
   const esActivoFijo = watch('es_activo_fijo');
@@ -605,6 +627,37 @@ export function ArticuloForm({
             )}
           </div>
 
+          {/* Aplicabilidad por Tipos de Equipo (Selección Múltiple N:M) */}
+          <div className="space-y-2.5 border-b border-gray-100 pb-5">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <Label className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                <Cpu className="h-4 w-4" style={{ color: 'var(--org-primary, #1E40AF)' }} />
+                Aplicabilidad por Tipos de Equipo (Opcional)
+              </Label>
+              <span className="text-[11px] text-gray-400">
+                Selección múltiple: todos los tipos, uno o varios activos del catálogo EAM
+              </span>
+            </div>
+
+            <TiposEquipoMultiSelect
+              aplicaTodos={aplicaTodosTipos}
+              selectedIds={tiposEquipoIds}
+              onChange={({ aplicaTodos, selectedIds }) => {
+                setValue('aplica_todos_tipos', aplicaTodos, { shouldDirty: true });
+                setValue('tipos_equipo_ids', selectedIds, { shouldDirty: true });
+                if (aplicaTodos) {
+                  setValue('modulos_tecnicos_ids', [], { shouldDirty: true });
+                }
+              }}
+              enableModulos={true}
+              selectedModuloIds={modulosTecnicosIds}
+              onModulosChange={(nextModIds) =>
+                setValue('modulos_tecnicos_ids', nextModIds, { shouldDirty: true })
+              }
+              disabled={isSubmitting}
+            />
+          </div>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {/* Código Interno / SKU Maestro con Auto-generador y Validación en Tiempo Real */}
             <div className="space-y-1.5">
@@ -846,7 +899,7 @@ export function ArticuloForm({
             {/* Costo Base */}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-gray-700">
-                Costo Base de Adquisición ($ COP)
+                Costo Base de Adquisición ({simboloMoneda} {monedaActiva})
               </Label>
               <Input
                 type="number"
@@ -885,7 +938,7 @@ export function ArticuloForm({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-semibold text-gray-700">
-                  Precio Sugerido de Venta ($ COP)
+                  Precio Sugerido de Venta ({simboloMoneda} {monedaActiva})
                 </Label>
                 <span className="text-[10px] text-emerald-600 font-semibold uppercase">PVP</span>
               </div>
@@ -910,11 +963,13 @@ export function ArticuloForm({
             </div>
             <p className="text-[11px] text-blue-700 leading-relaxed">
               <strong>Markup ({markupInput || 0}%):</strong> Es el recargo sobre el costo de
-              adquisición (${Number(costoInput || 0).toLocaleString()} COP).
+              adquisición ({simboloMoneda}
+              {Number(costoInput || 0).toLocaleString()} {monedaActiva}).
               <br />
               <strong>Margen Real ({margenRealCalculado ?? 0}%):</strong> Es la proporción neta de
-              cada peso facturado que corresponde a utilidad bruta sobre la venta total ($
-              {Number(precioVentaInput || 0).toLocaleString()} COP).
+              cada unidad monetaria facturada que corresponde a utilidad bruta sobre la venta total (
+              {simboloMoneda}
+              {Number(precioVentaInput || 0).toLocaleString()} {monedaActiva}).
             </p>
           </div>
         </CardContent>
@@ -1271,6 +1326,6 @@ export function ArticuloForm({
           )}
         </Button>
       </div>
-    </form>
+      </form>
   );
 }

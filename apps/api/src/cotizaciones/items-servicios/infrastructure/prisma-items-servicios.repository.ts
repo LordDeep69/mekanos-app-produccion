@@ -1,4 +1,4 @@
-// Infrastructure Repository - Prisma Items Servicios
+// Infrastructure Repository - Prisma Items Servicios (EAM-CPQ Universal)
 
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
@@ -9,20 +9,24 @@ import { ItemCotizacionServicio } from '../domain/item-cotizacion-servicio.entit
 export class PrismaItemsServiciosRepository implements ItemsCotizacionServiciosRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Helper para mapear de Prisma a Entity Domain
-   * Convierte null a undefined, Decimal a Number
-   */
   private mapToEntity(item: any): ItemCotizacionServicio {
     return new ItemCotizacionServicio({
       id_item_servicio: item.id_item_servicio,
       id_cotizacion: item.id_cotizacion,
-      id_servicio: item.id_servicio,
+      id_servicio: item.id_servicio ?? undefined,
+      id_equipo: item.id_equipo ?? undefined,
       cantidad: item.cantidad ? Number(item.cantidad) : 1,
       unidad: item.unidad ?? undefined,
+      costo_unitario:
+        item.costo_unitario !== null && item.costo_unitario !== undefined
+          ? Number(item.costo_unitario)
+          : 0,
       precio_unitario: Number(item.precio_unitario),
       descuento_porcentaje: item.descuento_porcentaje ? Number(item.descuento_porcentaje) : 0,
-      subtotal: item.subtotal ? Number(item.subtotal) : undefined,
+      subtotal: item.subtotal !== null && item.subtotal !== undefined ? Number(item.subtotal) : undefined,
+      es_opcional: Boolean(item.es_opcional),
+      iva_aplicable: item.iva_aplicable !== false,
+      seccion_titulo: item.seccion_titulo ?? undefined,
       descripcion_personalizada: item.descripcion_personalizada ?? undefined,
       observaciones: item.observaciones ?? undefined,
       justificacion_precio: item.justificacion_precio ?? undefined,
@@ -31,29 +35,38 @@ export class PrismaItemsServiciosRepository implements ItemsCotizacionServiciosR
       registrado_por: item.registrado_por ?? undefined,
       cotizacion: item.cotizaciones ?? item.cotizacion ?? undefined,
       servicio: item.catalogo_servicios ?? item.servicio ?? undefined,
+      equipo: item.equipos ?? undefined,
       usuario: item.usuarios ?? undefined,
     });
   }
 
   async save(data: Partial<ItemCotizacionServicio>): Promise<ItemCotizacionServicio> {
-    // Calcular subtotal antes de guardar
     const itemTemp = new ItemCotizacionServicio(data);
     const subtotalCalculado = itemTemp.calcularSubtotal();
 
     const itemCreado = await this.prisma.items_cotizacion_servicios.create({
       data: {
         id_cotizacion: data.id_cotizacion!,
-        id_servicio: data.id_servicio!,
+        id_servicio: data.id_servicio ?? null,
+        id_equipo: data.id_equipo ?? null,
         cantidad: data.cantidad ?? 1,
         unidad: data.unidad ?? 'servicio',
-        precio_unitario: data.precio_unitario!,
+        costo_unitario: data.costo_unitario ?? 0,
+        precio_unitario: data.precio_unitario ?? 0,
         descuento_porcentaje: data.descuento_porcentaje ?? 0,
         subtotal: subtotalCalculado,
+        es_opcional: Boolean(data.es_opcional),
+        iva_aplicable: data.iva_aplicable !== false,
+        seccion_titulo: data.seccion_titulo,
         descripcion_personalizada: data.descripcion_personalizada,
         observaciones: data.observaciones,
         justificacion_precio: data.justificacion_precio,
         orden_item: data.orden_item,
         registrado_por: data.registrado_por,
+      },
+      include: {
+        catalogo_servicios: true,
+        equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
       },
     });
 
@@ -73,6 +86,7 @@ export class PrismaItemsServiciosRepository implements ItemsCotizacionServiciosR
       include: {
         cotizaciones: includeRelations?.includeCotizacion ?? false,
         catalogo_servicios: includeRelations?.includeServicio ?? false,
+        equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
       },
     });
 
@@ -99,8 +113,9 @@ export class PrismaItemsServiciosRepository implements ItemsCotizacionServiciosR
       where: { id_cotizacion: idCotizacion },
       include: {
         catalogo_servicios: includeRelations?.includeServicio ?? false,
+        equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
       },
-      orderBy: { orden_item: 'asc' },
+      orderBy: [{ orden_item: 'asc' }, { id_item_servicio: 'asc' }],
     });
 
     if (includeRelations?.includeUsuario) {
@@ -123,15 +138,12 @@ export class PrismaItemsServiciosRepository implements ItemsCotizacionServiciosR
   }
 
   async update(id: number, data: Partial<ItemCotizacionServicio>): Promise<ItemCotizacionServicio> {
-    // Obtener item existente SIEMPRE para tener valores actuales
     const itemExistente = await this.findById(id);
     if (!itemExistente) {
       throw new Error(`Item servicio ${id} no encontrado`);
     }
 
-    // Si se actualizan campos que afectan el subtotal, recalcular
     let subtotalCalculado: number;
-
     if (
       data.cantidad !== undefined ||
       data.precio_unitario !== undefined ||
@@ -146,16 +158,20 @@ export class PrismaItemsServiciosRepository implements ItemsCotizacionServiciosR
       subtotalCalculado = itemExistente.subtotal || 0;
     }
 
-    // Construir objeto update solo con campos definidos
     const updateData: any = {
-      subtotal: subtotalCalculado, // SIEMPRE actualizar
+      subtotal: subtotalCalculado,
     };
 
+    if (data.id_equipo !== undefined) updateData.id_equipo = data.id_equipo;
     if (data.cantidad !== undefined) updateData.cantidad = data.cantidad;
     if (data.unidad !== undefined) updateData.unidad = data.unidad;
+    if (data.costo_unitario !== undefined) updateData.costo_unitario = data.costo_unitario;
     if (data.precio_unitario !== undefined) updateData.precio_unitario = data.precio_unitario;
     if (data.descuento_porcentaje !== undefined)
       updateData.descuento_porcentaje = data.descuento_porcentaje;
+    if (data.es_opcional !== undefined) updateData.es_opcional = data.es_opcional;
+    if (data.iva_aplicable !== undefined) updateData.iva_aplicable = data.iva_aplicable;
+    if (data.seccion_titulo !== undefined) updateData.seccion_titulo = data.seccion_titulo;
     if (data.descripcion_personalizada !== undefined)
       updateData.descripcion_personalizada = data.descripcion_personalizada;
     if (data.observaciones !== undefined) updateData.observaciones = data.observaciones;
@@ -166,6 +182,10 @@ export class PrismaItemsServiciosRepository implements ItemsCotizacionServiciosR
     const itemActualizado = await this.prisma.items_cotizacion_servicios.update({
       where: { id_item_servicio: id },
       data: updateData,
+      include: {
+        catalogo_servicios: true,
+        equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
+      },
     });
 
     return this.mapToEntity(itemActualizado);
@@ -179,7 +199,7 @@ export class PrismaItemsServiciosRepository implements ItemsCotizacionServiciosR
 
   async calcularSubtotalServicios(idCotizacion: number): Promise<number> {
     const result = await this.prisma.items_cotizacion_servicios.aggregate({
-      where: { id_cotizacion: idCotizacion },
+      where: { id_cotizacion: idCotizacion, es_opcional: false },
       _sum: {
         subtotal: true,
       },

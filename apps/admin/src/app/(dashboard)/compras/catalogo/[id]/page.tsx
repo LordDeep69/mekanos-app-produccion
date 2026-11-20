@@ -26,6 +26,7 @@ import {
   Edit,
   ExternalLink,
   FileText,
+  Globe2,
   HardHat,
   History,
   Layers,
@@ -147,6 +148,9 @@ export default function FichaArticulo360Page() {
 
       // Sanitizar payload: NUNCA enviar stock_actual en update (regla inmutable Zero-Trust)
       const payload: Partial<CreateArticuloMaestroPayload> = {
+        aplica_todos_tipos: values.aplica_todos_tipos ?? true,
+        tipos_equipo_ids: values.aplica_todos_tipos ? [] : values.tipos_equipo_ids || [],
+        modulos_tecnicos_ids: values.aplica_todos_tipos ? [] : values.modulos_tecnicos_ids || [],
         id_categoria: values.id_categoria ? Number(values.id_categoria) : undefined,
         codigo_interno: values.codigo_interno || undefined,
         referencia_fabricante: values.referencia_fabricante,
@@ -509,6 +513,51 @@ export default function FichaArticulo360Page() {
                   </Badge>
                 )}
               </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 pt-2">
+              <span className="text-[11px] font-semibold text-gray-500 mr-1">
+                Aplicabilidad EAM:
+              </span>
+              {articulo.aplica_todos_tipos !== false ||
+              !articulo.tipos_equipo ||
+              articulo.tipos_equipo.length === 0 ? (
+                <Badge
+                  variant="outline"
+                  className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] font-medium gap-1"
+                >
+                  <Globe2 className="h-3 w-3" />
+                  Todos los tipos de equipo (Universal)
+                </Badge>
+              ) : (
+                articulo.tipos_equipo.map((te) => (
+                  <Badge
+                    key={te.id_tipo_equipo}
+                    variant="outline"
+                    className="bg-slate-50 text-slate-800 border-slate-200 text-[11px] font-semibold"
+                  >
+                    {te.nombre_tipo}{' '}
+                    <span className="ml-1 font-mono text-[10px] text-slate-400">
+                      {te.codigo_tipo}
+                    </span>
+                  </Badge>
+                ))
+              )}
+              {articulo.modulos_tecnicos && articulo.modulos_tecnicos.length > 0 && (
+                <>
+                  <span className="text-[11px] text-gray-400 mx-0.5">→</span>
+                  {articulo.modulos_tecnicos.map((mod) => (
+                    <Badge
+                      key={mod.id_modulo}
+                      variant="outline"
+                      className="bg-indigo-50/70 text-indigo-800 border-indigo-200 text-[11px] font-medium gap-1"
+                    >
+                      <Layers className="h-3 w-3" />
+                      {mod.nombre_modulo}
+                    </Badge>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </div>

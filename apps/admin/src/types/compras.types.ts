@@ -244,6 +244,23 @@ export interface ArticuloMaestro {
   stock_actual: number;
   unidad_medida: string;
   activo: boolean;
+  aplica_todos_tipos?: boolean;
+  tipos_equipo_ids?: number[];
+  tipos_equipo?: Array<{
+    id_tipo_equipo: number;
+    codigo_tipo: string;
+    nombre_tipo: string;
+    color_hex?: string | null;
+    icono_ui?: string | null;
+  }>;
+  modulos_tecnicos_ids?: number[];
+  modulos_tecnicos?: Array<{
+    id_modulo: number;
+    codigo_modulo: string;
+    nombre_modulo: string;
+    icono?: string | null;
+    color_ui?: string | null;
+  }>;
   fecha_creacion: string;
   fecha_modificacion?: string | null;
   tipos_componente?: TipoComponente;
@@ -317,7 +334,7 @@ export interface ArticuloProveedorInicialPayload {
 }
 
 export interface CreateArticuloMaestroPayload {
-  id_tipo_componente?: number;
+  id_tipo_componente?: number | null;
   codigo_interno?: string;
   referencia_fabricante: string;
   marca?: string;
@@ -348,6 +365,9 @@ export interface CreateArticuloMaestroPayload {
   id_proveedor_principal?: number;
   observaciones?: string;
   notas_instalacion?: string;
+  aplica_todos_tipos?: boolean;
+  tipos_equipo_ids?: number[];
+  modulos_tecnicos_ids?: number[];
 }
 
 export interface VincularProveedorPayload {
@@ -395,6 +415,8 @@ export interface FiltrosArticulos {
   marca?: string;
   id_marca?: number;
   id_categoria?: number;
+  id_tipo_equipo?: number;
+  tipos_equipo_ids?: string;
   codigo_unidad_medida?: string;
   es_comprable?: boolean;
   es_inventariable?: boolean;

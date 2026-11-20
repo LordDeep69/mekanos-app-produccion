@@ -1,4 +1,4 @@
-// Command Handler - Crear Item Servicio
+// Command Handler - Crear Item Servicio (Fuente Única de Verdad: CotizacionCalculoService)
 
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
@@ -6,6 +6,7 @@ import { CreateItemServicioCommand } from './create-item-servicio.command';
 import { ItemsCotizacionServiciosRepository } from '../../domain/items-cotizacion-servicios.repository.interface';
 import { ItemCotizacionServicio } from '../../domain/item-cotizacion-servicio.entity';
 import { CotizacionesRepository } from '../../../domain/cotizaciones.repository.interface';
+import { CotizacionCalculoService } from '../../../services/cotizacion-calculo.service';
 
 @Injectable()
 @CommandHandler(CreateItemServicioCommand)
@@ -17,12 +18,12 @@ export class CreateItemServicioHandler
     private readonly itemsRepository: ItemsCotizacionServiciosRepository,
     @Inject('CotizacionesRepository')
     private readonly cotizacionesRepository: CotizacionesRepository,
+    private readonly calculoService: CotizacionCalculoService,
   ) {}
 
   async execute(
     command: CreateItemServicioCommand,
   ): Promise<ItemCotizacionServicio> {
-    // 1. Validar que la cotización exista
     const cotizacion = await this.cotizacionesRepository.findById(
       command.idCotizacion,
     );
@@ -32,18 +33,18 @@ export class CreateItemServicioHandler
       );
     }
 
-    // 2. Validar que cotización esté en estado BORRADOR (id_estado = 1)
     if (cotizacion.id_estado !== 1) {
       throw new BadRequestException(
         'Solo se pueden agregar items a cotizaciones en estado BORRADOR',
       );
     }
 
-    // 3. Validar datos del item
     const errors = ItemCotizacionServicio.validate({
       id_cotizacion: command.idCotizacion,
       id_servicio: command.idServicio,
+      descripcion_personalizada: command.descripcionPersonalizada,
       cantidad: command.cantidad,
+      costo_unitario: command.costoUnitario,
       precio_unitario: command.precioUnitario,
       descuento_porcentaje: command.descuentoPorcentaje,
     });
@@ -54,14 +55,18 @@ export class CreateItemServicioHandler
       );
     }
 
-    // 4. Crear item servicio
     const itemCreado = await this.itemsRepository.save({
       id_cotizacion: command.idCotizacion,
       id_servicio: command.idServicio,
+      id_equipo: command.idEquipo,
       cantidad: command.cantidad,
       unidad: command.unidad,
+      costo_unitario: command.costoUnitario,
       precio_unitario: command.precioUnitario,
       descuento_porcentaje: command.descuentoPorcentaje,
+      es_opcional: command.esOpcional,
+      iva_aplicable: command.ivaAplicable,
+      seccion_titulo: command.seccionTitulo,
       descripcion_personalizada: command.descripcionPersonalizada,
       observaciones: command.observaciones,
       justificacion_precio: command.justificacionPrecio,
@@ -69,44 +74,7 @@ export class CreateItemServicioHandler
       registrado_por: command.registradoPor,
     });
 
-    // 5. Recalcular subtotal_servicios de la cotización
-    const nuevoSubtotalServicios =
-      await this.itemsRepository.calcularSubtotalServicios(
-        command.idCotizacion,
-      );
-
-    // 6. Actualizar totales de la cotización
-    await this.cotizacionesRepository.update(command.idCotizacion, {
-      subtotal_servicios: nuevoSubtotalServicios,
-    });
-
-    // 7. Recalcular totales generales cotización
-    const cotizacionActualizada = await this.cotizacionesRepository.findById(
-      command.idCotizacion,
-    );
-
-    const { Cotizacion } = await import('../../../domain/cotizacion.entity');
-    const totalesCalc = Cotizacion.calcularTotales(
-      nuevoSubtotalServicios,
-      cotizacionActualizada!.subtotal_componentes || 0,
-      cotizacionActualizada!.descuento_porcentaje || 0,
-      cotizacionActualizada!.iva_porcentaje || 0,
-    );
-
-    const totalesRepository = {
-      subtotal_servicios: nuevoSubtotalServicios,
-      subtotal_componentes: cotizacionActualizada!.subtotal_componentes || 0,
-      subtotal_general: totalesCalc.subtotalGeneral,
-      descuento_valor: totalesCalc.descuentoValor,
-      subtotal_con_descuento: totalesCalc.subtotalConDescuento,
-      iva_valor: totalesCalc.ivaValor,
-      total_cotizacion: totalesCalc.totalCotizacion,
-    };
-
-    await this.cotizacionesRepository.updateTotales(
-      command.idCotizacion,
-      totalesRepository,
-    );
+    await this.calculoService.recalcularTotales(command.idCotizacion);
 
     return itemCreado;
   }

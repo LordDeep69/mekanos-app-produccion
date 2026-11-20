@@ -1,7 +1,5 @@
 /**
- * CREATE COTIZACION COMMAND
- * 
- * Comando para crear una nueva cotización en estado BORRADOR.
+ * CREATE COTIZACION COMMAND (EAM-CPQ Universal)
  */
 export class CreateCotizacionCommand {
   constructor(
@@ -9,7 +7,7 @@ export class CreateCotizacionCommand {
     public readonly fecha_cotizacion: Date,
     public readonly fecha_vencimiento: Date,
     public readonly asunto: string,
-    public readonly elaborada_por: number,
+    public readonly elaborada_por?: number,
     public readonly id_sede?: number,
     public readonly id_equipo?: number,
     public readonly descripcion_general?: string,
@@ -22,5 +20,20 @@ export class CreateCotizacionCommand {
     public readonly terminos_condiciones?: string,
     public readonly meses_garantia?: number,
     public readonly observaciones_garantia?: string,
+    public readonly extras?: {
+      equipos_ids?: number[];
+      tipo_cotizacion?: string;
+      id_plantilla_origen?: number;
+      id_propuesta_origen?: number;
+      moneda?: string;
+      usa_aiu?: boolean;
+      aiu_admin_porcentaje?: number;
+      aiu_imprevistos_porcentaje?: number;
+      aiu_utilidad_porcentaje?: number;
+      iva_sobre_utilidad_aiu?: boolean;
+      modo_agrupacion_pdf?: string;
+      user_id?: number;
+      user_empleado_id?: number | null;
+    },
   ) {}
 }

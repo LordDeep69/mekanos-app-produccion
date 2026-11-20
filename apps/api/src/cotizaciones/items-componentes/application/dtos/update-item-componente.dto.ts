@@ -1,7 +1,8 @@
-// DTO - Actualizar Item Componente
+// DTO - Actualizar Item Componente (EAM-CPQ Universal)
 
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsInt,
   IsNumber,
   IsOptional,
@@ -12,103 +13,100 @@ import {
 } from 'class-validator';
 
 export class UpdateItemComponenteDto {
-  @ApiProperty({
-    description: 'Descripción del componente',
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'ID del equipo asociado (null para general)' })
+  @IsOptional()
+  @IsInt()
+  id_equipo?: number | null;
+
+  @ApiPropertyOptional({ description: 'ID del tipo de componente' })
+  @IsOptional()
+  @IsInt()
+  id_tipo_componente?: number | null;
+
+  @ApiPropertyOptional({ description: 'Descripción del componente' })
   @IsOptional()
   @IsString()
   @MaxLength(300)
   descripcion?: string;
 
-  @ApiProperty({
-    description: 'Referencia o código',
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Referencia o código' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   referencia_manual?: string;
 
-  @ApiProperty({
-    description: 'Marca del componente',
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Marca del componente' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   marca_manual?: string;
 
-  @ApiProperty({
-    description: 'Cantidad',
-    example: 3,
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Cantidad', example: 3 })
   @IsOptional()
   @IsNumber()
   @Min(0.01)
   cantidad?: number;
 
-  @ApiProperty({
-    description: 'Unidad de medida',
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Unidad de medida' })
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   unidad?: string;
 
-  @ApiProperty({
-    description: 'Precio unitario',
-    example: 90000,
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Costo unitario interno' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  costo_unitario?: number;
+
+  @ApiPropertyOptional({ description: 'Precio unitario', example: 90000 })
   @IsOptional()
   @IsNumber()
   @Min(0)
   precio_unitario?: number;
 
-  @ApiProperty({
-    description: 'Porcentaje descuento (0-100)',
-    example: 5,
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Porcentaje descuento (0-100)', example: 5 })
   @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(100)
   descuento_porcentaje?: number;
 
-  @ApiProperty({
-    description: 'Meses de garantía',
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Ítem opcional' })
+  @IsOptional()
+  @IsBoolean()
+  es_opcional?: boolean;
+
+  @ApiPropertyOptional({ description: 'Grava IVA/impuesto' })
+  @IsOptional()
+  @IsBoolean()
+  iva_aplicable?: boolean;
+
+  @ApiPropertyOptional({ description: 'Sección editorial para PDF' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  seccion_titulo?: string;
+
+  @ApiPropertyOptional({ description: 'Meses de garantía' })
   @IsOptional()
   @IsInt()
   @Min(0)
   garantia_meses?: number;
 
-  @ApiProperty({
-    description: 'Observaciones garantía',
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Observaciones garantía' })
   @IsOptional()
   @IsString()
   observaciones_garantia?: string;
 
-  @ApiProperty({
-    description: 'Observaciones adicionales',
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Observaciones adicionales' })
   @IsOptional()
   @IsString()
   observaciones?: string;
 
-  @ApiProperty({
-    description: 'Orden visualización',
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'Orden visualización' })
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(0)
   orden_item?: number;
 }

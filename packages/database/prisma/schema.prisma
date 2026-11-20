@@ -234,6 +234,7 @@ model catalogo_componentes {
   componentes_compatibles      Int[]
   observaciones                String?
   notas_instalacion            String?
+  aplica_todos_tipos           Boolean                         @default(true)
   activo                       Boolean?                        @default(true)
   fecha_creacion               DateTime?                       @default(now()) @db.Timestamp(6)
   creado_por                   Int?
@@ -259,8 +260,11 @@ model catalogo_componentes {
   ordenes_compra_detalle       ordenes_compra_detalle[]
   remisiones_detalle           remisiones_detalle[]
   articulos_proveedores        articulos_proveedores[]
-  historial_costos_compra      historial_costos_compra[]
-  modelos_equipo_bom           modelos_equipo_bom[]
+  historial_costos_compra            historial_costos_compra[]
+  modelos_equipo_bom                 modelos_equipo_bom[]
+  catalogo_componentes_tipo_equipo   catalogo_componentes_tipo_equipo[]
+  catalogo_componentes_modulo_tecnico catalogo_componentes_modulo_tecnico[]
+  plantillas_cotizacion_items        plantillas_cotizacion_items[]
 
   @@index([referencia_fabricante], map: "idx_componente_referencia")
   @@index([id_tipo_componente], map: "idx_componente_tipo")
@@ -297,6 +301,7 @@ model catalogo_servicios {
   detalle_servicios_orden      detalle_servicios_orden[]
   items_cotizacion_servicios   items_cotizacion_servicios[]
   items_propuesta              items_propuesta[]
+  plantillas_cotizacion_items  plantillas_cotizacion_items[]
 
   @@index([categoria], map: "idx_servicios_categoria")
   @@index([codigo_servicio], map: "idx_servicios_codigo")
@@ -534,18 +539,39 @@ model cotizaciones {
   id_motivo_rechazo            Int?
   observaciones_rechazo        String?
   asunto                       String                         @db.VarChar(300)
+  tipo_cotizacion              String                         @default("SERVICIO_TECNICO") @db.VarChar(40)
+  id_plantilla_origen          Int?
+  id_propuesta_origen          Int?
+  moneda                       String?                        @db.VarChar(10)
   descripcion_general          String?
   alcance_trabajo              String?
   exclusiones                  String?
   subtotal_servicios           Decimal?                       @db.Decimal(12, 2)
   subtotal_componentes         Decimal?                       @db.Decimal(12, 2)
+  subtotal_otros               Decimal                        @default(0) @db.Decimal(14, 2)
   subtotal_general             Decimal?                       @db.Decimal(12, 2)
   descuento_porcentaje         Decimal?                       @default(0) @db.Decimal(5, 2)
   descuento_valor              Decimal?                       @db.Decimal(12, 2)
   subtotal_con_descuento       Decimal?                       @db.Decimal(12, 2)
+  usa_aiu                      Boolean                        @default(false)
+  aiu_admin_porcentaje         Decimal                        @default(0) @db.Decimal(5, 2)
+  aiu_imprevistos_porcentaje   Decimal                        @default(0) @db.Decimal(5, 2)
+  aiu_utilidad_porcentaje      Decimal                        @default(0) @db.Decimal(5, 2)
+  aiu_admin_valor              Decimal                        @default(0) @db.Decimal(14, 2)
+  aiu_imprevistos_valor        Decimal                        @default(0) @db.Decimal(14, 2)
+  aiu_utilidad_valor           Decimal                        @default(0) @db.Decimal(14, 2)
+  aiu_valor_total              Decimal                        @default(0) @db.Decimal(14, 2)
+  iva_sobre_utilidad_aiu       Boolean                        @default(false)
   iva_porcentaje               Decimal?                       @default(0) @db.Decimal(5, 2)
   iva_valor                    Decimal?                       @db.Decimal(12, 2)
   total_cotizacion             Decimal?                       @db.Decimal(12, 2)
+  subtotal_opcionales          Decimal                        @default(0) @db.Decimal(14, 2)
+  costo_total_estimado         Decimal                        @default(0) @db.Decimal(14, 2)
+  utilidad_bruta_estimada      Decimal                        @default(0) @db.Decimal(14, 2)
+  margen_bruto_porcentaje      Decimal                        @default(0) @db.Decimal(6, 2)
+  observaciones_aprobacion_cliente String?
+  orden_compra_cliente         String?                        @db.VarChar(80)
+  modo_agrupacion_pdf          String                         @default("POR_CATEGORIA") @db.VarChar(30)
   forma_pago                   String?                        @default("CONTADO") @db.VarChar(100)
   terminos_condiciones         String?
   meses_garantia               Int?                           @default(3)
@@ -575,6 +601,10 @@ model cotizaciones {
   historial_envios             historial_envios[]
   items_cotizacion_componentes items_cotizacion_componentes[]
   items_cotizacion_servicios   items_cotizacion_servicios[]
+  items_cotizacion_otros       items_cotizacion_otros[]
+  cotizaciones_equipos         cotizaciones_equipos[]
+  plantilla_origen             plantillas_cotizacion?         @relation(fields: [id_plantilla_origen], references: [id_plantilla], onDelete: SetNull)
+  propuesta_origen             propuestas_correctivo?         @relation("cotizaciones_propuesta_origen", fields: [id_propuesta_origen], references: [id_propuesta], onDelete: SetNull)
   remisiones                   remisiones[]
   versiones_cotizacion         versiones_cotizacion[]
 
@@ -796,6 +826,10 @@ model equipos {
   archivos_equipo                 archivos_equipo[]
   componentes_equipo              componentes_equipo[]
   cotizaciones                    cotizaciones[]
+  cotizaciones_equipos            cotizaciones_equipos[]
+  items_cotizacion_servicios      items_cotizacion_servicios[]
+  items_cotizacion_componentes    items_cotizacion_componentes[]
+  items_cotizacion_otros          items_cotizacion_otros[]
   cronogramas_servicio            cronogramas_servicio[]
   plantillas_parametros           plantillas_parametros?     @relation(fields: [id_plantilla_parametros], references: [id_plantilla])
   clientes                        clientes                   @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, map: "fk_equipos_cliente")
@@ -1306,16 +1340,21 @@ model informes {
 model items_cotizacion_componentes {
   id_item_componente     Int                   @id @default(autoincrement())
   id_cotizacion          Int
+  id_equipo              Int?
   id_componente          Int?
-  id_tipo_componente     Int
+  id_tipo_componente     Int?
   descripcion            String                @db.VarChar(300)
   referencia_manual      String?               @db.VarChar(100)
   marca_manual           String?               @db.VarChar(100)
   cantidad               Decimal               @default(1) @db.Decimal(10, 2)
   unidad                 String?               @default("unidad") @db.VarChar(20)
+  costo_unitario         Decimal               @default(0) @db.Decimal(12, 2)
   precio_unitario        Decimal               @db.Decimal(12, 2)
   descuento_porcentaje   Decimal?              @default(0) @db.Decimal(5, 2)
   subtotal               Decimal?              @db.Decimal(12, 2)
+  es_opcional            Boolean               @default(false)
+  iva_aplicable          Boolean               @default(true)
+  seccion_titulo         String?               @db.VarChar(120)
   garantia_meses         Int?
   observaciones_garantia String?
   observaciones          String?
@@ -1324,7 +1363,8 @@ model items_cotizacion_componentes {
   registrado_por         Int?
   catalogo_componentes   catalogo_componentes? @relation(fields: [id_componente], references: [id_componente])
   cotizaciones           cotizaciones          @relation(fields: [id_cotizacion], references: [id_cotizacion], onDelete: Cascade)
-  tipos_componente       tipos_componente      @relation(fields: [id_tipo_componente], references: [id_tipo_componente], onDelete: NoAction)
+  equipos                equipos?              @relation(fields: [id_equipo], references: [id_equipo], onDelete: SetNull)
+  tipos_componente       tipos_componente?     @relation(fields: [id_tipo_componente], references: [id_tipo_componente], onDelete: SetNull)
 
   @@index([id_cotizacion, orden_item], map: "idx_items_comp_cotizacion")
   @@index([id_tipo_componente], map: "idx_items_comp_tipo")
@@ -1333,22 +1373,28 @@ model items_cotizacion_componentes {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model items_cotizacion_servicios {
-  id_item_servicio          Int                @id @default(autoincrement())
+  id_item_servicio          Int                 @id @default(autoincrement())
   id_cotizacion             Int
-  id_servicio               Int
-  cantidad                  Decimal            @default(1) @db.Decimal(10, 2)
-  unidad                    String?            @default("servicio") @db.VarChar(20)
-  precio_unitario           Decimal            @db.Decimal(12, 2)
-  descuento_porcentaje      Decimal?           @default(0) @db.Decimal(5, 2)
-  subtotal                  Decimal?           @db.Decimal(12, 2)
+  id_equipo                 Int?
+  id_servicio               Int?
+  cantidad                  Decimal             @default(1) @db.Decimal(10, 2)
+  unidad                    String?             @default("servicio") @db.VarChar(20)
+  costo_unitario            Decimal             @default(0) @db.Decimal(12, 2)
+  precio_unitario           Decimal             @db.Decimal(12, 2)
+  descuento_porcentaje      Decimal?            @default(0) @db.Decimal(5, 2)
+  subtotal                  Decimal?            @db.Decimal(12, 2)
+  es_opcional               Boolean             @default(false)
+  iva_aplicable             Boolean             @default(true)
+  seccion_titulo            String?             @db.VarChar(120)
   descripcion_personalizada String?
   observaciones             String?
   justificacion_precio      String?
   orden_item                Int?
-  fecha_registro            DateTime?          @default(now()) @db.Timestamp(6)
+  fecha_registro            DateTime?           @default(now()) @db.Timestamp(6)
   registrado_por            Int?
-  cotizaciones              cotizaciones       @relation(fields: [id_cotizacion], references: [id_cotizacion], onDelete: Cascade)
-  catalogo_servicios        catalogo_servicios @relation(fields: [id_servicio], references: [id_servicio], onDelete: NoAction)
+  cotizaciones              cotizaciones        @relation(fields: [id_cotizacion], references: [id_cotizacion], onDelete: Cascade)
+  equipos                   equipos?            @relation(fields: [id_equipo], references: [id_equipo], onDelete: SetNull)
+  catalogo_servicios        catalogo_servicios? @relation(fields: [id_servicio], references: [id_servicio], onDelete: SetNull)
 
   @@index([id_cotizacion, orden_item], map: "idx_items_serv_cotizacion")
   @@index([id_servicio, precio_unitario], map: "idx_items_serv_precios")
@@ -1877,6 +1923,7 @@ model propuestas_correctivo {
   ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio          ordenes_servicio          @relation("propuestas_correctivo_id_orden_servicioToordenes_servicio", fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: NoAction)
   ordenes_servicio_propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio ordenes_servicio?         @relation("propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio", fields: [id_orden_servicio_generada], references: [id_orden_servicio])
   empleados                                                                           empleados                 @relation(fields: [propuesta_por], references: [id_empleado], onDelete: NoAction)
+  cotizaciones_derivadas                                                              cotizaciones[]            @relation("cotizaciones_propuesta_origen")
 
   @@index([id_cliente, fecha_propuesta(sort: Desc)], map: "idx_prop_cliente")
   @@index([id_estado, fecha_propuesta(sort: Desc)], map: "idx_prop_estado")
@@ -2151,8 +2198,10 @@ model tipos_equipo {
   tipo_equipo_modulos          tipo_equipo_modulos[]
   tipo_equipo_planes           tipo_equipo_planes[]
   modelos_equipo               modelos_equipo[]
-  catalogo_actividades         catalogo_actividades[]
-  tipos_componente_tipo_equipo tipos_componente_tipo_equipo[]
+  catalogo_actividades             catalogo_actividades[]
+  tipos_componente_tipo_equipo     tipos_componente_tipo_equipo[]
+  catalogo_componentes_tipo_equipo catalogo_componentes_tipo_equipo[]
+  plantillas_cotizacion            plantillas_cotizacion[]
 
   @@index([codigo_tipo], map: "idx_tipos_equipo_codigo")
 }
@@ -3272,9 +3321,11 @@ model modulos_tecnicos {
   fecha_creacion      DateTime              @default(now()) @db.Timestamp(6)
   fecha_modificacion  DateTime?             @default(now()) @db.Timestamp(6)
 
-  modulo_atributos    modulo_atributos[]
-  tipo_equipo_modulos tipo_equipo_modulos[]
-  catalogo_sistemas   catalogo_sistemas[]
+  modulo_atributos                    modulo_atributos[]
+  tipo_equipo_modulos                 tipo_equipo_modulos[]
+  catalogo_sistemas                   catalogo_sistemas[]
+  catalogo_componentes_modulo_tecnico catalogo_componentes_modulo_tecnico[]
+  plantillas_cotizacion               plantillas_cotizacion[]
 
   @@map("modulos_tecnicos")
 }
@@ -3355,9 +3406,10 @@ model modelos_equipo {
   fecha_creacion              DateTime             @default(now()) @db.Timestamp(6)
   fecha_modificacion          DateTime?            @default(now()) @db.Timestamp(6)
 
-  tipo_equipo                 tipos_equipo         @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: Restrict)
+  tipo_equipo                 tipos_equipo            @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: Restrict)
   modelos_equipo_bom          modelos_equipo_bom[]
   equipos                     equipos[]
+  plantillas_cotizacion       plantillas_cotizacion[]
 
   @@index([id_tipo_equipo], map: "idx_modelos_equipo_tipo")
   @@index([marca, modelo], map: "idx_modelos_equipo_marca_modelo")
@@ -3448,6 +3500,12 @@ model configuracion_organizacion {
   politica_retencion_mobile_dias     Int      @default(30)
   modulo_comercial_activo            Boolean  @default(true)
   modulo_inventario_activo           Boolean  @default(true)
+  umbral_aprobacion_supervisor       Decimal  @default(5000000.00) @db.Decimal(14, 2)
+  umbral_aprobacion_gerente          Decimal  @default(15000000.00) @db.Decimal(14, 2)
+  descuento_max_sin_aprobacion       Decimal  @default(15.00) @db.Decimal(5, 2)
+  margen_minimo_alerta               Decimal  @default(25.00) @db.Decimal(5, 2)
+  margen_minimo_aprobacion           Decimal  @default(18.00) @db.Decimal(5, 2)
+  terminos_cotizacion_defecto        String?
   fecha_creacion                     DateTime @default(now()) @db.Timestamp(6)
   fecha_modificacion                 DateTime @default(now()) @updatedAt @db.Timestamp(6)
   modificado_por                     Int?
@@ -3483,6 +3541,30 @@ model tipos_componente_tipo_equipo {
   @@map("tipos_componente_tipo_equipo")
 }
 
+model catalogo_componentes_tipo_equipo {
+  id_componente        Int                  @db.Integer
+  id_tipo_equipo       Int                  @db.Integer
+  fecha_creacion       DateTime             @default(now()) @db.Timestamp(6)
+  catalogo_componentes catalogo_componentes @relation(fields: [id_componente], references: [id_componente], onDelete: Cascade, onUpdate: NoAction, map: "fk_cc_te_componente")
+  tipos_equipo         tipos_equipo         @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: Cascade, onUpdate: NoAction, map: "fk_cc_te_tipo_equipo")
+
+  @@id([id_componente, id_tipo_equipo])
+  @@index([id_tipo_equipo], map: "idx_cc_te_tipo_equipo")
+  @@map("catalogo_componentes_tipo_equipo")
+}
+
+model catalogo_componentes_modulo_tecnico {
+  id_componente        Int                  @db.Integer
+  id_modulo            Int                  @db.Integer
+  fecha_creacion       DateTime             @default(now()) @db.Timestamp(6)
+  catalogo_componentes catalogo_componentes @relation(fields: [id_componente], references: [id_componente], onDelete: Cascade, onUpdate: NoAction, map: "fk_cc_mt_componente")
+  modulos_tecnicos     modulos_tecnicos     @relation(fields: [id_modulo], references: [id_modulo], onDelete: Cascade, onUpdate: NoAction, map: "fk_cc_mt_modulo")
+
+  @@id([id_componente, id_modulo])
+  @@index([id_modulo], map: "idx_cc_mt_modulo")
+  @@map("catalogo_componentes_modulo_tecnico")
+}
+
 model ordenes_eliminadas {
   id_orden_servicio   Int
   numero_orden        String   @db.VarChar(50)
@@ -3493,4 +3575,115 @@ model ordenes_eliminadas {
   @@index([id_tecnico_asignado, fecha_eliminacion], map: "idx_ordenes_eliminadas_tecnico_fecha")
   @@index([fecha_eliminacion], map: "idx_ordenes_eliminadas_fecha")
   @@map("ordenes_eliminadas")
+}
+
+model cotizaciones_equipos {
+  id_cotizacion_equipo Int          @id @default(autoincrement())
+  id_cotizacion        Int
+  id_equipo            Int
+  orden_secuencia      Int          @default(1)
+  notas_alcance        String?
+  fecha_creacion       DateTime     @default(now()) @db.Timestamp(6)
+  cotizaciones         cotizaciones @relation(fields: [id_cotizacion], references: [id_cotizacion], onDelete: Cascade)
+  equipos              equipos      @relation(fields: [id_equipo], references: [id_equipo], onDelete: Restrict)
+
+  @@unique([id_cotizacion, id_equipo], map: "uq_cotizacion_equipo")
+  @@index([id_cotizacion, orden_secuencia], map: "idx_cot_equipos_cot")
+  @@index([id_equipo], map: "idx_cot_equipos_eq")
+  @@map("cotizaciones_equipos")
+}
+
+model items_cotizacion_otros {
+  id_item_otro         Int          @id @default(autoincrement())
+  id_cotizacion        Int
+  id_equipo            Int?
+  categoria_rubro      String       @default("OTRO") @db.VarChar(40)
+  descripcion          String       @db.VarChar(300)
+  detalle_calculo      String?      @db.VarChar(200)
+  cantidad             Decimal      @default(1) @db.Decimal(10, 2)
+  unidad               String?      @default("global") @db.VarChar(30)
+  costo_unitario       Decimal      @default(0) @db.Decimal(12, 2)
+  precio_unitario      Decimal      @default(0) @db.Decimal(12, 2)
+  descuento_porcentaje Decimal      @default(0) @db.Decimal(5, 2)
+  subtotal             Decimal      @default(0) @db.Decimal(12, 2)
+  visible_cliente      Boolean      @default(true)
+  es_opcional          Boolean      @default(false)
+  iva_aplicable        Boolean      @default(true)
+  orden_item           Int          @default(0)
+  observaciones        String?
+  registrado_por       Int?
+  fecha_registro       DateTime     @default(now()) @db.Timestamp(6)
+  cotizaciones         cotizaciones @relation(fields: [id_cotizacion], references: [id_cotizacion], onDelete: Cascade)
+  equipos              equipos?     @relation(fields: [id_equipo], references: [id_equipo], onDelete: SetNull)
+
+  @@index([id_cotizacion, orden_item], map: "idx_items_otros_cot")
+  @@map("items_cotizacion_otros")
+}
+
+model plantillas_cotizacion {
+  id_plantilla               Int                           @id @default(autoincrement())
+  codigo_plantilla           String                        @unique @db.VarChar(60)
+  nombre                     String                        @db.VarChar(200)
+  descripcion                String?
+  tipo_cotizacion            String                        @default("SERVICIO_TECNICO") @db.VarChar(40)
+  id_tipo_equipo             Int?
+  id_modelo_equipo           Int?
+  id_modulo                  Int?
+  asunto_sugerido            String?                       @db.VarChar(300)
+  descripcion_general        String?
+  alcance_trabajo            String?
+  exclusiones                String?
+  terminos_condiciones       String?
+  forma_pago                 String?                       @default("CONTADO") @db.VarChar(100)
+  meses_garantia             Int?                          @default(3)
+  tiempo_estimado_dias       Int?
+  usa_aiu                    Boolean                       @default(false)
+  aiu_admin_porcentaje       Decimal                       @default(0) @db.Decimal(5, 2)
+  aiu_imprevistos_porcentaje Decimal                       @default(0) @db.Decimal(5, 2)
+  aiu_utilidad_porcentaje    Decimal                       @default(0) @db.Decimal(5, 2)
+  iva_sobre_utilidad_aiu     Boolean                       @default(false)
+  veces_usada                Int                           @default(0)
+  activo                     Boolean                       @default(true)
+  creado_por                 Int?
+  fecha_creacion             DateTime                      @default(now()) @db.Timestamp(6)
+  fecha_modificacion         DateTime                      @default(now()) @updatedAt @db.Timestamp(6)
+  tipos_equipo               tipos_equipo?                 @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: SetNull)
+  modelos_equipo             modelos_equipo?               @relation(fields: [id_modelo_equipo], references: [id_modelo_equipo], onDelete: SetNull)
+  modulos_tecnicos           modulos_tecnicos?             @relation(fields: [id_modulo], references: [id_modulo], onDelete: SetNull)
+  items                      plantillas_cotizacion_items[]
+  cotizaciones               cotizaciones[]
+
+  @@index([tipo_cotizacion, activo], map: "idx_plantillas_cot_tipo")
+  @@index([id_tipo_equipo], map: "idx_plantillas_cot_equipo")
+  @@index([id_modelo_equipo], map: "idx_plantillas_cot_modelo")
+  @@map("plantillas_cotizacion")
+}
+
+model plantillas_cotizacion_items {
+  id_plantilla_item    Int                   @id @default(autoincrement())
+  id_plantilla         Int
+  tipo_linea           String                @db.VarChar(20)
+  id_servicio          Int?
+  id_componente        Int?
+  categoria_rubro      String?               @db.VarChar(40)
+  descripcion          String                @db.VarChar(300)
+  detalle_calculo      String?               @db.VarChar(200)
+  unidad               String?               @default("unidad") @db.VarChar(30)
+  cantidad_base        Decimal               @default(1) @db.Decimal(10, 2)
+  es_por_equipo        Boolean               @default(true)
+  usar_precio_catalogo Boolean               @default(true)
+  precio_unitario_fijo Decimal?              @db.Decimal(12, 2)
+  costo_unitario_fijo  Decimal?              @db.Decimal(12, 2)
+  visible_cliente      Boolean               @default(true)
+  es_opcional          Boolean               @default(false)
+  iva_aplicable        Boolean               @default(true)
+  garantia_meses       Int?
+  orden_item           Int                   @default(0)
+  observaciones        String?
+  plantilla            plantillas_cotizacion @relation(fields: [id_plantilla], references: [id_plantilla], onDelete: Cascade)
+  catalogo_servicios   catalogo_servicios?   @relation(fields: [id_servicio], references: [id_servicio], onDelete: SetNull)
+  catalogo_componentes catalogo_componentes? @relation(fields: [id_componente], references: [id_componente], onDelete: SetNull)
+
+  @@index([id_plantilla, orden_item], map: "idx_plantillas_cot_items_pl")
+  @@map("plantillas_cotizacion_items")
 }

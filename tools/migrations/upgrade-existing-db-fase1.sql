@@ -412,4 +412,171 @@ ALTER TABLE public.usuarios ALTER COLUMN password_plain DROP NOT NULL;
 ALTER TABLE public.usuarios ALTER COLUMN password_plain SET DEFAULT NULL;
 UPDATE public.usuarios SET password_plain = NULL WHERE password_plain IS NOT NULL;
 
+-- 10. Aplicabilidad N:M directa a nivel de articulo maestro (catalogo_componentes <-> tipos_equipo)
+ALTER TABLE public.catalogo_componentes
+  ADD COLUMN IF NOT EXISTS aplica_todos_tipos BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS public.catalogo_componentes_tipo_equipo (
+  id_componente   INTEGER NOT NULL REFERENCES public.catalogo_componentes(id_componente) ON DELETE CASCADE,
+  id_tipo_equipo  INTEGER NOT NULL REFERENCES public.tipos_equipo(id_tipo_equipo) ON DELETE CASCADE,
+  fecha_creacion  TIMESTAMP(6) NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (id_componente, id_tipo_equipo)
+);
+CREATE INDEX IF NOT EXISTS idx_cc_te_tipo_equipo ON public.catalogo_componentes_tipo_equipo (id_tipo_equipo);
+
+-- 11. Aplicabilidad granular opcional por Parte / Subsistema EAM (catalogo_componentes <-> modulos_tecnicos)
+CREATE TABLE IF NOT EXISTS public.catalogo_componentes_modulo_tecnico (
+  id_componente   INTEGER NOT NULL REFERENCES public.catalogo_componentes(id_componente) ON DELETE CASCADE,
+  id_modulo       INTEGER NOT NULL REFERENCES public.modulos_tecnicos(id_modulo) ON DELETE CASCADE,
+  fecha_creacion  TIMESTAMP(6) NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (id_componente, id_modulo)
+);
+CREATE INDEX IF NOT EXISTS idx_cc_mt_modulo ON public.catalogo_componentes_modulo_tecnico (id_modulo);
+
+-- 12. Hub Comercial de Cotizaciones EAM-CPQ (Multi-Equipo, Rubros Indirectos/Logistica, AIU, Margen y Plantillas)
+ALTER TABLE public.configuracion_organizacion
+  ADD COLUMN IF NOT EXISTS umbral_aprobacion_supervisor DECIMAL(14,2) NOT NULL DEFAULT 5000000.00,
+  ADD COLUMN IF NOT EXISTS umbral_aprobacion_gerente    DECIMAL(14,2) NOT NULL DEFAULT 15000000.00,
+  ADD COLUMN IF NOT EXISTS descuento_max_sin_aprobacion DECIMAL(5,2)  NOT NULL DEFAULT 15.00,
+  ADD COLUMN IF NOT EXISTS margen_minimo_alerta         DECIMAL(5,2)  NOT NULL DEFAULT 25.00,
+  ADD COLUMN IF NOT EXISTS margen_minimo_aprobacion     DECIMAL(5,2)  NOT NULL DEFAULT 18.00,
+  ADD COLUMN IF NOT EXISTS terminos_cotizacion_defecto  TEXT;
+
+CREATE TABLE IF NOT EXISTS public.plantillas_cotizacion (
+  id_plantilla                SERIAL PRIMARY KEY,
+  codigo_plantilla            VARCHAR(60) UNIQUE NOT NULL,
+  nombre                      VARCHAR(200) NOT NULL,
+  descripcion                 TEXT,
+  tipo_cotizacion             VARCHAR(40) NOT NULL DEFAULT 'SERVICIO_TECNICO',
+  id_tipo_equipo              INTEGER REFERENCES public.tipos_equipo(id_tipo_equipo) ON DELETE SET NULL,
+  id_modelo_equipo            INTEGER REFERENCES public.modelos_equipo(id_modelo_equipo) ON DELETE SET NULL,
+  id_modulo                   INTEGER REFERENCES public.modulos_tecnicos(id_modulo) ON DELETE SET NULL,
+  asunto_sugerido             VARCHAR(300),
+  descripcion_general         TEXT,
+  alcance_trabajo             TEXT,
+  exclusiones                 TEXT,
+  terminos_condiciones        TEXT,
+  forma_pago                  VARCHAR(100) DEFAULT 'CONTADO',
+  meses_garantia              INTEGER DEFAULT 3,
+  tiempo_estimado_dias        INTEGER,
+  usa_aiu                     BOOLEAN NOT NULL DEFAULT false,
+  aiu_admin_porcentaje        DECIMAL(5,2) NOT NULL DEFAULT 0,
+  aiu_imprevistos_porcentaje  DECIMAL(5,2) NOT NULL DEFAULT 0,
+  aiu_utilidad_porcentaje     DECIMAL(5,2) NOT NULL DEFAULT 0,
+  iva_sobre_utilidad_aiu      BOOLEAN NOT NULL DEFAULT false,
+  veces_usada                 INTEGER NOT NULL DEFAULT 0,
+  activo                      BOOLEAN NOT NULL DEFAULT true,
+  creado_por                  INTEGER,
+  fecha_creacion              TIMESTAMP(6) NOT NULL DEFAULT NOW(),
+  fecha_modificacion          TIMESTAMP(6) NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_plantillas_cot_tipo ON public.plantillas_cotizacion (tipo_cotizacion, activo);
+CREATE INDEX IF NOT EXISTS idx_plantillas_cot_equipo ON public.plantillas_cotizacion (id_tipo_equipo);
+CREATE INDEX IF NOT EXISTS idx_plantillas_cot_modelo ON public.plantillas_cotizacion (id_modelo_equipo);
+
+CREATE TABLE IF NOT EXISTS public.plantillas_cotizacion_items (
+  id_plantilla_item      SERIAL PRIMARY KEY,
+  id_plantilla           INTEGER NOT NULL REFERENCES public.plantillas_cotizacion(id_plantilla) ON DELETE CASCADE,
+  tipo_linea             VARCHAR(20) NOT NULL,
+  id_servicio            INTEGER REFERENCES public.catalogo_servicios(id_servicio) ON DELETE SET NULL,
+  id_componente          INTEGER REFERENCES public.catalogo_componentes(id_componente) ON DELETE SET NULL,
+  categoria_rubro        VARCHAR(40),
+  descripcion            VARCHAR(300) NOT NULL,
+  detalle_calculo        VARCHAR(200),
+  unidad                 VARCHAR(30) DEFAULT 'unidad',
+  cantidad_base          DECIMAL(10,2) NOT NULL DEFAULT 1,
+  es_por_equipo          BOOLEAN NOT NULL DEFAULT true,
+  usar_precio_catalogo   BOOLEAN NOT NULL DEFAULT true,
+  precio_unitario_fijo   DECIMAL(12,2),
+  costo_unitario_fijo    DECIMAL(12,2),
+  visible_cliente        BOOLEAN NOT NULL DEFAULT true,
+  es_opcional            BOOLEAN NOT NULL DEFAULT false,
+  iva_aplicable          BOOLEAN NOT NULL DEFAULT true,
+  garantia_meses         INTEGER,
+  orden_item             INTEGER NOT NULL DEFAULT 0,
+  observaciones          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_plantillas_cot_items_pl ON public.plantillas_cotizacion_items (id_plantilla, orden_item);
+
+ALTER TABLE public.cotizaciones
+  ADD COLUMN IF NOT EXISTS tipo_cotizacion                  VARCHAR(40) NOT NULL DEFAULT 'SERVICIO_TECNICO',
+  ADD COLUMN IF NOT EXISTS id_plantilla_origen              INTEGER REFERENCES public.plantillas_cotizacion(id_plantilla) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS id_propuesta_origen              INTEGER REFERENCES public.propuestas_correctivo(id_propuesta) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS moneda                           VARCHAR(10),
+  ADD COLUMN IF NOT EXISTS subtotal_otros                   DECIMAL(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS usa_aiu                          BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS aiu_admin_porcentaje             DECIMAL(5,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS aiu_imprevistos_porcentaje       DECIMAL(5,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS aiu_utilidad_porcentaje          DECIMAL(5,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS aiu_admin_valor                  DECIMAL(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS aiu_imprevistos_valor            DECIMAL(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS aiu_utilidad_valor               DECIMAL(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS aiu_valor_total                  DECIMAL(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS iva_sobre_utilidad_aiu           BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS subtotal_opcionales              DECIMAL(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS costo_total_estimado             DECIMAL(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS utilidad_bruta_estimada          DECIMAL(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS margen_bruto_porcentaje          DECIMAL(6,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS observaciones_aprobacion_cliente TEXT,
+  ADD COLUMN IF NOT EXISTS orden_compra_cliente             VARCHAR(80),
+  ADD COLUMN IF NOT EXISTS modo_agrupacion_pdf              VARCHAR(30) NOT NULL DEFAULT 'POR_CATEGORIA';
+
+CREATE TABLE IF NOT EXISTS public.cotizaciones_equipos (
+  id_cotizacion_equipo SERIAL PRIMARY KEY,
+  id_cotizacion        INTEGER NOT NULL REFERENCES public.cotizaciones(id_cotizacion) ON DELETE CASCADE,
+  id_equipo            INTEGER NOT NULL REFERENCES public.equipos(id_equipo) ON DELETE RESTRICT,
+  orden_secuencia      INTEGER NOT NULL DEFAULT 1,
+  notas_alcance        TEXT,
+  fecha_creacion       TIMESTAMP(6) NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_cotizacion_equipo UNIQUE (id_cotizacion, id_equipo)
+);
+CREATE INDEX IF NOT EXISTS idx_cot_equipos_cot ON public.cotizaciones_equipos (id_cotizacion, orden_secuencia);
+CREATE INDEX IF NOT EXISTS idx_cot_equipos_eq ON public.cotizaciones_equipos (id_equipo);
+
+ALTER TABLE public.items_cotizacion_componentes
+  ALTER COLUMN id_tipo_componente DROP NOT NULL,
+  ADD COLUMN IF NOT EXISTS id_equipo       INTEGER REFERENCES public.equipos(id_equipo) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS costo_unitario  DECIMAL(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS es_opcional     BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS iva_aplicable   BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS seccion_titulo  VARCHAR(120);
+
+ALTER TABLE public.items_cotizacion_servicios
+  ALTER COLUMN id_servicio DROP NOT NULL,
+  ADD COLUMN IF NOT EXISTS id_equipo       INTEGER REFERENCES public.equipos(id_equipo) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS costo_unitario  DECIMAL(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS es_opcional     BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS iva_aplicable   BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS seccion_titulo  VARCHAR(120);
+
+CREATE TABLE IF NOT EXISTS public.items_cotizacion_otros (
+  id_item_otro         SERIAL PRIMARY KEY,
+  id_cotizacion        INTEGER NOT NULL REFERENCES public.cotizaciones(id_cotizacion) ON DELETE CASCADE,
+  id_equipo            INTEGER REFERENCES public.equipos(id_equipo) ON DELETE SET NULL,
+  categoria_rubro      VARCHAR(40) NOT NULL DEFAULT 'OTRO',
+  descripcion          VARCHAR(300) NOT NULL,
+  detalle_calculo      VARCHAR(200),
+  cantidad             DECIMAL(10,2) NOT NULL DEFAULT 1,
+  unidad               VARCHAR(30) DEFAULT 'global',
+  costo_unitario       DECIMAL(12,2) NOT NULL DEFAULT 0,
+  precio_unitario      DECIMAL(12,2) NOT NULL DEFAULT 0,
+  descuento_porcentaje DECIMAL(5,2) NOT NULL DEFAULT 0,
+  subtotal             DECIMAL(12,2) NOT NULL DEFAULT 0,
+  visible_cliente      BOOLEAN NOT NULL DEFAULT true,
+  es_opcional          BOOLEAN NOT NULL DEFAULT false,
+  iva_aplicable        BOOLEAN NOT NULL DEFAULT true,
+  orden_item           INTEGER NOT NULL DEFAULT 0,
+  observaciones        TEXT,
+  registrado_por       INTEGER,
+  fecha_registro       TIMESTAMP(6) NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_items_otros_cot ON public.items_cotizacion_otros (id_cotizacion, orden_item);
+
+-- Backfill cotizaciones_equipos para cotizaciones legacy con id_equipo
+INSERT INTO public.cotizaciones_equipos (id_cotizacion, id_equipo, orden_secuencia)
+SELECT id_cotizacion, id_equipo, 1
+  FROM public.cotizaciones
+ WHERE id_equipo IS NOT NULL
+ON CONFLICT (id_cotizacion, id_equipo) DO NOTHING;
+
 COMMIT;

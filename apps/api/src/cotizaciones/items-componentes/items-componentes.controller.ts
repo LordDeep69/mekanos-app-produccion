@@ -1,4 +1,4 @@
-// Controller - Items Componentes Cotización
+// Controller - Items Componentes Cotización (JWT Protected + EAM-CPQ)
 
 import {
   Body,
@@ -10,9 +10,12 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CreateItemComponenteDto } from './application/dtos/create-item-componente.dto';
 import { UpdateItemComponenteDto } from './application/dtos/update-item-componente.dto';
 import { CreateItemComponenteCommand } from './application/commands/create-item-componente.command';
@@ -20,8 +23,10 @@ import { UpdateItemComponenteCommand } from './application/commands/update-item-
 import { DeleteItemComponenteCommand } from './application/commands/delete-item-componente.command';
 import { GetItemsComponentesQuery } from './application/queries/get-items-componentes.query';
 
-@Controller('cotizaciones/:idCotizacion/componentes')
 @ApiTags('Items Cotización - Componentes')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('cotizaciones/:idCotizacion/componentes')
 export class ItemsComponentesController {
   constructor(
     private readonly commandBus: CommandBus,
@@ -30,13 +35,14 @@ export class ItemsComponentesController {
 
   @Post()
   @ApiOperation({
-    summary: 'Agregar componente a cotización',
+    summary: 'Agregar componente/repuesto a cotización',
     description:
-      'Crea un nuevo item componente en una cotización BORRADOR. Recalcula automáticamente subtotal_componentes y totales.',
+      'Crea un nuevo item componente (catálogo WMS o manual) en una cotización BORRADOR. Recalcula automáticamente totales, AIU, IVA y rentabilidad.',
   })
   async create(
     @Param('idCotizacion', ParseIntPipe) idCotizacion: number,
     @Body() dto: CreateItemComponenteDto,
+    @CurrentUser('id') userId?: number,
   ) {
     const command = new CreateItemComponenteCommand(
       idCotizacion,
@@ -53,7 +59,12 @@ export class ItemsComponentesController {
       dto.observaciones_garantia,
       dto.observaciones,
       dto.orden_item,
-      dto.registrado_por,
+      userId ?? dto.registrado_por,
+      dto.id_equipo,
+      dto.costo_unitario,
+      dto.es_opcional,
+      dto.iva_aplicable,
+      dto.seccion_titulo,
     );
 
     return await this.commandBus.execute(command);
@@ -65,24 +76,9 @@ export class ItemsComponentesController {
     description:
       'Obtiene todos los items componentes de una cotización ordenados por orden_item.',
   })
-  @ApiQuery({
-    name: 'includeComponente',
-    required: false,
-    type: Boolean,
-    description: 'Incluir datos del componente del catálogo',
-  })
-  @ApiQuery({
-    name: 'includeTipoComponente',
-    required: false,
-    type: Boolean,
-    description: 'Incluir datos del tipo de componente',
-  })
-  @ApiQuery({
-    name: 'includeUsuario',
-    required: false,
-    type: Boolean,
-    description: 'Incluir datos del usuario que registró',
-  })
+  @ApiQuery({ name: 'includeComponente', required: false, type: Boolean })
+  @ApiQuery({ name: 'includeTipoComponente', required: false, type: Boolean })
+  @ApiQuery({ name: 'includeUsuario', required: false, type: Boolean })
   async getAll(
     @Param('idCotizacion', ParseIntPipe) idCotizacion: number,
     @Query('includeComponente') includeComponente?: boolean,
@@ -103,7 +99,7 @@ export class ItemsComponentesController {
   @ApiOperation({
     summary: 'Actualizar componente de cotización',
     description:
-      'Modifica un item componente existente. Solo cotizaciones BORRADOR. Recalcula subtotal automáticamente.',
+      'Modifica un item componente existente. Solo cotizaciones BORRADOR. Recalcula totales automáticamente.',
   })
   async update(
     @Param('idCotizacion', ParseIntPipe) idCotizacion: number,
@@ -124,6 +120,12 @@ export class ItemsComponentesController {
       dto.observaciones_garantia,
       dto.observaciones,
       dto.orden_item,
+      dto.id_equipo,
+      dto.id_tipo_componente,
+      dto.costo_unitario,
+      dto.es_opcional,
+      dto.iva_aplicable,
+      dto.seccion_titulo,
     );
 
     return await this.commandBus.execute(command);
@@ -133,7 +135,7 @@ export class ItemsComponentesController {
   @ApiOperation({
     summary: 'Eliminar componente de cotización',
     description:
-      'Elimina un item componente. Solo cotizaciones BORRADOR. Recalcula subtotales automáticamente.',
+      'Elimina un item componente. Solo cotizaciones BORRADOR. Recalcula totales automáticamente.',
   })
   async delete(
     @Param('idCotizacion', ParseIntPipe) idCotizacion: number,

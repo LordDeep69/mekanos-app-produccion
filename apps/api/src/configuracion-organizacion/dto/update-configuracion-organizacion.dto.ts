@@ -296,4 +296,47 @@ export class UpdateConfiguracionOrganizacionDto {
   @IsOptional()
   @IsBoolean()
   modulo_inventario_activo?: boolean;
+
+  @ApiPropertyOptional({ description: 'Monto a partir del cual se requiere aprobación de Supervisor' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  umbral_aprobacion_supervisor?: number;
+
+  @ApiPropertyOptional({ description: 'Monto a partir del cual se requiere aprobación de Gerente' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  umbral_aprobacion_gerente?: number;
+
+  @ApiPropertyOptional({ description: 'Descuento porcentual máximo sin aprobación interna (0-100)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  descuento_max_sin_aprobacion?: number;
+
+  @ApiPropertyOptional({ description: 'Margen bruto mínimo para alerta amarilla (0-100)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  margen_minimo_alerta?: number;
+
+  @ApiPropertyOptional({ description: 'Margen bruto mínimo antes de requerir aprobación gerencial (0-100)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  margen_minimo_aprobacion?: number;
+
+  @ApiPropertyOptional({ description: 'Términos y condiciones por defecto para cotizaciones comerciales' })
+  @IsOptional()
+  @IsString()
+  terminos_cotizacion_defecto?: string | null;
 }

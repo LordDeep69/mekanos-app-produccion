@@ -1,7 +1,8 @@
-// DTO - Crear Item Componente Cotización
+// DTO - Crear Item Componente Cotización (EAM-CPQ Universal)
 
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -13,53 +14,58 @@ import {
 } from 'class-validator';
 
 export class CreateItemComponenteDto {
-  @ApiProperty({
-    description: 'ID del componente del catálogo (opcional si es manual)',
+  @ApiPropertyOptional({
+    description: 'ID del componente del catálogo WMS (opcional si es manual)',
     example: 15,
-    required: false,
   })
   @IsOptional()
   @IsInt()
   id_componente?: number;
 
-  @ApiProperty({
-    description: 'ID del tipo de componente',
+  @ApiPropertyOptional({
+    description: 'ID del tipo de componente (opcional, legacy compatible)',
     example: 3,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsInt()
-  id_tipo_componente!: number;
+  id_tipo_componente?: number;
+
+  @ApiPropertyOptional({
+    description: 'ID del equipo específico al que aplica esta línea (opcional)',
+    example: 42,
+  })
+  @IsOptional()
+  @IsInt()
+  id_equipo?: number;
 
   @ApiProperty({
-    description: 'Descripción del componente',
-    example: 'Filtro de aceite motor Perkins 2806',
+    description: 'Descripción del componente o repuesto',
+    example: 'Batería de Arranque 12V 1000 CCA libre mantenimiento',
   })
   @IsNotEmpty()
   @IsString()
   @MaxLength(300)
   descripcion!: string;
 
-  @ApiProperty({
-    description: 'Referencia o código de catálogo',
+  @ApiPropertyOptional({
+    description: 'Referencia o código de catálogo/fabricante',
     example: 'CH10929',
-    required: false,
   })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   referencia_manual?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Marca del componente',
     example: 'Perkins Original',
-    required: false,
   })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   marca_manual?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Cantidad de componentes',
     example: 2,
     default: 1,
@@ -69,17 +75,26 @@ export class CreateItemComponenteDto {
   @Min(0.01)
   cantidad?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Unidad de medida',
     example: 'unidad',
-    required: false,
   })
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   unidad?: string;
 
+  @ApiPropertyOptional({
+    description: 'Costo unitario interno (si se omite, se hereda del catálogo WMS)',
+    example: 55000,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  costo_unitario?: number;
+
   @ApiProperty({
-    description: 'Precio unitario del componente',
+    description: 'Precio unitario de venta (permite 0 para cortesías/incluidos)',
     example: 85000,
   })
   @IsNotEmpty()
@@ -87,10 +102,9 @@ export class CreateItemComponenteDto {
   @Min(0)
   precio_unitario!: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Porcentaje de descuento (0-100)',
     example: 0,
-    required: false,
   })
   @IsOptional()
   @IsNumber()
@@ -98,46 +112,65 @@ export class CreateItemComponenteDto {
   @Max(100)
   descuento_porcentaje?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Si es true, se presenta como ítem opcional fuera del total principal',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  es_opcional?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Indica si el ítem grava impuesto/IVA',
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  iva_aplicable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Título de sección para agrupación en PDF',
+    maxLength: 120,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  seccion_titulo?: string;
+
+  @ApiPropertyOptional({
     description: 'Meses de garantía del componente',
     example: 6,
-    required: false,
   })
   @IsOptional()
   @IsInt()
   @Min(0)
   garantia_meses?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Observaciones sobre la garantía',
-    required: false,
   })
   @IsOptional()
   @IsString()
   observaciones_garantia?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Observaciones adicionales',
-    required: false,
   })
   @IsOptional()
   @IsString()
   observaciones?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Orden de visualización',
     example: 1,
-    required: false,
   })
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(0)
   orden_item?: number;
 
-  @ApiProperty({
-    description: 'ID usuario que registra',
-    example: 1,
-    required: false,
+  @ApiPropertyOptional({
+    description: 'ID usuario que registra (se resuelve automáticamente del JWT)',
   })
   @IsOptional()
   @IsInt()
