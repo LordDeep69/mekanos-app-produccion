@@ -383,6 +383,25 @@ export class PdfController {
 
       if (actividadesConEquipo.length > 0) {
         // CASO IDEAL: Las actividades tienen id_orden_equipo asignado
+        // Si además existen actividades huérfanas (caso híbrido), distribuirlas por índice sin clonar ni ocultarlas
+        const huerfanasPorEquipo = new Map<number, any[]>();
+        if (actividadesSinEquipo.length > 0) {
+          const sinEqPorDesc = new Map<string, any[]>();
+          for (const act of actividadesSinEquipo) {
+            const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || act.descripcion || 'N/A';
+            if (!sinEqPorDesc.has(key)) sinEqPorDesc.set(key, []);
+            sinEqPorDesc.get(key)!.push(act);
+          }
+          orden.ordenes_equipos.forEach((oe: any, equipoIndex: number) => {
+            const extras: any[] = [];
+            for (const [, acts] of sinEqPorDesc.entries()) {
+              const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
+              if (ordenados[equipoIndex]) extras.push(ordenados[equipoIndex]);
+            }
+            if (extras.length > 0) huerfanasPorEquipo.set(oe.id_orden_equipo, extras);
+          });
+        }
+
         actividadesPorEquipo = orden.ordenes_equipos.map((oe: any) => ({
           equipo: {
             idOrdenEquipo: oe.id_orden_equipo,
@@ -392,34 +411,30 @@ export class PdfController {
             nombreEquipo: oe.equipos?.nombre_equipo || undefined,
             estado: oe.estado_equipo || 'PENDIENTE',
           },
-          actividades: actividadesConEquipo
-            .filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo)
-            .map((act: any) => ({
-              sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
-              descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
+          actividades: [
+            ...actividadesConEquipo.filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo),
+            ...(huerfanasPorEquipo.get(oe.id_orden_equipo) || []),
+          ].map((act: any) => ({
+              sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || act.sistema || 'GENERAL',
+              descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || act.descripcion || 'N/A',
               resultado: (act.estado as any) || 'NA',
               observaciones: act.observaciones || '',
             })),
         }));
       } else if (actividadesSinEquipo.length > 0) {
-        // ✅ FALLBACK INTELIGENTE: Distribuir actividades equitativamente entre equipos
-        // Las actividades del tipo A son idénticas para todos los equipos
-        // Asumimos que si hay N equipos y M actividades, cada equipo tiene M/N actividades
-        // Y el patrón se repite (actividad 1 para todos, actividad 2 para todos, etc.)
+        // ✅ FALLBACK HISTÓRICO: Solo para órdenes previas sin id_orden_equipo (sin clonar falsamente entre equipos)
         this.logger.log(`⚠️ FALLBACK: Distribuyendo ${actividadesSinEquipo.length} actividades entre ${orden.ordenes_equipos.length} equipos`);
 
         const actividadesUnicas = new Map<string, any[]>(); // descripcion -> [resultados por equipo]
 
-        // Agrupar actividades por descripción (cada descripción aparece N veces, una por equipo)
         for (const act of actividadesSinEquipo) {
-          const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A';
+          const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || act.descripcion || 'N/A';
           if (!actividadesUnicas.has(key)) {
             actividadesUnicas.set(key, []);
           }
           actividadesUnicas.get(key)!.push(act);
         }
 
-        // Construir estructura por equipo
         actividadesPorEquipo = orden.ordenes_equipos.map((oe: any, equipoIndex: number) => ({
           equipo: {
             idOrdenEquipo: oe.id_orden_equipo,
@@ -429,16 +444,18 @@ export class PdfController {
             nombreEquipo: oe.equipos?.nombre_equipo || undefined,
             estado: oe.estado_equipo || 'PENDIENTE',
           },
-          actividades: Array.from(actividadesUnicas.entries()).map(([descripcion, acts]) => {
+          actividades: Array.from(actividadesUnicas.entries()).reduce((acc: any[], [descripcion, acts]) => {
             const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
-            const actEquipo = ordenados[equipoIndex] || ordenados[0];
-            return {
-              sistema: actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+            const actEquipo = ordenados[equipoIndex];
+            if (!actEquipo) return acc;
+            acc.push({
+              sistema: actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || actEquipo.sistema || 'GENERAL',
               descripcion: descripcion,
               resultado: (actEquipo.estado as any) || 'NA',
               observaciones: actEquipo.observaciones || '',
-            };
-          }),
+            });
+            return acc;
+          }, []),
         }));
 
         this.logger.log(`✅ FALLBACK completado: ${actividadesUnicas.size} actividades únicas distribuidas`);
@@ -456,6 +473,24 @@ export class PdfController {
 
       if (medicionesConEquipo.length > 0) {
         // CASO IDEAL: Las mediciones tienen id_orden_equipo asignado
+        const medHuerfanasPorEquipo = new Map<number, any[]>();
+        if (medicionesSinEquipo.length > 0) {
+          const sinEqPorParam = new Map<string, any[]>();
+          for (const med of medicionesSinEquipo) {
+            const key = med.parametros_medicion?.nombre_parametro || 'N/A';
+            if (!sinEqPorParam.has(key)) sinEqPorParam.set(key, []);
+            sinEqPorParam.get(key)!.push(med);
+          }
+          orden.ordenes_equipos.forEach((oe: any, equipoIndex: number) => {
+            const extras: any[] = [];
+            for (const [, meds] of sinEqPorParam.entries()) {
+              const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
+              if (ordenados[equipoIndex]) extras.push(ordenados[equipoIndex]);
+            }
+            if (extras.length > 0) medHuerfanasPorEquipo.set(oe.id_orden_equipo, extras);
+          });
+        }
+
         medicionesPorEquipo = orden.ordenes_equipos.map((oe: any) => ({
           equipo: {
             idOrdenEquipo: oe.id_orden_equipo,
@@ -465,17 +500,18 @@ export class PdfController {
             nombreEquipo: oe.equipos?.nombre_equipo || undefined,
             estado: oe.estado_equipo || 'PENDIENTE',
           },
-          mediciones: medicionesConEquipo
-            .filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo)
-            .map((med: any) => ({
+          mediciones: [
+            ...medicionesConEquipo.filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo),
+            ...(medHuerfanasPorEquipo.get(oe.id_orden_equipo) || []),
+          ].map((med: any) => ({
               parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
               valor: Number(med.valor_numerico) || 0,
-              unidad: med.parametros_medicion?.unidad_medida || '',
+              unidad: med.unidad_medida || med.parametros_medicion?.unidad_medida || '',
               nivelAlerta: (med.nivel_alerta as any) || 'OK',
             })),
         }));
       } else if (medicionesSinEquipo.length > 0) {
-        // ✅ FALLBACK INTELIGENTE: Distribuir mediciones entre equipos
+        // ✅ FALLBACK HISTÓRICO: Solo para órdenes previas sin id_orden_equipo (sin clonar valores entre equipos)
         this.logger.log(`⚠️ FALLBACK MEDICIONES: Distribuyendo ${medicionesSinEquipo.length} mediciones entre ${orden.ordenes_equipos.length} equipos`);
 
         const medicionesUnicas = new Map<string, any[]>(); // parametro -> [valores por equipo]
@@ -497,16 +533,18 @@ export class PdfController {
             nombreEquipo: oe.equipos?.nombre_equipo || undefined,
             estado: oe.estado_equipo || 'PENDIENTE',
           },
-          mediciones: Array.from(medicionesUnicas.entries()).map(([parametro, meds]) => {
+          mediciones: Array.from(medicionesUnicas.entries()).reduce((acc: any[], [parametro, meds]) => {
             const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
-            const medEquipo = ordenados[equipoIndex] || ordenados[0];
-            return {
+            const medEquipo = ordenados[equipoIndex];
+            if (!medEquipo) return acc;
+            acc.push({
               parametro: parametro,
               valor: Number(medEquipo.valor_numerico) || 0,
-              unidad: medEquipo.parametros_medicion?.unidad_medida || '',
+              unidad: medEquipo.unidad_medida || medEquipo.parametros_medicion?.unidad_medida || '',
               nivelAlerta: (medEquipo.nivel_alerta as any) || 'OK',
-            };
-          }),
+            });
+            return acc;
+          }, []),
         }));
 
         this.logger.log(`✅ FALLBACK MEDICIONES completado: ${medicionesUnicas.size} parámetros únicos`);
@@ -1435,12 +1473,31 @@ export class PdfController {
         .filter((act: any) => act.id_orden_equipo == null && !act.excluido_pdf);
 
       if (actividadesConEquipo.length > 0) {
+        const huerfanasPorEquipo = new Map<number, any[]>();
+        if (actividadesSinEquipo.length > 0) {
+          const sinEqPorDesc = new Map<string, any[]>();
+          for (const act of actividadesSinEquipo) {
+            const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || act.descripcion || 'N/A';
+            if (!sinEqPorDesc.has(key)) sinEqPorDesc.set(key, []);
+            sinEqPorDesc.get(key)!.push(act);
+          }
+          orden.ordenes_equipos.forEach((oe: any, equipoIndex: number) => {
+            const extras: any[] = [];
+            for (const [, acts] of sinEqPorDesc.entries()) {
+              const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
+              if (ordenados[equipoIndex]) extras.push(ordenados[equipoIndex]);
+            }
+            if (extras.length > 0) huerfanasPorEquipo.set(oe.id_orden_equipo, extras);
+          });
+        }
+
         actividadesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
-          const actividadesEquipo = actividadesConEquipo
-            .filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo)
-            .map((act: any) => ({
-              sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
-              descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
+          const actividadesEquipo = [
+            ...actividadesConEquipo.filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo),
+            ...(huerfanasPorEquipo.get(oe.id_orden_equipo) || []),
+          ].map((act: any) => ({
+              sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || act.sistema || 'GENERAL',
+              descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || act.descripcion || 'N/A',
               resultado: (act.estado as any) || 'NA',
               observaciones: act.observaciones || '',
             }));
@@ -1457,10 +1514,10 @@ export class PdfController {
           };
         });
       } else if (actividadesSinEquipo.length > 0) {
-        // ✅ FIX 14-FEB-2026: fallback para órdenes históricas sin id_orden_equipo en actividades
+        // ✅ FALLBACK HISTÓRICO: Solo órdenes previas sin id_orden_equipo (sin clonar falsamente entre equipos)
         const actividadesUnicas = new Map<string, any[]>();
         for (const act of actividadesSinEquipo) {
-          const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A';
+          const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || act.descripcion || 'N/A';
           if (!actividadesUnicas.has(key)) {
             actividadesUnicas.set(key, []);
           }
@@ -1475,16 +1532,18 @@ export class PdfController {
             codigoEquipo: oe.equipos?.codigo_equipo,
             nombreEquipo: oe.equipos?.nombre_equipo,
           },
-          actividades: Array.from(actividadesUnicas.entries()).map(([descripcion, acts]) => {
+          actividades: Array.from(actividadesUnicas.entries()).reduce((acc: any[], [descripcion, acts]) => {
             const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
-            const actEquipo = ordenados[equipoIndex] || ordenados[0];
-            return {
-              sistema: actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+            const actEquipo = ordenados[equipoIndex];
+            if (!actEquipo) return acc;
+            acc.push({
+              sistema: actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || actEquipo.sistema || 'GENERAL',
               descripcion,
               resultado: (actEquipo.estado as any) || 'NA',
               observaciones: actEquipo.observaciones || '',
-            };
-          }),
+            });
+            return acc;
+          }, []),
         }));
       }
 
@@ -1495,13 +1554,32 @@ export class PdfController {
         .filter((med: any) => med.id_orden_equipo == null && !med.excluido_pdf);
 
       if (medicionesConEquipo.length > 0) {
+        const medHuerfanasPorEquipo = new Map<number, any[]>();
+        if (medicionesSinEquipo.length > 0) {
+          const sinEqPorParam = new Map<string, any[]>();
+          for (const med of medicionesSinEquipo) {
+            const key = med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A';
+            if (!sinEqPorParam.has(key)) sinEqPorParam.set(key, []);
+            sinEqPorParam.get(key)!.push(med);
+          }
+          orden.ordenes_equipos.forEach((oe: any, equipoIndex: number) => {
+            const extras: any[] = [];
+            for (const [, meds] of sinEqPorParam.entries()) {
+              const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
+              if (ordenados[equipoIndex]) extras.push(ordenados[equipoIndex]);
+            }
+            if (extras.length > 0) medHuerfanasPorEquipo.set(oe.id_orden_equipo, extras);
+          });
+        }
+
         medicionesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
-          const medicionesEquipo = medicionesConEquipo
-            .filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo)
-            .map((med: any) => ({
+          const medicionesEquipo = [
+            ...medicionesConEquipo.filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo),
+            ...(medHuerfanasPorEquipo.get(oe.id_orden_equipo) || []),
+          ].map((med: any) => ({
               parametro: med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
               valor: Number(med.valor_numerico) || 0,
-              unidad: med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
+              unidad: med.unidad_medida || med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
               nivelAlerta: (med.nivel_alerta as any) || 'OK',
             }));
 
@@ -1515,7 +1593,7 @@ export class PdfController {
           };
         });
       } else if (medicionesSinEquipo.length > 0) {
-        // ✅ FIX 14-FEB-2026: fallback para órdenes históricas sin id_orden_equipo en mediciones
+        // ✅ FALLBACK HISTÓRICO: Solo órdenes previas sin id_orden_equipo (sin clonar valores entre equipos)
         const medicionesUnicas = new Map<string, any[]>();
         for (const med of medicionesSinEquipo) {
           const key = med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A';
@@ -1531,16 +1609,18 @@ export class PdfController {
             ordenSecuencia: oe.orden_secuencia || 1,
             nombreSistema: oe.nombre_sistema || oe.equipos?.nombre_equipo || 'Equipo',
           },
-          mediciones: Array.from(medicionesUnicas.entries()).map(([parametro, meds]) => {
+          mediciones: Array.from(medicionesUnicas.entries()).reduce((acc: any[], [parametro, meds]) => {
             const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
-            const medEquipo = ordenados[equipoIndex] || ordenados[0];
-            return {
+            const medEquipo = ordenados[equipoIndex];
+            if (!medEquipo) return acc;
+            acc.push({
               parametro,
               valor: Number(medEquipo.valor_numerico) || 0,
-              unidad: medEquipo.parametros_medicion?.unidad_medida || medEquipo.unidad_medida_snapshot || '',
+              unidad: medEquipo.unidad_medida || medEquipo.parametros_medicion?.unidad_medida || medEquipo.unidad_medida_snapshot || '',
               nivelAlerta: (medEquipo.nivel_alerta as any) || 'OK',
-            };
-          }),
+            });
+            return acc;
+          }, []),
         }));
       }
 

@@ -18,6 +18,7 @@ import {
     ArrayMaxSize,
     ArrayMinSize,
     IsArray,
+    IsBoolean,
     IsEnum,
     IsNotEmpty,
     IsNumber,
@@ -184,6 +185,11 @@ export class ActividadDto {
     @IsString()
     @MaxLength(500)
     observaciones?: string;
+
+    @ApiPropertyOptional({ description: 'ID del orden-equipo (para trazabilidad multi-equipo)' })
+    @IsOptional()
+    @IsNumber()
+    idOrdenEquipo?: number;
 }
 
 /**
@@ -210,6 +216,60 @@ export class MedicionDto {
     @IsOptional()
     @IsEnum(NivelAlerta)
     nivelAlerta?: NivelAlerta;
+
+    @ApiPropertyOptional({ description: 'ID del orden-equipo (para trazabilidad multi-equipo)' })
+    @IsOptional()
+    @IsNumber()
+    idOrdenEquipo?: number;
+
+    @ApiPropertyOptional({ description: 'Observaciones específicas de la medición' })
+    @IsOptional()
+    @IsString()
+    @MaxLength(500)
+    observaciones?: string;
+}
+
+/**
+ * Grupo de actividades por equipo (multi-equipo)
+ */
+export class ActividadesPorEquipoDto {
+    @ApiProperty({ description: 'ID del registro en ordenes_equipos' })
+    @IsNumber()
+    idOrdenEquipo: number;
+
+    @ApiProperty({ description: 'Nombre del equipo para display' })
+    @IsString()
+    nombreEquipo: string;
+
+    @ApiPropertyOptional({ description: 'Código del equipo' })
+    @IsOptional()
+    @IsString()
+    codigoEquipo?: string;
+
+    @ApiProperty({ type: [ActividadDto], description: 'Actividades ejecutadas para este equipo' })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ActividadDto)
+    actividades: ActividadDto[];
+}
+
+/**
+ * Grupo de mediciones por equipo (multi-equipo)
+ */
+export class MedicionesPorEquipoDto {
+    @ApiProperty({ description: 'ID del registro en ordenes_equipos' })
+    @IsNumber()
+    idOrdenEquipo: number;
+
+    @ApiProperty({ description: 'Nombre del equipo para display' })
+    @IsString()
+    nombreEquipo: string;
+
+    @ApiProperty({ type: [MedicionDto], description: 'Mediciones registradas para este equipo' })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => MedicionDto)
+    mediciones: MedicionDto[];
 }
 
 /**
@@ -355,6 +415,31 @@ export class FinalizarOrdenCompletoDto {
     @ValidateNested({ each: true })
     @Type(() => MedicionDto)
     mediciones?: MedicionDto[];
+
+    @ApiPropertyOptional({
+        type: [ActividadesPorEquipoDto],
+        description: 'Actividades agrupadas explícitamente por equipo (multi-equipo)'
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ActividadesPorEquipoDto)
+    actividadesPorEquipo?: ActividadesPorEquipoDto[];
+
+    @ApiPropertyOptional({
+        type: [MedicionesPorEquipoDto],
+        description: 'Mediciones agrupadas explícitamente por equipo (multi-equipo)'
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => MedicionesPorEquipoDto)
+    medicionesPorEquipo?: MedicionesPorEquipoDto[];
+
+    @ApiPropertyOptional({ description: 'Indica si la orden fue ejecutada en modo multi-equipo' })
+    @IsOptional()
+    @IsBoolean()
+    esMultiEquipo?: boolean;
 
     @ApiProperty({ description: 'Observaciones generales del servicio' })
     @IsString()

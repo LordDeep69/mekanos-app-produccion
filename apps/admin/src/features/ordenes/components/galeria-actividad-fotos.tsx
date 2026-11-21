@@ -295,6 +295,9 @@ export function GaleriaActividadFotos({
                     const evId = e.id_evidencia ?? e.idEvidencia ?? 0;
                     if (evId && seenIds.has(evId)) continue; // ya agregada
 
+                    // Excluir fotos GENERAL (se gestionan en galería general, no dentro de una actividad)
+                    if (getEvidenciaTipo(e) === 'GENERAL') continue;
+
                     // ✅ FIX MULTI-EQUIPO: Excluir fotos de OTRO equipo
                     if (idOrdenEquipo) {
                         const evEquipo = getEvidenciaIdEquipo(e);

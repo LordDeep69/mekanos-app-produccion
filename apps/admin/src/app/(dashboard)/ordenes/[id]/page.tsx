@@ -602,7 +602,11 @@ function agruparActividadesPorEquipo(
     const conEquipo = actividades.filter((a: any) => a.id_orden_equipo != null);
     const sinEquipo = actividades.filter((a: any) => a.id_orden_equipo == null);
 
-    const mapEquipos = equipos.map((oe): EquipoGroup => ({
+    const equiposOrdenados = [...equipos].sort(
+        (a, b) => (a.orden_secuencia || 0) - (b.orden_secuencia || 0) || a.id_orden_equipo - b.id_orden_equipo
+    );
+
+    const mapEquipos = equiposOrdenados.map((oe): EquipoGroup => ({
         idOrdenEquipo: oe.id_orden_equipo,
         idEquipo: oe.equipo?.id_equipo || (oe as any).id_equipo,
         ordenSecuencia: oe.orden_secuencia || 1,
@@ -611,30 +615,49 @@ function agruparActividadesPorEquipo(
         nombreSistema: oe.nombre_sistema,
     }));
 
-    if (conEquipo.length > 0) {
-        // CASO IDEAL: actividades tienen id_orden_equipo asignado
-        return mapEquipos.map((eq) => ({
-            equipo: eq,
-            actividades: conEquipo.filter((a: any) => a.id_orden_equipo === eq.idOrdenEquipo),
-        }));
-    }
+    const distribuirSinEquipo = (listaSinEquipo: any[]): Map<number, any[]> => {
+        const result = new Map<number, any[]>();
+        if (listaSinEquipo.length === 0) return result;
 
-    if (sinEquipo.length > 0) {
-        // FALLBACK: distribuir por descripción, ordenar por id para determinismo
         const actividadesUnicas = new Map<string, any[]>();
-        for (const act of sinEquipo) {
+        for (const act of listaSinEquipo) {
             const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || 'N/A';
             if (!actividadesUnicas.has(key)) actividadesUnicas.set(key, []);
             actividadesUnicas.get(key)!.push(act);
         }
 
-        return mapEquipos.map((eq, equipoIndex) => ({
-            equipo: eq,
-            actividades: Array.from(actividadesUnicas.entries()).map(([, acts]) => {
+        mapEquipos.forEach((eq, equipoIndex) => {
+            const extras: any[] = [];
+            for (const [, acts] of actividadesUnicas.entries()) {
                 const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
-                const act = ordenados[equipoIndex] || ordenados[0];
-                return { ...act, id_orden_equipo: eq.idOrdenEquipo };
-            }),
+                const act = ordenados[equipoIndex];
+                if (act) {
+                    extras.push({ ...act, id_orden_equipo: eq.idOrdenEquipo });
+                }
+            }
+            if (extras.length > 0) result.set(eq.idOrdenEquipo, extras);
+        });
+        return result;
+    };
+
+    if (conEquipo.length > 0) {
+        // CASO IDEAL: actividades tienen id_orden_equipo asignado (si hubiera huérfanas, se anexan sin clonar ni ocultar)
+        const huerfanasPorEquipo = distribuirSinEquipo(sinEquipo);
+        return mapEquipos.map((eq) => ({
+            equipo: eq,
+            actividades: [
+                ...conEquipo.filter((a: any) => a.id_orden_equipo === eq.idOrdenEquipo),
+                ...(huerfanasPorEquipo.get(eq.idOrdenEquipo) || []),
+            ],
+        }));
+    }
+
+    if (sinEquipo.length > 0) {
+        // FALLBACK HISTÓRICO: solo para órdenes previas sin id_orden_equipo (sin clonar registros hacia otros equipos)
+        const distribuidas = distribuirSinEquipo(sinEquipo);
+        return mapEquipos.map((eq) => ({
+            equipo: eq,
+            actividades: distribuidas.get(eq.idOrdenEquipo) || [],
         }));
     }
 
@@ -648,7 +671,11 @@ function agruparMedicionesPorEquipo(
     const conEquipo = mediciones.filter((m: any) => m.id_orden_equipo != null);
     const sinEquipo = mediciones.filter((m: any) => m.id_orden_equipo == null);
 
-    const mapEquipos = equipos.map((oe): EquipoGroup => ({
+    const equiposOrdenados = [...equipos].sort(
+        (a, b) => (a.orden_secuencia || 0) - (b.orden_secuencia || 0) || a.id_orden_equipo - b.id_orden_equipo
+    );
+
+    const mapEquipos = equiposOrdenados.map((oe): EquipoGroup => ({
         idOrdenEquipo: oe.id_orden_equipo,
         idEquipo: oe.equipo?.id_equipo || (oe as any).id_equipo,
         ordenSecuencia: oe.orden_secuencia || 1,
@@ -657,30 +684,49 @@ function agruparMedicionesPorEquipo(
         nombreSistema: oe.nombre_sistema,
     }));
 
-    if (conEquipo.length > 0) {
-        // CASO IDEAL: mediciones tienen id_orden_equipo asignado
-        return mapEquipos.map((eq) => ({
-            equipo: eq,
-            mediciones: conEquipo.filter((m: any) => m.id_orden_equipo === eq.idOrdenEquipo),
-        }));
-    }
+    const distribuirSinEquipo = (listaSinEquipo: any[]): Map<number, any[]> => {
+        const result = new Map<number, any[]>();
+        if (listaSinEquipo.length === 0) return result;
 
-    if (sinEquipo.length > 0) {
-        // FALLBACK: distribuir por nombre de parámetro, ordenar por id_medicion para determinismo
         const medicionesUnicas = new Map<string, any[]>();
-        for (const med of sinEquipo) {
+        for (const med of listaSinEquipo) {
             const key = med.parametros_medicion?.nombre_parametro || 'N/A';
             if (!medicionesUnicas.has(key)) medicionesUnicas.set(key, []);
             medicionesUnicas.get(key)!.push(med);
         }
 
-        return mapEquipos.map((eq, equipoIndex) => ({
-            equipo: eq,
-            mediciones: Array.from(medicionesUnicas.entries()).map(([, meds]) => {
+        mapEquipos.forEach((eq, equipoIndex) => {
+            const extras: any[] = [];
+            for (const [, meds] of medicionesUnicas.entries()) {
                 const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
-                const med = ordenados[equipoIndex] || ordenados[0];
-                return { ...med, id_orden_equipo: eq.idOrdenEquipo };
-            }),
+                const med = ordenados[equipoIndex];
+                if (med) {
+                    extras.push({ ...med, id_orden_equipo: eq.idOrdenEquipo });
+                }
+            }
+            if (extras.length > 0) result.set(eq.idOrdenEquipo, extras);
+        });
+        return result;
+    };
+
+    if (conEquipo.length > 0) {
+        // CASO IDEAL: mediciones tienen id_orden_equipo asignado (si hubiera huérfanas, se anexan sin clonar ni ocultar)
+        const huerfanasPorEquipo = distribuirSinEquipo(sinEquipo);
+        return mapEquipos.map((eq) => ({
+            equipo: eq,
+            mediciones: [
+                ...conEquipo.filter((m: any) => m.id_orden_equipo === eq.idOrdenEquipo),
+                ...(huerfanasPorEquipo.get(eq.idOrdenEquipo) || []),
+            ],
+        }));
+    }
+
+    if (sinEquipo.length > 0) {
+        // FALLBACK HISTÓRICO: solo para órdenes previas sin id_orden_equipo (sin clonar valores hacia otros equipos)
+        const distribuidas = distribuirSinEquipo(sinEquipo);
+        return mapEquipos.map((eq) => ({
+            equipo: eq,
+            mediciones: distribuidas.get(eq.idOrdenEquipo) || [],
         }));
     }
 
@@ -747,9 +793,14 @@ function TabEjecucion({ orden }: { orden: Orden }) {
     const mediciones = medicionesData?.data || [];
     const parametrosSinMedir = (medicionesData as any)?.parametros_sin_medir || [];
 
-    // ✅ MULTI-EQUIPO: Detectar y agrupar
-    const esMultiEquipo = (orden.ordenes_equipos?.length || 0) > 1;
-    const equipos = orden.ordenes_equipos || [];
+    // ✅ MULTI-EQUIPO: Detectar y agrupar (siempre ordenados canónicamente por orden_secuencia)
+    const equipos = useMemo(
+        () => [...(orden.ordenes_equipos || [])].sort(
+            (a, b) => (a.orden_secuencia || 0) - (b.orden_secuencia || 0) || a.id_orden_equipo - b.id_orden_equipo
+        ),
+        [orden.ordenes_equipos]
+    );
+    const esMultiEquipo = equipos.length > 1;
     const [equipoFiltro, setEquipoFiltro] = useState<number | 'todos'>('todos');
 
     const actividadesPorEquipo = useMemo(() => {
@@ -792,6 +843,9 @@ function TabEjecucion({ orden }: { orden: Orden }) {
 
     const handleCrearMedicion = async (idParametro: number) => {
         if (!nuevoValor && !nuevaObs) return;
+        const idOrdenEquipoTarget = esMultiEquipo
+            ? (equipoFiltro !== 'todos' ? equipoFiltro : undefined)
+            : (equipos.length === 1 ? equipos[0].id_orden_equipo : undefined);
         try {
             await createMedicion.mutateAsync({
                 idOrden: orden.id_orden_servicio,
@@ -799,6 +853,7 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                     id_parametro_medicion: idParametro,
                     valor_numerico: nuevoValor ? parseFloat(nuevoValor) : undefined,
                     observaciones: nuevaObs || undefined,
+                    ...(idOrdenEquipoTarget ? { id_orden_equipo: idOrdenEquipoTarget } : {}),
                 },
             });
             setCreandoParam(null);
@@ -814,7 +869,7 @@ function TabEjecucion({ orden }: { orden: Orden }) {
         <div className="space-y-2">
             {acts.map((act: any) => (
                 <ActividadCardAdvanced
-                    key={act.id_actividad_ejecutada}
+                    key={`${act.id_orden_equipo ?? 'sin'}-${act.id_actividad_ejecutada}`}
                     actividad={act}
                     idOrdenServicio={orden.id_orden_servicio}
                 />
@@ -827,7 +882,7 @@ function TabEjecucion({ orden }: { orden: Orden }) {
         <div className="space-y-2">
             {meds.map((med: any) => (
                 <MedicionCardAdvanced
-                    key={med.id_medicion}
+                    key={`${med.id_orden_equipo ?? 'sin'}-${med.id_medicion}`}
                     medicion={med}
                     idOrdenServicio={orden.id_orden_servicio}
                 />

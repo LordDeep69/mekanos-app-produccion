@@ -346,9 +346,15 @@ export class PrismaOrdenServicioRepository {
       },
     },
     ordenes_equipos: {
+      orderBy: [
+        { orden_secuencia: 'asc' as const },
+        { id_orden_equipo: 'asc' as const },
+      ],
       select: {
         id_orden_equipo: true,
         id_equipo: true,
+        orden_secuencia: true,
+        nombre_sistema: true,
         equipos: {
           select: {
             id_equipo: true,
@@ -431,6 +437,10 @@ export class PrismaOrdenServicioRepository {
     // ("Unknown argument") -> HTTP 400/500. Se elimina; el creador se expone por
     // `creado_por` (id de empleado) y, si se necesita el nombre, vía empleados.
     ordenes_equipos: {
+      orderBy: [
+        { orden_secuencia: 'asc' as const },
+        { id_orden_equipo: 'asc' as const },
+      ],
       include: {
         equipos: {
           include: {
@@ -1075,8 +1085,12 @@ export class PrismaOrdenServicioRepository {
         tipos_servicio: true,
         empleados_ordenes_servicio_id_tecnico_asignadoToempleados: { include: { persona: true } },
         estados_orden: true,
-        // Multi-equipos (necesario para mostrar lista de equipos)
+        // Multi-equipos (necesario para mostrar lista de equipos en orden canónico)
         ordenes_equipos: {
+          orderBy: [
+            { orden_secuencia: 'asc' as const },
+            { id_orden_equipo: 'asc' as const },
+          ],
           include: {
             equipos: { include: { tipos_equipo: true } }
           }

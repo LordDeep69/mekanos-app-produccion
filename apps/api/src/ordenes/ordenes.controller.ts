@@ -512,7 +512,7 @@ export class OrdenesController {
       include: {
         parametros_medicion: true,
       },
-      orderBy: { fecha_medicion: 'desc' },
+      orderBy: [{ id_orden_equipo: 'asc' }, { id_medicion: 'asc' }],
     });
 
     return {
@@ -571,11 +571,11 @@ export class OrdenesController {
 
     console.log(`[MEDICIONES-COMPLETAS] Orden #${id}: id_tipo_servicio=${orden.id_tipo_servicio}, id_tipo_equipo=${orden.equipos?.id_tipo_equipo}, plan_items=${orden.ordenes_actividades_plan?.length}, ordenes_equipos=${orden.ordenes_equipos?.length}`);
 
-    // 2. Obtener mediciones ya registradas
+    // 2. Obtener mediciones ya registradas (orden determinista por equipo y registro)
     const mediciones = await this.prisma.mediciones_servicio.findMany({
       where: { id_orden_servicio: id },
       include: { parametros_medicion: true },
-      orderBy: { fecha_medicion: 'desc' },
+      orderBy: [{ id_orden_equipo: 'asc' }, { id_medicion: 'asc' }],
     });
 
     const idsMedidos = new Set(mediciones.map(m => m.id_parametro_medicion));
@@ -3895,10 +3895,11 @@ export class OrdenesController {
     console.log('');
     console.log('📝 ACTIVIDADES recibidas:', dto.actividades?.length || 0);
     dto.actividades?.slice(0, 3).forEach((act, i) => {
-      console.log(`   [${i}] sistema="${act.sistema}", resultado="${act.resultado}"`);
+      console.log(`   [${i}] idOrdenEquipo=${act.idOrdenEquipo ?? 'NULL'}, sistema="${act.sistema}", resultado="${act.resultado}"`);
     });
     console.log('');
     console.log('📏 MEDICIONES:', dto.mediciones?.length || 0);
+    console.log(`🔧 MULTI-EQUIPO: flag=${dto.esMultiEquipo ?? false}, actPorEquipo=${dto.actividadesPorEquipo?.length || 0}, medPorEquipo=${dto.medicionesPorEquipo?.length || 0}`);
     console.log(`⏰ HORA ENTRADA: "${dto.horaEntrada}"`);
     console.log(`⏰ HORA SALIDA: "${dto.horaSalida}"`);
     console.log(`📝 OBSERVACIONES: "${dto.observaciones?.substring(0, 50)}..."`);
@@ -3940,14 +3941,44 @@ export class OrdenesController {
         descripcion: a.descripcion,
         resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
         observaciones: a.observaciones,
+        idOrdenEquipo: a.idOrdenEquipo,
       })),
       mediciones: dto.mediciones?.map(m => ({
         parametro: m.parametro,
         valor: m.valor,
         unidad: m.unidad,
         nivelAlerta: m.nivelAlerta as 'OK' | 'WARNING' | 'CRITICAL' | undefined,
+        idOrdenEquipo: m.idOrdenEquipo,
+        observaciones: m.observaciones,
       })),
+      // ✅ MULTI-EQUIPOS: Preservar agrupación explícita por equipo desde Mobile
+      actividadesPorEquipo: dto.actividadesPorEquipo?.map(g => ({
+        idOrdenEquipo: g.idOrdenEquipo,
+        nombreEquipo: g.nombreEquipo,
+        codigoEquipo: g.codigoEquipo,
+        actividades: (g.actividades || []).map(a => ({
+          sistema: a.sistema,
+          descripcion: a.descripcion,
+          resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
+          observaciones: a.observaciones,
+          idOrdenEquipo: a.idOrdenEquipo ?? g.idOrdenEquipo,
+        })),
+      })),
+      medicionesPorEquipo: dto.medicionesPorEquipo?.map(g => ({
+        idOrdenEquipo: g.idOrdenEquipo,
+        nombreEquipo: g.nombreEquipo,
+        mediciones: (g.mediciones || []).map(m => ({
+          parametro: m.parametro,
+          valor: m.valor,
+          unidad: m.unidad,
+          nivelAlerta: m.nivelAlerta as 'OK' | 'WARNING' | 'CRITICAL' | undefined,
+          idOrdenEquipo: m.idOrdenEquipo ?? g.idOrdenEquipo,
+          observaciones: m.observaciones,
+        })),
+      })),
+      esMultiEquipo: dto.esMultiEquipo,
       observaciones: dto.observaciones,
+      razonFalla: dto.razonFalla,
       datosModulo: dto.datosModulo,
       horaEntrada: dto.horaEntrada,
       horaSalida: dto.horaSalida,
@@ -4063,14 +4094,44 @@ export class OrdenesController {
           descripcion: a.descripcion,
           resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
           observaciones: a.observaciones,
+          idOrdenEquipo: a.idOrdenEquipo,
         })),
         mediciones: dto.mediciones?.map(m => ({
           parametro: m.parametro,
           valor: m.valor,
           unidad: m.unidad,
           nivelAlerta: m.nivelAlerta as 'OK' | 'WARNING' | 'CRITICAL' | undefined,
+          idOrdenEquipo: m.idOrdenEquipo,
+          observaciones: m.observaciones,
         })),
+        // ✅ MULTI-EQUIPOS: Preservar agrupación explícita por equipo desde Mobile
+        actividadesPorEquipo: dto.actividadesPorEquipo?.map(g => ({
+          idOrdenEquipo: g.idOrdenEquipo,
+          nombreEquipo: g.nombreEquipo,
+          codigoEquipo: g.codigoEquipo,
+          actividades: (g.actividades || []).map(a => ({
+            sistema: a.sistema,
+            descripcion: a.descripcion,
+            resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
+            observaciones: a.observaciones,
+            idOrdenEquipo: a.idOrdenEquipo ?? g.idOrdenEquipo,
+          })),
+        })),
+        medicionesPorEquipo: dto.medicionesPorEquipo?.map(g => ({
+          idOrdenEquipo: g.idOrdenEquipo,
+          nombreEquipo: g.nombreEquipo,
+          mediciones: (g.mediciones || []).map(m => ({
+            parametro: m.parametro,
+            valor: m.valor,
+            unidad: m.unidad,
+            nivelAlerta: m.nivelAlerta as 'OK' | 'WARNING' | 'CRITICAL' | undefined,
+            idOrdenEquipo: m.idOrdenEquipo ?? g.idOrdenEquipo,
+            observaciones: m.observaciones,
+          })),
+        })),
+        esMultiEquipo: dto.esMultiEquipo,
         observaciones: dto.observaciones,
+        razonFalla: dto.razonFalla,
         datosModulo: dto.datosModulo,
         horaEntrada: dto.horaEntrada,
         horaSalida: dto.horaSalida,
