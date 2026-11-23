@@ -50,6 +50,10 @@ import { CreateOrdenDto } from './dto/create-orden.dto';
 import { FinalizarOrdenCompletoDto } from './dto/finalizar-orden-completo.dto';
 import { AddActividadPlanDto, UpdateActividadPlanDto } from './dto/plan-actividades.dto';
 import { ProgramarOrdenDto } from './dto/programar-orden.dto';
+import {
+  PreviewTransferenciaOrdenDto,
+  TransferirDatosOrdenDto,
+} from './dto/transferir-datos-orden.dto';
 import { UpdateOrdenDto } from './dto/update-orden.dto';
 
 // Services
@@ -68,6 +72,7 @@ import {
   ProgresoRegistroService,
   HeartbeatProgresoDto,
 } from './services/progreso-registro.service';
+import { TransferenciaOrdenService } from './services/transferencia-orden.service';
 
 // Decorators
 import { UserId } from './decorators/user-id.decorator';
@@ -77,7 +82,6 @@ import {
   normalizarObservacionCierre,
   observacionesCierreEquivalentes,
 } from './domain/observaciones-cierre-audit';
-import { VALIDACIONES_POR_ESTADO } from './domain/workflow-estados';
 
 /**
  * OrdenesController - FASE 3
@@ -110,6 +114,7 @@ export class OrdenesController {
     private readonly r2Service: R2StorageService,
     private readonly progresoService: ProgresoRegistroService,
     private readonly inventarioService: InventarioService,
+    private readonly transferenciaService: TransferenciaOrdenService,
     @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
   ) {}
 
@@ -4244,509 +4249,58 @@ export class OrdenesController {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ✅ FIX 13-MAR-2026: TRANSFERIR DATOS ENTRE ÓRDENES
+  // ✅ TRANSFERENCIA INTELIGENTE DE DATOS ENTRE ÓRDENES (v2.0)
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
+   * POST /api/ordenes/:id/transferir-datos/preview
+   * Analiza origen y destino, calcula emparejamiento 1:1 inteligente por equipo,
+   * detecta cruces de cliente/tipo de equipo/datos legacy y devuelve el plan sugerido.
+   */
+  @Post(':id/transferir-datos/preview')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Previsualizar transferencia inteligente de datos entre órdenes',
+    description:
+      'Analiza ambas órdenes, reconstruye la atribución por equipo (incluyendo órdenes históricas), sugiere el mapeo 1:1 exacto y reporta advertencias de compatibilidad antes de ejecutar.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden DESTINO', type: Number })
+  @ApiResponse({ status: 200, description: 'Diagnóstico y mapeo sugerido calculados' })
+  async previsualizarTransferenciaOrden(
+    @Param('id', ParseIntPipe) idDestino: number,
+    @Body() body: PreviewTransferenciaOrdenDto,
+  ) {
+    return this.transferenciaService.previsualizarTransferencia(
+      idDestino,
+      Number(body?.idOrdenOrigen),
+    );
+  }
+
+  /**
    * POST /api/ordenes/:id/transferir-datos
-   * Transfiere TODOS los datos/evidencias/firmas de una orden origen a esta orden destino.
-   * La orden destino NO debe estar COMPLETADA ni CANCELADA.
+   * Ejecuta transferencia atómica con mapeo 1:1 por equipo, preservación de id_orden_equipo,
+   * protección de formato/equipo destino y control granular de equipos excedentes.
    */
   @Post(':id/transferir-datos')
   @HttpCode(200)
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: 'Transferir datos completos de otra orden',
+    summary: 'Transferir datos completos de otra orden con mapeo inteligente por equipo',
     description:
-      'Copia todos los datos (campos directos, actividades, evidencias, mediciones, firmas, componentes) de una orden origen a la orden destino.',
+      'Copia selectivamente los datos (actividades, mediciones, evidencias por equipo y generales, lotes de galería, observaciones, firmas, componentes y pendientes) preservando los vínculos id_orden_equipo e identidad del destino.',
   })
   @ApiParam({ name: 'id', description: 'ID de la orden DESTINO', type: Number })
   @ApiResponse({ status: 200, description: 'Datos transferidos exitosamente' })
   async transferirDatosOrden(
     @Param('id', ParseIntPipe) idDestino: number,
-    @Body() body: { idOrdenOrigen: number },
+    @Body() body: TransferirDatosOrdenDto,
     @UserId() userId: number,
   ) {
-    const { idOrdenOrigen } = body;
-
-    if (!idOrdenOrigen || typeof idOrdenOrigen !== 'number') {
-      throw new BadRequestException('Debe proporcionar idOrdenOrigen (numérico)');
-    }
-
-    if (idOrdenOrigen === idDestino) {
-      throw new BadRequestException('La orden origen y destino no pueden ser la misma');
-    }
-
-    console.log(
-      `🔄 [TRANSFER] Iniciando transferencia: Orden #${idOrdenOrigen} → Orden #${idDestino}`,
+    return this.transferenciaService.ejecutarTransferencia(
+      idDestino,
+      body,
+      userId,
     );
-
-    // 1. Validar que ambas órdenes existen
-    const [ordenOrigen, ordenDestino] = await Promise.all([
-      this.prisma.ordenes_servicio.findUnique({
-        where: { id_orden_servicio: idOrdenOrigen },
-        include: { estados_orden: true },
-      }),
-      this.prisma.ordenes_servicio.findUnique({
-        where: { id_orden_servicio: idDestino },
-        include: { estados_orden: true },
-      }),
-    ]);
-
-    if (!ordenOrigen) {
-      throw new NotFoundException(`Orden origen #${idOrdenOrigen} no encontrada`);
-    }
-    if (!ordenDestino) {
-      throw new NotFoundException(`Orden destino #${idDestino} no encontrada`);
-    }
-
-    // 2. Validar que el destino NO sea un estado final.
-    //
-    // 🛡️ FUENTE ÚNICA DE VERDAD (03-OCT-2026): antes esta comprobación mantenía su
-    // propia lista hardcodeada ['COMPLETADA','CANCELADA'] que ya divergía de tres
-    // definiciones distintas de "estado final" (FSM, columna es_estado_final, seed).
-    // Ahora se lee `es_estado_final` de la propia fila de estados_orden, de modo que
-    // el backend, el frontend y la base de datos no puedan discrepar.
-    const estadoDestinoRow = ordenDestino.estados_orden;
-    const estadoDestino = estadoDestinoRow?.codigo_estado?.toUpperCase();
-    const estadoOrigen = ordenOrigen.estados_orden?.codigo_estado?.toUpperCase();
-
-    if (!estadoDestinoRow || !estadoDestino) {
-      throw new InternalServerErrorException(
-        `La orden destino #${idDestino} tiene id_estado_actual=${ordenDestino.id_estado_actual} ` +
-          `sin relación válida en estados_orden. No se puede evaluar la transferencia.`,
-      );
-    }
-
-    if (estadoDestinoRow.es_estado_final) {
-      throw new BadRequestException(
-        `La orden destino #${idDestino} (${ordenDestino.numero_orden}) está en estado ` +
-          `"${estadoDestinoRow.nombre_estado}" y no se puede sobrescribir. ` +
-          `Solo se puede transferir a órdenes en estados no finales.`,
-      );
-    }
-
-    console.log(
-      `🔄 [TRANSFER] Origen: ${ordenOrigen.numero_orden} (${estadoOrigen}) | Destino: ${ordenDestino.numero_orden} (${estadoDestino})`,
-    );
-
-    // ── ADOPCIÓN DE ESTADO (no "transición") ──
-    //
-    // La transferencia NO es un avance de una orden: es el reemplazo del cuerpo de
-    // trabajo de una orden por el de otra. Por eso NO se valida contra las aristas de
-    // la FSM. La FSM (`workflow-estados.ts`) modela el progreso de un técnico paso a
-    // paso — PROGRAMADA → ASIGNADA → EN_PROCESO → COMPLETADA — y exigir esa arista
-    // obligaría a recorrer estados intermedios que ya existen y son consistentes en la
-    // orden origen. Un fix previo aplicó `validarTransicion` aquí y bloqueó el caso
-    // de uso principal (ASIGNADA ← COMPLETADA), que es precisamente el escenario
-    // para el que existe esta función.
-    //
-    // Lo que sí debe cumplirse es que el estado adoptado sea VÁLIDO como estado final
-    // de una orden, es decir: que los campos que ese estado exige existan. Como esos
-    // campos viajan en la copia (PASO B), se valida un objeto compuesto.
-    const estadoSeAdopta = Boolean(estadoOrigen && estadoOrigen !== estadoDestino);
-
-    if (estadoSeAdopta) {
-      // CANCELADA no es adoptable: una orden cancelada representa una decisión
-      // operativa sobre ESA orden, no un cuerpo de trabajo reutilizable.
-      if (estadoOrigen === 'CANCELADA') {
-        throw new BadRequestException(
-          `No se puede transferir desde la orden ${ordenOrigen.numero_orden}: está CANCELADA. ` +
-            `Una orden cancelada no aporta datos de trabajo; use "Aprobar/Rechazar" sobre la orden destino.`,
-        );
-      }
-
-      // Estados que exigen un técnico responsable (invariante del dominio).
-      const ESTADOS_QUE_EXIGEN_TECNICO = ['ASIGNADA', 'EN_PROCESO', 'EN_ESPERA_REPUESTO'];
-      if (ESTADOS_QUE_EXIGEN_TECNICO.includes(estadoOrigen!) && !ordenDestino.id_tecnico_asignado) {
-        throw new BadRequestException(
-          `No se puede transferir: la orden destino ${ordenDestino.numero_orden} no tiene técnico asignado, ` +
-            `pero el estado de la orden origen es "${estadoOrigen}", que exige un técnico responsable. ` +
-            `Asigne un técnico a la orden destino antes de transferir.`,
-        );
-      }
-
-      // Los campos que el estado adoptado exige deben existir. Se evalúan sobre el
-      // objeto que la orden quedará tenga tras la copia, no sobre el estado actual del
-      // destino (que todavía no tiene los datos del origen).
-      const camposRequeridos = VALIDACIONES_POR_ESTADO[estadoOrigen!]?.campos_requeridos ?? [];
-      const datosTrasLaCopia: Record<string, unknown> = {
-        ...ordenOrigen,
-        id_tecnico_asignado: ordenDestino.id_tecnico_asignado,
-      };
-      const faltantes = camposRequeridos.filter((campo) => !datosTrasLaCopia[campo]);
-      if (faltantes.length > 0) {
-        throw new BadRequestException(
-          `No se puede adoptar el estado "${estadoOrigen}" en la orden ${ordenDestino.numero_orden}: ` +
-            `la orden origen ${ordenOrigen.numero_orden} no tiene ${faltantes.join(', ')}. ` +
-            `Un estado que exige esos campos no puede quedar incompleto.`,
-        );
-      }
-    }
-
-    // 3. Ejecutar transferencia en transacción atómica
-    const resultado = await this.prisma.$transaction(
-      async (tx) => {
-        const stats = {
-          camposDirectos: false,
-          ordenesEquipos: 0,
-          actividadesEjecutadas: 0,
-          evidenciasFotograficas: 0,
-          medicionesServicio: 0,
-          componentesUsados: 0,
-          ordenesActividadesPlan: 0,
-        };
-
-        // ── PASO A: Limpiar datos existentes en destino (orden inverso de dependencias) ──
-        console.log(`🗑️ [TRANSFER] Limpiando datos existentes en orden destino #${idDestino}...`);
-
-        // ✅ FIX 14-ABR-2026: NO borrar ordenes_equipos - mantener equipo de orden destino
-        const delComponentes = await tx.componentes_usados.deleteMany({
-          where: { id_orden_servicio: idDestino },
-        });
-        const delEvidencias = await tx.evidencias_fotograficas.deleteMany({
-          where: { id_orden_servicio: idDestino },
-        });
-        const delMediciones = await tx.mediciones_servicio.deleteMany({
-          where: { id_orden_servicio: idDestino },
-        });
-        const delActividades = await tx.actividades_ejecutadas.deleteMany({
-          where: { id_orden_servicio: idDestino },
-        });
-        // await tx.ordenes_equipos.deleteMany({ where: { id_orden_servicio: idDestino } }); // ❌ NO borrar equipos
-        const delPlan = await tx.ordenes_actividades_plan.deleteMany({
-          where: { id_orden_servicio: idDestino },
-        });
-
-        // ── PASO B: Copiar campos directos de la orden ──
-        console.log(`📋 [TRANSFER] Copiando campos directos...`);
-
-        await tx.ordenes_servicio.update({
-          where: { id_orden_servicio: idDestino },
-          data: {
-            // Adopta el estado del ORIGEN (decisión de negocio 03-OCT-2026), ya validado
-            // contra la FSM arriba. Si el estado no cambia, se envía el del destino para
-            // no generar un update redundante del campo.
-            id_estado_actual: estadoSeAdopta
-              ? ordenOrigen.id_estado_actual
-              : ordenDestino.id_estado_actual,
-            trabajo_realizado: ordenOrigen.trabajo_realizado,
-            observaciones_tecnico: ordenOrigen.observaciones_tecnico,
-            observaciones_cierre: ordenOrigen.observaciones_cierre,
-            descripcion_inicial: ordenOrigen.descripcion_inicial,
-            fecha_inicio_real: ordenOrigen.fecha_inicio_real,
-            fecha_fin_real: ordenOrigen.fecha_fin_real,
-            duracion_minutos: ordenOrigen.duracion_minutos,
-            nombre_quien_recibe: ordenOrigen.nombre_quien_recibe,
-            cargo_quien_recibe: ordenOrigen.cargo_quien_recibe,
-            cliente_conforme: ordenOrigen.cliente_conforme,
-            calificacion_cliente: ordenOrigen.calificacion_cliente,
-            tiene_garantia: ordenOrigen.tiene_garantia,
-            meses_garantia: ordenOrigen.meses_garantia,
-            fecha_vencimiento_garantia: ordenOrigen.fecha_vencimiento_garantia,
-            observaciones_garantia: ordenOrigen.observaciones_garantia,
-            id_firma_cliente: ordenOrigen.id_firma_cliente,
-            id_firma_tecnico: ordenOrigen.id_firma_tecnico,
-            metadata: ordenOrigen.metadata ?? undefined,
-            total_servicios: ordenOrigen.total_servicios,
-            total_gastos: ordenOrigen.total_gastos,
-            total_componentes: ordenOrigen.total_componentes,
-            total_general: ordenOrigen.total_general,
-            modificado_por: userId || null,
-            fecha_modificacion: new Date(),
-          },
-        });
-        stats.camposDirectos = true;
-
-        // ── TRAZABILIDAD INTERNA DE LA TRANSFERENCIA (03-OCT-2026) ──
-        // Antes solo se escribía un historial con `id_estado_anterior` NULL y un texto
-        // libre, lo que dejaba 1.430 de 1.521 registros de historial sin estado de
-        // partida (auditoría no reconstruible). Ahora se registran estado anterior y
-        // nuevo, y el `metadata` guarda el detalle forense de lo que se copió y lo que NO.
-        const auditoria = {
-          operacion: 'TRANSFERIR_DATOS_ENTRE_ORDENES',
-          orden_origen_id: idOrdenOrigen,
-          orden_origen_numero: ordenOrigen.numero_orden,
-          orden_destino_id: idDestino,
-          orden_destino_numero: ordenDestino.numero_orden,
-          estado_origen: estadoOrigen ?? null,
-          estado_destino_antes: estadoDestino,
-          estado_destino_despues: estadoOrigen ?? estadoDestino,
-          // La transferencia es una ADOPCIÓN de estado, no una transición por la FSM.
-          // Se deja explícito para que un auditor no interprete este salto como
-          // una transición saltada: el estado anterior y el nuevo quedan ambos
-          // registrados en las columnas propias del historial.
-          tipo_operacion: 'ADOPCION_ESTADO',
-          validado_contra_fsm: false,
-          validacion_aplicada: 'compatibilidad_de_destino',
-          // Campos explícitos: la ausencia detransferencia de técnico y de equipo es
-          // una decisión de negocio, no un olvido. Se hace auditable.
-          tecnico_transferido: false,
-          tecnico_conservado: ordenDestino.id_tecnico_asignado ?? null,
-          equipos_transferidos: false,
-          equipos_conservados: true,
-          campos_directos_sobrescritos: true,
-          // La transferencia también reemplaza las observaciones de cierre del
-          // destino con las del origen. Se deja el antes/después explícito para
-          // que la auditoría no dependa de reconstruir el estado anterior.
-          observacion_cierre_anterior: ordenDestino.observaciones_cierre ?? null,
-          observacion_cierre_nueva: ordenOrigen.observaciones_cierre ?? null,
-          // Conteo de lo SOBREESCRITO, tomado del `deleteMany` de PASO A (no de un
-          // `count` posterior, que siempre devolvería 0 al haber borrado ya).
-          sobrescrito_en_destino: {
-            componentes_usados: delComponentes,
-            evidencias_fotograficas: delEvidencias,
-            mediciones_servicio: delMediciones,
-            actividades_ejecutadas: delActividades,
-            ordenes_actividades_plan: delPlan,
-          },
-          usuario: userId ?? null,
-          timestamp: new Date().toISOString(),
-        };
-
-        await tx.historial_estados_orden.create({
-          data: {
-            id_orden_servicio: idDestino,
-            // Estado anterior explícito: sin esto el salto queda huérfano en la auditoría.
-            id_estado_anterior: ordenDestino.id_estado_actual,
-            id_estado_nuevo: ordenOrigen.id_estado_actual,
-            motivo_cambio: 'Transferencia de datos entre órdenes',
-            observaciones:
-              `ADOPCIÓN de estado por transferencia: ${estadoDestino} → ${estadoOrigen}, ` +
-              `tomando el cuerpo de trabajo de ${ordenOrigen.numero_orden} (ID ${idOrdenOrigen}). ` +
-              `No es una transición por la FSM: la transferencia reemplaza la orden, no la avanza. ` +
-              `Técnico conservado: ${ordenDestino.id_tecnico_asignado ?? 'sin asignar'}. ` +
-              `Equipos conservados (no se transfieren por diseño).`,
-            accion: 'TRANSFERIR_DATOS',
-            fecha_cambio: new Date(),
-            realizado_por: userId || 1,
-            metadata: auditoria,
-          },
-        });
-        console.log(
-          `🔄 [TRANSFER] Estado ${estadoDestino} → ${estadoOrigen} registrado en historial (auditado)`,
-        );
-
-        // ── PASO C: NO copiar ordenes_equipos (mantener equipo de orden destino)
-        // ✅ FIX 14-ABR-2026: Si el técnico se equivocó de equipo, queremos mantener el equipo correcto de destino
-        console.log(`📦 [TRANSFER] Equipos NO transferidos (manteniendo equipo de orden destino)`);
-        // Sin usages posteriores: se eliminó el Map vacío para no mantener código muerto.
-
-        // ── PASO D: Copiar actividades_ejecutadas ──
-        const actividadesOrigen = await tx.actividades_ejecutadas.findMany({
-          where: { id_orden_servicio: idOrdenOrigen },
-          orderBy: { orden_secuencia: 'asc' },
-        });
-
-        // Mapa de ID viejo → ID nuevo para actividades
-        const mapActividades = new Map<number, number>();
-
-        for (const act of actividadesOrigen) {
-          // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
-          const nuevoIdOrdenEquipo = null;
-          const nuevaAct = await tx.actividades_ejecutadas.create({
-            data: {
-              id_orden_servicio: idDestino,
-              id_actividad_catalogo: act.id_actividad_catalogo,
-              descripcion_manual: act.descripcion_manual,
-              sistema: act.sistema,
-              orden_secuencia: act.orden_secuencia,
-              estado: act.estado,
-              observaciones: act.observaciones,
-              ejecutada: act.ejecutada,
-              fecha_ejecucion: act.fecha_ejecucion,
-              ejecutada_por: act.ejecutada_por,
-              tiempo_ejecucion_minutos: act.tiempo_ejecucion_minutos,
-              requiere_evidencia: act.requiere_evidencia,
-              evidencia_capturada: act.evidencia_capturada,
-              fecha_registro: act.fecha_registro,
-              id_orden_equipo: nuevoIdOrdenEquipo,
-            },
-          });
-          mapActividades.set(act.id_actividad_ejecutada, nuevaAct.id_actividad_ejecutada);
-          stats.actividadesEjecutadas++;
-        }
-
-        console.log(`⚡ [TRANSFER] Copiadas ${stats.actividadesEjecutadas} actividades_ejecutadas`);
-
-        // ── PASO E: Copiar evidencias_fotograficas ──
-        const evidenciasOrigen = await tx.evidencias_fotograficas.findMany({
-          where: { id_orden_servicio: idOrdenOrigen },
-          orderBy: { orden_visualizacion: 'asc' },
-        });
-
-        for (const ev of evidenciasOrigen) {
-          // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
-          const nuevoIdOrdenEquipo = null;
-          const nuevoIdActividad = ev.id_actividad_ejecutada
-            ? (mapActividades.get(ev.id_actividad_ejecutada) ?? null)
-            : null;
-
-          await tx.evidencias_fotograficas.create({
-            data: {
-              id_orden_servicio: idDestino,
-              id_actividad_ejecutada: nuevoIdActividad,
-              tipo_evidencia: ev.tipo_evidencia,
-              descripcion: ev.descripcion,
-              nombre_archivo: ev.nombre_archivo,
-              ruta_archivo: ev.ruta_archivo,
-              hash_sha256: ev.hash_sha256,
-              tama_o_bytes: ev.tama_o_bytes,
-              mime_type: ev.mime_type,
-              ancho_pixels: ev.ancho_pixels,
-              alto_pixels: ev.alto_pixels,
-              orden_visualizacion: ev.orden_visualizacion,
-              es_principal: ev.es_principal,
-              fecha_captura: ev.fecha_captura,
-              capturada_por: ev.capturada_por,
-              latitud: ev.latitud,
-              longitud: ev.longitud,
-              metadata_exif: ev.metadata_exif ?? undefined,
-              tiene_miniatura: ev.tiene_miniatura,
-              ruta_miniatura: ev.ruta_miniatura,
-              esta_comprimida: ev.esta_comprimida,
-              tama_o_original_bytes: ev.tama_o_original_bytes,
-              fecha_registro: ev.fecha_registro,
-              id_orden_equipo: nuevoIdOrdenEquipo,
-            },
-          });
-          stats.evidenciasFotograficas++;
-        }
-
-        console.log(
-          `📸 [TRANSFER] Copiadas ${stats.evidenciasFotograficas} evidencias_fotograficas`,
-        );
-
-        // ── PASO F: Copiar mediciones_servicio ──
-        const medicionesOrigen = await tx.mediciones_servicio.findMany({
-          where: { id_orden_servicio: idOrdenOrigen },
-        });
-
-        for (const med of medicionesOrigen) {
-          // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
-          const nuevoIdOrdenEquipo = null;
-
-          await tx.mediciones_servicio.create({
-            data: {
-              id_orden_servicio: idDestino,
-              id_parametro_medicion: med.id_parametro_medicion,
-              valor_numerico: med.valor_numerico,
-              valor_texto: med.valor_texto,
-              unidad_medida: med.unidad_medida,
-              fuera_de_rango: med.fuera_de_rango,
-              nivel_alerta: med.nivel_alerta,
-              mensaje_alerta: med.mensaje_alerta,
-              observaciones: med.observaciones,
-              temperatura_ambiente: med.temperatura_ambiente,
-              humedad_relativa: med.humedad_relativa,
-              fecha_medicion: med.fecha_medicion,
-              medido_por: med.medido_por,
-              instrumento_medicion: med.instrumento_medicion,
-              fecha_registro: med.fecha_registro,
-              id_orden_equipo: nuevoIdOrdenEquipo,
-            },
-          });
-          stats.medicionesServicio++;
-        }
-
-        console.log(`📏 [TRANSFER] Copiadas ${stats.medicionesServicio} mediciones_servicio`);
-
-        // ── PASO G: Copiar componentes_usados ──
-        const componentesOrigen = await tx.componentes_usados.findMany({
-          where: { id_orden_servicio: idOrdenOrigen },
-        });
-
-        for (const comp of componentesOrigen) {
-          const nuevoIdActividad = comp.id_actividad_ejecutada
-            ? (mapActividades.get(comp.id_actividad_ejecutada) ?? null)
-            : null;
-
-          // Generar nuevo ID (no es autoincrement)
-          const maxComp = await tx.componentes_usados.findFirst({
-            orderBy: { id_componente_usado: 'desc' },
-            select: { id_componente_usado: true },
-          });
-          const nuevoId = (maxComp?.id_componente_usado ?? 0) + 1;
-
-          await tx.componentes_usados.create({
-            data: {
-              id_componente_usado: nuevoId,
-              id_orden_servicio: idDestino,
-              id_componente: comp.id_componente,
-              id_tipo_componente: comp.id_tipo_componente,
-              id_actividad_ejecutada: nuevoIdActividad,
-              descripcion: comp.descripcion,
-              referencia_manual: comp.referencia_manual,
-              marca_manual: comp.marca_manual,
-              cantidad: comp.cantidad,
-              unidad: comp.unidad,
-              costo_unitario: comp.costo_unitario,
-              costo_total: comp.costo_total,
-              estado_componente_retirado: comp.estado_componente_retirado,
-              razon_uso: comp.razon_uso,
-              componente_guardado: comp.componente_guardado,
-              origen_componente: comp.origen_componente,
-              observaciones: comp.observaciones,
-              fecha_uso: comp.fecha_uso,
-              usado_por: comp.usado_por,
-              fecha_registro: comp.fecha_registro,
-              registrado_por: comp.registrado_por,
-            },
-          });
-          stats.componentesUsados++;
-        }
-
-        console.log(`🔧 [TRANSFER] Copiados ${stats.componentesUsados} componentes_usados`);
-
-        // ── PASO H: Copiar ordenes_actividades_plan ──
-        const planOrigen = await tx.ordenes_actividades_plan.findMany({
-          where: { id_orden_servicio: idOrdenOrigen },
-          orderBy: { orden_secuencia: 'asc' },
-        });
-
-        for (const plan of planOrigen) {
-          await tx.ordenes_actividades_plan.create({
-            data: {
-              id_orden_servicio: idDestino,
-              id_actividad_catalogo: plan.id_actividad_catalogo,
-              orden_secuencia: plan.orden_secuencia,
-              origen: plan.origen,
-              es_obligatoria: plan.es_obligatoria,
-              creado_por: plan.creado_por,
-              fecha_creacion: plan.fecha_creacion,
-            },
-          });
-          stats.ordenesActividadesPlan++;
-        }
-
-        console.log(
-          `📋 [TRANSFER] Copiados ${stats.ordenesActividadesPlan} ordenes_actividades_plan`,
-        );
-
-        return stats;
-      },
-      {
-        timeout: 60000, // 60 segundos para transacciones grandes
-      },
-    );
-
-    console.log(
-      `✅ [TRANSFER] Transferencia completada exitosamente: ${ordenOrigen.numero_orden} → ${ordenDestino.numero_orden}`,
-    );
-    console.log(`📊 [TRANSFER] Resumen: ${JSON.stringify(resultado)}`);
-
-    return {
-      success: true,
-      message: `Datos transferidos exitosamente de ${ordenOrigen.numero_orden} a ${ordenDestino.numero_orden}`,
-      ordenOrigen: {
-        id: idOrdenOrigen,
-        numero: ordenOrigen.numero_orden,
-      },
-      ordenDestino: {
-        id: idDestino,
-        numero: ordenDestino.numero_orden,
-      },
-      estadisticas: resultado,
-    };
   }
 }

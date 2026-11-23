@@ -930,21 +930,37 @@ function generarEvidenciasUniversal(evidencias: any[], _lotesGaleria?: LoteGaler
 
 function generarEvidenciasMultiEquipo(
   evidenciasPorEquipo: EvidenciasPorEquipoPDF[],
-  _lotesGaleria?: LoteGaleriaPDF[],
+  lotesGaleria?: LoteGaleriaPDF[],
 ): string {
+  const esGrupoGeneral = (eq: EvidenciasPorEquipoPDF['equipo']) =>
+    eq.idOrdenEquipo === 0 || eq.ordenSecuencia === 999;
+
+  const totalEquiposReales = evidenciasPorEquipo.filter(
+    (g) => !esGrupoGeneral(g.equipo),
+  ).length;
+  const etiquetaEquipos =
+    totalEquiposReales === 1 ? '1 equipo' : `${totalEquiposReales} equipos`;
+
   return `
   <div class="section">
-    <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO - MULTI-EQUIPOS</div>
+    <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO - MULTI-EQUIPOS (${etiquetaEquipos})</div>
     ${evidenciasPorEquipo
       .map((g) => {
+        const esGeneral = esGrupoGeneral(g.equipo);
         const nom =
           g.equipo.nombreSistema || g.equipo.nombreEquipo || `Equipo ${g.equipo.ordenSecuencia}`;
+        const headerBg = esGeneral ? '#334155' : '#1E293B';
+        const headerTexto = esGeneral
+          ? '📷 FOTOGRAFÍAS GENERALES DEL SERVICIO'
+          : `EQ${g.equipo.ordenSecuencia}: ${escapeBrandHtml(nom)}${
+              g.equipo.codigoEquipo ? ` (${escapeBrandHtml(g.equipo.codigoEquipo)})` : ''
+            }`;
         return `
         <div style="margin-bottom: 10px; border: 1.5px solid #CBD5E1; border-radius: 6px; overflow: hidden;">
-          <div style="background: #1E293B; color: #FFFFFF; padding: 6px 10px; font-size: 9.5px; font-weight: bold;">
-            ${escapeBrandHtml(nom)} (${escapeBrandHtml(g.equipo.codigoEquipo || 'S/C')})
+          <div style="background: ${headerBg}; color: #FFFFFF; padding: 6px 10px; font-size: 9.5px; font-weight: bold;">
+            ${headerTexto}
           </div>
-          ${generarEvidenciasUniversal(g.evidencias, undefined)}
+          ${generarEvidenciasUniversal(g.evidencias, esGeneral ? lotesGaleria : undefined)}
         </div>
         `;
       })
