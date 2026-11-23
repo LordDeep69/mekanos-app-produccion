@@ -201,6 +201,29 @@ export const equiposService = {
     );
     return response.data;
   },
+
+  /**
+   * Oculta o vuelve a mostrar un equipo en el selector al crear órdenes de servicio
+   */
+  async toggleVisibilidadOrdenes(
+    id: number,
+    oculto_en_ordenes: boolean
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      id_equipo: number;
+      codigo_equipo: string;
+      nombre_equipo: string | null;
+      oculto_en_ordenes: boolean;
+    };
+  }> {
+    const response = await apiClient.patch(
+      `/equipos/${id}/visibilidad-ordenes`,
+      { oculto_en_ordenes }
+    );
+    return response.data;
+  },
 };
 
 export const clientesService = {
@@ -377,6 +400,25 @@ export function useEliminarEquipoCompletamente() {
       equiposService.eliminarEquipoCompletamente(id, confirmacion),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
+    },
+  });
+}
+
+/**
+ * Hook para ocultar o mostrar un equipo en la creación de órdenes de servicio.
+ * Invalida tanto el listado de equipos como el selector de órdenes y últimas selecciones.
+ */
+export function useToggleVisibilidadOrdenesEquipo() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, oculto_en_ordenes }: { id: number; oculto_en_ordenes: boolean }) =>
+      equiposService.toggleVisibilidadOrdenes(id, oculto_en_ordenes),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: equiposKeys.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: ['equipos-selector'] });
+      queryClient.invalidateQueries({ queryKey: ['ultimas-selecciones-equipos'] });
     },
   });
 }

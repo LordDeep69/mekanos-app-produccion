@@ -81,7 +81,13 @@ export interface EquipoListItem {
   numero_serie_equipo?: string | null;
   horas_actuales?: number | string | null;
   activo?: boolean;
+  oculto_en_ordenes?: boolean;
   tipo: TipoEquipo;
+  tipos_equipo?: {
+    id_tipo_equipo: number;
+    nombre_tipo: string;
+    codigo_tipo: string;
+  } | null;
   estado_equipo: EstadoEquipo;
   criticidad: Criticidad;
   ubicacion_texto: string;

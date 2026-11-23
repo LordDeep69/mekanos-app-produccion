@@ -396,6 +396,31 @@ export class EquiposController {
   // ════════════════════════════════════════════════════════════════════════════
 
   /**
+   * PATCH /api/equipos/:id/visibilidad-ordenes
+   * Oculta o vuelve a mostrar un equipo en el selector al crear órdenes de servicio
+   */
+  @Patch(':id/visibilidad-ordenes')
+  @ApiOperation({ summary: 'Ocultar o mostrar un equipo en la creación de órdenes de servicio' })
+  async toggleVisibilidadOrdenes(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { oculto_en_ordenes: boolean },
+    @UserId() userId: number,
+  ) {
+    const resultado = await this.equiposGestionService.toggleVisibilidadOrdenes(
+      id,
+      Boolean(body?.oculto_en_ordenes),
+      userId,
+    );
+    return {
+      success: true,
+      message: resultado.oculto_en_ordenes
+        ? 'Equipo ocultado en el selector de órdenes de servicio'
+        : 'Equipo visible nuevamente en el selector de órdenes de servicio',
+      data: resultado,
+    };
+  }
+
+  /**
    * PATCH /api/equipos/:id/cambiar-estado
    * Cambiar estado del equipo con registro en historial
    */

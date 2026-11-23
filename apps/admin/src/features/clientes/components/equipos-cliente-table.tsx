@@ -25,13 +25,14 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { useEquipos } from '@/features/equipos/lib/equipos.service';
+import { useEquipos, useToggleVisibilidadOrdenesEquipo } from '@/features/equipos/lib/equipos.service';
 import { tiposEquipoService } from '@/features/equipos/lib/tipos-equipo.service';
 import type { EstadoEquipo } from '@/features/equipos/types';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Eye, Filter, Plus, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Filter, Loader2, Plus, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 interface EquiposClienteTableProps {
     clienteId: number;
@@ -61,7 +62,10 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
     const [search, setSearch] = useState('');
     const [estadoFilter, setEstadoFilter] = useState<string>('TODOS');
     const [tipoFilter, setTipoFilter] = useState<string>('TODOS');
+    const [togglingId, setTogglingId] = useState<number | null>(null);
     const limit = 10;
+
+    const toggleVisibilidadMutation = useToggleVisibilidadOrdenesEquipo();
 
     // Query para tipos de equipo
     const { data: tiposEquipo } = useQuery({
@@ -85,6 +89,33 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
 
     const handleVerEquipo = (idEquipo: number) => {
         router.push(`/equipos/${idEquipo}`);
+    };
+
+    const handleToggleVisibilidadOrdenes = async (
+        idEquipo: number,
+        nombreOCodigo: string,
+        actualmenteOculto: boolean
+    ) => {
+        const nuevoEstadoOculto = !actualmenteOculto;
+        setTogglingId(idEquipo);
+        try {
+            await toggleVisibilidadMutation.mutateAsync({
+                id: idEquipo,
+                oculto_en_ordenes: nuevoEstadoOculto,
+            });
+            toast.success(
+                nuevoEstadoOculto
+                    ? `${nombreOCodigo} ocultado en el selector de nuevas órdenes`
+                    : `${nombreOCodigo} visible nuevamente al crear órdenes`
+            );
+        } catch (error: any) {
+            toast.error(
+                error?.response?.data?.message ||
+                'No se pudo actualizar la visibilidad del equipo en órdenes'
+            );
+        } finally {
+            setTogglingId(null);
+        }
     };
 
     const handleResetFilters = () => {
@@ -203,37 +234,102 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {equipos.map((equipo) => (
-                                        <TableRow key={equipo.id_equipo}>
-                                            <TableCell className="font-medium">
-                                                {equipo.codigo_equipo}
-                                            </TableCell>
-                                            <TableCell>
-                                                {equipo.nombre_equipo || '-'}
-                                            </TableCell>
-                                            <TableCell>
-                                                {equipo.tipo === 'GENERADOR' ? 'Generador' : equipo.tipo === 'BOMBA' ? 'Bomba' : equipo.tipo === 'MOTOR' ? 'Motor' : '-'}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant={ESTADO_EQUIPO_COLORS[equipo.estado_equipo as EstadoEquipo]}>
-                                                    {ESTADO_EQUIPO_LABELS[equipo.estado_equipo as EstadoEquipo]}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="max-w-[200px] truncate">
-                                                {equipo.ubicacion_texto}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleVerEquipo(equipo.id_equipo)}
-                                                >
-                                                    <Eye className="h-4 w-4 mr-1" />
-                                                    Ver
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                    {equipos.map((equipo) => {
+                                        const estaOculto = Boolean(equipo.oculto_en_ordenes);
+                                        const isToggling = togglingId === equipo.id_equipo;
+                                        const tipoLabel =
+                                            equipo.tipo === 'GENERADOR'
+                                                ? 'Generador'
+                                                : equipo.tipo === 'BOMBA'
+                                                    ? 'Bomba'
+                                                    : equipo.tipo === 'MOTOR'
+                                                        ? 'Motor'
+                                                        : equipo.tipo === 'COMPRESOR'
+                                                            ? 'Compresor'
+                                                            : equipo.tipos_equipo?.nombre_tipo || '-';
+
+                                        return (
+                                            <TableRow
+                                                key={equipo.id_equipo}
+                                                className={estaOculto ? 'bg-amber-50/50 hover:bg-amber-50/80' : undefined}
+                                            >
+                                                <TableCell className="font-medium">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className={estaOculto ? 'text-gray-500' : undefined}>
+                                                            {equipo.codigo_equipo}
+                                                        </span>
+                                                        {estaOculto && (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="w-fit text-[10px] font-semibold bg-amber-100/80 text-amber-800 border-amber-300 px-1.5 py-0"
+                                                            >
+                                                                <EyeOff className="h-2.5 w-2.5 mr-1" />
+                                                                Oculto en órdenes
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className={estaOculto ? 'text-gray-500' : undefined}>
+                                                    {equipo.nombre_equipo || '-'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {tipoLabel}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant={ESTADO_EQUIPO_COLORS[equipo.estado_equipo as EstadoEquipo]}>
+                                                        {ESTADO_EQUIPO_LABELS[equipo.estado_equipo as EstadoEquipo]}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="max-w-[200px] truncate">
+                                                    {equipo.ubicacion_texto}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="inline-flex items-center justify-end gap-1.5">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            disabled={isToggling}
+                                                            onClick={() =>
+                                                                handleToggleVisibilidadOrdenes(
+                                                                    equipo.id_equipo,
+                                                                    equipo.nombre_equipo || equipo.codigo_equipo,
+                                                                    estaOculto
+                                                                )
+                                                            }
+                                                            title={
+                                                                estaOculto
+                                                                    ? 'Volver a mostrar este equipo en el listado al crear nuevas órdenes de servicio'
+                                                                    : 'Ocultar este equipo del listado al crear nuevas órdenes de servicio'
+                                                            }
+                                                            className={
+                                                                estaOculto
+                                                                    ? 'h-8 text-xs font-medium text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-800 cursor-pointer'
+                                                                    : 'h-8 text-xs font-medium text-amber-700 border-amber-200 bg-white hover:bg-amber-50 hover:text-amber-800 hover:border-amber-300 cursor-pointer'
+                                                            }
+                                                        >
+                                                            {isToggling ? (
+                                                                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                                            ) : estaOculto ? (
+                                                                <Eye className="h-3.5 w-3.5 mr-1.5" />
+                                                            ) : (
+                                                                <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+                                                            )}
+                                                            {estaOculto ? 'Mostrar en órdenes' : 'Ocultar en órdenes'}
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleVerEquipo(equipo.id_equipo)}
+                                                            className="h-8 text-xs cursor-pointer"
+                                                        >
+                                                            <Eye className="h-4 w-4 mr-1" />
+                                                            Ver
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
                                 </TableBody>
                             </Table>
                         </div>

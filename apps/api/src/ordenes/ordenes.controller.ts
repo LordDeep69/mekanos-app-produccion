@@ -1296,6 +1296,7 @@ export class OrdenesController {
                 nombre_equipo: true,
                 id_sede: true,
                 id_tipo_equipo: true,
+                metadata: true,
                 tipos_equipo: {
                   select: { id_tipo_equipo: true, nombre_tipo: true, codigo_tipo: true },
                 },
@@ -1306,20 +1307,24 @@ export class OrdenesController {
       },
     });
 
-    const data = ordenes.map((o) => ({
-      id_orden_servicio: o.id_orden_servicio,
-      numero_orden: o.numero_orden,
-      fecha_creacion: o.fecha_creacion,
-      tipo_servicio: o.tipos_servicio,
-      equipos: o.ordenes_equipos.map((oe) => ({
-        id_equipo: oe.equipos.id_equipo,
-        codigo_equipo: oe.equipos.codigo_equipo || '',
-        nombre_equipo: oe.equipos.nombre_equipo,
-        id_sede: oe.equipos.id_sede,
-        id_tipo_equipo: oe.equipos.id_tipo_equipo,
-        tipos_equipo: oe.equipos.tipos_equipo,
-      })),
-    }));
+    const data = ordenes
+      .map((o) => ({
+        id_orden_servicio: o.id_orden_servicio,
+        numero_orden: o.numero_orden,
+        fecha_creacion: o.fecha_creacion,
+        tipo_servicio: o.tipos_servicio,
+        equipos: o.ordenes_equipos
+          .filter((oe) => (oe.equipos?.metadata as Record<string, any> | null)?.oculto_en_ordenes !== true)
+          .map((oe) => ({
+            id_equipo: oe.equipos.id_equipo,
+            codigo_equipo: oe.equipos.codigo_equipo || '',
+            nombre_equipo: oe.equipos.nombre_equipo,
+            id_sede: oe.equipos.id_sede,
+            id_tipo_equipo: oe.equipos.id_tipo_equipo,
+            tipos_equipo: oe.equipos.tipos_equipo,
+          })),
+      }))
+      .filter((item) => item.equipos.length > 0);
 
     return { success: true, data };
   }
