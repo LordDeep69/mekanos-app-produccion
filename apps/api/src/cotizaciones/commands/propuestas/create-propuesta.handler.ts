@@ -25,6 +25,7 @@ export class CreatePropuestaHandler implements ICommandHandler<CreatePropuestaCo
       tipoPropuesta,
       descripcionHallazgo,
       descripcionSolucion,
+      urgenciaPropuesta,
       prioridad,
       creadaPor,
     } = command;
@@ -78,14 +79,64 @@ export class CreatePropuestaHandler implements ICommandHandler<CreatePropuestaCo
 
     const numeroPropuesta = `PROP-${year}-${consecutivo.toString().padStart(4, '0')}`;
 
-    // PASO 3: Obtener estado BORRADOR para propuesta
+    // PASO 3: Obtener estado BORRADOR para propuesta (compatible con codigo_estado y nombre_estado)
     const estadoBorrador = await this.prisma.estados_cotizacion.findFirst({
-      where: { nombre_estado: 'BORRADOR' },
+      where: {
+        OR: [
+          { codigo_estado: 'BORRADOR' },
+          { nombre_estado: { equals: 'BORRADOR', mode: 'insensitive' } },
+        ],
+      },
     });
 
-    if (!estadoBorrador) {
-      throw new BadRequestException('Estado BORRADOR no encontrado en estados_cotizacion');
-    }
+    const idEstadoBorrador = estadoBorrador?.id_estado ?? 1;
+
+    // Normalizar enums PostgreSQL estrictos (categoria_propuesta_enum y prioridad_enum)
+    const mapCategoria = (
+      raw?: string,
+    ): 'CORRECTIVO' | 'PREVENTIVO_URGENTE' | 'MEJORA' | 'EXTENSION_GARANTIA' => {
+      const upper = String(raw || 'CORRECTIVO').toUpperCase();
+      if (
+        upper === 'CORRECTIVO' ||
+        upper === 'PREVENTIVO_URGENTE' ||
+        upper === 'MEJORA' ||
+        upper === 'EXTENSION_GARANTIA'
+      ) {
+        return upper;
+      }
+      if (upper === 'PREDICTIVO') return 'PREVENTIVO_URGENTE';
+      return 'CORRECTIVO';
+    };
+
+    const mapPrioridad = (
+      rawPrio: number | string | undefined,
+      rawUrg?: string,
+    ): 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA' => {
+      const prioStr = String(rawPrio ?? '').toUpperCase();
+      if (
+        prioStr === 'NORMAL' ||
+        prioStr === 'ALTA' ||
+        prioStr === 'URGENTE' ||
+        prioStr === 'EMERGENCIA'
+      ) {
+        return prioStr;
+      }
+      const num = Number(rawPrio);
+      if (Number.isFinite(num) && num > 0) {
+        if (num >= 5) return 'EMERGENCIA';
+        if (num === 4) return 'URGENTE';
+        if (num === 3) return 'ALTA';
+        return 'NORMAL';
+      }
+      const urg = String(rawUrg || '').toUpperCase();
+      if (urg === 'CRITICA') return 'EMERGENCIA';
+      if (urg === 'ALTA') return 'URGENTE';
+      if (urg === 'MEDIA') return 'ALTA';
+      return 'NORMAL';
+    };
+
+    const categoriaNormalizada = mapCategoria(tipoPropuesta);
+    const prioridadNormalizada = mapPrioridad(prioridad, urgenciaPropuesta);
 
     // PASO 4: Crear propuesta correctivo
     const propuesta = await this.prisma.propuestas_correctivo.create({
@@ -96,14 +147,20 @@ export class CreatePropuestaHandler implements ICommandHandler<CreatePropuestaCo
         id_equipo: ordenServicio.id_equipo,
         descripcion_problema: descripcionHallazgo,
         solucion_propuesta: descripcionSolucion,
-        categoria: tipoPropuesta as any, // CORRECTIVO | PREDICTIVO | MEJORA
-        prioridad: prioridad as any, // BAJA | NORMAL | ALTA | URGENTE
-        id_estado: estadoBorrador.id_estado,
+        categoria: categoriaNormalizada,
+        prioridad: prioridadNormalizada,
+        id_estado: idEstadoBorrador,
         fecha_propuesta: new Date(),
         fecha_vencimiento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días
         subtotal_servicios: 0, // Técnico completa después
         subtotal_componentes: 0,
         total_propuesta: 0,
+        metadata: {
+          tipo_propuesta_original: tipoPropuesta,
+          urgencia_propuesta: urgenciaPropuesta,
+          prioridad_numerica: typeof prioridad === 'number' ? prioridad : null,
+          tiempo_estimado_ejecucion: command.tiempoEstimadoEjecucion ?? null,
+        },
         propuesta_por: creadaPor,
       },
     });

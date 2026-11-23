@@ -297,6 +297,27 @@ export class UpdateConfiguracionOrganizacionDto {
   @IsBoolean()
   modulo_inventario_activo?: boolean;
 
+  @ApiPropertyOptional({
+    description: 'Activa el flujo de aprobaciones internas y control de rentabilidad CPQ en cotizaciones',
+  })
+  @IsOptional()
+  @IsBoolean()
+  enable_cpq_governance?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Bloquea edición manual de precios unitarios de catálogo en cotizaciones (rebajas solo vía Descuento %)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  lock_catalog_unit_price?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Desglosar precios unitarios y subtotales por rubro en PDF de cotizaciones por defecto (false = Suma Alzada compacta)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  cot_mostrar_desglose_precios?: boolean;
+
   @ApiPropertyOptional({ description: 'Monto a partir del cual se requiere aprobación de Supervisor' })
   @IsOptional()
   @Type(() => Number)

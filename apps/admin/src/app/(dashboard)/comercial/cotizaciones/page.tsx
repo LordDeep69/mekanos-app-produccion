@@ -1,5 +1,6 @@
 'use client';
 
+import { CotizacionPdfPreviewModal } from '@/components/comercial/cotizacion-pdf-preview-modal';
 import { PlantillasCotizacionManager } from '@/components/comercial/plantillas-cotizacion-manager';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  downloadCotizacionPdf,
   ESTADO_LABELS_COTIZACION,
   getEstadoCodigoCotizacion,
   TIPO_COTIZACION_PRESETS,
@@ -32,7 +32,6 @@ import {
   CheckCircle2,
   Copy,
   Cpu,
-  Download,
   FileText,
   Layers,
   Loader2,
@@ -65,6 +64,14 @@ export default function CotizacionesPage() {
   const [search, setSearch] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<string>('TODOS');
   const [tipoFiltro, setTipoFiltro] = useState<string>('TODOS');
+  const [pdfPreviewTarget, setPdfPreviewTarget] = useState<{
+    id: number;
+    numero?: string;
+    version?: number | null;
+    estadoLabel?: string;
+    cacheKey?: string;
+    mostrarDesglosePrecios?: boolean;
+  } | null>(null);
 
   const { data: cotData, isLoading, refetch } = useCotizaciones({ take: 150 });
   const { data: aprobacionesData } = useAprobacionesPendientes();
@@ -505,12 +512,19 @@ export default function CotizacionesPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 w-8 p-0"
-                                title="Descargar PDF corporativo"
+                                title="Previsualizar y descargar PDF corporativo"
                                 onClick={() =>
-                                  downloadCotizacionPdf(c.id_cotizacion, c.numero_cotizacion)
+                                  setPdfPreviewTarget({
+                                    id: c.id_cotizacion,
+                                    numero: c.numero_cotizacion,
+                                    version: c.version,
+                                    estadoLabel: ESTADO_LABELS_COTIZACION[estCode] || estCode,
+                                    cacheKey: `${c.fecha_modificacion ?? ''}-${c.version ?? 1}-${c.total_cotizacion ?? 0}-${c.id_estado ?? 0}`,
+                                    mostrarDesglosePrecios: Boolean(c.mostrar_desglose_precios ?? false),
+                                  })
                                 }
                               >
-                                <Download className="h-4 w-4 text-slate-600" />
+                                <FileText className="h-4 w-4 text-slate-600" />
                               </Button>
                             </div>
                           </td>
@@ -623,6 +637,24 @@ export default function CotizacionesPage() {
           }
         />
       )}
+
+      <CotizacionPdfPreviewModal
+        open={Boolean(pdfPreviewTarget)}
+        onOpenChange={(open) => {
+          if (!open) setPdfPreviewTarget(null);
+        }}
+        cotizacionId={pdfPreviewTarget?.id ?? null}
+        numeroCotizacion={pdfPreviewTarget?.numero}
+        version={pdfPreviewTarget?.version}
+        estadoLabel={pdfPreviewTarget?.estadoLabel}
+        cacheKey={pdfPreviewTarget?.cacheKey}
+        mostrarDesglosePrecios={pdfPreviewTarget?.mostrarDesglosePrecios}
+        onDesgloseChange={(nextVal) =>
+          setPdfPreviewTarget((prev) =>
+            prev ? { ...prev, mostrarDesglosePrecios: nextVal } : prev,
+          )
+        }
+      />
     </div>
   );
 }

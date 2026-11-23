@@ -26,6 +26,18 @@ export class UpdateCotizacionDto {
   @IsNumber()
   id_equipo?: number | null;
 
+  @ApiPropertyOptional({ description: 'Destinatario comercial ("Atención a / Representante")' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  atencion_a_nombre?: string | null;
+
+  @ApiPropertyOptional({ description: 'Cargo o dependencia del destinatario comercial' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  atencion_a_cargo?: string | null;
+
   @ApiPropertyOptional({ description: 'Lista N:M de equipos vinculados', type: [Number] })
   @IsOptional()
   @IsArray()
@@ -125,6 +137,11 @@ export class UpdateCotizacionDto {
   @IsString()
   @MaxLength(30)
   modo_agrupacion_pdf?: string;
+
+  @ApiPropertyOptional({ description: 'Desglosar precios unitarios y subtotales por rubro en PDF (false = Suma Alzada compacta)' })
+  @IsOptional()
+  @IsBoolean()
+  mostrar_desglose_precios?: boolean;
 
   @ApiPropertyOptional({ description: 'Tiempo estimado de ejecución en días' })
   @IsOptional()

@@ -62,6 +62,8 @@ export class UpdateCotizacionHandler implements ICommandHandler<UpdateCotizacion
     await this.repository.update(command.id_cotizacion, {
       id_sede: command.id_sede ?? undefined,
       id_equipo: idEquipoPrincipal ?? undefined,
+      atencion_a_nombre: extras.atencion_a_nombre,
+      atencion_a_cargo: extras.atencion_a_cargo,
       tipo_cotizacion: extras.tipo_cotizacion,
       moneda: extras.moneda,
       fecha_cotizacion: extras.fecha_cotizacion,
@@ -78,6 +80,7 @@ export class UpdateCotizacionHandler implements ICommandHandler<UpdateCotizacion
       aiu_utilidad_porcentaje: extras.aiu_utilidad_porcentaje,
       iva_sobre_utilidad_aiu: extras.iva_sobre_utilidad_aiu,
       modo_agrupacion_pdf: extras.modo_agrupacion_pdf,
+      mostrar_desglose_precios: extras.mostrar_desglose_precios,
       tiempo_estimado_dias: command.tiempo_estimado_dias,
       forma_pago: command.forma_pago,
       terminos_condiciones: command.terminos_condiciones,

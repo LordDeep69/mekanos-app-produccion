@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -37,6 +38,7 @@ import { GetCotizacionByIdQuery } from './application/queries/get-cotizacion-by-
 import { GetCotizacionesQuery } from './application/queries/get-cotizaciones.query';
 import { CreateVersionCommand } from './commands/versiones/create-version.command';
 import {
+  ActualizarPresentacionPdfDto,
   ConvertirCotizacionOrdenDto,
   CreateItemOtroDto,
   GuardarStudioCompletoDto,
@@ -166,6 +168,8 @@ export class CotizacionesController {
       dto.meses_garantia,
       dto.observaciones_garantia,
       {
+        atencion_a_nombre: dto.atencion_a_nombre,
+        atencion_a_cargo: dto.atencion_a_cargo,
         equipos_ids: dto.equipos_ids,
         tipo_cotizacion: dto.tipo_cotizacion,
         id_plantilla_origen: dto.id_plantilla_origen,
@@ -177,6 +181,7 @@ export class CotizacionesController {
         aiu_utilidad_porcentaje: dto.aiu_utilidad_porcentaje,
         iva_sobre_utilidad_aiu: dto.iva_sobre_utilidad_aiu,
         modo_agrupacion_pdf: dto.modo_agrupacion_pdf,
+        mostrar_desglose_precios: dto.mostrar_desglose_precios,
         user_id: user.id,
         user_empleado_id: user.idEmpleado,
       },
@@ -259,6 +264,8 @@ export class CotizacionesController {
       dto.meses_garantia,
       dto.observaciones_garantia,
       {
+        atencion_a_nombre: dto.atencion_a_nombre,
+        atencion_a_cargo: dto.atencion_a_cargo,
         equipos_ids: dto.equipos_ids,
         tipo_cotizacion: dto.tipo_cotizacion,
         moneda: dto.moneda,
@@ -269,6 +276,7 @@ export class CotizacionesController {
         aiu_utilidad_porcentaje: dto.aiu_utilidad_porcentaje,
         iva_sobre_utilidad_aiu: dto.iva_sobre_utilidad_aiu,
         modo_agrupacion_pdf: dto.modo_agrupacion_pdf,
+        mostrar_desglose_precios: dto.mostrar_desglose_precios,
       },
     );
 
@@ -276,6 +284,18 @@ export class CotizacionesController {
   }
 
   // ==================== STUDIO CPQ ATÓMICO, EQUIPOS N:M Y OTROS RUBROS ====================
+
+  @Patch(':id/presentacion-pdf')
+  @ApiOperation({
+    summary: 'Actualizar preferencia de presentación PDF (Suma Alzada compacta vs Detallado con precios unitarios)',
+  })
+  async actualizarPresentacionPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ActualizarPresentacionPdfDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.cpqService.actualizarPresentacionPdf(id, dto.mostrar_desglose_precios, user.id);
+  }
 
   @Put(':id/studio')
   @ApiOperation({

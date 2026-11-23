@@ -22,16 +22,26 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  downloadCotizacionPdf,
   ESTADO_LABELS_COTIZACION,
   getEstadoCodigoCotizacion,
   RUBRO_OTRO_PRESETS,
-  TIPO_COTIZACION_PRESETS,
   type ConvertirCotizacionOrdenResponse,
   type CotizacionRecord,
   type GuardarStudioPayload,
   type PlantillaCotizacionRecord,
 } from '@/features/comercial/api/comercial.service';
+import { EamSelect } from '@/components/ui/eam-select';
+import { CotizacionPdfPreviewModal } from './cotizacion-pdf-preview-modal';
+import {
+  buildUnidadOptions,
+  CpqCreatableCombobox,
+  CpqMoneyInput,
+  CpqSmartNumberInput,
+  FORMA_PAGO_COMBOBOX_OPTIONS,
+  matchesAllTokens,
+  RUBRO_OTRO_COMBOBOX_OPTIONS,
+  TIPO_OFERTA_COMBOBOX_OPTIONS,
+} from './cpq-premium-controls';
 import {
   useCotizacionDetalle,
   useCotizacionItemActions,
@@ -62,19 +72,23 @@ import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   ArrowRightCircle,
   BookmarkPlus,
   Building2,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Copy,
   Cpu,
-  Download,
   Eye,
   EyeOff,
+  FileCheck2,
   FileText,
   History,
   Layers,
+  Leaf,
   Loader2,
   Lock,
   Mail,
@@ -84,10 +98,13 @@ import {
   Save,
   Search,
   Send,
+  Shield,
   ShieldCheck,
   Sparkles,
   Trash2,
   Truck,
+  Users,
+  Utensils,
   Wrench,
   X,
   XCircle,
@@ -204,7 +221,7 @@ export function CotizacionStudio({
 
   const editorKey = cotizacionId
     ? `edit-${detalle?.id_cotizacion}-${detalle?.version}-${detalle?.id_estado}-${detalle?.items_servicios?.length || 0}-${detalle?.items_componentes?.length || 0}-${detalle?.items_otros?.length || 0}`
-    : `new-${initialPlantilla?.id_plantilla || 'blank'}-${orgConfig?.tasa_impuesto_defecto ?? 'def'}`;
+    : `new-${initialPlantilla?.id_plantilla || 'blank'}-${orgConfig?.tasa_impuesto_defecto ?? 'def'}-${orgConfig?.cot_mostrar_desglose_precios ? '1' : '0'}`;
 
   return (
     <CotizacionStudioEditor
@@ -246,6 +263,12 @@ function CotizacionStudioEditor({
   const [sedeId, setSedeId] = useState<string>(
     cotizacion?.id_sede ? String(cotizacion.id_sede) : 'NONE',
   );
+  const [atencionANombre, setAtencionANombre] = useState<string>(
+    cotizacion?.atencion_a_nombre || '',
+  );
+  const [atencionACargo, setAtencionACargo] = useState<string>(
+    cotizacion?.atencion_a_cargo || '',
+  );
   const [elaboradaPor, setElaboradaPor] = useState<string>(
     cotizacion?.elaborada_por ? String(cotizacion.elaborada_por) : '',
   );
@@ -272,6 +295,13 @@ function CotizacionStudioEditor({
   );
   const [exclusiones, setExclusiones] = useState<string>(
     cotizacion?.exclusiones || initialPlantilla?.exclusiones || '',
+  );
+  const [alcanceExpandido, setAlcanceExpandido] = useState<boolean>(() =>
+    Boolean(
+      (cotizacion?.descripcion_general || initialPlantilla?.descripcion_general || '').trim() ||
+        (cotizacion?.alcance_trabajo || initialPlantilla?.alcance_trabajo || '').trim() ||
+        (cotizacion?.exclusiones || initialPlantilla?.exclusiones || '').trim(),
+    ),
   );
   const [formaPago, setFormaPago] = useState<string>(
     cotizacion?.forma_pago || initialPlantilla?.forma_pago || 'CONTADO',
@@ -326,6 +356,9 @@ function CotizacionStudioEditor({
   );
   const [ivaSobreUtilidadAiu, setIvaSobreUtilidadAiu] = useState<boolean>(
     Boolean(cotizacion?.iva_sobre_utilidad_aiu ?? initialPlantilla?.iva_sobre_utilidad_aiu ?? false),
+  );
+  const [mostrarDesglosePrecios, setMostrarDesglosePrecios] = useState<boolean>(
+    Boolean(cotizacion?.mostrar_desglose_precios ?? orgConfig?.cot_mostrar_desglose_precios ?? false),
   );
 
   // Equipos N:M seleccionados
@@ -457,12 +490,15 @@ function CotizacionStudioEditor({
     return [];
   });
 
-  // Buscadores rápidos para agregar servicios / repuestos
+  // Buscadores rápidos para agregar plantillas / servicios / repuestos
+  const [plantillaSearch, setPlantillaSearch] = useState('');
+  const [mostrarTodasPlantillas, setMostrarTodasPlantillas] = useState(false);
   const [srvSearch, setSrvSearch] = useState('');
   const [cmpSearch, setCmpSearch] = useState('');
   const [showCostosInternos, setShowCostosInternos] = useState(true);
 
   // Modales de workflow
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [solicitarOpen, setSolicitarOpen] = useState(false);
   const [solicitarObs, setSolicitarObs] = useState('');
 
@@ -471,7 +507,8 @@ function CotizacionStudioEditor({
     cotizacion?.sede?.email_sede || cotizacion?.cliente?.persona?.email_principal || '',
   );
   const [enviarNombre, setEnviarNombre] = useState(
-    cotizacion?.cliente?.persona?.razon_social ||
+    cotizacion?.atencion_a_nombre ||
+      cotizacion?.cliente?.persona?.razon_social ||
       cotizacion?.cliente?.persona?.nombre_comercial ||
       '',
   );
@@ -554,6 +591,25 @@ function CotizacionStudioEditor({
   );
   const articulosSearch = useMemo(() => catalogoSearchData?.items || [], [catalogoSearchData]);
 
+  const moneyLocale = orgConfig?.locale || 'es-CO';
+  const moneySymbol = orgConfig?.simbolo_moneda || '$';
+  const moneyDecimals = Number(orgConfig?.decimales_moneda ?? 0);
+
+  const unidadOptions = useMemo(() => buildUnidadOptions(unidadesMedida), [unidadesMedida]);
+
+  const asesorOptions = useMemo(
+    () =>
+      empleados.map((emp) => ({
+        value: String(emp.id_empleado),
+        label: getNombreCompleto(emp.persona),
+        badge: emp.cargo || emp.codigo_empleado || undefined,
+        description: emp.persona?.numero_identificacion
+          ? `ID: ${emp.persona.numero_identificacion}`
+          : undefined,
+      })),
+    [empleados],
+  );
+
   const selectedTiposEquipoIds = useMemo(() => {
     const ids = new Set<number>();
     const byId = new Map<number, number>();
@@ -577,31 +633,67 @@ function CotizacionStudioEditor({
     [clientes, clienteId],
   );
 
+  const sedeSeleccionada = useMemo(
+    () => (sedeId !== 'NONE' ? sedes.find((s) => String(s.id_sede) === sedeId) : undefined),
+    [sedes, sedeId],
+  );
+
+  const contactoFichaSugerido = useMemo(() => {
+    const nombreSede = sedeSeleccionada?.contacto_sede?.trim() || '';
+    const cargoSede = sedeSeleccionada?.cargo_contacto?.trim() || '';
+    if (nombreSede) {
+      return { nombre: nombreSede, cargo: cargoSede, origen: 'sede' as const };
+    }
+    const nombreCliente =
+      clienteSeleccionado?.persona?.representante_legal?.trim() ||
+      cotizacion?.cliente?.persona?.representante_legal?.trim() ||
+      '';
+    const cargoCliente = clienteSeleccionado?.cargo_contacto?.trim() || '';
+    if (nombreCliente) {
+      return { nombre: nombreCliente, cargo: cargoCliente, origen: 'cliente' as const };
+    }
+    return { nombre: '', cargo: '', origen: null };
+  }, [sedeSeleccionada, clienteSeleccionado, cotizacion]);
+
+  const handleSelectSede = (nextSedeId: string) => {
+    setSedeId(nextSedeId);
+    if (nextSedeId !== 'NONE') {
+      const sedeObj = sedes.find((s) => String(s.id_sede) === nextSedeId);
+      const contactoSede = sedeObj?.contacto_sede?.trim() || '';
+      const cargoSede = sedeObj?.cargo_contacto?.trim() || '';
+      const repCliente = clienteSeleccionado?.persona?.representante_legal?.trim() || '';
+      if (contactoSede && (!atencionANombre.trim() || atencionANombre.trim() === repCliente)) {
+        setAtencionANombre(contactoSede);
+        setAtencionACargo(cargoSede);
+      }
+      if (sedeObj?.email_sede) {
+        setEnviarEmail(sedeObj.email_sede);
+      }
+    }
+  };
+
   const clientesFiltrados = useMemo(() => {
-    const q = clienteSearch.trim().toLowerCase();
-    if (!q) return clientes.slice(0, 40);
+    if (!clienteSearch.trim()) return clientes.slice(0, 40);
     return clientes
-      .filter((c) => {
-        const nom = (
-          c.nombre_sede ||
-          c.persona?.nombre_comercial ||
-          c.persona?.razon_social ||
-          ''
-        ).toLowerCase();
-        const nit = (c.persona?.numero_identificacion || '').toLowerCase();
-        return nom.includes(q) || nit.includes(q);
-      })
+      .filter((c) =>
+        matchesAllTokens(clienteSearch, [
+          c.nombre_sede,
+          c.persona?.nombre_comercial,
+          c.persona?.razon_social,
+          c.persona?.numero_identificacion,
+        ]),
+      )
       .slice(0, 40);
   }, [clientes, clienteSearch]);
 
   const equiposFiltrados = useMemo(() => {
-    const q = equipoSearch.trim().toLowerCase();
-    if (!q) return equiposCliente;
-    return equiposCliente.filter(
-      (e) =>
-        (e.codigo_equipo || '').toLowerCase().includes(q) ||
-        (e.nombre_equipo || '').toLowerCase().includes(q) ||
-        (e.tipos_equipo?.nombre_tipo || '').toLowerCase().includes(q),
+    if (!equipoSearch.trim()) return equiposCliente;
+    return equiposCliente.filter((e) =>
+      matchesAllTokens(equipoSearch, [
+        e.codigo_equipo,
+        e.nombre_equipo,
+        e.tipos_equipo?.nombre_tipo,
+      ]),
     );
   }, [equiposCliente, equipoSearch]);
 
@@ -629,6 +721,39 @@ function CotizacionStudioEditor({
     }));
   }, [equiposIds, equiposCliente, cotizacion]);
 
+  const lockCatalogUnitPrice = Boolean(
+    orgConfig?.enable_cpq_governance && orgConfig?.lock_catalog_unit_price,
+  );
+
+  const srvPrecioCatalogoMap = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const s of serviciosCatalogo) {
+      if (Number(s.precio_base || 0) > 0) m.set(s.id_servicio, Number(s.precio_base));
+    }
+    for (const s of cotizacion?.items_servicios || []) {
+      if (s.id_servicio && Number(s.catalogo_servicios?.precio_base || 0) > 0) {
+        m.set(s.id_servicio, Number(s.catalogo_servicios?.precio_base));
+      }
+    }
+    return m;
+  }, [serviciosCatalogo, cotizacion]);
+
+  const compPrecioCatalogoMap = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const c of articulosMaestro) {
+      if (Number(c.precio_venta || 0) > 0) m.set(c.id_componente, Number(c.precio_venta));
+    }
+    for (const c of articulosSearch) {
+      if (Number(c.precio_venta || 0) > 0) m.set(c.id_componente, Number(c.precio_venta));
+    }
+    for (const c of cotizacion?.items_componentes || []) {
+      if (c.id_componente && Number(c.catalogo_componentes?.precio_venta || 0) > 0) {
+        m.set(c.id_componente, Number(c.catalogo_componentes?.precio_venta));
+      }
+    }
+    return m;
+  }, [articulosMaestro, articulosSearch, cotizacion]);
+
   // ═══════════════════════════════════════════════════════════════════════════
   // MOTOR FINANCIERO EN VIVO (Espejo exacto de CotizacionCalculoService)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -640,6 +765,7 @@ function CotizacionStudioEditor({
     let subComp = 0;
     let subOtros = 0;
     let subOpcionales = 0;
+    let brutoSinDescuentos = 0;
     let subGravableBruto = 0;
     let costoTotal = 0;
     let costosAbsorbidos = 0;
@@ -650,6 +776,7 @@ function CotizacionStudioEditor({
         subOpcionales += sub;
       } else {
         subServ += sub;
+        brutoSinDescuentos += s.cantidad * s.precio_unitario;
         if (s.iva_aplicable) subGravableBruto += sub;
         costoTotal += s.cantidad * (s.costo_unitario || 0);
       }
@@ -661,6 +788,7 @@ function CotizacionStudioEditor({
         subOpcionales += sub;
       } else {
         subComp += sub;
+        brutoSinDescuentos += c.cantidad * c.precio_unitario;
         if (c.iva_aplicable) subGravableBruto += sub;
         costoTotal += c.cantidad * (c.costo_unitario || 0);
       }
@@ -684,6 +812,7 @@ function CotizacionStudioEditor({
           costosAbsorbidos += cLinea;
         } else {
           subOtros += sub;
+          brutoSinDescuentos += o.cantidad * o.precio_unitario;
           if (o.iva_aplicable) subGravableBruto += sub;
         }
       }
@@ -717,22 +846,54 @@ function CotizacionStudioEditor({
     const margenPct =
       ingresoNetoSinIva > 0 ? Math.round((utilidadBruta / ingresoNetoSinIva) * 10000) / 100 : 0;
 
-    // Predicción de nivel de aprobación según políticas de configuracion_organizacion
-    const umbralSup = orgConfig?.umbral_aprobacion_supervisor ?? 5000000;
-    const umbralGer = orgConfig?.umbral_aprobacion_gerente ?? 15000000;
-    const descMax = orgConfig?.descuento_max_sin_aprobacion ?? 15;
-    const margenAlerta = orgConfig?.margen_minimo_alerta ?? 25;
-    const margenAprob = orgConfig?.margen_minimo_aprobacion ?? 18;
+    // Descuento efectivo real (combina descuentos por línea + descuento global)
+    const descuentoCombinado =
+      brutoSinDescuentos > 0
+        ? Math.max(
+            0,
+            Math.round(((brutoSinDescuentos - subtotalConDescuento) / brutoSinDescuentos) * 10000) /
+              100,
+          )
+        : 0;
+    const descuentoEfectivo = Math.max(descuentoGlobal, descuentoCombinado);
+
+    // Reglas oficiales de Gobernanza CPQ (Espejo exacto de evaluarGobernanzaCpq en backend)
+    const governanceEnabled = Boolean(orgConfig?.enable_cpq_governance);
+    const umbralSup = Number(orgConfig?.umbral_aprobacion_supervisor ?? 0);
+    const umbralGer = Number(orgConfig?.umbral_aprobacion_gerente ?? 0);
+    const descMax = Number(orgConfig?.descuento_max_sin_aprobacion ?? 0);
+    const descGer = descMax > 0 ? Math.min(100, descMax + 10) : 0;
+    const margenAlerta = Number(orgConfig?.margen_minimo_alerta ?? 0);
+    const margenAprob = Number(orgConfig?.margen_minimo_aprobacion ?? 0);
 
     let nivelAprobacion: 'NINGUNO' | 'SUPERVISOR' | 'GERENTE' = 'NINGUNO';
-    if (
-      totalCotizacion > umbralGer ||
-      descuentoGlobal > descMax + 10 ||
-      (costoTotal > 0 && margenPct < margenAprob)
-    ) {
-      nivelAprobacion = 'GERENTE';
-    } else if (totalCotizacion > umbralSup || descuentoGlobal > descMax) {
-      nivelAprobacion = 'SUPERVISOR';
+    let estadoGobernanza: 'MODO_AGIL' | 'LIBRE' | 'ALERTA_MARGEN' | 'SUPERVISOR' | 'GERENTE' =
+      governanceEnabled ? 'LIBRE' : 'MODO_AGIL';
+    let alertaMargen = false;
+
+    if (governanceEnabled) {
+      alertaMargen = margenAlerta > 0 && costoTotal > 0 && margenPct < margenAlerta;
+      const hitGerente =
+        (umbralGer > 0 && totalCotizacion > umbralGer) ||
+        (descMax > 0 && descGer < 100 && descuentoEfectivo > descGer) ||
+        (margenAprob > 0 && costoTotal > 0 && margenPct < margenAprob);
+      const hitSupervisor =
+        (umbralSup > 0 && totalCotizacion > umbralSup) ||
+        (descMax > 0 && descuentoEfectivo > descMax);
+
+      if (hitGerente) {
+        nivelAprobacion = 'GERENTE';
+        estadoGobernanza = 'GERENTE';
+      } else if (hitSupervisor) {
+        nivelAprobacion = 'SUPERVISOR';
+        estadoGobernanza = 'SUPERVISOR';
+      } else if (alertaMargen) {
+        nivelAprobacion = 'NINGUNO';
+        estadoGobernanza = 'ALERTA_MARGEN';
+      } else {
+        nivelAprobacion = 'NINGUNO';
+        estadoGobernanza = 'LIBRE';
+      }
     }
 
     return {
@@ -756,6 +917,9 @@ function CotizacionStudioEditor({
       margenPct,
       margenAlerta,
       margenAprob,
+      alertaMargen,
+      governanceEnabled,
+      estadoGobernanza,
       nivelAprobacion,
     };
   }, [
@@ -862,10 +1026,18 @@ function CotizacionStudioEditor({
     setPlantillaOrigenId(pl.id_plantilla);
     if (pl.tipo_cotizacion) setTipoCotizacion(pl.tipo_cotizacion);
     if (!asunto.trim() && pl.asunto_sugerido) setAsunto(pl.asunto_sugerido);
-    if (!descripcionGeneral.trim() && pl.descripcion_general)
+    if (!descripcionGeneral.trim() && pl.descripcion_general) {
       setDescripcionGeneral(pl.descripcion_general);
-    if (!alcanceTrabajo.trim() && pl.alcance_trabajo) setAlcanceTrabajo(pl.alcance_trabajo);
-    if (!exclusiones.trim() && pl.exclusiones) setExclusiones(pl.exclusiones);
+      setAlcanceExpandido(true);
+    }
+    if (!alcanceTrabajo.trim() && pl.alcance_trabajo) {
+      setAlcanceTrabajo(pl.alcance_trabajo);
+      setAlcanceExpandido(true);
+    }
+    if (!exclusiones.trim() && pl.exclusiones) {
+      setExclusiones(pl.exclusiones);
+      setAlcanceExpandido(true);
+    }
     if (pl.forma_pago) setFormaPago(pl.forma_pago);
     if (pl.meses_garantia != null) setMesesGarantia(String(pl.meses_garantia));
     if (pl.tiempo_estimado_dias != null) setTiempoDias(String(pl.tiempo_estimado_dias));
@@ -949,6 +1121,8 @@ function CotizacionStudioEditor({
   const buildStudioPayload = (): GuardarStudioPayload => ({
     id_cliente: Number(clienteId),
     id_sede: sedeId !== 'NONE' ? Number(sedeId) : null,
+    atencion_a_nombre: atencionANombre.trim() || null,
+    atencion_a_cargo: atencionACargo.trim() || null,
     elaborada_por: elaboradaPor ? Number(elaboradaPor) : undefined,
     tipo_cotizacion: tipoCotizacion.trim() || 'SERVICIO_TECNICO',
     id_plantilla_origen: plantillaOrigenId,
@@ -965,6 +1139,7 @@ function CotizacionStudioEditor({
     aiu_imprevistos_porcentaje: usaAiu ? aiuImprevPct : 0,
     aiu_utilidad_porcentaje: usaAiu ? aiuUtilPct : 0,
     iva_sobre_utilidad_aiu: usaAiu && ivaSobreUtilidadAiu,
+    mostrar_desglose_precios: mostrarDesglosePrecios,
     forma_pago: formaPago.trim() || 'CONTADO',
     tiempo_estimado_dias: tiempoDias ? Number(tiempoDias) : null,
     meses_garantia: Number(mesesGarantia) || 0,
@@ -1051,6 +1226,8 @@ function CotizacionStudioEditor({
     const creada = await createMut.mutateAsync({
       id_cliente: Number(clienteId),
       id_sede: sedeId !== 'NONE' ? Number(sedeId) : undefined,
+      atencion_a_nombre: atencionANombre.trim() || undefined,
+      atencion_a_cargo: atencionACargo.trim() || undefined,
       equipos_ids: equiposIds,
       tipo_cotizacion: tipoCotizacion.trim() || 'SERVICIO_TECNICO',
       id_plantilla_origen: plantillaOrigenId ?? undefined,
@@ -1067,6 +1244,7 @@ function CotizacionStudioEditor({
       aiu_imprevistos_porcentaje: usaAiu ? aiuImprevPct : 0,
       aiu_utilidad_porcentaje: usaAiu ? aiuUtilPct : 0,
       iva_sobre_utilidad_aiu: usaAiu && ivaSobreUtilidadAiu,
+      mostrar_desglose_precios: mostrarDesglosePrecios,
       tiempo_estimado_dias: tiempoDias ? Number(tiempoDias) : undefined,
       forma_pago: formaPago.trim() || 'CONTADO',
       meses_garantia: Number(mesesGarantia) || 0,
@@ -1091,15 +1269,12 @@ function CotizacionStudioEditor({
     return null;
   };
 
-  // Filtrados para comboboxes rápidos de catálogo (priorizando compatibilidad N:M con equipos seleccionados)
+  // Filtrados para comboboxes rápidos de catálogo (búsqueda tokenizada sin tildes + prioridad N:M)
   const serviciosFiltrados = useMemo(() => {
-    const q = srvSearch.trim().toLowerCase();
+    const q = srvSearch.trim();
     const list = q
-      ? serviciosCatalogo.filter(
-          (s) =>
-            s.nombre_servicio.toLowerCase().includes(q) ||
-            (s.codigo_servicio || '').toLowerCase().includes(q) ||
-            (s.categoria || '').toLowerCase().includes(q),
+      ? serviciosCatalogo.filter((s) =>
+          matchesAllTokens(q, [s.nombre_servicio, s.codigo_servicio, s.categoria]),
         )
       : serviciosCatalogo;
 
@@ -1116,7 +1291,7 @@ function CotizacionStudioEditor({
   }, [serviciosCatalogo, srvSearch, selectedTiposEquipoIds]);
 
   const componentesFiltrados = useMemo(() => {
-    const q = cmpSearch.trim().toLowerCase();
+    const q = cmpSearch.trim();
     const byId = new Map<number, (typeof articulosMaestro)[number]>();
 
     // Resultados en vivo del servidor cuando el usuario escribe >= 2 caracteres
@@ -1126,19 +1301,22 @@ function CotizacionStudioEditor({
       }
     }
 
-    // Más coincidencia local instantánea sobre los primeros 300 del Catálogo Maestro
+    // Más coincidencia local instantánea tokenizada e insensible a acentos sobre los primeros 300
     for (const c of articulosMaestro) {
       if (byId.has(c.id_componente)) continue;
       if (!q) {
         byId.set(c.id_componente, c);
         continue;
       }
-      const marcaNom = (c.marcas?.nombre || c.marca || '').toLowerCase();
       if (
-        (c.descripcion_corta || '').toLowerCase().includes(q) ||
-        (c.referencia_fabricante || '').toLowerCase().includes(q) ||
-        (c.codigo_interno || '').toLowerCase().includes(q) ||
-        marcaNom.includes(q)
+        matchesAllTokens(q, [
+          c.descripcion_corta,
+          c.referencia_fabricante,
+          c.codigo_interno,
+          c.marcas?.nombre,
+          c.marca,
+          c.categorias_componente?.nombre,
+        ])
       ) {
         byId.set(c.id_componente, c);
       }
@@ -1158,14 +1336,83 @@ function CotizacionStudioEditor({
       .slice(0, 30);
   }, [articulosMaestro, articulosSearch, cmpSearch, selectedTiposEquipoIds]);
 
+  const { plantillasVisibles, totalPlantillasDisponibles, bomKitsVisibles } = useMemo(() => {
+    const mult = Math.max(1, equiposIds.length);
+    const sugMap = new Map(
+      (sugerencias?.plantillas_sugeridas || []).map((s, idx) => [s.id_plantilla, { s, idx }]),
+    );
+
+    const ordenadas = [...plantillasAll].sort((a, b) => {
+      const ra = sugMap.get(a.id_plantilla)?.idx ?? 9999;
+      const rb = sugMap.get(b.id_plantilla)?.idx ?? 9999;
+      if (ra !== rb) return ra - rb;
+      return (b.veces_usada || 0) - (a.veces_usada || 0);
+    });
+
+    const q = plantillaSearch.trim();
+    const filtradas = q
+      ? ordenadas.filter((p) =>
+          matchesAllTokens(q, [
+            p.nombre,
+            p.codigo_plantilla,
+            p.descripcion,
+            p.tipo_cotizacion,
+            p.tipos_equipo?.nombre_tipo,
+            p.modelos_equipo?.marca,
+            p.modelos_equipo?.modelo,
+            p.modulos_tecnicos?.nombre_modulo,
+            ...(p.items || []).map((it) => it.descripcion),
+          ]),
+        )
+      : ordenadas;
+
+    const mapped = filtradas.map((p) => {
+      const sug = sugMap.get(p.id_plantilla)?.s;
+      const estCalc =
+        sug?.subtotal_estimado ??
+        (p.items || [])
+          .filter((i) => !i.es_opcional && i.visible_cliente !== false)
+          .reduce(
+            (acc, i) =>
+              acc +
+              Number(i.cantidad_base || 1) *
+                (i.es_por_equipo ? mult : 1) *
+                Number(i.precio_unitario_fijo || 0),
+            0,
+          );
+      return {
+        plantilla: p,
+        total_items: sug?.total_items ?? (p.items?.length || 0),
+        subtotal_estimado: estCalc,
+      };
+    });
+
+    const kits = (sugerencias?.bom_kits || []).filter((kit) =>
+      q
+        ? matchesAllTokens(q, [
+            kit.etiqueta_modelo,
+            ...kit.items.map((it) => it.descripcion),
+            ...kit.items.map((it) => it.referencia_fabricante),
+          ])
+        : true,
+    );
+
+    const visibles = q || mostrarTodasPlantillas ? mapped : mapped.slice(0, 4);
+    return {
+      plantillasVisibles: visibles,
+      totalPlantillasDisponibles: ordenadas.length,
+      bomKitsVisibles: kits,
+    };
+  }, [plantillasAll, sugerencias, equiposIds.length, plantillaSearch, mostrarTodasPlantillas]);
+
   const isSaving = createMut.isPending || guardarStudioMut.isPending;
 
   return (
-    <div className="space-y-5 pb-12">
+    <div className="space-y-5 -mx-3 sm:-mx-5 px-3 sm:px-5 pt-3 pb-14 bg-slate-50/90 min-h-screen rounded-2xl">
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* HEADER EJECUTIVO & BARRA DE WORKFLOW                                   */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="sticky top-0 z-20 -mx-2 px-4 py-3 bg-white/95 backdrop-blur border-b border-slate-200 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3">
+      <div className="sticky top-0 z-20 px-4 py-3 bg-white/95 backdrop-blur border border-slate-200/90 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <Button variant="outline" size="sm" asChild>
             <Link href="/comercial/cotizaciones">
@@ -1218,11 +1465,10 @@ function CotizacionStudioEditor({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  downloadCotizacionPdf(cotizacion.id_cotizacion, cotizacion.numero_cotizacion)
-                }
+                onClick={() => setPdfPreviewOpen(true)}
+                title="Previsualizar y descargar PDF corporativo"
               >
-                <Download className="h-4 w-4 mr-1.5" />
+                <FileText className="h-4 w-4 mr-1.5" />
                 PDF
               </Button>
 
@@ -1272,7 +1518,12 @@ function CotizacionStudioEditor({
                 <Button
                   size="sm"
                   className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                  onClick={() => setEnviarOpen(true)}
+                  onClick={() => {
+                    if (atencionANombre.trim()) {
+                      setEnviarNombre(atencionANombre.trim());
+                    }
+                    setEnviarOpen(true);
+                  }}
                 >
                   <Mail className="h-4 w-4 mr-1.5" />
                   Enviar al Cliente
@@ -1365,11 +1616,14 @@ function CotizacionStudioEditor({
         {/* COLUMNA IZQUIERDA (8) */}
         <div className="xl:col-span-8 space-y-5">
           {/* PASO 1: CLIENTE, SEDE, TIPO Y PARQUE MULTI-EQUIPO */}
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800">
-                <Building2 className="h-4 w-4 text-primary" />
-                1. Cliente, Contexto Comercial y Parque de Equipos
+          <Card className="bg-white border-slate-200/90 shadow-sm rounded-xl">
+            <CardHeader className="py-3.5 px-5 border-b border-slate-100 bg-slate-50/40 rounded-t-xl">
+              <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-900">
+                <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center text-xs font-extrabold shrink-0">
+                  1
+                </span>
+                <Building2 className="h-4 w-4 text-primary shrink-0" />
+                <span>Cliente, Contexto Comercial y Parque de Equipos</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 space-y-4">
@@ -1414,12 +1668,19 @@ function CotizacionStudioEditor({
                                 key={c.id_cliente}
                                 type="button"
                                 onClick={() => {
+                                  const repNombre = c.persona?.representante_legal?.trim() || '';
+                                  const repCargo = c.cargo_contacto?.trim() || '';
                                   setClienteId(String(c.id_cliente));
                                   setSedeId('NONE');
                                   setEquiposIds([]);
                                   setClienteDropdownOpen(false);
                                   setClienteSearch('');
-                                  setEnviarNombre(label);
+                                  setAtencionANombre(repNombre);
+                                  setAtencionACargo(repCargo);
+                                  setEnviarNombre(repNombre || label);
+                                  if (c.persona?.email_principal) {
+                                    setEnviarEmail(c.persona.email_principal);
+                                  }
                                 }}
                                 className="w-full px-2.5 py-2 text-left text-xs hover:bg-primary/5 rounded flex items-center justify-between"
                               >
@@ -1444,7 +1705,7 @@ function CotizacionStudioEditor({
                   <Select
                     disabled={!isEditable || !clienteId || sedes.length === 0}
                     value={sedeId}
-                    onValueChange={setSedeId}
+                    onValueChange={handleSelectSede}
                   >
                     <SelectTrigger className="h-9 text-xs bg-white">
                       <SelectValue placeholder="Todas / Principal" />
@@ -1461,37 +1722,94 @@ function CotizacionStudioEditor({
                 </div>
               </div>
 
+              {/* Destinatario Comercial ("Atención a / Representante") */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      Atención a / Representante (Opcional)
+                    </Label>
+                    {isEditable &&
+                      contactoFichaSugerido.nombre &&
+                      (atencionANombre.trim() !== contactoFichaSugerido.nombre ||
+                        (Boolean(contactoFichaSugerido.cargo) &&
+                          atencionACargo.trim() !== contactoFichaSugerido.cargo)) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAtencionANombre(contactoFichaSugerido.nombre);
+                            setAtencionACargo(contactoFichaSugerido.cargo);
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                          title={`Restaurar desde ficha del ${contactoFichaSugerido.origen}: ${contactoFichaSugerido.nombre}`}
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          Restaurar de ficha
+                        </button>
+                      )}
+                  </div>
+                  <Input
+                    disabled={!isEditable}
+                    value={atencionANombre}
+                    onChange={(e) => setAtencionANombre(e.target.value)}
+                    maxLength={200}
+                    placeholder="Ej: Ing. María Fernanda Gómez (aparece en encabezado y firma del PDF)"
+                    className="h-9 text-xs bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">
+                    Cargo / Dependencia (Opcional)
+                  </Label>
+                  <Input
+                    disabled={!isEditable}
+                    value={atencionACargo}
+                    onChange={(e) => setAtencionACargo(e.target.value)}
+                    maxLength={120}
+                    placeholder="Ej: Administración / Compras / Ingeniería"
+                    className="h-9 text-xs bg-white"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Tipo de Oferta (Abierto)</Label>
-                  <Input
-                    list="cpq-tipos-cotizacion"
+                  <Label className="text-xs font-semibold text-slate-700">Tipo de Oferta</Label>
+                  <CpqCreatableCombobox
                     disabled={!isEditable}
                     value={tipoCotizacion}
-                    onChange={(e) => setTipoCotizacion(e.target.value)}
-                    placeholder="Ej: SUMINISTRO_BATERIAS"
-                    className="h-9 text-xs bg-white"
+                    onChange={setTipoCotizacion}
+                    options={TIPO_OFERTA_COMBOBOX_OPTIONS}
+                    placeholder="Seleccionar tipo de oferta..."
+                    searchPlaceholder="Buscar o escribir tipo personalizado..."
+                    customLabel="Crear tipo de oferta"
+                    normalizeCustom={(raw) =>
+                      raw
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9]+/g, '_')
+                        .replace(/^_+|_+$/g, '')
+                        .slice(0, 40)
+                    }
+                    minDropdownWidth={290}
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Asesor Responsable</Label>
-                  <Select
+                  <Label className="text-xs font-semibold text-slate-700">Asesor Responsable</Label>
+                  <EamSelect
                     disabled={!isEditable}
                     value={elaboradaPor || (empleados[0] ? String(empleados[0].id_empleado) : '')}
-                    onValueChange={setElaboradaPor}
-                  >
-                    <SelectTrigger className="h-9 text-xs bg-white">
-                      <SelectValue placeholder="Auto (Usuario actual)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {empleados.map((emp) => (
-                        <SelectItem key={emp.id_empleado} value={String(emp.id_empleado)}>
-                          {getNombreCompleto(emp.persona)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={setElaboradaPor}
+                    options={asesorOptions}
+                    searchable
+                    placeholder="Seleccionar asesor..."
+                    searchPlaceholder="Buscar asesor por nombre o cargo..."
+                    size="sm"
+                    minDropdownWidth={280}
+                    className="h-9 rounded-lg"
+                  />
                 </div>
 
                 <div className="space-y-1">
@@ -1627,22 +1945,51 @@ function CotizacionStudioEditor({
               {/* ═══════════════════════════════════════════════════════════════ */}
               {isEditable && (
                 <div className="rounded-xl border border-primary/25 bg-gradient-to-br from-primary/5 via-white to-emerald-50/40 p-3.5 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
-                      <span className="text-xs font-bold text-slate-900">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                      <span className="text-xs font-bold text-slate-900 truncate">
                         Asistente Inteligente CPQ · Plantillas & Kits OEM
                       </span>
+                      {totalPlantillasDisponibles > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 h-4 bg-white/80 text-slate-600 border-slate-200 font-mono"
+                        >
+                          {totalPlantillasDisponibles}
+                        </Badge>
+                      )}
                       {loadingSugerencias && (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
                       )}
                     </div>
-                    <Button variant="ghost" size="sm" className="h-6 text-[11px]" asChild>
-                      <Link href="/comercial/cotizaciones/plantillas">
-                        <Layers className="h-3 w-3 mr-1" />
-                        Gestionar Plantillas
-                      </Link>
-                    </Button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative">
+                        <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <Input
+                          value={plantillaSearch}
+                          onChange={(e) => setPlantillaSearch(e.target.value)}
+                          placeholder="Buscar plantilla o kit..."
+                          className="h-7 w-48 sm:w-56 pl-7 pr-6 text-xs bg-white/95 border-slate-200 rounded-lg"
+                        />
+                        {plantillaSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setPlantillaSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            title="Limpiar búsqueda"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                      <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2" asChild>
+                        <Link href="/comercial/cotizaciones/plantillas">
+                          <Layers className="h-3 w-3 mr-1" />
+                          Gestionar
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Alerta de Equipos Gemelos detectados */}
@@ -1666,139 +2013,233 @@ function CotizacionStudioEditor({
                       </div>
                     )}
 
-                  {/* Plantillas sugeridas */}
-                  <div className="flex flex-wrap gap-2">
-                    {(sugerencias?.plantillas_sugeridas?.length
-                      ? sugerencias.plantillas_sugeridas.slice(0, 4)
-                      : plantillasAll.slice(0, 4).map((p) => ({
-                          id_plantilla: p.id_plantilla,
-                          nombre: p.nombre,
-                          multiplicador_equipos: Math.max(1, equiposIds.length),
-                          total_items: p.items.length,
-                          subtotal_estimado: 0,
-                          razones: ['Plantilla disponible'],
-                        }))
-                    ).map((sug) => {
-                      const fullTpl = plantillasAll.find((p) => p.id_plantilla === sug.id_plantilla);
-                      if (!fullTpl) return null;
-                      return (
+                  {/* Plantillas sugeridas y resultados de búsqueda */}
+                  {plantillasVisibles.length === 0 && bomKitsVisibles.length === 0 ? (
+                    <div className="py-3 px-4 flex items-center justify-between gap-2 text-xs text-slate-500 border border-dashed border-slate-200 rounded-lg bg-white/70">
+                      <span>
+                        {plantillaSearch.trim()
+                          ? `Sin plantillas ni kits que coincidan con "${plantillaSearch.trim()}".`
+                          : 'Aún no hay plantillas estándar creadas en el catálogo.'}
+                      </span>
+                      {plantillaSearch.trim() && (
                         <button
-                          key={sug.id_plantilla}
                           type="button"
-                          onClick={() => applyPlantillaLocal(fullTpl, false)}
-                          className="text-left px-3 py-2 rounded-lg bg-white border border-slate-200 hover:border-primary hover:shadow-sm transition-all flex items-center gap-2.5 max-w-xs"
+                          onClick={() => setPlantillaSearch('')}
+                          className="text-primary font-semibold hover:underline shrink-0"
                         >
-                          <div className="h-7 w-7 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                            <Layers className="h-3.5 w-3.5" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-800 truncate">
-                              {sug.nombre}
-                            </p>
-                            <p className="text-[10px] text-slate-500 truncate">
-                              {sug.total_items} líneas · ×{Math.max(1, equiposIds.length)} eq.
-                              {sug.subtotal_estimado > 0
-                                ? ` · Est. ${formatCurrency(sug.subtotal_estimado)}`
-                                : ''}
-                            </p>
-                          </div>
+                          Limpiar filtro
                         </button>
-                      );
-                    })}
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-0.5">
+                        {plantillasVisibles.map(({ plantilla: fullTpl, total_items, subtotal_estimado }) => (
+                          <button
+                            key={fullTpl.id_plantilla}
+                            type="button"
+                            onClick={() => applyPlantillaLocal(fullTpl, false)}
+                            className="group text-left px-3 py-2.5 rounded-xl bg-slate-50/70 hover:bg-emerald-50/50 border border-slate-200/90 hover:border-emerald-300 hover:shadow-sm transition-all flex items-start justify-between gap-2.5"
+                          >
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <div className="h-7 w-7 mt-0.5 rounded-lg bg-primary/10 text-primary group-hover:bg-emerald-100 group-hover:text-emerald-700 flex items-center justify-center shrink-0 transition-colors">
+                                <Layers className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="min-w-0 space-y-0.5">
+                                <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 line-clamp-2 leading-snug">
+                                  {fullTpl.nombre}
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  {total_items} líneas · ×{Math.max(1, equiposIds.length)} eq.
+                                  {subtotal_estimado > 0
+                                    ? ` · Est. ${formatCurrency(subtotal_estimado)}`
+                                    : ''}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="inline-flex items-center gap-0.5 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-colors mt-0.5">
+                              Aplicar
+                              <ArrowRight className="h-2.5 w-2.5" />
+                            </span>
+                          </button>
+                        ))}
 
-                    {/* Kits OEM BOM detectados */}
-                    {(sugerencias?.bom_kits || []).map((kit) => (
-                      <button
-                        key={kit.id_modelo_equipo}
-                        type="button"
-                        onClick={() => importBomKitLocal(kit)}
-                        className="text-left px-3 py-2 rounded-lg bg-emerald-50/70 border border-emerald-200 hover:border-emerald-400 transition-all flex items-center gap-2.5"
-                      >
-                        <div className="h-7 w-7 rounded-md bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                          <Package className="h-3.5 w-3.5" />
+                        {/* Kits OEM BOM detectados */}
+                        {bomKitsVisibles.map((kit) => (
+                          <button
+                            key={kit.id_modelo_equipo}
+                            type="button"
+                            onClick={() => importBomKitLocal(kit)}
+                            className="group text-left px-3 py-2.5 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 hover:border-emerald-400 hover:shadow-sm transition-all flex items-start justify-between gap-2.5"
+                          >
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <div className="h-7 w-7 mt-0.5 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                                <Package className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="min-w-0 space-y-0.5">
+                                <p className="text-xs font-bold text-emerald-950 line-clamp-2 leading-snug">
+                                  Kit BOM OEM · {kit.etiqueta_modelo}
+                                </p>
+                                <p className="text-[11px] text-emerald-800">
+                                  {kit.items.length} repuestos OEM × {kit.equipos_gemelos} equipo(s)
+                                </p>
+                              </div>
+                            </div>
+                            <span className="inline-flex items-center gap-0.5 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-600 text-white mt-0.5">
+                              Importar
+                              <ArrowRight className="h-2.5 w-2.5" />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {!plantillaSearch.trim() && totalPlantillasDisponibles > 4 && (
+                        <div className="flex justify-center pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setMostrarTodasPlantillas((v) => !v)}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                          >
+                            {mostrarTodasPlantillas ? (
+                              <>
+                                <ChevronUp className="h-3.5 w-3.5" />
+                                Mostrar solo sugeridas (4)
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-3.5 w-3.5" />
+                                Ver todas las plantillas ({totalPlantillasDisponibles})
+                              </>
+                            )}
+                          </button>
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-emerald-950">
-                            Importar Kit BOM · {kit.etiqueta_modelo}
-                          </p>
-                          <p className="text-[10px] text-emerald-800">
-                            {kit.items.length} repuestos OEM × {kit.equipos_gemelos} equipo(s)
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>
           </Card>
 
           {/* PASO 2: OBJETO COMERCIAL Y ALCANCE TÉCNICO */}
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800">
-                <FileText className="h-4 w-4 text-primary" />
-                2. Objeto de la Oferta, Alcance Técnico y Exclusiones
+          <Card className="bg-white border-slate-200/90 shadow-sm rounded-xl">
+            <CardHeader className="py-3.5 px-5 border-b border-slate-100 bg-slate-50/40 rounded-t-xl">
+              <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-900">
+                <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center text-xs font-extrabold shrink-0">
+                  2
+                </span>
+                <FileText className="h-4 w-4 text-primary shrink-0" />
+                <span>Objeto de la Oferta, Alcance Técnico y Exclusiones</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-4 space-y-3">
+            <CardContent className="p-4 sm:p-5 space-y-3">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold">Asunto / Título Comercial *</Label>
+                <Label className="text-xs font-semibold text-slate-700">Asunto / Título Comercial *</Label>
                 <Input
                   disabled={!isEditable}
                   value={asunto}
                   onChange={(e) => setAsunto(e.target.value)}
                   placeholder="Ej: Suministro e instalación de bancos de baterías para 2 plantas de emergencia"
-                  className="bg-white font-medium"
+                  className="bg-white font-medium h-9"
                 />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">Descripción General (Opcional)</Label>
-                <Textarea
-                  disabled={!isEditable}
-                  rows={2}
-                  value={descripcionGeneral}
-                  onChange={(e) => setDescripcionGeneral(e.target.value)}
-                  placeholder="Resumen ejecutivo de la necesidad o contexto técnico..."
-                  className="bg-white text-xs"
-                />
+
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setAlcanceExpandido((v) => !v)}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-primary transition-colors py-1"
+                >
+                  {alcanceExpandido ? (
+                    <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                  )}
+                  <span>
+                    {alcanceExpandido
+                      ? 'Ocultar descripción general, alcance incluido y exclusiones'
+                      : 'Agregar descripción general, alcance incluido y exclusiones (opcional)'}
+                  </span>
+                  {!alcanceExpandido &&
+                    [descripcionGeneral, alcanceTrabajo, exclusiones].filter((t) => t.trim()).length > 0 && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] ml-1 bg-primary/5 text-primary border-primary/20"
+                      >
+                        {[descripcionGeneral, alcanceTrabajo, exclusiones].filter((t) => t.trim()).length}{' '}
+                        con texto
+                      </Badge>
+                    )}
+                </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-emerald-800">
-                    Alcance Incluido
-                  </Label>
-                  <Textarea
-                    disabled={!isEditable}
-                    rows={3}
-                    value={alcanceTrabajo}
-                    onChange={(e) => setAlcanceTrabajo(e.target.value)}
-                    placeholder="• Actividades técnicas incluidas..."
-                    className="bg-white text-xs"
-                  />
+
+              {alcanceExpandido && (
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      Descripción General (Opcional)
+                    </Label>
+                    <Textarea
+                      disabled={!isEditable}
+                      rows={2}
+                      value={descripcionGeneral}
+                      onChange={(e) => setDescripcionGeneral(e.target.value)}
+                      placeholder="Resumen ejecutivo de la necesidad o contexto técnico..."
+                      className="bg-white text-xs"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-emerald-800">
+                        Alcance Incluido
+                      </Label>
+                      <Textarea
+                        disabled={!isEditable}
+                        rows={3}
+                        value={alcanceTrabajo}
+                        onChange={(e) => setAlcanceTrabajo(e.target.value)}
+                        placeholder="• Actividades técnicas incluidas..."
+                        className="bg-white text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-rose-800">Exclusiones</Label>
+                      <Textarea
+                        disabled={!isEditable}
+                        rows={3}
+                        value={exclusiones}
+                        onChange={(e) => setExclusiones(e.target.value)}
+                        placeholder="• Conceptos no contemplados en esta oferta..."
+                        className="bg-white text-xs"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-rose-800">Exclusiones</Label>
-                  <Textarea
-                    disabled={!isEditable}
-                    rows={3}
-                    value={exclusiones}
-                    onChange={(e) => setExclusiones(e.target.value)}
-                    placeholder="• Conceptos no contemplados en esta oferta..."
-                    className="bg-white text-xs"
-                  />
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
           {/* PASO 3: SERVICIOS TÉCNICOS */}
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between gap-2">
-              <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800">
-                <Wrench className="h-4 w-4 text-blue-600" />
-                3. Servicios Técnicos y Mano de Obra ({serviciosRows.length})
-              </CardTitle>
+          <Card className="bg-white border-slate-200/90 shadow-sm rounded-xl">
+            <CardHeader className="py-3.5 px-5 border-b border-slate-100 bg-slate-50/40 rounded-t-xl flex flex-row items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-900">
+                  <span className="h-6 w-6 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/80 flex items-center justify-center text-xs font-extrabold shrink-0">
+                    3
+                  </span>
+                  <Wrench className="h-4 w-4 text-blue-600 shrink-0" />
+                  <span>Servicios Técnicos y Mano de Obra ({serviciosRows.length})</span>
+                </CardTitle>
+                {lockCatalogUnitPrice && isEditable && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-slate-50 text-slate-600 border-slate-200 gap-1"
+                  >
+                    <Lock className="h-2.5 w-2.5" />
+                    Precios catálogo protegidos (rebajas vía Desc%)
+                  </Badge>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -1855,7 +2296,7 @@ function CotizacionStudioEditor({
                     className="pl-8 h-8 text-xs bg-slate-50"
                   />
                   {srvSearch.trim().length > 0 && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
+                    <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100">
                       {serviciosFiltrados.length === 0 ? (
                         <div className="p-3 text-xs text-slate-500">
                           Sin coincidencias en catálogo. Usa &ldquo;+ Línea Libre&rdquo; para un servicio a medida.
@@ -1935,11 +2376,24 @@ function CotizacionStudioEditor({
               )}
 
               {serviciosRows.length === 0 ? (
-                <p className="py-5 text-center text-xs text-slate-400 border border-dashed rounded-lg">
-                  Sin servicios agregados aún. Busca en el catálogo arriba o añade una línea personalizada.
-                </p>
+                <div className="py-3.5 px-4 flex items-center justify-center gap-2 text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
+                  <Wrench className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                  <span>Sin servicios agregados aún. Busca en el catálogo arriba o añade una línea libre.</span>
+                </div>
               ) : (
                 <div className="space-y-2">
+                  {/* Cabecera de columnas (desktop) */}
+                  <div className="hidden md:grid grid-cols-12 gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    <div className="col-span-5">Descripción del Servicio</div>
+                    <div className="col-span-1 text-center">Cant.</div>
+                    {showCostosInternos && (
+                      <div className="col-span-2 text-right text-amber-700/80">Costo Interno</div>
+                    )}
+                    <div className={showCostosInternos ? 'col-span-2 text-right' : 'col-span-3 text-right'}>
+                      Precio Venta
+                    </div>
+                    <div className="col-span-2 text-right pr-1">Subtotal</div>
+                  </div>
                   {serviciosRows.map((row, idx) => {
                     const sub =
                       Math.round(
@@ -1948,13 +2402,17 @@ function CotizacionStudioEditor({
                           (1 - row.descuento_porcentaje / 100) *
                           100,
                       ) / 100;
+                    const precioSrvBloqueado =
+                      lockCatalogUnitPrice &&
+                      row.id_servicio != null &&
+                      (srvPrecioCatalogoMap.get(row.id_servicio) ?? 0) > 0;
                     return (
                       <div
                         key={row.uid}
-                        className={`p-2.5 rounded-lg border space-y-2 ${
+                        className={`p-3 rounded-xl border space-y-2.5 transition-all hover:border-slate-300 ${
                           row.es_opcional
-                            ? 'bg-slate-50 border-dashed border-slate-300'
-                            : 'bg-white border-slate-200'
+                            ? 'bg-slate-50/80 border-dashed border-slate-300'
+                            : 'bg-white border-slate-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.03)]'
                         }`}
                       >
                         <div className="grid grid-cols-12 gap-2 items-center">
@@ -1962,6 +2420,7 @@ function CotizacionStudioEditor({
                             <Input
                               disabled={!isEditable}
                               value={row.descripcion}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) =>
                                 setServiciosRows((prev) =>
                                   prev.map((r, i) =>
@@ -1974,45 +2433,38 @@ function CotizacionStudioEditor({
                             />
                           </div>
                           <div className="col-span-4 md:col-span-1">
-                            <Input
-                              type="number"
-                              step="0.01"
+                            <CpqSmartNumberInput
                               min={0.01}
+                              decimals={2}
+                              align="center"
                               disabled={!isEditable}
                               value={row.cantidad}
-                              onChange={(e) =>
+                              onChange={(val) =>
                                 setServiciosRows((prev) =>
-                                  prev.map((r, i) =>
-                                    i === idx ? { ...r, cantidad: Number(e.target.value) || 0 } : r,
-                                  ),
+                                  prev.map((r, i) => (i === idx ? { ...r, cantidad: val } : r)),
                                 )
                               }
-                              className="h-8 text-xs text-center font-mono"
                               title="Cantidad"
                             />
                           </div>
                           {showCostosInternos && (
                             <div className="col-span-4 md:col-span-2">
-                              <div className="relative">
-                                <Lock className="h-3 w-3 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  disabled={!isEditable}
-                                  value={row.costo_unitario}
-                                  onChange={(e) =>
-                                    setServiciosRows((prev) =>
-                                      prev.map((r, i) =>
-                                        i === idx
-                                          ? { ...r, costo_unitario: Number(e.target.value) || 0 }
-                                          : r,
-                                      ),
-                                    )
-                                  }
-                                  className="h-8 pl-6 text-xs font-mono bg-amber-50/40 border-amber-200/70"
-                                  title="Costo Interno (Privado)"
-                                />
-                              </div>
+                              <CpqMoneyInput
+                                tone="cost"
+                                disabled={!isEditable}
+                                value={row.costo_unitario}
+                                locale={moneyLocale}
+                                symbol={moneySymbol}
+                                decimals={moneyDecimals}
+                                onChange={(val) =>
+                                  setServiciosRows((prev) =>
+                                    prev.map((r, i) =>
+                                      i === idx ? { ...r, costo_unitario: val } : r,
+                                    ),
+                                  )
+                                }
+                                title="Costo Interno (Privado)"
+                              />
                             </div>
                           )}
                           <div
@@ -2020,22 +2472,25 @@ function CotizacionStudioEditor({
                               showCostosInternos ? 'col-span-4 md:col-span-2' : 'col-span-5 md:col-span-3'
                             }
                           >
-                            <Input
-                              type="number"
-                              min={0}
+                            <CpqMoneyInput
                               disabled={!isEditable}
+                              locked={precioSrvBloqueado}
                               value={row.precio_unitario}
-                              onChange={(e) =>
+                              locale={moneyLocale}
+                              symbol={moneySymbol}
+                              decimals={moneyDecimals}
+                              onChange={(val) =>
                                 setServiciosRows((prev) =>
                                   prev.map((r, i) =>
-                                    i === idx
-                                      ? { ...r, precio_unitario: Number(e.target.value) || 0 }
-                                      : r,
+                                    i === idx ? { ...r, precio_unitario: val } : r,
                                   ),
                                 )
                               }
-                              className="h-8 text-xs font-mono text-right"
-                              title="Precio Unitario Venta"
+                              title={
+                                precioSrvBloqueado
+                                  ? 'Precio de catálogo protegido por política CPQ — aplica rebajas en Desc%'
+                                  : 'Precio Unitario Venta'
+                              }
                             />
                           </div>
                           <div className="col-span-10 md:col-span-2 text-right font-mono text-xs font-bold text-slate-800 pr-1">
@@ -2043,49 +2498,46 @@ function CotizacionStudioEditor({
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <input
-                              list="cpq-unidades-medida"
-                              disabled={!isEditable}
-                              value={row.unidad}
-                              onChange={(e) =>
-                                setServiciosRows((prev) =>
-                                  prev.map((r, i) =>
-                                    i === idx ? { ...r, unidad: e.target.value } : r,
-                                  ),
-                                )
-                              }
-                              className="w-20 border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white"
-                              placeholder="unidad"
-                            />
-                            <label className="flex items-center gap-1" title="Descuento por línea (%)">
-                              <span className="text-slate-400">Desc%</span>
-                              <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                step="0.5"
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px] text-slate-600">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <div className="w-28">
+                              <CpqCreatableCombobox
+                                size="xs"
                                 disabled={!isEditable}
-                                value={row.descuento_porcentaje}
-                                onChange={(e) =>
+                                value={row.unidad}
+                                onChange={(val) =>
                                   setServiciosRows((prev) =>
-                                    prev.map((r, i) =>
-                                      i === idx
-                                        ? {
-                                            ...r,
-                                            descuento_porcentaje: Math.max(
-                                              0,
-                                              Math.min(100, Number(e.target.value) || 0),
-                                            ),
-                                          }
-                                        : r,
-                                    ),
+                                    prev.map((r, i) => (i === idx ? { ...r, unidad: val } : r)),
                                   )
                                 }
-                                className="w-12 border border-slate-200 rounded px-1 py-0.5 text-[11px] font-mono text-right bg-white"
+                                options={unidadOptions}
+                                placeholder="Unidad"
+                                searchPlaceholder="Buscar unidad (ej. servicio, hr, día)..."
+                                customLabel="Usar unidad"
+                                minDropdownWidth={230}
                               />
-                            </label>
+                            </div>
+                            <div className="flex items-center gap-1.5" title="Descuento por línea (%)">
+                              <span className="text-[11px] font-medium text-slate-400">Desc.</span>
+                              <div className="w-16">
+                                <CpqSmartNumberInput
+                                  min={0}
+                                  max={100}
+                                  decimals={1}
+                                  suffix="%"
+                                  disabled={!isEditable}
+                                  value={row.descuento_porcentaje}
+                                  onChange={(val) =>
+                                    setServiciosRows((prev) =>
+                                      prev.map((r, i) =>
+                                        i === idx ? { ...r, descuento_porcentaje: val } : r,
+                                      ),
+                                    )
+                                  }
+                                  className="h-7 text-[11px]"
+                                />
+                              </div>
+                            </div>
                             {equiposSeleccionadosInfo.length > 1 && (
                               <select
                                 disabled={!isEditable}
@@ -2165,12 +2617,26 @@ function CotizacionStudioEditor({
           </Card>
 
           {/* PASO 4: REPUESTOS, COMPONENTES E INSUMOS WMS */}
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between gap-2">
-              <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800">
-                <Package className="h-4 w-4 text-emerald-600" />
-                4. Repuestos, Componentes e Insumos WMS ({componentesRows.length})
-              </CardTitle>
+          <Card className="bg-white border-slate-200/90 shadow-sm rounded-xl">
+            <CardHeader className="py-3.5 px-5 border-b border-slate-100 bg-slate-50/40 rounded-t-xl flex flex-row items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-900">
+                  <span className="h-6 w-6 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center justify-center text-xs font-extrabold shrink-0">
+                    4
+                  </span>
+                  <Package className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>Repuestos, Componentes e Insumos WMS ({componentesRows.length})</span>
+                </CardTitle>
+                {lockCatalogUnitPrice && isEditable && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-slate-50 text-slate-600 border-slate-200 gap-1"
+                  >
+                    <Lock className="h-2.5 w-2.5" />
+                    Precios catálogo protegidos (rebajas vía Desc%)
+                  </Badge>
+                )}
+              </div>
               {isEditable && (
                 <Button
                   type="button"
@@ -2213,7 +2679,7 @@ function CotizacionStudioEditor({
                     className="pl-8 h-8 text-xs bg-slate-50"
                   />
                   {cmpSearch.trim().length > 0 && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-64 overflow-y-auto divide-y divide-slate-100">
+                    <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto divide-y divide-slate-100">
                       {componentesFiltrados.length === 0 ? (
                         <div className="p-3 text-xs text-slate-500">
                           Sin coincidencias en el Catálogo Maestro. Usa &ldquo;+ Repuesto Manual&rdquo; sin restricciones.
@@ -2337,11 +2803,24 @@ function CotizacionStudioEditor({
               )}
 
               {componentesRows.length === 0 ? (
-                <p className="py-5 text-center text-xs text-slate-400 border border-dashed rounded-lg">
-                  Sin repuestos ni insumos agregados. Busca en el catálogo WMS o importa un Kit BOM OEM.
-                </p>
+                <div className="py-3.5 px-4 flex items-center justify-center gap-2 text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
+                  <Package className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                  <span>Sin repuestos ni insumos agregados. Busca en el catálogo WMS o importa un Kit BOM OEM.</span>
+                </div>
               ) : (
                 <div className="space-y-2">
+                  {/* Cabecera de columnas (desktop) */}
+                  <div className="hidden md:grid grid-cols-12 gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    <div className="col-span-5">Repuesto / Suministro</div>
+                    <div className="col-span-1 text-center">Cant.</div>
+                    {showCostosInternos && (
+                      <div className="col-span-2 text-right text-amber-700/80">Costo Compra</div>
+                    )}
+                    <div className={showCostosInternos ? 'col-span-2 text-right' : 'col-span-3 text-right'}>
+                      Precio Venta
+                    </div>
+                    <div className="col-span-2 text-right pr-1">Subtotal</div>
+                  </div>
                   {componentesRows.map((row, idx) => {
                     const sub =
                       Math.round(
@@ -2354,13 +2833,17 @@ function CotizacionStudioEditor({
                       row.id_componente != null &&
                       row.stock_actual != null &&
                       row.cantidad > row.stock_actual;
+                    const precioCmpBloqueado =
+                      lockCatalogUnitPrice &&
+                      row.id_componente != null &&
+                      (compPrecioCatalogoMap.get(row.id_componente) ?? 0) > 0;
                     return (
                       <div
                         key={row.uid}
-                        className={`p-2.5 rounded-lg border space-y-2 ${
+                        className={`p-3 rounded-xl border space-y-2.5 transition-all hover:border-slate-300 ${
                           row.es_opcional
-                            ? 'bg-slate-50 border-dashed border-slate-300'
-                            : 'bg-white border-slate-200'
+                            ? 'bg-slate-50/80 border-dashed border-slate-300'
+                            : 'bg-white border-slate-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.03)]'
                         }`}
                       >
                         <div className="grid grid-cols-12 gap-2 items-center">
@@ -2368,6 +2851,7 @@ function CotizacionStudioEditor({
                             <Input
                               disabled={!isEditable}
                               value={row.descripcion}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) =>
                                 setComponentesRows((prev) =>
                                   prev.map((r, i) =>
@@ -2380,44 +2864,38 @@ function CotizacionStudioEditor({
                             />
                           </div>
                           <div className="col-span-4 md:col-span-1">
-                            <Input
-                              type="number"
-                              step="0.01"
+                            <CpqSmartNumberInput
                               min={0.01}
+                              decimals={2}
+                              align="center"
                               disabled={!isEditable}
                               value={row.cantidad}
-                              onChange={(e) =>
+                              onChange={(val) =>
                                 setComponentesRows((prev) =>
-                                  prev.map((r, i) =>
-                                    i === idx ? { ...r, cantidad: Number(e.target.value) || 0 } : r,
-                                  ),
+                                  prev.map((r, i) => (i === idx ? { ...r, cantidad: val } : r)),
                                 )
                               }
-                              className="h-8 text-xs text-center font-mono"
+                              title="Cantidad"
                             />
                           </div>
                           {showCostosInternos && (
                             <div className="col-span-4 md:col-span-2">
-                              <div className="relative">
-                                <Lock className="h-3 w-3 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  disabled={!isEditable}
-                                  value={row.costo_unitario}
-                                  onChange={(e) =>
-                                    setComponentesRows((prev) =>
-                                      prev.map((r, i) =>
-                                        i === idx
-                                          ? { ...r, costo_unitario: Number(e.target.value) || 0 }
-                                          : r,
-                                      ),
-                                    )
-                                  }
-                                  className="h-8 pl-6 text-xs font-mono bg-amber-50/40 border-amber-200/70"
-                                  title="Costo Compra (Privado)"
-                                />
-                              </div>
+                              <CpqMoneyInput
+                                tone="cost"
+                                disabled={!isEditable}
+                                value={row.costo_unitario}
+                                locale={moneyLocale}
+                                symbol={moneySymbol}
+                                decimals={moneyDecimals}
+                                onChange={(val) =>
+                                  setComponentesRows((prev) =>
+                                    prev.map((r, i) =>
+                                      i === idx ? { ...r, costo_unitario: val } : r,
+                                    ),
+                                  )
+                                }
+                                title="Costo Compra (Privado)"
+                              />
                             </div>
                           )}
                           <div
@@ -2425,21 +2903,25 @@ function CotizacionStudioEditor({
                               showCostosInternos ? 'col-span-4 md:col-span-2' : 'col-span-5 md:col-span-3'
                             }
                           >
-                            <Input
-                              type="number"
-                              min={0}
+                            <CpqMoneyInput
                               disabled={!isEditable}
+                              locked={precioCmpBloqueado}
                               value={row.precio_unitario}
-                              onChange={(e) =>
+                              locale={moneyLocale}
+                              symbol={moneySymbol}
+                              decimals={moneyDecimals}
+                              onChange={(val) =>
                                 setComponentesRows((prev) =>
                                   prev.map((r, i) =>
-                                    i === idx
-                                      ? { ...r, precio_unitario: Number(e.target.value) || 0 }
-                                      : r,
+                                    i === idx ? { ...r, precio_unitario: val } : r,
                                   ),
                                 )
                               }
-                              className="h-8 text-xs font-mono text-right"
+                              title={
+                                precioCmpBloqueado
+                                  ? 'Precio de catálogo protegido por política CPQ — aplica rebajas en Desc%'
+                                  : 'Precio Unitario Venta'
+                              }
                             />
                           </div>
                           <div className="col-span-10 md:col-span-2 text-right font-mono text-xs font-bold text-slate-800 pr-1">
@@ -2447,61 +2929,70 @@ function CotizacionStudioEditor({
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px] text-slate-600">
                           <div className="flex flex-wrap items-center gap-2.5">
-                            <input
-                              disabled={!isEditable}
-                              value={row.referencia_manual || ''}
-                              onChange={(e) =>
-                                setComponentesRows((prev) =>
-                                  prev.map((r, i) =>
-                                    i === idx ? { ...r, referencia_manual: e.target.value } : r,
-                                  ),
-                                )
-                              }
-                              placeholder="Ref / P/N"
-                              className="w-24 border border-slate-200 rounded px-1.5 py-0.5 text-[11px] font-mono bg-white"
-                            />
-                            <input
-                              list="cpq-unidades-medida"
-                              disabled={!isEditable}
-                              value={row.unidad}
-                              onChange={(e) =>
-                                setComponentesRows((prev) =>
-                                  prev.map((r, i) =>
-                                    i === idx ? { ...r, unidad: e.target.value } : r,
-                                  ),
-                                )
-                              }
-                              className="w-16 border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white"
-                            />
-                            <label className="flex items-center gap-1" title="Descuento por línea (%)">
-                              <span className="text-slate-400">Desc%</span>
+                            {row.id_componente != null && row.referencia_manual ? (
+                              <span
+                                title={row.referencia_manual}
+                                className="inline-flex items-center font-mono text-xs text-slate-700 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded truncate max-w-[180px]"
+                              >
+                                {row.referencia_manual}
+                              </span>
+                            ) : (
                               <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                step="0.5"
                                 disabled={!isEditable}
-                                value={row.descuento_porcentaje}
+                                value={row.referencia_manual || ''}
+                                title={row.referencia_manual || 'Referencia o número de parte'}
+                                onFocus={(e) => e.target.select()}
                                 onChange={(e) =>
                                   setComponentesRows((prev) =>
                                     prev.map((r, i) =>
-                                      i === idx
-                                        ? {
-                                            ...r,
-                                            descuento_porcentaje: Math.max(
-                                              0,
-                                              Math.min(100, Number(e.target.value) || 0),
-                                            ),
-                                          }
-                                        : r,
+                                      i === idx ? { ...r, referencia_manual: e.target.value } : r,
                                     ),
                                   )
                                 }
-                                className="w-12 border border-slate-200 rounded px-1 py-0.5 text-[11px] font-mono text-right bg-white"
+                                placeholder="Ref / P/N"
+                                className="w-40 h-7 border border-slate-200 rounded-md px-2 text-xs font-mono bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                               />
-                            </label>
+                            )}
+                            <div className="w-24">
+                              <CpqCreatableCombobox
+                                size="xs"
+                                disabled={!isEditable}
+                                value={row.unidad}
+                                onChange={(val) =>
+                                  setComponentesRows((prev) =>
+                                    prev.map((r, i) => (i === idx ? { ...r, unidad: val } : r)),
+                                  )
+                                }
+                                options={unidadOptions}
+                                placeholder="Und"
+                                searchPlaceholder="Buscar unidad (ej. und, gal, kit)..."
+                                customLabel="Usar unidad"
+                                minDropdownWidth={230}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5" title="Descuento por línea (%)">
+                              <span className="text-[11px] font-medium text-slate-400">Desc.</span>
+                              <div className="w-16">
+                                <CpqSmartNumberInput
+                                  min={0}
+                                  max={100}
+                                  decimals={1}
+                                  suffix="%"
+                                  disabled={!isEditable}
+                                  value={row.descuento_porcentaje}
+                                  onChange={(val) =>
+                                    setComponentesRows((prev) =>
+                                      prev.map((r, i) =>
+                                        i === idx ? { ...r, descuento_porcentaje: val } : r,
+                                      ),
+                                    )
+                                  }
+                                  className="h-7 text-[11px]"
+                                />
+                              </div>
+                            </div>
                             {equiposSeleccionadosInfo.length > 1 && (
                               <select
                                 disabled={!isEditable}
@@ -2593,39 +3084,62 @@ function CotizacionStudioEditor({
           </Card>
 
           {/* PASO 5: LOGÍSTICA, VIÁTICOS, PÓLIZAS Y OTROS RUBROS */}
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3 border-b border-slate-100 space-y-2">
+          <Card className="bg-white border-slate-200/90 shadow-sm rounded-xl">
+            <CardHeader className="py-3.5 px-5 border-b border-slate-100 bg-slate-50/40 rounded-t-xl space-y-2.5">
               <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800">
-                  <Truck className="h-4 w-4 text-amber-600" />
-                  5. Logística, Viáticos, Pólizas y Otros Rubros ({otrosRows.length})
+                <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-900">
+                  <span className="h-6 w-6 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center justify-center text-xs font-extrabold shrink-0">
+                    5
+                  </span>
+                  <Truck className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>Logística, Viáticos, Pólizas y Otros Rubros ({otrosRows.length})</span>
                 </CardTitle>
               </div>
               {isEditable && (
                 <div className="flex flex-wrap gap-1.5">
-                  {RUBRO_OTRO_PRESETS.map((p) => (
-                    <Button
-                      key={p.value}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[11px] bg-white"
-                      onClick={() => addOtroPreset(p.value, p.label)}
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      {p.label.split(' / ')[0]}
-                    </Button>
-                  ))}
+                  {RUBRO_OTRO_PRESETS.map((p) => {
+                    const iconMap: Record<string, React.ReactNode> = {
+                      TRANSPORTE: <Truck className="h-3 w-3 shrink-0" />,
+                      VIATICOS: <Utensils className="h-3 w-3 shrink-0" />,
+                      POLIZA: <Shield className="h-3 w-3 shrink-0" />,
+                      ALQUILER: <Wrench className="h-3 w-3 shrink-0" />,
+                      DISPOSICION_AMBIENTAL: <Leaf className="h-3 w-3 shrink-0" />,
+                      SUBCONTRATO: <Users className="h-3 w-3 shrink-0" />,
+                      OTRO: <Plus className="h-3 w-3 shrink-0" />,
+                    };
+                    return (
+                      <button
+                        key={p.value}
+                        type="button"
+                        onClick={() => addOtroPreset(p.value, p.label)}
+                        className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition-colors"
+                      >
+                        {iconMap[p.value] || <Plus className="h-3 w-3 shrink-0" />}
+                        <span>{p.label.split(' / ')[0]}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </CardHeader>
             <CardContent className="p-4 space-y-2.5">
               {otrosRows.length === 0 ? (
-                <p className="py-5 text-center text-xs text-slate-400 border border-dashed rounded-lg">
-                  Sin gastos de transporte, viáticos, pólizas ni otros rubros. Usa los botones rápidos arriba para añadirlos (puedes cobrarlos al cliente o absorberlos internamente en el margen).
-                </p>
+                <div className="py-3.5 px-4 flex items-center justify-center gap-2 text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
+                  <Truck className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                  <span>Sin gastos de transporte, viáticos ni pólizas. Usa los accesos rápidos arriba (facturables o absorbidos).</span>
+                </div>
               ) : (
-                otrosRows.map((row, idx) => {
+                <div className="space-y-2">
+                  {/* Cabecera de columnas (desktop) */}
+                  <div className="hidden md:grid grid-cols-12 gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    <div className="col-span-2">Categoría</div>
+                    <div className="col-span-4">Concepto del Rubro</div>
+                    <div className="col-span-1 text-center">Cant.</div>
+                    <div className="col-span-2 text-right text-amber-700/80">Costo Real</div>
+                    <div className="col-span-2 text-right">Precio Cliente</div>
+                    <div className="col-span-1 text-right">Subtotal</div>
+                  </div>
+                  {otrosRows.map((row, idx) => {
                   const sub =
                     Math.round(
                       row.cantidad *
@@ -2636,35 +3150,48 @@ function CotizacionStudioEditor({
                   return (
                     <div
                       key={row.uid}
-                      className={`p-2.5 rounded-lg border space-y-2 ${
+                      className={`p-3 rounded-xl border space-y-2.5 transition-all hover:border-slate-300 ${
                         !row.visible_cliente
                           ? 'bg-amber-50/50 border-amber-200 border-dashed'
                           : row.es_opcional
-                            ? 'bg-slate-50 border-dashed border-slate-300'
-                            : 'bg-white border-slate-200'
+                            ? 'bg-slate-50/80 border-dashed border-slate-300'
+                            : 'bg-white border-slate-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.03)]'
                       }`}
                     >
                       <div className="grid grid-cols-12 gap-2 items-center">
                         <div className="col-span-12 md:col-span-2">
-                          <Input
-                            list="cpq-rubros-otros"
+                          <CpqCreatableCombobox
+                            size="sm"
                             disabled={!isEditable}
                             value={row.categoria_rubro}
-                            onChange={(e) =>
+                            onChange={(val) =>
                               setOtrosRows((prev) =>
                                 prev.map((r, i) =>
-                                  i === idx ? { ...r, categoria_rubro: e.target.value } : r,
+                                  i === idx ? { ...r, categoria_rubro: val } : r,
                                 ),
                               )
                             }
+                            options={RUBRO_OTRO_COMBOBOX_OPTIONS}
                             placeholder="Categoría..."
-                            className="w-full h-8 text-[11px] font-semibold bg-white px-2"
+                            searchPlaceholder="Buscar o crear rubro..."
+                            customLabel="Crear rubro"
+                            normalizeCustom={(raw) =>
+                              raw
+                                .normalize('NFD')
+                                .replace(/[\u0300-\u036f]/g, '')
+                                .toUpperCase()
+                                .replace(/[^A-Z0-9]+/g, '_')
+                                .replace(/^_+|_+$/g, '')
+                                .slice(0, 40)
+                            }
+                            minDropdownWidth={230}
                           />
                         </div>
                         <div className="col-span-12 md:col-span-4">
                           <Input
                             disabled={!isEditable}
                             value={row.descripcion}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) =>
                               setOtrosRows((prev) =>
                                 prev.map((r, i) =>
@@ -2677,60 +3204,51 @@ function CotizacionStudioEditor({
                           />
                         </div>
                         <div className="col-span-4 md:col-span-1">
-                          <Input
-                            type="number"
-                            step="0.01"
+                          <CpqSmartNumberInput
                             min={0.01}
+                            decimals={2}
+                            align="center"
                             disabled={!isEditable}
                             value={row.cantidad}
-                            onChange={(e) =>
+                            onChange={(val) =>
                               setOtrosRows((prev) =>
-                                prev.map((r, i) =>
-                                  i === idx ? { ...r, cantidad: Number(e.target.value) || 0 } : r,
-                                ),
+                                prev.map((r, i) => (i === idx ? { ...r, cantidad: val } : r)),
                               )
                             }
-                            className="h-8 text-xs text-center font-mono"
                           />
                         </div>
                         <div className="col-span-4 md:col-span-2">
-                          <div className="relative">
-                            <Lock className="h-3 w-3 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
-                            <Input
-                              type="number"
-                              min={0}
-                              disabled={!isEditable}
-                              value={row.costo_unitario}
-                              onChange={(e) =>
-                                setOtrosRows((prev) =>
-                                  prev.map((r, i) =>
-                                    i === idx
-                                      ? { ...r, costo_unitario: Number(e.target.value) || 0 }
-                                      : r,
-                                  ),
-                                )
-                              }
-                              className="h-8 pl-6 text-xs font-mono bg-amber-50/40 border-amber-200/70"
-                              title="Costo Interno Real"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-span-4 md:col-span-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            disabled={!isEditable || !row.visible_cliente}
-                            value={row.visible_cliente ? row.precio_unitario : 0}
-                            onChange={(e) =>
+                          <CpqMoneyInput
+                            tone="cost"
+                            disabled={!isEditable}
+                            value={row.costo_unitario}
+                            locale={moneyLocale}
+                            symbol={moneySymbol}
+                            decimals={moneyDecimals}
+                            onChange={(val) =>
                               setOtrosRows((prev) =>
                                 prev.map((r, i) =>
-                                  i === idx
-                                    ? { ...r, precio_unitario: Number(e.target.value) || 0 }
-                                    : r,
+                                  i === idx ? { ...r, costo_unitario: val } : r,
                                 ),
                               )
                             }
-                            className="h-8 text-xs font-mono text-right"
+                            title="Costo Interno Real"
+                          />
+                        </div>
+                        <div className="col-span-4 md:col-span-2">
+                          <CpqMoneyInput
+                            disabled={!isEditable || !row.visible_cliente}
+                            value={row.visible_cliente ? row.precio_unitario : 0}
+                            locale={moneyLocale}
+                            symbol={moneySymbol}
+                            decimals={moneyDecimals}
+                            onChange={(val) =>
+                              setOtrosRows((prev) =>
+                                prev.map((r, i) =>
+                                  i === idx ? { ...r, precio_unitario: val } : r,
+                                ),
+                              )
+                            }
                             title="Precio Facturable al Cliente"
                           />
                         </div>
@@ -2739,50 +3257,47 @@ function CotizacionStudioEditor({
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <input
-                            list="cpq-unidades-medida"
-                            disabled={!isEditable}
-                            value={row.unidad}
-                            onChange={(e) =>
-                              setOtrosRows((prev) =>
-                                prev.map((r, i) =>
-                                  i === idx ? { ...r, unidad: e.target.value } : r,
-                                ),
-                              )
-                            }
-                            placeholder="unidad"
-                            className="w-20 border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white"
-                          />
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px] text-slate-600">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <div className="w-28">
+                            <CpqCreatableCombobox
+                              size="xs"
+                              disabled={!isEditable}
+                              value={row.unidad}
+                              onChange={(val) =>
+                                setOtrosRows((prev) =>
+                                  prev.map((r, i) => (i === idx ? { ...r, unidad: val } : r)),
+                                )
+                              }
+                              options={unidadOptions}
+                              placeholder="Unidad"
+                              searchPlaceholder="Buscar unidad (ej. global, día, km)..."
+                              customLabel="Usar unidad"
+                              minDropdownWidth={230}
+                            />
+                          </div>
                           {row.visible_cliente && (
-                            <label className="flex items-center gap-1" title="Descuento por línea (%)">
-                              <span className="text-slate-400">Desc%</span>
-                              <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                step="0.5"
-                                disabled={!isEditable}
-                                value={row.descuento_porcentaje}
-                                onChange={(e) =>
-                                  setOtrosRows((prev) =>
-                                    prev.map((r, i) =>
-                                      i === idx
-                                        ? {
-                                            ...r,
-                                            descuento_porcentaje: Math.max(
-                                              0,
-                                              Math.min(100, Number(e.target.value) || 0),
-                                            ),
-                                          }
-                                        : r,
-                                    ),
-                                  )
-                                }
-                                className="w-12 border border-slate-200 rounded px-1 py-0.5 text-[11px] font-mono text-right bg-white"
-                              />
-                            </label>
+                            <div className="flex items-center gap-1.5" title="Descuento por línea (%)">
+                              <span className="text-[11px] font-medium text-slate-400">Desc.</span>
+                              <div className="w-16">
+                                <CpqSmartNumberInput
+                                  min={0}
+                                  max={100}
+                                  decimals={1}
+                                  suffix="%"
+                                  disabled={!isEditable}
+                                  value={row.descuento_porcentaje}
+                                  onChange={(val) =>
+                                    setOtrosRows((prev) =>
+                                      prev.map((r, i) =>
+                                        i === idx ? { ...r, descuento_porcentaje: val } : r,
+                                      ),
+                                    )
+                                  }
+                                  className="h-7 text-[11px]"
+                                />
+                              </div>
+                            </div>
                           )}
                           {equiposSeleccionadosInfo.length > 1 && (
                             <select
@@ -2836,8 +3351,13 @@ function CotizacionStudioEditor({
                                 )
                               }
                             />
-                            {row.visible_cliente ? 'Visible al cliente' : 'Absorbido (solo costo interno)'}
+                            Visible al cliente
                           </label>
+                          {!row.visible_cliente && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-semibold">
+                              Costo interno absorbido
+                            </span>
+                          )}
                           {row.visible_cliente && (
                             <>
                               <label className="flex items-center gap-1 cursor-pointer">
@@ -2887,64 +3407,81 @@ function CotizacionStudioEditor({
                       </div>
                     </div>
                   );
-                })
+                })}
+                </div>
               )}
             </CardContent>
           </Card>
 
           {/* PASO 6: CONDICIONES COMERCIALES Y TÉRMINOS */}
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <CardTitle className="text-sm font-bold text-slate-800">
-                6. Condiciones Comerciales, Garantía y Términos Legales
+          <Card className="bg-white border-slate-200/90 shadow-sm rounded-xl">
+            <CardHeader className="py-3.5 px-5 border-b border-slate-100 bg-slate-50/40 rounded-t-xl">
+              <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-900">
+                <span className="h-6 w-6 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200/80 flex items-center justify-center text-xs font-extrabold shrink-0">
+                  6
+                </span>
+                <FileCheck2 className="h-4 w-4 text-indigo-600 shrink-0" />
+                <span>Condiciones Comerciales, Garantía y Términos Legales</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-4 space-y-3">
+            <CardContent className="p-4 sm:p-5 space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Forma de Pago</Label>
-                  <Input
+                  <Label className="text-xs font-semibold text-slate-700">Forma de Pago</Label>
+                  <CpqCreatableCombobox
                     disabled={!isEditable}
                     value={formaPago}
-                    onChange={(e) => setFormaPago(e.target.value)}
-                    placeholder="CONTADO / 50% ANTICIPO / CREDITO 30 DIAS"
-                    className="h-9 text-xs bg-white"
+                    onChange={setFormaPago}
+                    options={FORMA_PAGO_COMBOBOX_OPTIONS}
+                    placeholder="Seleccionar forma de pago..."
+                    searchPlaceholder="Buscar o escribir forma de pago..."
+                    customLabel="Usar forma de pago"
+                    minDropdownWidth={260}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Tiempo Estimado (días hábiles)</Label>
-                  <Input
-                    type="number"
+                  <Label className="text-xs font-semibold text-slate-700">
+                    Tiempo Estimado (días hábiles)
+                  </Label>
+                  <CpqSmartNumberInput
                     min={0}
+                    decimals={0}
+                    align="left"
                     disabled={!isEditable}
-                    value={tiempoDias}
-                    onChange={(e) => setTiempoDias(e.target.value)}
-                    className="h-9 text-xs bg-white"
+                    value={Number(tiempoDias) || 0}
+                    onChange={(v) => setTiempoDias(String(v))}
+                    className="h-9 text-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Garantía (meses)</Label>
-                  <Input
-                    type="number"
+                  <Label className="text-xs font-semibold text-slate-700">Garantía (meses)</Label>
+                  <CpqSmartNumberInput
                     min={0}
+                    decimals={0}
+                    align="left"
                     disabled={!isEditable}
-                    value={mesesGarantia}
-                    onChange={(e) => setMesesGarantia(e.target.value)}
-                    className="h-9 text-xs bg-white"
+                    value={Number(mesesGarantia) || 0}
+                    onChange={(v) => setMesesGarantia(String(v))}
+                    className="h-9 text-xs"
                   />
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-semibold">Observaciones de Garantía (Opcional)</Label>
+                <Label className="text-xs font-semibold text-slate-700">
+                  Observaciones de Garantía (Opcional)
+                </Label>
                 <Input
                   disabled={!isEditable}
                   value={obsGarantia}
                   onChange={(e) => setObsGarantia(e.target.value)}
+                  placeholder="Ej: Garantía válida por defectos de fabricación e instalación bajo uso normal..."
                   className="h-9 text-xs bg-white"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-semibold">Términos y Condiciones del PDF</Label>
+                <Label className="text-xs font-semibold text-slate-700">
+                  Términos y Condiciones del PDF
+                </Label>
                 <Textarea
                   disabled={!isEditable}
                   rows={4}
@@ -3002,16 +3539,18 @@ function CotizacionStudioEditor({
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
                 <span className="text-xs text-slate-600">Descuento Global (%)</span>
                 <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.5"
-                    disabled={!isEditable}
-                    value={descuentoGlobal}
-                    onChange={(e) => setDescuentoGlobal(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                    className="w-20 h-7 text-xs font-mono text-right bg-white"
-                  />
+                  <div className="w-20">
+                    <CpqSmartNumberInput
+                      min={0}
+                      max={100}
+                      decimals={1}
+                      suffix="%"
+                      disabled={!isEditable}
+                      value={descuentoGlobal}
+                      onChange={setDescuentoGlobal}
+                      className="h-7"
+                    />
+                  </div>
                   {resumenFinanciero.descuentoValor > 0 && (
                     <span className="text-xs font-mono text-emerald-700 font-semibold">
                       -{formatCurrency(resumenFinanciero.descuentoValor)}
@@ -3037,38 +3576,41 @@ function CotizacionStudioEditor({
                     <div className="grid grid-cols-3 gap-1.5">
                       <div>
                         <span className="text-[10px] text-slate-500">Admin %</span>
-                        <Input
-                          type="number"
-                          step="0.1"
+                        <CpqSmartNumberInput
                           min={0}
+                          max={100}
+                          decimals={1}
+                          suffix="%"
                           disabled={!isEditable}
                           value={aiuAdminPct}
-                          onChange={(e) => setAiuAdminPct(Number(e.target.value) || 0)}
-                          className="h-7 text-xs font-mono bg-white"
+                          onChange={setAiuAdminPct}
+                          className="h-7"
                         />
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-500">Imprev %</span>
-                        <Input
-                          type="number"
-                          step="0.1"
+                        <CpqSmartNumberInput
                           min={0}
+                          max={100}
+                          decimals={1}
+                          suffix="%"
                           disabled={!isEditable}
                           value={aiuImprevPct}
-                          onChange={(e) => setAiuImprevPct(Number(e.target.value) || 0)}
-                          className="h-7 text-xs font-mono bg-white"
+                          onChange={setAiuImprevPct}
+                          className="h-7"
                         />
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-500">Utilid %</span>
-                        <Input
-                          type="number"
-                          step="0.1"
+                        <CpqSmartNumberInput
                           min={0}
+                          max={100}
+                          decimals={1}
+                          suffix="%"
                           disabled={!isEditable}
                           value={aiuUtilPct}
-                          onChange={(e) => setAiuUtilPct(Number(e.target.value) || 0)}
-                          className="h-7 text-xs font-mono bg-white"
+                          onChange={setAiuUtilPct}
+                          className="h-7"
                         />
                       </div>
                     </div>
@@ -3095,16 +3637,18 @@ function CotizacionStudioEditor({
                   {taxLabel} (%) {resumenFinanciero.ivaSobreUtil ? 's/ Utilidad' : ''}
                 </span>
                 <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.5"
-                    disabled={!isEditable}
-                    value={ivaPorcentaje}
-                    onChange={(e) => setIvaPorcentaje(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                    className="w-20 h-7 text-xs font-mono text-right bg-white"
-                  />
+                  <div className="w-20">
+                    <CpqSmartNumberInput
+                      min={0}
+                      max={100}
+                      decimals={1}
+                      suffix="%"
+                      disabled={!isEditable}
+                      value={ivaPorcentaje}
+                      onChange={setIvaPorcentaje}
+                      className="h-7"
+                    />
+                  </div>
                   <span className="text-xs font-mono font-semibold text-slate-800">
                     {formatCurrency(resumenFinanciero.ivaValor)}
                   </span>
@@ -3127,6 +3671,29 @@ function CotizacionStudioEditor({
                   </span>
                 </div>
               )}
+
+              {/* Preferencia de presentación PDF */}
+              <div className="pt-2.5 border-t border-slate-100">
+                <label className="flex items-start gap-2 cursor-pointer text-xs text-slate-700 select-none">
+                  <input
+                    type="checkbox"
+                    disabled={!isEditable}
+                    checked={mostrarDesglosePrecios}
+                    onChange={(e) => setMostrarDesglosePrecios(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300 text-primary"
+                  />
+                  <span>
+                    <span className="font-semibold text-slate-800 block">
+                      Desglosar precios unitarios en PDF
+                    </span>
+                    <span className="text-[11px] text-slate-500 block">
+                      {mostrarDesglosePrecios
+                        ? 'Modo licitación: muestra precios unitarios y subtotales por sección.'
+                        : 'Modo Suma Alzada (1 pág.): tabla única de alcance sin precios unitarios.'}
+                    </span>
+                  </span>
+                </label>
+              </div>
             </CardContent>
           </Card>
 
@@ -3140,13 +3707,14 @@ function CotizacionStudioEditor({
                 </span>
                 <Badge
                   className={
-                    resumenFinanciero.costoTotal === 0
+                    resumenFinanciero.costoTotal === 0 || !resumenFinanciero.governanceEnabled
                       ? 'bg-slate-700 text-slate-200'
-                      : resumenFinanciero.margenPct >= resumenFinanciero.margenAlerta
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                        : resumenFinanciero.margenPct >= resumenFinanciero.margenAprob
+                      : resumenFinanciero.margenAprob > 0 &&
+                          resumenFinanciero.margenPct < resumenFinanciero.margenAprob
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                        : resumenFinanciero.alertaMargen
                           ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                   }
                 >
                   Margen: {resumenFinanciero.margenPct.toFixed(1)}%
@@ -3178,20 +3746,29 @@ function CotizacionStudioEditor({
                   {formatCurrency(resumenFinanciero.utilidadBruta)}
                 </span>
               </div>
-              <div className="pt-2 border-t border-slate-800 text-[11px] flex items-center justify-between text-slate-400">
+              <div className="pt-2 border-t border-slate-800 text-[11px] flex items-center justify-between text-slate-400 gap-2">
                 <span>Gobernanza Aprobación:</span>
                 <span
-                  className={`font-semibold ${
-                    resumenFinanciero.nivelAprobacion === 'GERENTE'
+                  className={`font-semibold text-right ${
+                    resumenFinanciero.estadoGobernanza === 'GERENTE'
                       ? 'text-rose-300'
-                      : resumenFinanciero.nivelAprobacion === 'SUPERVISOR'
+                      : resumenFinanciero.estadoGobernanza === 'SUPERVISOR' ||
+                          resumenFinanciero.estadoGobernanza === 'ALERTA_MARGEN'
                         ? 'text-amber-300'
-                        : 'text-emerald-300'
+                        : resumenFinanciero.estadoGobernanza === 'MODO_AGIL'
+                          ? 'text-slate-300'
+                          : 'text-emerald-300'
                   }`}
                 >
-                  {resumenFinanciero.nivelAprobacion === 'NINGUNO'
-                    ? 'Aprobación Automática'
-                    : `Requiere ${resumenFinanciero.nivelAprobacion}`}
+                  {resumenFinanciero.estadoGobernanza === 'MODO_AGIL'
+                    ? 'Modo ágil (sin bloqueo)'
+                    : resumenFinanciero.estadoGobernanza === 'GERENTE'
+                      ? 'Requiere Gerente'
+                      : resumenFinanciero.estadoGobernanza === 'SUPERVISOR'
+                        ? 'Requiere Supervisor'
+                        : resumenFinanciero.estadoGobernanza === 'ALERTA_MARGEN'
+                          ? 'Alerta Visual de Margen'
+                          : 'Libre · Aprobación Automática'}
                 </span>
               </div>
             </CardContent>
@@ -3648,10 +4225,10 @@ function CotizacionStudioEditor({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="BAJA">Baja</SelectItem>
                       <SelectItem value="NORMAL">Normal</SelectItem>
                       <SelectItem value="ALTA">Alta</SelectItem>
                       <SelectItem value="URGENTE">Urgente</SelectItem>
+                      <SelectItem value="EMERGENCIA">Emergencia</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3735,34 +4312,17 @@ function CotizacionStudioEditor({
         </DialogContent>
       </Dialog>
 
-      {/* Datalists Maestros Abiertos (EAU · Catálogo Unidades + Presets extensibles) */}
-      <datalist id="cpq-tipos-cotizacion">
-        {TIPO_COTIZACION_PRESETS.map((t) => (
-          <option key={t.value} value={t.value}>
-            {t.label}
-          </option>
-        ))}
-      </datalist>
-      <datalist id="cpq-rubros-otros">
-        {RUBRO_OTRO_PRESETS.map((r) => (
-          <option key={r.value} value={r.value}>
-            {r.label}
-          </option>
-        ))}
-      </datalist>
-      <datalist id="cpq-unidades-medida">
-        <option value="servicio">Servicio</option>
-        <option value="global">Global</option>
-        <option value="dia">Día</option>
-        <option value="hora">Hora</option>
-        <option value="dia-tecnico">Día-Técnico</option>
-        <option value="km">Kilómetro</option>
-        {unidadesMedida.map((u) => (
-          <option key={u.codigo} value={u.simbolo || u.codigo}>
-            {u.nombre} ({u.codigo})
-          </option>
-        ))}
-      </datalist>
+      <CotizacionPdfPreviewModal
+        open={pdfPreviewOpen}
+        onOpenChange={setPdfPreviewOpen}
+        cotizacionId={cotizacion?.id_cotizacion ?? null}
+        numeroCotizacion={cotizacion?.numero_cotizacion}
+        version={cotizacion?.version}
+        estadoLabel={ESTADO_LABELS_COTIZACION[estadoCodigo] || estadoCodigo}
+        cacheKey={`${cotizacion?.fecha_modificacion ?? ''}-${cotizacion?.version ?? 1}-${cotizacion?.total_cotizacion ?? 0}-${cotizacion?.id_estado ?? 0}-${cotizacion?.items_servicios?.length ?? 0}-${cotizacion?.items_componentes?.length ?? 0}-${cotizacion?.items_otros?.length ?? 0}`}
+        mostrarDesglosePrecios={mostrarDesglosePrecios}
+        onDesgloseChange={setMostrarDesglosePrecios}
+      />
     </div>
   );
 }

@@ -16,6 +16,8 @@ export class Cotizacion {
   id_cliente!: number;
   id_sede?: number;
   id_equipo?: number;
+  atencion_a_nombre?: string | null;
+  atencion_a_cargo?: string | null;
   fecha_cotizacion!: Date; // ← CORREGIDO: era fecha_emision
   fecha_vencimiento!: Date;
   dias_validez?: number; // Calculado: vencimiento - cotizacion
@@ -65,6 +67,7 @@ export class Cotizacion {
   observaciones_aprobacion_cliente?: string;
   orden_compra_cliente?: string;
   modo_agrupacion_pdf?: string;
+  mostrar_desglose_precios?: boolean;
   
   // Condiciones comerciales
   forma_pago?: string; // ← NUEVO: CONTADO, CREDITO, ANTICIPADO

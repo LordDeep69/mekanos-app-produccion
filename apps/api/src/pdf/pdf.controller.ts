@@ -144,6 +144,12 @@ class EnviarPdfExistenteDto {
 @UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 export class PdfController {
   private readonly logger = new Logger(PdfController.name);
+  private readonly cotizacionPdfCache = new Map<
+    number,
+    { stamp: string; buffer: Buffer; filename: string; cachedAt: number }
+  >();
+  private readonly COT_PDF_CACHE_TTL_MS = 5 * 60_000;
+  private readonly COT_PDF_CACHE_MAX = 15;
 
   constructor(
     private readonly pdfService: PdfService,
@@ -232,18 +238,83 @@ export class PdfController {
     content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } },
   })
   @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
-  async generarPdfCotizacion(@Param('id') id: string, @Res() res: Response): Promise<void> {
+  async generarPdfCotizacion(
+    @Param('id') id: string,
+    @Query('refresh') refresh: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
     const idNumerico = parseInt(id, 10);
     if (isNaN(idNumerico)) {
       throw new NotFoundException(`ID de cotización inválido: ${id}`);
     }
 
-    const { datosCotizacion } = await this.pdfAssembler.assembleCotizacionPdf(idNumerico);
+    const forceRefresh = refresh === '1' || refresh === 'true';
+
+    // Verificación rápida de huella para reutilizar PDF si la cotización o la configuración no cambiaron
+    if (!forceRefresh) {
+      const cached = this.cotizacionPdfCache.get(idNumerico);
+      if (cached && Date.now() - cached.cachedAt < this.COT_PDF_CACHE_TTL_MS) {
+        const [meta, orgMeta] = await Promise.all([
+          this.prisma.cotizaciones.findUnique({
+            where: { id_cotizacion: idNumerico },
+            select: {
+              fecha_modificacion: true,
+              version: true,
+              id_estado: true,
+              total_cotizacion: true,
+              mostrar_desglose_precios: true,
+            },
+          }),
+          this.prisma.configuracion_organizacion
+            .findUnique({
+              where: { id_configuracion: 1 },
+              select: { enable_cpq_governance: true, fecha_modificacion: true },
+            })
+            .catch(() => null),
+        ]);
+        if (!meta) {
+          this.cotizacionPdfCache.delete(idNumerico);
+          throw new NotFoundException(`Cotización #${idNumerico} no encontrada`);
+        }
+        const stamp = `${meta.fecha_modificacion?.getTime() || 0}-${meta.version || 1}-${meta.id_estado}-${meta.total_cotizacion?.toString() || '0'}-desg:${meta.mostrar_desglose_precios ? 1 : 0}-gov:${orgMeta?.enable_cpq_governance ? 1 : 0}-org:${orgMeta?.fecha_modificacion?.getTime() || 0}`;
+        if (cached.stamp === stamp) {
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${cached.filename}"`);
+          res.setHeader('Content-Length', cached.buffer.length);
+          res.setHeader('X-PDF-Cache', 'HIT');
+          res.status(HttpStatus.OK).send(cached.buffer);
+          return;
+        }
+      }
+    }
+
+    const [{ cotizacion, datosCotizacion }, orgMetaPost] = await Promise.all([
+      this.pdfAssembler.assembleCotizacionPdf(idNumerico),
+      this.prisma.configuracion_organizacion
+        .findUnique({
+          where: { id_configuracion: 1 },
+          select: { enable_cpq_governance: true, fecha_modificacion: true },
+        })
+        .catch(() => null),
+    ]);
     const resultado = await this.pdfService.generarPDFCotizacion(datosCotizacion);
 
+    const stamp = `${cotizacion?.fecha_modificacion ? new Date(cotizacion.fecha_modificacion).getTime() : 0}-${cotizacion?.version || 1}-${cotizacion?.id_estado || 0}-${cotizacion?.total_cotizacion?.toString() || '0'}-desg:${cotizacion?.mostrar_desglose_precios ? 1 : 0}-gov:${orgMetaPost?.enable_cpq_governance ? 1 : 0}-org:${orgMetaPost?.fecha_modificacion?.getTime() || 0}`;
+    if (this.cotizacionPdfCache.size >= this.COT_PDF_CACHE_MAX) {
+      const oldestKey = this.cotizacionPdfCache.keys().next().value;
+      if (oldestKey !== undefined) this.cotizacionPdfCache.delete(oldestKey);
+    }
+    this.cotizacionPdfCache.set(idNumerico, {
+      stamp,
+      buffer: resultado.buffer,
+      filename: resultado.filename,
+      cachedAt: Date.now(),
+    });
+
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${resultado.filename}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${resultado.filename}"`);
     res.setHeader('Content-Length', resultado.size);
+    res.setHeader('X-PDF-Cache', 'MISS');
     res.status(HttpStatus.OK).send(resultado.buffer);
   }
 

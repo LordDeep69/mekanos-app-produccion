@@ -376,6 +376,16 @@ export class GuardarStudioCompletoDto {
   id_sede?: number | null;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  atencion_a_nombre?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  atencion_a_cargo?: string | null;
+
+  @IsOptional()
   @IsInt()
   elaborada_por?: number;
 
@@ -460,6 +470,10 @@ export class GuardarStudioCompletoDto {
   @IsString()
   @MaxLength(30)
   modo_agrupacion_pdf?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  mostrar_desglose_precios?: boolean;
 
   @IsOptional()
   @IsString()
@@ -556,4 +570,12 @@ export class ConvertirCotizacionOrdenDto {
   @IsOptional()
   @IsString()
   observaciones?: string;
+}
+
+export class ActualizarPresentacionPdfDto {
+  @ApiProperty({
+    description: 'Desglosar precios unitarios y subtotales por rubro en PDF (false = Suma Alzada compacta)',
+  })
+  @IsBoolean()
+  mostrar_desglose_precios: boolean;
 }

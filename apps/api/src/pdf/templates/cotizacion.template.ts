@@ -1,24 +1,20 @@
 /**
- * Template White-Label EAM-CPQ - Cotización Comercial Editorial Prémium
+ * Template White-Label EAM-CPQ - Cotización Comercial Editorial Ejecutivo Minimalista
  *
- * Características:
+ * Filosofía visual (Regla del 5% de Color Acento):
+ * - Inspirado en propuestas corporativas modernas (Stripe / Ingeniería Prémium)
+ * - Barra superior fina de 4px + acentos verticales de 3px + fila TOTAL con color primario White-Label
+ * - Tipografía clara, números tabulares, cabeceras neutras (#F1F5F9), sin efecto cebra ni parches estridentes
+ * - Márgenes uniformes (14mm laterales, 14mm sup., 18mm inf.) con padding completo en cada bloque
+ * - Bloque de cierre balanceado en 2 columnas (55% Condiciones & Términos / 45% Resumen Económico)
  * - 100% XSS-safe (todo texto de usuario escapado con escapeBrandHtml)
- * - Paginación fluida profesional (sin page-breaks forzados que dejen hojas vacías)
- * - Soporte Multi-Equipo (ficha compacta para 1 activo o tabla de parque para N activos)
- * - 3 tablas estructuradas: Servicios, Repuestos/Suministros y Logística/Viáticos/Pólizas
- *   (los costos indirectos absorbidos con visible_cliente=false nunca se muestran al cliente)
- * - Sección separada de Ítems Opcionales (no sumados al total principal)
- * - Desglose opcional de AIU (Administración, Imprevistos, Utilidad) y régimen dual de IVA
- * - Identidad White-Label (colores, logo, moneda, impuesto y footer de configuracion_organizacion)
+ * - Marca de agua antifuga diagonal en cada página cuando gobernanza CPQ está activa y el estado no está autorizado
  */
 
 import {
-  baseStyles,
   buildBrandCssVars,
   escapeBrandHtml,
   formatCurrencyOrg,
-  generarFooterCorporativoHtml,
-  MEKANOS_COLORS,
   OrgBrandingContext,
   renderOrgLogoHtml,
   resolveOrgBranding,
@@ -99,6 +95,18 @@ export interface DatosCotizacionPDF {
   version: number;
   ordenCompraCliente?: string;
 
+  // Gobernanza y estado documental
+  estadoCodigo?: string;
+  mostrarMarcaAguaBorrador?: boolean;
+  textoMarcaAgua?: string;
+
+  // Presentación comercial PDF (false = Suma Alzada compacta 1 pág. | true = Detallado Licitación)
+  mostrarDesglosePrecios?: boolean;
+
+  // Destinatario comercial ("Atención a / Representante") editable por cotización
+  atencionANombre?: string;
+  atencionACargo?: string;
+
   // Cliente
   cliente: {
     nombre: string;
@@ -168,6 +176,14 @@ const esc = (v?: string | number | null): string => escapeBrandHtml(v == null ? 
 const escMultiline = (v?: string | null): string =>
   escapeBrandHtml(v || '').replace(/\r?\n/g, '<br/>');
 
+const formatDiasHabiles = (n: number): string =>
+  n === 1 ? '1 día hábil' : `${n} días hábiles`;
+
+const formatMeses = (n: number): string => (n === 1 ? '1 mes' : `${n} meses`);
+
+const formatDiasCalendario = (n: number): string =>
+  n === 1 ? '1 día calendario' : `${n} días calendario`;
+
 const RUBRO_LABELS: Record<string, string> = {
   TRANSPORTE: 'Transporte / Movilización',
   VIATICOS: 'Viáticos / Estadía',
@@ -179,14 +195,23 @@ const RUBRO_LABELS: Record<string, string> = {
 };
 
 const TIPO_COT_LABELS: Record<string, string> = {
-  SERVICIO_TECNICO: 'SERVICIO TÉCNICO',
-  PREVENTIVO: 'MANTENIMIENTO PREVENTIVO',
-  CORRECTIVO: 'MANTENIMIENTO CORRECTIVO',
-  SUMINISTRO: 'SUMINISTRO DE REPUESTOS',
-  SUMINISTRO_INSTALACION: 'SUMINISTRO E INSTALACIÓN',
-  PROYECTO: 'PROYECTO DE INGENIERÍA',
-  CONTRATO: 'PROPUESTA CONTRACTUAL',
-  DIAGNOSTICO: 'DIAGNÓSTICO TÉCNICO',
+  SERVICIO_TECNICO: 'Servicio Técnico',
+  PREVENTIVO: 'Mantenimiento Preventivo',
+  CORRECTIVO: 'Mantenimiento Correctivo',
+  SUMINISTRO: 'Suministro de Repuestos',
+  SUMINISTRO_INSTALACION: 'Suministro e Instalación',
+  PROYECTO: 'Proyecto de Ingeniería',
+  CONTRATO: 'Propuesta Contractual',
+  DIAGNOSTICO: 'Diagnóstico Técnico',
+};
+
+const formatTipoLabel = (raw?: string): string | null => {
+  if (!raw) return null;
+  if (TIPO_COT_LABELS[raw]) return TIPO_COT_LABELS[raw];
+  return raw
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
 export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
@@ -204,441 +229,1262 @@ export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
 
   const itemsOtros = datos.itemsOtros || [];
   const itemsOpcionales = datos.itemsOpcionales || [];
+  const mostrarDesglose = Boolean(datos.mostrarDesglosePrecios);
+
+  const watermarkHtml = datos.mostrarMarcaAguaBorrador
+    ? `<div class="gov-watermark-layer" aria-hidden="true"><span class="gov-watermark-text">${esc(datos.textoMarcaAgua || 'BORRADOR — PENDIENTE DE APROBACIÓN')}</span></div>`
+    : '';
+
+  let bodyContentHtml = '';
+
+  if (!mostrarDesglose) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYOUT A (POR DEFECTO): MODO EJECUTIVO "SUMA ALZADA" (1 PÁGINA)
+    // ═══════════════════════════════════════════════════════════════════════
+    bodyContentHtml = `
+      ${generarTablaAlcanceSumaAlzada(datos, itemsOtros)}
+      ${generarBandaTotalesSumaAlzada(datos, brand)}
+      ${generarCondicionesYTerminosAnchoCompleto(datos, brand, itemsOtros.length > 0)}
+      ${itemsOpcionales.length > 0 ? generarSeccionOpcionalesSumaAlzada(itemsOpcionales, brand) : ''}
+    `;
+  } else {
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYOUT B: MODO DETALLADO LICITACIÓN (DESGLOSE POR RUBRO + RESUMEN)
+    // ═══════════════════════════════════════════════════════════════════════
+    let secIdx = 0;
+    const serviciosHtml =
+      datos.itemsServicios.length > 0
+        ? generarTablaServicios(datos.itemsServicios, brand, ++secIdx)
+        : '';
+    const componentesHtml =
+      datos.itemsComponentes.length > 0
+        ? generarTablaComponentes(datos.itemsComponentes, brand, ++secIdx)
+        : '';
+    const otrosHtml =
+      itemsOtros.length > 0 ? generarTablaOtros(itemsOtros, brand, ++secIdx) : '';
+
+    bodyContentHtml = `
+      ${serviciosHtml}
+      ${componentesHtml}
+      ${otrosHtml}
+      ${generarBloqueCierreBalanceado(datos, brand, itemsOtros.length > 0)}
+      ${itemsOpcionales.length > 0 ? generarSeccionOpcionales(itemsOpcionales, brand) : ''}
+    `;
+  }
 
   return `<!DOCTYPE html>
 <html lang="${esc(brand.locale || 'es')}">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cotización ${esc(datos.numeroCotizacion)}</title>
   <style>
     ${buildBrandCssVars(brand)}
-    ${baseStyles}
-    ${cotizacionStyles}
+    ${editorialStyles}
   </style>
 </head>
 <body>
-  <div class="cot-doc">
-    ${generarHeader(datos, brand)}
-    ${generarDatosCliente(datos, brand)}
-    ${equiposList.length > 0 ? generarSeccionEquipos(equiposList) : ''}
-    ${generarDescripcion(datos)}
-    ${datos.itemsServicios.length > 0 ? generarTablaServicios(datos.itemsServicios, brand) : ''}
-    ${datos.itemsComponentes.length > 0 ? generarTablaComponentes(datos.itemsComponentes, brand) : ''}
-    ${itemsOtros.length > 0 ? generarTablaOtros(itemsOtros, brand) : ''}
-    ${generarResumenTotales(datos, brand)}
-    ${itemsOpcionales.length > 0 ? generarTablaOpcionales(itemsOpcionales, brand) : ''}
-    ${generarCondicionesComerciales(datos)}
-    ${generarTerminosCondiciones(datos.terminosCondiciones, brand, itemsOtros.length > 0)}
-    ${generarFirmas(datos, brand)}
-    ${generarFooterCorporativoHtml(brand)}
+  ${watermarkHtml}
+  <div class="doc-shell${mostrarDesglose ? '' : ' mode-compact'}">
+    <div class="top-accent-bar"></div>
+    ${generarHeaderEditorial(datos, brand)}
+    ${generarBloqueClienteYEquipos(datos, equiposList, brand)}
+    ${generarObjetoOferta(datos)}
+    ${bodyContentHtml}
+    ${generarFirmasSobrias(datos, brand)}
   </div>
 </body>
 </html>`;
 };
 
-const cotizacionStyles = `
-  .cot-doc {
+const editorialStyles = `
+  @page {
+    size: A4;
+    margin: 14mm 14mm 18mm 14mm;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
     padding: 0;
   }
 
-  .cot-section {
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: #0F172A;
+    background: #FFFFFF;
+    font-size: 8.8px;
+    line-height: 1.45;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Marca de agua diagonal de gobernanza antifuga (centrada limpiamente en cada hoja en Chromium print) */
+  .gov-watermark-layer {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 9999;
+    user-select: none;
+  }
+
+  .gov-watermark-text {
+    transform: rotate(-34deg);
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    color: #DC2626;
+    opacity: 0.085;
+    white-space: nowrap;
+    text-transform: uppercase;
+  }
+
+  .doc-shell {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+  }
+
+  .avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* 1. Barra superior de acento (4px White-Label) */
+  .top-accent-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--brand-primary);
+    border-radius: 2px;
+    margin-bottom: 14px;
+  }
+
+  /* 2. Membrete Corporativo 2 columnas */
+  .ed-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #E2E8F0;
     margin-bottom: 12px;
   }
 
-  .cot-avoid-break {
-    break-inside: avoid;
-    page-break-inside: avoid;
+  .ed-brand-col {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex: 1 1 56%;
+    min-width: 0;
   }
 
-  .cot-header-meta {
+  .ed-logo-wrap {
+    flex: 0 0 auto;
+    max-width: 128px;
+    max-height: 48px;
     display: flex;
     align-items: center;
-    gap: 6px;
-    justify-content: center;
-    margin-top: 4px;
-    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
-  .cotizacion-badge {
-    background: ${MEKANOS_COLORS.primary};
-    color: white;
-    padding: 2px 9px;
-    border-radius: 12px;
-    font-size: 8.5px;
-    font-weight: bold;
-    letter-spacing: 0.4px;
+  .ed-logo-wrap img {
+    max-height: 48px !important;
+    max-width: 128px !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain;
+    border-radius: 5px;
+    display: block;
   }
 
-  .tipo-badge {
-    background: ${MEKANOS_COLORS.background};
-    color: ${MEKANOS_COLORS.primary};
-    border: 1px solid ${MEKANOS_COLORS.border};
-    padding: 2px 8px;
-    border-radius: 12px;
+  .ed-company-info {
+    min-width: 0;
+  }
+
+  .ed-company-name {
+    font-size: 12px;
+    font-weight: 800;
+    color: #0F172A;
+    line-height: 1.25;
+    margin-bottom: 2px;
+  }
+
+  .ed-company-meta {
     font-size: 8px;
+    color: #475569;
+    line-height: 1.45;
+  }
+
+  .ed-doc-col {
+    flex: 0 0 42%;
+    text-align: right;
+  }
+
+  .ed-doc-kicker {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #64748B;
+    margin-bottom: 2px;
+  }
+
+  .ed-doc-number {
+    font-size: 16px;
+    font-weight: 800;
+    color: #0F172A;
+    letter-spacing: -0.2px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+    margin-bottom: 5px;
+  }
+
+  .ed-badges {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .ed-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 7.5px;
+    font-weight: 600;
+    background: #F1F5F9;
+    color: #334155;
+    border: 1px solid #E2E8F0;
+  }
+
+  .ed-badge-gov {
+    background: #FEF2F2;
+    color: #991B1B;
+    border: 1px solid #FECACA;
     font-weight: 700;
     letter-spacing: 0.3px;
   }
 
-  .validez-tag {
-    background: ${MEKANOS_COLORS.warning};
-    color: white;
-    padding: 3px 8px;
-    border-radius: 3px;
-    font-size: 8.5px;
-    font-weight: bold;
-    margin-top: 3px;
-    display: inline-block;
-  }
-
-  .po-tag {
-    background: ${MEKANOS_COLORS.success};
-    color: white;
-    padding: 2px 7px;
-    border-radius: 3px;
-    font-size: 8px;
+  .ed-badge-po {
+    background: #ECFDF5;
+    color: #065F46;
+    border: 1px solid #A7F3D0;
     font-weight: 700;
-    margin-top: 3px;
-    display: inline-block;
   }
 
-  .items-table {
+  .ed-dates {
+    font-size: 8px;
+    color: #475569;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ed-dates strong {
+    color: #0F172A;
+    font-weight: 600;
+  }
+
+  /* 3. Tarjetas Cliente y Equipo */
+  .ed-cards-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .ed-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+
+  .ed-card-kicker {
+    font-size: 7.5px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: #64748B;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #E2E8F0;
+  }
+
+  .ed-card-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: #0F172A;
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+
+  .ed-atencion-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px;
+    margin-bottom: 6px;
+    padding: 3.5px 7px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-left: 2.5px solid var(--brand-primary);
+    border-radius: 3px;
+    line-height: 1.35;
+  }
+
+  .ed-atencion-label {
+    font-size: 7px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #64748B;
+  }
+
+  .ed-atencion-name {
+    font-size: 8.5px;
+    font-weight: 700;
+    color: #0F172A;
+  }
+
+  .ed-atencion-cargo {
+    font-size: 8px;
+    font-weight: 500;
+    color: #475569;
+  }
+
+  .ed-kv-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 10px;
+  }
+
+  .ed-kv-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px 12px;
+  }
+
+  .ed-kv {
+    min-width: 0;
+  }
+
+  .ed-kv-full {
+    grid-column: 1 / -1;
+  }
+
+  .ed-k {
+    display: block;
+    font-size: 7px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #64748B;
+  }
+
+  .ed-v {
+    display: block;
+    font-size: 8.4px;
+    color: #0F172A;
+    font-weight: 500;
+    word-break: break-word;
+  }
+
+  .ed-v-strong {
+    font-weight: 700;
+  }
+
+  .ed-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 4. Objeto de la Oferta */
+  .ed-objeto {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-left: 3px solid var(--brand-primary);
+    border-radius: 0 6px 6px 0;
+    padding: 9px 12px;
+    margin-bottom: 12px;
+  }
+
+  .ed-objeto-kicker {
+    font-size: 7.2px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: #64748B;
+    margin-bottom: 2px;
+  }
+
+  .ed-objeto-asunto {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #0F172A;
+    line-height: 1.35;
+  }
+
+  .ed-objeto-desc {
+    margin-top: 6px;
+    font-size: 8.3px;
+    color: #334155;
+    line-height: 1.45;
+  }
+
+  .ed-alcance-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #E2E8F0;
+  }
+
+  .ed-alcance-box {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 8px;
+    color: #334155;
+    line-height: 1.45;
+  }
+
+  .ed-alcance-box.incluido {
+    border-left: 2.5px solid #10B981;
+  }
+
+  .ed-alcance-box.exclusiones {
+    border-left: 2.5px solid #F43F5E;
+  }
+
+  .ed-alcance-label {
+    font-size: 7.4px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 3px;
+    display: block;
+  }
+
+  /* 5. Títulos de sección y tablas elegantes */
+  .ed-section {
+    margin-bottom: 12px;
+  }
+
+  .ed-sec-heading {
+    font-size: 10.2px;
+    font-weight: 700;
+    color: #0F172A;
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
+    border-left: 3px solid var(--brand-primary);
+    padding-left: 8px;
+    margin: 0 0 6px 0;
+    line-height: 1.3;
+  }
+
+  .ed-table {
     width: 100%;
     border-collapse: collapse;
-    margin: 6px 0 4px 0;
-    font-size: 8.8px;
+    font-size: 8.5px;
   }
 
-  .items-table thead {
+  .ed-table thead {
     display: table-header-group;
   }
 
-  .items-table tr {
+  .ed-table tr {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .items-table th {
-    background: ${MEKANOS_COLORS.primary};
-    color: white;
-    padding: 7px 6px;
+  .ed-table th {
+    background: #F1F5F9;
+    color: #334155;
+    border-top: 1px solid #E2E8F0;
+    border-bottom: 1.2px solid #CBD5E1;
+    padding: 6.5px 8px;
     text-align: left;
-    font-weight: bold;
-    font-size: 8.3px;
+    font-size: 7.6px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.4px;
   }
 
-  .items-table th.numero { width: 26px; text-align: center; }
-  .items-table th.descripcion { width: 44%; }
-  .items-table th.cantidad { width: 64px; text-align: center; }
-  .items-table th.precio { width: 84px; text-align: right; }
-  .items-table th.desc { width: 44px; text-align: center; }
-  .items-table th.subtotal { width: 92px; text-align: right; }
+  .ed-table th.col-num { width: 28px; text-align: center; }
+  .ed-table th.col-desc { width: 46%; }
+  .ed-table th.col-qty { width: 70px; text-align: center; }
+  .ed-table th.col-price { width: 88px; text-align: right; }
+  .ed-table th.col-disc { width: 46px; text-align: center; }
+  .ed-table th.col-sub { width: 96px; text-align: right; }
 
-  .items-table td {
-    padding: 6px;
-    border-bottom: 1px solid ${MEKANOS_COLORS.border};
+  .ed-table td {
+    padding: 7px 8px;
+    border-bottom: 1px solid #E2E8F0;
     vertical-align: top;
+    color: #0F172A;
   }
 
-  .items-table td.numero { text-align: center; font-weight: bold; color: ${MEKANOS_COLORS.primary}; }
-  .items-table td.cantidad { text-align: center; white-space: nowrap; }
-  .items-table td.precio { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .items-table td.desc { text-align: center; color: ${MEKANOS_COLORS.success}; font-weight: 600; }
-  .items-table td.subtotal { text-align: right; font-weight: bold; white-space: nowrap; font-variant-numeric: tabular-nums; }
-
-  .items-table tbody tr:nth-child(even) {
-    background: ${MEKANOS_COLORS.background};
+  .ed-table td.col-num {
+    text-align: center;
+    color: #64748B;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
 
-  .item-meta {
+  .ed-table td.col-qty {
+    text-align: center;
+    white-space: nowrap;
+    color: #334155;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ed-table td.col-price {
+    text-align: right;
+    white-space: nowrap;
+    color: #334155;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ed-table td.col-disc {
+    text-align: center;
+    white-space: nowrap;
+    color: #059669;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ed-table td.col-sub {
+    text-align: right;
+    white-space: nowrap;
+    font-weight: 700;
+    color: #0F172A;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ed-table tfoot {
+    display: table-row-group;
+  }
+
+  .ed-table tfoot td,
+  .ed-table tr.ed-subtotal-row td {
+    background: #F8FAFC;
+    border-top: 1px solid #CBD5E1;
+    border-bottom: 1px solid #E2E8F0;
+    padding: 6.5px 8px;
+    font-size: 8.3px;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  .ed-item-title {
+    font-weight: 600;
+    color: #0F172A;
+  }
+
+  .ed-item-meta {
     display: block;
-    font-size: 7.8px;
-    color: ${MEKANOS_COLORS.secondary};
+    font-size: 7.6px;
+    color: #64748B;
     margin-top: 2px;
+    line-height: 1.4;
   }
 
-  .item-pill {
+  .ed-pill {
     display: inline-block;
-    font-size: 7.3px;
+    font-size: 7px;
     padding: 1px 5px;
     border-radius: 3px;
-    background: #E2E8F0;
-    color: #334155;
+    background: #F1F5F9;
+    color: #475569;
+    border: 1px solid #E2E8F0;
     font-weight: 600;
     margin-right: 4px;
     text-transform: uppercase;
+    letter-spacing: 0.25px;
   }
 
-  .item-pill-exento {
+  .ed-pill-exento {
     background: #FEF3C7;
     color: #92400E;
+    border: 1px solid #FDE68A;
   }
 
-  .table-footer td {
-    background: ${MEKANOS_COLORS.background};
-    font-weight: bold;
-    border-top: 1.5px solid ${MEKANOS_COLORS.primary};
-    padding: 7px 6px;
+  /* 6. Bloque de Cierre Balanceado (55% Izquierda / 45% Derecha) */
+  .ed-closing-grid {
+    display: grid;
+    grid-template-columns: 55% 1fr;
+    gap: 12px;
+    align-items: start;
+    margin-top: 14px;
+    margin-bottom: 12px;
   }
 
-  .opcionales-table th {
-    background: #475569;
-  }
-
-  .opcionales-note {
-    font-size: 8px;
-    color: #475569;
-    margin: 4px 0 6px 0;
-    font-style: italic;
-  }
-
-  .totales-wrapper {
+  .ed-closing-left {
     display: flex;
-    justify-content: flex-end;
-    margin: 10px 0 12px 0;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  .totales-box {
-    width: 340px;
-    max-width: 100%;
-    background: white;
-    border: 1.5px solid ${MEKANOS_COLORS.primary};
+  .ed-cond-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
     border-radius: 6px;
-    padding: 10px 14px 0 14px;
+    padding: 10px 12px;
+  }
+
+  .ed-cond-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px 12px;
+  }
+
+  .ed-cond-val {
+    font-size: 8.8px;
+    font-weight: 700;
+    color: #0F172A;
+    margin-top: 1px;
+  }
+
+  .ed-terms-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+
+  .ed-terms-text {
+    font-size: 7.7px;
+    line-height: 1.5;
+    color: #475569;
+  }
+
+  /* Resumen Económico (Derecha 45% — Único fondo primario sólido en fila TOTAL) */
+  .ed-totals-card {
+    background: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
     overflow: hidden;
   }
 
-  .total-row {
+  .ed-totals-head {
+    background: #F8FAFC;
+    border-bottom: 1px solid #E2E8F0;
+    padding: 7px 12px;
+    font-size: 7.8px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: #334155;
+  }
+
+  .ed-totals-body {
+    padding: 6px 12px 2px 12px;
+  }
+
+  .ed-trow {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: baseline;
+    gap: 8px;
     padding: 4.5px 0;
-    font-size: 9px;
-    border-bottom: 1px dashed ${MEKANOS_COLORS.border};
+    font-size: 8.6px;
+    color: #334155;
+    border-bottom: 1px solid #F1F5F9;
   }
 
-  .total-row.subtotal-strong {
-    border-bottom: 1.5px solid ${MEKANOS_COLORS.primary};
-    font-weight: 700;
-    padding: 5.5px 0;
-  }
-
-  .total-row.descuento {
-    color: ${MEKANOS_COLORS.success};
-  }
-
-  .total-row.aiu-sub {
-    font-size: 8.3px;
-    color: #475569;
-    padding-left: 10px;
-  }
-
-  .total-row.iva {
-    color: ${MEKANOS_COLORS.secondary};
-    font-weight: 600;
-  }
-
-  .total-row.final {
-    background: ${MEKANOS_COLORS.primary};
-    color: white;
-    padding: 9px 14px;
-    margin: 6px -14px 0 -14px;
-    font-size: 12px;
-    font-weight: bold;
+  .ed-trow:last-child {
     border-bottom: none;
   }
 
-  .total-value {
-    font-weight: bold;
+  .ed-trow.strong {
+    border-top: 1px solid #CBD5E1;
+    border-bottom: 1px solid #CBD5E1;
+    margin-top: 2px;
+    padding: 5.5px 0;
+    font-weight: 700;
+    color: #0F172A;
+  }
+
+  .ed-trow.discount {
+    color: #059669;
+    font-weight: 600;
+  }
+
+  .ed-trow.sub-indent {
+    font-size: 8px;
+    color: #64748B;
+    padding: 3px 0 3px 10px;
+    border-bottom: 1px dashed #F1F5F9;
+  }
+
+  .ed-trow.tax {
+    font-weight: 600;
+    color: #0F172A;
+    padding-bottom: 6px;
+  }
+
+  .ed-tval {
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
-  .condiciones-box {
-    background: ${MEKANOS_COLORS.background};
-    border: 1px solid ${MEKANOS_COLORS.border};
-    border-radius: 6px;
-    padding: 10px 12px;
-    margin: 6px 0;
+  .ed-trow.strong .ed-tval,
+  .ed-trow.tax .ed-tval {
+    font-weight: 700;
   }
 
-  .condiciones-grid {
+  .ed-total-final {
+    background: var(--brand-primary);
+    color: #FFFFFF;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ed-total-final-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .ed-total-final-value {
+    font-size: 14px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* 7. Ítems Opcionales (borde punteado suave, padding interno completo 12px) */
+  .ed-opcionales-card {
+    border: 1px dashed #CBD5E1;
+    border-radius: 6px;
+    background: #FAFBFD;
+    padding: 12px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+  }
+
+  .ed-opcionales-title {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #334155;
+    margin-bottom: 4px;
+  }
+
+  .ed-opcionales-note {
+    font-size: 8px;
+    color: #64748B;
+    margin-bottom: 8px;
+    line-height: 1.45;
+  }
+
+  /* 8. Firmas Sobrias sobre fondo blanco */
+  .ed-firmas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px;
+    margin-top: 26px;
+    padding: 0 8px;
+  }
+
+  .ed-firma-col {
+    text-align: center;
+  }
+
+  .ed-firma-space {
+    height: 44px;
+    border-bottom: 1px solid #94A3B8;
+    margin-bottom: 6px;
+  }
+
+  .ed-firma-name {
+    font-size: 9px;
+    font-weight: 700;
+    color: #0F172A;
+    text-transform: uppercase;
+    letter-spacing: 0.25px;
+  }
+
+  .ed-firma-sub {
+    font-size: 7.8px;
+    color: #64748B;
+    margin-top: 1px;
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     LAYOUT A (POR DEFECTO): MODO EJECUTIVO "SUMA ALZADA" (1 PÁGINA)
+     ═════════════════════════════════════════════════════════════════════════ */
+  .mode-compact .top-accent-bar {
+    margin-bottom: 10px;
+  }
+
+  .mode-compact .ed-header {
+    padding-bottom: 9px;
+    margin-bottom: 9px;
+  }
+
+  .mode-compact .ed-cards-2col {
+    margin-bottom: 9px;
+  }
+
+  .mode-compact .ed-card {
+    padding: 8px 11px;
+  }
+
+  .mode-compact .ed-objeto {
+    padding: 7px 11px;
+    margin-bottom: 9px;
+  }
+
+  .mode-compact .ed-section {
+    margin-bottom: 8px;
+  }
+
+  .mode-compact .ed-table th {
+    padding: 5.5px 8px;
+  }
+
+  .mode-compact .ed-table td {
+    padding: 5.5px 8px;
+  }
+
+  .mode-compact .ed-firmas {
+    margin-top: 18px;
+  }
+
+  .mode-compact .ed-firma-space {
+    height: 36px;
+  }
+
+  .sa-table th.sa-col-num { width: 32px; text-align: center; }
+  .sa-table th.sa-col-desc { width: auto; }
+  .sa-table th.sa-col-qty { width: 92px; text-align: right; }
+
+  .sa-table td.sa-col-num {
+    text-align: center;
+    color: #64748B;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sa-table td.sa-col-qty {
+    text-align: right;
+    white-space: nowrap;
+    color: #334155;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sa-type-tag {
+    display: inline-block;
+    font-size: 7.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+    padding: 1.5px 6px;
+    border-radius: 3.5px;
+    background: #F1F5F9;
+    color: #475569;
+    border: 1px solid #E2E8F0;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  .sa-desc-meta {
+    display: block;
+    font-size: 7.4px;
+    color: #64748B;
+    margin-top: 1.5px;
+    line-height: 1.35;
+  }
+
+  /* Banda Ejecutiva Horizontal de Totales (ancho completo 100%, balanceada de extremo a extremo) */
+  .sa-totals-band {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    width: 100%;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #F8FAFC;
+    margin-top: 8px;
+    margin-bottom: 10px;
+  }
+
+  .sa-band-intro {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 8px 14px;
+    min-width: 0;
+  }
+
+  .sa-band-intro-title {
+    font-size: 7.6px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #1E293B;
+    line-height: 1.25;
+  }
+
+  .sa-band-intro-sub {
+    font-size: 7.1px;
+    color: #64748B;
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+
+  .sa-band-cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+    padding: 7px 12px;
+    border-left: 1px solid #E2E8F0;
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .sa-band-label {
+    font-size: 7px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
+    color: #64748B;
+    white-space: nowrap;
+  }
+
+  .sa-band-value {
+    font-size: 10px;
+    font-weight: 700;
+    color: #0F172A;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    margin-top: 1px;
+  }
+
+  .sa-band-value.discount {
+    color: #059669;
+  }
+
+  .sa-band-sub {
+    font-size: 6.9px;
+    color: #64748B;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    margin-top: 1px;
+  }
+
+  .sa-band-total {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+    background: var(--brand-primary);
+    color: #FFFFFF;
+    padding: 8px 16px;
+    min-width: 165px;
+  }
+
+  .sa-band-total-label {
+    font-size: 7.4px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.65px;
+    opacity: 0.92;
+    white-space: nowrap;
+  }
+
+  .sa-band-total-value {
+    font-size: 14.5px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    line-height: 1.15;
+    margin-top: 2px;
+  }
+
+  /* Tira horizontal de Condiciones Comerciales (4 columnas) + Términos a ancho completo */
+  .sa-cond-strip {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+  }
+
+  .sa-cond-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 10px;
   }
 
-  .condicion-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .condicion-label {
-    font-size: 7.5px;
-    color: ${MEKANOS_COLORS.secondary};
-    text-transform: uppercase;
-    font-weight: bold;
-    letter-spacing: 0.3px;
-  }
-
-  .condicion-value {
-    font-size: 9.8px;
-    color: ${MEKANOS_COLORS.primary};
-    font-weight: bold;
-  }
-
-  .terminos-box {
-    background: white;
-    border: 1px solid ${MEKANOS_COLORS.border};
+  .sa-terms-strip {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
     border-radius: 6px;
-    padding: 10px 12px;
-    margin: 6px 0;
+    padding: 8px 12px;
+    margin-bottom: 9px;
   }
 
-  .terminos-content {
-    font-size: 8px;
-    line-height: 1.5;
-    color: ${MEKANOS_COLORS.text};
+  .sa-terms-text {
+    font-size: 8.5px;
+    line-height: 1.48;
+    color: #334155;
+  }
+
+  /* Ítems Opcionales Compactos (Suma Alzada) */
+  .sa-opcionales-card {
+    border: 1px dashed #CBD5E1;
+    border-radius: 6px;
+    background: #FAFBFD;
+    padding: 9px 11px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+
+  .sa-opcionales-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+
+  .sa-opcionales-title {
+    font-size: 8.6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #334155;
+  }
+
+  .sa-opcionales-hint {
+    font-size: 7.4px;
+    color: #64748B;
+    font-style: italic;
   }
 `;
 
-const generarHeader = (
+const generarHeaderEditorial = (
   datos: DatosCotizacionPDF,
-  brand = resolveOrgBranding(datos.branding),
+  brand: OrgBrandingContext,
 ): string => {
-  const tipoLabel =
-    (datos.tipoCotizacion && TIPO_COT_LABELS[datos.tipoCotizacion]) ||
-    datos.tipoCotizacion?.replace(/_/g, ' ') ||
-    null;
+  const tipoLabel = formatTipoLabel(datos.tipoCotizacion);
+
+  const lineaFiscal = [
+    brand.numeroIdFiscal
+      ? `${esc(brand.tipoIdFiscal || 'NIT')}: ${esc(brand.numeroIdFiscal)}`
+      : null,
+    brand.direccionLinea1 ? esc(brand.direccionLinea1) : null,
+    [brand.ciudadDefecto, brand.paisDefecto].filter(Boolean).map(esc).join(', ') || null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const lineaContacto = [
+    brand.telefonoPrincipal ? `Tel: ${esc(brand.telefonoPrincipal)}` : null,
+    brand.emailContacto ? esc(brand.emailContacto) : null,
+    brand.sitioWeb ? esc(brand.sitioWeb) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const logoHtml = brand.logoUrl ? renderOrgLogoHtml(brand, 48, 'light') : '';
 
   return `
-  <div class="header">
-    <div class="logo-container" style="flex: 0 0 180px;">
-      ${renderOrgLogoHtml(brand, 48, 'light')}
-    </div>
-    <div class="header-title">
-      <h1>COTIZACIÓN COMERCIAL</h1>
-      <div class="cot-header-meta">
-        <span class="cotizacion-badge">Versión ${datos.version}</span>
-        ${tipoLabel ? `<span class="tipo-badge">${esc(tipoLabel)}</span>` : ''}
+  <header class="ed-header avoid-break">
+    <div class="ed-brand-col">
+      ${logoHtml ? `<div class="ed-logo-wrap">${logoHtml}</div>` : ''}
+      <div class="ed-company-info">
+        <div class="ed-company-name">${esc(brand.razonSocial || brand.nombreComercial)}</div>
+        ${
+          brand.nombreComercial &&
+          brand.razonSocial &&
+          !brand.razonSocial.toLowerCase().includes(brand.nombreComercial.toLowerCase())
+            ? `<div class="ed-company-meta" style="font-weight: 600; color: #334155;">${esc(brand.nombreComercial)}</div>`
+            : ''
+        }
+        ${lineaFiscal ? `<div class="ed-company-meta">${lineaFiscal}</div>` : ''}
+        ${lineaContacto ? `<div class="ed-company-meta">${lineaContacto}</div>` : ''}
       </div>
     </div>
-    <div class="header-order">
-      <div class="order-number">${esc(datos.numeroCotizacion)}</div>
-      <div style="font-size: 8.5px; color: ${MEKANOS_COLORS.secondary};">
-        Emisión: ${esc(datos.fechaCotizacion)}
+
+    <div class="ed-doc-col">
+      <div class="ed-doc-kicker">Cotización Comercial</div>
+      <div class="ed-doc-number">${esc(datos.numeroCotizacion)}</div>
+      <div class="ed-badges">
+        <span class="ed-badge">Versión ${datos.version}</span>
+        ${tipoLabel ? `<span class="ed-badge">${esc(tipoLabel)}</span>` : ''}
+        ${
+          datos.mostrarMarcaAguaBorrador
+            ? `<span class="ed-badge ed-badge-gov">BORRADOR · SIN APROBACIÓN</span>`
+            : ''
+        }
+        ${
+          datos.ordenCompraCliente
+            ? `<span class="ed-badge ed-badge-po">PO: ${esc(datos.ordenCompraCliente)}</span>`
+            : ''
+        }
       </div>
-      <div class="validez-tag">
-        Válida hasta: ${esc(datos.fechaVencimiento)} (${datos.diasValidez} días)
+      <div class="ed-dates">
+        <div>Emisión: <strong>${esc(datos.fechaCotizacion)}</strong></div>
+        <div>Válida hasta: <strong>${esc(datos.fechaVencimiento)}</strong> (${datos.diasValidez} días)</div>
       </div>
-      ${
-        datos.ordenCompraCliente
-          ? `<div class="po-tag">PO Cliente: ${esc(datos.ordenCompraCliente)}</div>`
-          : ''
-      }
     </div>
+  </header>`;
+};
+
+const generarTarjetaClienteContenido = (
+  datos: DatosCotizacionPDF,
+  brand: OrgBrandingContext,
+  horizontal = false,
+): string => {
+  const atencionNombre = datos.atencionANombre?.trim() || '';
+  const atencionCargo = datos.atencionACargo?.trim() || '';
+
+  return `
+  <div class="ed-card-kicker">Cliente</div>
+  <div class="ed-card-title">${esc(datos.cliente.nombre)}</div>
+  ${
+    atencionNombre
+      ? `<div class="ed-atencion-row">
+    <span class="ed-atencion-label">Atención a:</span>
+    <span class="ed-atencion-name">${esc(atencionNombre)}</span>
+    ${atencionCargo ? `<span class="ed-atencion-cargo">· ${esc(atencionCargo)}</span>` : ''}
+  </div>`
+      : ''
+  }
+  <div class="${horizontal ? 'ed-kv-grid-3' : 'ed-kv-grid'}">
+    ${
+      datos.cliente.nit
+        ? `<div class="ed-kv">
+      <span class="ed-k">${esc(brand.tipoIdFiscal || 'NIT')}</span>
+      <span class="ed-v ed-mono">${esc(datos.cliente.nit)}</span>
+    </div>`
+        : ''
+    }
+    <div class="ed-kv">
+      <span class="ed-k">Dirección</span>
+      <span class="ed-v">${esc(datos.cliente.direccion)}</span>
+    </div>
+    ${
+      datos.cliente.telefono
+        ? `<div class="ed-kv">
+      <span class="ed-k">Teléfono</span>
+      <span class="ed-v">${esc(datos.cliente.telefono)}</span>
+    </div>`
+        : ''
+    }
+    ${
+      datos.cliente.email
+        ? `<div class="ed-kv${horizontal ? '' : ' ed-kv-full'}">
+      <span class="ed-k">Correo Electrónico</span>
+      <span class="ed-v">${esc(datos.cliente.email)}</span>
+    </div>`
+        : ''
+    }
   </div>`;
 };
 
-const generarDatosCliente = (
+const generarBloqueClienteYEquipos = (
   datos: DatosCotizacionPDF,
+  equipos: EquipoCotizacionPDF[],
   brand: OrgBrandingContext,
-): string => `
-  <div class="section cot-section cot-avoid-break">
-    <div class="section-title">DATOS DEL CLIENTE</div>
-    <div class="info-grid">
-      <div class="info-item">
-        <span class="info-label">Razón Social / Cliente</span>
-        <span class="info-value">${esc(datos.cliente.nombre)}</span>
-      </div>
-      ${
-        datos.cliente.nit
-          ? `<div class="info-item">
-        <span class="info-label">${esc(brand.tipoIdFiscal || 'NIT')}</span>
-        <span class="info-value">${esc(datos.cliente.nit)}</span>
-      </div>`
-          : ''
-      }
-      <div class="info-item">
-        <span class="info-label">Dirección</span>
-        <span class="info-value">${esc(datos.cliente.direccion)}</span>
-      </div>
-      ${
-        datos.cliente.contacto
-          ? `<div class="info-item">
-        <span class="info-label">Contacto</span>
-        <span class="info-value">${esc(datos.cliente.contacto)}</span>
-      </div>`
-          : ''
-      }
-      ${
-        datos.cliente.telefono
-          ? `<div class="info-item">
-        <span class="info-label">Teléfono</span>
-        <span class="info-value">${esc(datos.cliente.telefono)}</span>
-      </div>`
-          : ''
-      }
-      ${
-        datos.cliente.email
-          ? `<div class="info-item">
-        <span class="info-label">Correo Electrónico</span>
-        <span class="info-value">${esc(datos.cliente.email)}</span>
-      </div>`
-          : ''
-      }
-    </div>
-  </div>`;
-
-const generarSeccionEquipos = (equipos: EquipoCotizacionPDF[]): string => {
+): string => {
+  // 1 solo equipo: 2 tarjetas lado a lado (50% / 50%)
   if (equipos.length === 1) {
     const eq = equipos[0];
+    const marcaModelo =
+      [eq.marca, eq.modelo].filter((x) => x && x !== 'N/A').join(' · ') ||
+      eq.nombreEquipo ||
+      '-';
     return `
-  <div class="section cot-section cot-avoid-break">
-    <div class="section-title">ACTIVO / EQUIPO CUBIERTO</div>
-    <div class="info-grid info-grid-4">
-      ${
-        eq.codigoEquipo
-          ? `<div class="info-item"><span class="info-label">Código</span><span class="info-value">${esc(eq.codigoEquipo)}</span></div>`
-          : ''
-      }
-      <div class="info-item">
-        <span class="info-label">Clase / Tipo</span>
-        <span class="info-value">${esc(eq.tipoEquipo || '-')}</span>
+  <div class="ed-cards-2col avoid-break">
+    <div class="ed-card">
+      ${generarTarjetaClienteContenido(datos, brand, false)}
+    </div>
+    <div class="ed-card">
+      <div class="ed-card-kicker">Activo / Equipo Cubierto</div>
+      <div class="ed-card-title">
+        ${eq.codigoEquipo ? `<span class="ed-mono">${esc(eq.codigoEquipo)}</span>` : ''}${eq.codigoEquipo && eq.nombreEquipo ? ' · ' : ''}${esc(eq.nombreEquipo || eq.tipoEquipo)}
       </div>
-      <div class="info-item">
-        <span class="info-label">Marca / Modelo</span>
-        <span class="info-value">${esc([eq.marca, eq.modelo].filter((x) => x && x !== 'N/A').join(' · ') || eq.nombreEquipo || '-')}</span>
+      <div class="ed-kv-grid">
+        <div class="ed-kv">
+          <span class="ed-k">Clase / Tipo</span>
+          <span class="ed-v">${esc(eq.tipoEquipo || '-')}</span>
+        </div>
+        <div class="ed-kv">
+          <span class="ed-k">Marca / Modelo</span>
+          <span class="ed-v">${esc(marcaModelo)}</span>
+        </div>
+        ${
+          eq.serie && eq.serie !== 'N/A'
+            ? `<div class="ed-kv">
+          <span class="ed-k">N° de Serie</span>
+          <span class="ed-v ed-mono">${esc(eq.serie)}</span>
+        </div>`
+            : ''
+        }
+        ${
+          eq.ubicacion
+            ? `<div class="ed-kv">
+          <span class="ed-k">Ubicación</span>
+          <span class="ed-v">${esc(eq.ubicacion)}</span>
+        </div>`
+            : ''
+        }
       </div>
-      ${
-        eq.serie && eq.serie !== 'N/A'
-          ? `<div class="info-item"><span class="info-label">N° de Serie</span><span class="info-value">${esc(eq.serie)}</span></div>`
-          : ''
-      }
-      ${
-        eq.ubicacion
-          ? `<div class="info-item"><span class="info-label">Ubicación</span><span class="info-value">${esc(eq.ubicacion)}</span></div>`
-          : ''
-      }
     </div>
   </div>`;
   }
 
+  // 0 equipos: solo tarjeta cliente compacta horizontal
+  if (equipos.length === 0) {
+    return `
+  <div class="ed-section avoid-break">
+    <div class="ed-card">
+      ${generarTarjetaClienteContenido(datos, brand, true)}
+    </div>
+  </div>`;
+  }
+
+  // 2 o más equipos (Multi-Equipo): tarjeta cliente arriba + tabla ligera de parque debajo
   return `
-  <div class="section cot-section">
-    <div class="section-title">ACTIVOS CUBIERTOS (${equipos.length} EQUIPOS)</div>
-    <table class="items-table">
+  <div class="ed-section avoid-break">
+    <div class="ed-card">
+      ${generarTarjetaClienteContenido(datos, brand, true)}
+    </div>
+  </div>
+  <div class="ed-section">
+    <div class="ed-sec-heading">Parque de Equipos Cubiertos (${equipos.length} activos)</div>
+    <table class="ed-table">
       <thead>
         <tr>
-          <th class="numero">#</th>
-          <th style="width: 15%;">Código</th>
-          <th style="width: 28%;">Equipo / Tipo</th>
-          <th style="width: 25%;">Marca / Modelo · Serie</th>
-          <th style="width: 26%;">Ubicación / Alcance</th>
+          <th class="col-num">#</th>
+          <th style="width: 16%;">Código</th>
+          <th style="width: 28%;">Equipo / Clase</th>
+          <th style="width: 26%;">Marca / Modelo · Serie</th>
+          <th style="width: 24%;">Ubicación / Alcance</th>
         </tr>
       </thead>
       <tbody>
@@ -646,19 +1492,19 @@ const generarSeccionEquipos = (equipos: EquipoCotizacionPDF[]): string => {
           .map(
             (eq, idx) => `
         <tr>
-          <td class="numero">${idx + 1}</td>
-          <td><strong>${esc(eq.codigoEquipo || '-')}</strong></td>
+          <td class="col-num">${idx + 1}</td>
+          <td class="ed-mono ed-v-strong">${esc(eq.codigoEquipo || '-')}</td>
           <td>
-            ${esc(eq.nombreEquipo || eq.tipoEquipo)}
-            <span class="item-meta">${esc(eq.tipoEquipo)}</span>
+            <span class="ed-item-title">${esc(eq.nombreEquipo || eq.tipoEquipo)}</span>
+            <span class="ed-item-meta">${esc(eq.tipoEquipo)}</span>
           </td>
           <td>
             ${esc([eq.marca, eq.modelo].filter((x) => x && x !== 'N/A').join(' ') || '-')}
-            ${eq.serie && eq.serie !== 'N/A' ? `<span class="item-meta">S/N: ${esc(eq.serie)}</span>` : ''}
+            ${eq.serie && eq.serie !== 'N/A' ? `<span class="ed-item-meta ed-mono">S/N: ${esc(eq.serie)}</span>` : ''}
           </td>
           <td>
             ${esc(eq.ubicacion || '-')}
-            ${eq.notasAlcance ? `<span class="item-meta">${esc(eq.notasAlcance)}</span>` : ''}
+            ${eq.notasAlcance ? `<span class="ed-item-meta">${esc(eq.notasAlcance)}</span>` : ''}
           </td>
         </tr>`,
           )
@@ -668,50 +1514,60 @@ const generarSeccionEquipos = (equipos: EquipoCotizacionPDF[]): string => {
   </div>`;
 };
 
-const generarDescripcion = (datos: DatosCotizacionPDF): string => `
-  <div class="section cot-section cot-avoid-break">
-    <div class="section-title">OBJETO DE LA OFERTA: ${esc(datos.asunto.toUpperCase())}</div>
+const generarObjetoOferta = (datos: DatosCotizacionPDF): string => {
+  const tieneAlcance = Boolean(datos.alcanceTrabajo?.trim());
+  const tieneExclusiones = Boolean(datos.exclusiones?.trim());
+
+  return `
+  <div class="ed-objeto avoid-break">
+    <div class="ed-objeto-kicker">Objeto de la Oferta</div>
+    <div class="ed-objeto-asunto">${esc(datos.asunto)}</div>
     ${
-      datos.descripcionGeneral
-        ? `<div class="observaciones-box" style="margin-bottom: 8px;">
-      <strong>Descripción General:</strong><br/>
-      ${escMultiline(datos.descripcionGeneral)}
-    </div>`
+      datos.descripcionGeneral?.trim()
+        ? `<div class="ed-objeto-desc">${escMultiline(datos.descripcionGeneral)}</div>`
         : ''
     }
     ${
-      datos.alcanceTrabajo
-        ? `<div class="observaciones-box" style="margin-bottom: 8px; border-left: 3px solid ${MEKANOS_COLORS.success};">
-      <strong>Alcance Técnico del Trabajo:</strong><br/>
-      ${escMultiline(datos.alcanceTrabajo)}
-    </div>`
-        : ''
-    }
-    ${
-      datos.exclusiones
-        ? `<div class="observaciones-box" style="border-left: 3px solid ${MEKANOS_COLORS.danger};">
-      <strong>Exclusiones:</strong><br/>
-      ${escMultiline(datos.exclusiones)}
+      tieneAlcance || tieneExclusiones
+        ? `<div class="ed-alcance-grid" style="${tieneAlcance && tieneExclusiones ? '' : 'grid-template-columns: 1fr;'}">
+      ${
+        tieneAlcance
+          ? `<div class="ed-alcance-box incluido">
+        <span class="ed-alcance-label" style="color: #065F46;">Alcance Técnico Incluido</span>
+        ${escMultiline(datos.alcanceTrabajo)}
+      </div>`
+          : ''
+      }
+      ${
+        tieneExclusiones
+          ? `<div class="ed-alcance-box exclusiones">
+        <span class="ed-alcance-label" style="color: #9F1239;">Exclusiones</span>
+        ${escMultiline(datos.exclusiones)}
+      </div>`
+          : ''
+      }
     </div>`
         : ''
     }
   </div>`;
+};
 
 const generarTablaServicios = (
   items: ItemServicioPDF[],
-  brand = resolveOrgBranding(),
+  brand: OrgBrandingContext,
+  secNum: number,
 ): string => `
-  <div class="section cot-section">
-    <div class="section-title">1. SERVICIOS TÉCNICOS Y MANO DE OBRA</div>
-    <table class="items-table">
+  <div class="ed-section">
+    <div class="ed-sec-heading">${secNum}. Servicios Técnicos y Mano de Obra</div>
+    <table class="ed-table">
       <thead>
         <tr>
-          <th class="numero">#</th>
-          <th class="descripcion">Descripción del Servicio</th>
-          <th class="cantidad">Cant.</th>
-          <th class="precio">V. Unitario</th>
-          <th class="desc">Desc.</th>
-          <th class="subtotal">Subtotal</th>
+          <th class="col-num">#</th>
+          <th class="col-desc">Descripción del Servicio</th>
+          <th class="col-qty">Cant.</th>
+          <th class="col-price">V. Unitario</th>
+          <th class="col-disc">Desc.</th>
+          <th class="col-sub">Subtotal</th>
         </tr>
       </thead>
       <tbody>
@@ -719,101 +1575,110 @@ const generarTablaServicios = (
           .map(
             (item) => `
         <tr>
-          <td class="numero">${item.orden}</td>
+          <td class="col-num">${item.orden}</td>
           <td>
-            ${esc(item.descripcion)}
+            <span class="ed-item-title">${esc(item.descripcion)}</span>
             ${
               item.equipoEtiqueta || item.ivaAplicable === false || item.observaciones
-                ? `<span class="item-meta">
-                    ${item.equipoEtiqueta ? `<span class="item-pill">${esc(item.equipoEtiqueta)}</span>` : ''}
-                    ${item.ivaAplicable === false ? `<span class="item-pill item-pill-exento">Exento ${esc(brand.etiquetaImpuesto)}</span>` : ''}
+                ? `<span class="ed-item-meta">
+                    ${item.equipoEtiqueta ? `<span class="ed-pill">${esc(item.equipoEtiqueta)}</span>` : ''}
+                    ${item.ivaAplicable === false ? `<span class="ed-pill ed-pill-exento">Exento ${esc(brand.etiquetaImpuesto)}</span>` : ''}
                     ${item.observaciones ? esc(item.observaciones) : ''}
-                   </span>`
+                  </span>`
                 : ''
             }
           </td>
-          <td class="cantidad">${item.cantidad} ${esc(item.unidad)}</td>
-          <td class="precio">${esc(formatCurrencyOrg(item.precioUnitario, brand))}</td>
-          <td class="desc">${item.descuentoPorcentaje > 0 ? `${item.descuentoPorcentaje}%` : '-'}</td>
-          <td class="subtotal">${esc(formatCurrencyOrg(item.subtotal, brand))}</td>
+          <td class="col-qty">${item.cantidad} ${esc(item.unidad)}</td>
+          <td class="col-price">${esc(formatCurrencyOrg(item.precioUnitario, brand))}</td>
+          <td class="col-disc">${item.descuentoPorcentaje > 0 ? `${item.descuentoPorcentaje}%` : '—'}</td>
+          <td class="col-sub">${esc(formatCurrencyOrg(item.subtotal, brand))}</td>
         </tr>`,
           )
           .join('')}
-      </tbody>
-      <tfoot>
-        <tr class="table-footer">
-          <td colspan="5" style="text-align: right;">SUBTOTAL SERVICIOS:</td>
-          <td class="subtotal">${esc(formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand))}</td>
+        <tr class="ed-subtotal-row avoid-break">
+          <td colspan="5" style="text-align: right;">Subtotal Servicios</td>
+          <td class="col-sub">${esc(formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand))}</td>
         </tr>
-      </tfoot>
+      </tbody>
     </table>
   </div>`;
 
 const generarTablaComponentes = (
   items: ItemComponentePDF[],
-  brand = resolveOrgBranding(),
+  brand: OrgBrandingContext,
+  secNum: number,
 ): string => `
-  <div class="section cot-section">
-    <div class="section-title">2. REPUESTOS, COMPONENTES E INSUMOS</div>
-    <table class="items-table">
+  <div class="ed-section">
+    <div class="ed-sec-heading">${secNum}. Repuestos, Componentes e Insumos</div>
+    <table class="ed-table">
       <thead>
         <tr>
-          <th class="numero">#</th>
-          <th class="descripcion">Descripción / Especificación</th>
-          <th class="cantidad">Cant.</th>
-          <th class="precio">V. Unitario</th>
-          <th class="desc">Desc.</th>
-          <th class="subtotal">Subtotal</th>
+          <th class="col-num">#</th>
+          <th class="col-desc">Descripción / Especificación</th>
+          <th class="col-qty">Cant.</th>
+          <th class="col-price">V. Unitario</th>
+          <th class="col-disc">Desc.</th>
+          <th class="col-sub">Subtotal</th>
         </tr>
       </thead>
       <tbody>
         ${items
-          .map(
-            (item) => `
+          .map((item) => {
+            const metaParts = [
+              item.referencia ? `Ref: ${esc(item.referencia)}` : null,
+              item.marca ? `Marca: ${esc(item.marca)}` : null,
+              item.garantiaMeses ? `Garantía: ${formatMeses(item.garantiaMeses)}` : null,
+            ].filter(Boolean);
+            const hasMeta =
+              Boolean(item.equipoEtiqueta) ||
+              metaParts.length > 0 ||
+              item.ivaAplicable === false;
+            return `
         <tr>
-          <td class="numero">${item.orden}</td>
+          <td class="col-num">${item.orden}</td>
           <td>
-            ${esc(item.descripcion)}
-            <span class="item-meta">
-              ${item.equipoEtiqueta ? `<span class="item-pill">${esc(item.equipoEtiqueta)}</span>` : ''}
-              ${item.referencia ? `Ref: ${esc(item.referencia)}` : ''}
-              ${item.marca ? `${item.referencia ? ' · ' : ''}Marca: ${esc(item.marca)}` : ''}
-              ${item.garantiaMeses ? ` · Garantía: ${item.garantiaMeses} mes(es)` : ''}
-              ${item.ivaAplicable === false ? ` <span class="item-pill item-pill-exento">Exento ${esc(brand.etiquetaImpuesto)}</span>` : ''}
-            </span>
+            <span class="ed-item-title">${esc(item.descripcion)}</span>
+            ${
+              hasMeta
+                ? `<span class="ed-item-meta">
+                    ${item.equipoEtiqueta ? `<span class="ed-pill">${esc(item.equipoEtiqueta)}</span>` : ''}
+                    ${metaParts.join(' · ')}
+                    ${item.ivaAplicable === false ? ` <span class="ed-pill ed-pill-exento">Exento ${esc(brand.etiquetaImpuesto)}</span>` : ''}
+                  </span>`
+                : ''
+            }
           </td>
-          <td class="cantidad">${item.cantidad} ${esc(item.unidad)}</td>
-          <td class="precio">${esc(formatCurrencyOrg(item.precioUnitario, brand))}</td>
-          <td class="desc">${item.descuentoPorcentaje > 0 ? `${item.descuentoPorcentaje}%` : '-'}</td>
-          <td class="subtotal">${esc(formatCurrencyOrg(item.subtotal, brand))}</td>
-        </tr>`,
-          )
+          <td class="col-qty">${item.cantidad} ${esc(item.unidad)}</td>
+          <td class="col-price">${esc(formatCurrencyOrg(item.precioUnitario, brand))}</td>
+          <td class="col-disc">${item.descuentoPorcentaje > 0 ? `${item.descuentoPorcentaje}%` : '—'}</td>
+          <td class="col-sub">${esc(formatCurrencyOrg(item.subtotal, brand))}</td>
+        </tr>`;
+          })
           .join('')}
-      </tbody>
-      <tfoot>
-        <tr class="table-footer">
-          <td colspan="5" style="text-align: right;">SUBTOTAL REPUESTOS E INSUMOS:</td>
-          <td class="subtotal">${esc(formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand))}</td>
+        <tr class="ed-subtotal-row avoid-break">
+          <td colspan="5" style="text-align: right;">Subtotal Repuestos e Insumos</td>
+          <td class="col-sub">${esc(formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand))}</td>
         </tr>
-      </tfoot>
+      </tbody>
     </table>
   </div>`;
 
 const generarTablaOtros = (
   items: ItemOtroPDF[],
-  brand = resolveOrgBranding(),
+  brand: OrgBrandingContext,
+  secNum: number,
 ): string => `
-  <div class="section cot-section">
-    <div class="section-title">3. LOGÍSTICA, VIÁTICOS, PÓLIZAS Y OTROS RUBROS</div>
-    <table class="items-table">
+  <div class="ed-section">
+    <div class="ed-sec-heading">${secNum}. Logística, Viáticos, Pólizas y Otros Rubros</div>
+    <table class="ed-table">
       <thead>
         <tr>
-          <th class="numero">#</th>
-          <th class="descripcion">Concepto / Categoría</th>
-          <th class="cantidad">Cant.</th>
-          <th class="precio">V. Unitario</th>
-          <th class="desc">Desc.</th>
-          <th class="subtotal">Subtotal</th>
+          <th class="col-num">#</th>
+          <th class="col-desc">Concepto / Categoría</th>
+          <th class="col-qty">Cant.</th>
+          <th class="col-price">V. Unitario</th>
+          <th class="col-disc">Desc.</th>
+          <th class="col-sub">Subtotal</th>
         </tr>
       </thead>
       <tbody>
@@ -821,54 +1686,193 @@ const generarTablaOtros = (
           .map(
             (item) => `
         <tr>
-          <td class="numero">${item.orden}</td>
+          <td class="col-num">${item.orden}</td>
           <td>
-            <span class="item-pill">${esc(RUBRO_LABELS[item.categoriaRubro] || item.categoriaRubro)}</span>
-            ${esc(item.descripcion)}
+            <span class="ed-pill">${esc(RUBRO_LABELS[item.categoriaRubro] || item.categoriaRubro)}</span>
+            <span class="ed-item-title">${esc(item.descripcion)}</span>
             ${
               item.detalleCalculo || item.equipoEtiqueta || item.ivaAplicable === false
-                ? `<span class="item-meta">
-                    ${item.equipoEtiqueta ? `<span class="item-pill">${esc(item.equipoEtiqueta)}</span>` : ''}
+                ? `<span class="ed-item-meta">
+                    ${item.equipoEtiqueta ? `<span class="ed-pill">${esc(item.equipoEtiqueta)}</span>` : ''}
                     ${item.detalleCalculo ? esc(item.detalleCalculo) : ''}
-                    ${item.ivaAplicable === false ? ` <span class="item-pill item-pill-exento">Exento ${esc(brand.etiquetaImpuesto)}</span>` : ''}
+                    ${item.ivaAplicable === false ? ` <span class="ed-pill ed-pill-exento">Exento ${esc(brand.etiquetaImpuesto)}</span>` : ''}
                   </span>`
                 : ''
             }
           </td>
-          <td class="cantidad">${item.cantidad} ${esc(item.unidad)}</td>
-          <td class="precio">${esc(formatCurrencyOrg(item.precioUnitario, brand))}</td>
-          <td class="desc">${item.descuentoPorcentaje > 0 ? `${item.descuentoPorcentaje}%` : '-'}</td>
-          <td class="subtotal">${esc(formatCurrencyOrg(item.subtotal, brand))}</td>
+          <td class="col-qty">${item.cantidad} ${esc(item.unidad)}</td>
+          <td class="col-price">${esc(formatCurrencyOrg(item.precioUnitario, brand))}</td>
+          <td class="col-disc">${item.descuentoPorcentaje > 0 ? `${item.descuentoPorcentaje}%` : '—'}</td>
+          <td class="col-sub">${esc(formatCurrencyOrg(item.subtotal, brand))}</td>
         </tr>`,
           )
           .join('')}
-      </tbody>
-      <tfoot>
-        <tr class="table-footer">
-          <td colspan="5" style="text-align: right;">SUBTOTAL LOGÍSTICA Y OTROS:</td>
-          <td class="subtotal">${esc(formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand))}</td>
+        <tr class="ed-subtotal-row avoid-break">
+          <td colspan="5" style="text-align: right;">Subtotal Logística y Otros</td>
+          <td class="col-sub">${esc(formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand))}</td>
         </tr>
-      </tfoot>
+      </tbody>
     </table>
   </div>`;
 
-const generarTablaOpcionales = (
+const generarBloqueCierreBalanceado = (
+  datos: DatosCotizacionPDF,
+  brand: OrgBrandingContext,
+  incluyeLogistica: boolean,
+): string => {
+  const t = datos.totales;
+  const subtotalOtros = t.subtotalOtros || 0;
+  const usaAiu = Boolean(t.usaAiu && (t.aiuValorTotal || 0) > 0);
+  const etiquetaIva =
+    t.ivaSobreUtilidadAiu && usaAiu
+      ? `${brand.etiquetaImpuesto} (${t.ivaPorcentaje}% s/ Utilidad AIU)`
+      : `${brand.etiquetaImpuesto} (${t.ivaPorcentaje}%)`;
+
+  const terminosDefault = [
+    `1. Valores expresados en ${brand.codigoMoneda} con el tratamiento tributario de ${brand.etiquetaImpuesto} detallado en el resumen económico.`,
+    '2. El plazo de ejecución inicia tras la aprobación escrita u Orden de Compra (PO) y el cumplimiento de las condiciones de pago.',
+    '3. La garantía cubre defectos de fabricación y mano de obra ejecutada; excluye operación indebida o alteraciones externas.',
+    '4. Todo trabajo o repuesto adicional fuera del alcance descrito se cotizará y aprobará previamente.',
+    ...(incluyeLogistica
+      ? []
+      : ['5. Movilización, transporte o viáticos fuera del área estándar se cotizan de forma independiente cuando apliquen.']),
+    `${incluyeLogistica ? '5' : '6'}. Precios y disponibilidad de repuestos sujetos a confirmación después del vencimiento de esta oferta.`,
+  ].join('\n');
+
+  return `
+  <div class="ed-closing-grid avoid-break">
+    <!-- Columna Izquierda (55%): Condiciones Comerciales + Términos -->
+    <div class="ed-closing-left">
+      <div class="ed-cond-card">
+        <div class="ed-card-kicker">Condiciones Comerciales</div>
+        <div class="ed-cond-grid">
+          <div>
+            <span class="ed-k">Forma de Pago</span>
+            <div class="ed-cond-val">${esc(datos.formaPago)}</div>
+          </div>
+          <div>
+            <span class="ed-k">Tiempo Estimado</span>
+            <div class="ed-cond-val">${datos.tiempoEstimadoDias ? formatDiasHabiles(datos.tiempoEstimadoDias) : 'A convenir'}</div>
+          </div>
+          <div>
+            <span class="ed-k">Garantía</span>
+            <div class="ed-cond-val">${formatMeses(datos.mesesGarantia)}</div>
+          </div>
+          <div>
+            <span class="ed-k">Validez de Oferta</span>
+            <div class="ed-cond-val">${formatDiasCalendario(datos.diasValidez)}</div>
+          </div>
+        </div>
+        ${
+          datos.observacionesGarantia?.trim()
+            ? `<div style="margin-top: 7px; padding-top: 6px; border-top: 1px dashed #CBD5E1;">
+          <span class="ed-k">Observaciones de Garantía</span>
+          <div style="font-size: 8px; color: #334155; margin-top: 2px;">${escMultiline(datos.observacionesGarantia)}</div>
+        </div>`
+            : ''
+        }
+      </div>
+
+      <div class="ed-terms-card">
+        <div class="ed-card-kicker">Términos y Condiciones</div>
+        <div class="ed-terms-text">${escMultiline(datos.terminosCondiciones?.trim() || terminosDefault)}</div>
+      </div>
+    </div>
+
+    <!-- Columna Derecha (45%): Resumen Económico -->
+    <div class="ed-totals-card">
+      <div class="ed-totals-head">Resumen Económico</div>
+      <div class="ed-totals-body">
+        ${
+          t.subtotalServicios > 0
+            ? `<div class="ed-trow">
+          <span>Subtotal Servicios</span>
+          <span class="ed-tval">${esc(formatCurrencyOrg(t.subtotalServicios, brand))}</span>
+        </div>`
+            : ''
+        }
+        ${
+          t.subtotalComponentes > 0
+            ? `<div class="ed-trow">
+          <span>Subtotal Repuestos e Insumos</span>
+          <span class="ed-tval">${esc(formatCurrencyOrg(t.subtotalComponentes, brand))}</span>
+        </div>`
+            : ''
+        }
+        ${
+          subtotalOtros > 0
+            ? `<div class="ed-trow">
+          <span>Subtotal Logística y Otros</span>
+          <span class="ed-tval">${esc(formatCurrencyOrg(subtotalOtros, brand))}</span>
+        </div>`
+            : ''
+        }
+        <div class="ed-trow strong">
+          <span>SUBTOTAL GENERAL</span>
+          <span class="ed-tval">${esc(formatCurrencyOrg(t.subtotalGeneral, brand))}</span>
+        </div>
+        ${
+          t.descuentoPorcentaje > 0
+            ? `<div class="ed-trow discount">
+          <span>Descuento Comercial (${t.descuentoPorcentaje}%)</span>
+          <span class="ed-tval">-${esc(formatCurrencyOrg(t.descuentoValor, brand))}</span>
+        </div>
+        <div class="ed-trow">
+          <span>Subtotal Neto</span>
+          <span class="ed-tval">${esc(formatCurrencyOrg(t.subtotalConDescuento, brand))}</span>
+        </div>`
+            : ''
+        }
+        ${
+          usaAiu
+            ? `<div class="ed-trow sub-indent">
+          <span>Administración (${t.aiuAdminPorcentaje || 0}%)</span>
+          <span class="ed-tval">${esc(formatCurrencyOrg(t.aiuAdminValor || 0, brand))}</span>
+        </div>
+        <div class="ed-trow sub-indent">
+          <span>Imprevistos (${t.aiuImprevistosPorcentaje || 0}%)</span>
+          <span class="ed-tval">${esc(formatCurrencyOrg(t.aiuImprevistosValor || 0, brand))}</span>
+        </div>
+        <div class="ed-trow sub-indent">
+          <span>Utilidad (${t.aiuUtilidadPorcentaje || 0}%)</span>
+          <span class="ed-tval">${esc(formatCurrencyOrg(t.aiuUtilidadValor || 0, brand))}</span>
+        </div>
+        <div class="ed-trow">
+          <span style="font-weight: 700; color: #0F172A;">Total AIU</span>
+          <span class="ed-tval" style="font-weight: 700; color: #0F172A;">${esc(formatCurrencyOrg(t.aiuValorTotal || 0, brand))}</span>
+        </div>`
+            : ''
+        }
+        <div class="ed-trow tax">
+          <span>${esc(etiquetaIva)}</span>
+          <span class="ed-tval">${esc(formatCurrencyOrg(t.ivaValor, brand))}</span>
+        </div>
+      </div>
+      <div class="ed-total-final">
+        <span class="ed-total-final-label">Total (${esc(brand.codigoMoneda)})</span>
+        <span class="ed-total-final-value">${esc(formatCurrencyOrg(t.totalCotizacion, brand))}</span>
+      </div>
+    </div>
+  </div>`;
+};
+
+const generarSeccionOpcionales = (
   items: ItemOpcionalPDF[],
-  brand = resolveOrgBranding(),
+  brand: OrgBrandingContext,
 ): string => `
-  <div class="section cot-section cot-avoid-break">
-    <div class="section-title">ÍTEMS OPCIONALES RECOMENDADOS (NO INCLUIDOS EN EL TOTAL)</div>
-    <p class="opcionales-note">
-      Los siguientes conceptos son opcionales y solo se ejecutarán y facturarán bajo autorización expresa del cliente.
+  <div class="ed-opcionales-card avoid-break">
+    <div class="ed-opcionales-title">Ítems Opcionales Recomendados (No incluidos en el total)</div>
+    <p class="ed-opcionales-note">
+      Los siguientes conceptos son opcionales y únicamente se ejecutarán y facturarán bajo autorización expresa del cliente.
     </p>
-    <table class="items-table opcionales-table">
+    <table class="ed-table">
       <thead>
         <tr>
-          <th class="numero">#</th>
-          <th class="descripcion">Concepto Opcional</th>
-          <th class="cantidad">Cant.</th>
-          <th class="precio">V. Unitario</th>
-          <th class="subtotal">Subtotal Ref.</th>
+          <th class="col-num">#</th>
+          <th class="col-desc">Concepto Opcional</th>
+          <th class="col-qty">Cant.</th>
+          <th class="col-price">V. Unitario</th>
+          <th class="col-sub">Subtotal Ref.</th>
         </tr>
       </thead>
       <tbody>
@@ -876,15 +1880,15 @@ const generarTablaOpcionales = (
           .map(
             (item, idx) => `
         <tr>
-          <td class="numero">${idx + 1}</td>
+          <td class="col-num">${idx + 1}</td>
           <td>
-            <span class="item-pill">${esc(item.tipo)}</span>
-            ${esc(item.descripcion)}
-            ${item.referencia ? `<span class="item-meta">Ref: ${esc(item.referencia)}</span>` : ''}
+            <span class="ed-pill">${esc(item.tipo)}</span>
+            <span class="ed-item-title">${esc(item.descripcion)}</span>
+            ${item.referencia ? `<span class="ed-item-meta">Ref: ${esc(item.referencia)}</span>` : ''}
           </td>
-          <td class="cantidad">${item.cantidad} ${esc(item.unidad)}</td>
-          <td class="precio">${esc(formatCurrencyOrg(item.precioUnitario, brand))}</td>
-          <td class="subtotal">${esc(formatCurrencyOrg(item.subtotal, brand))}</td>
+          <td class="col-qty">${item.cantidad} ${esc(item.unidad)}</td>
+          <td class="col-price">${esc(formatCurrencyOrg(item.precioUnitario, brand))}</td>
+          <td class="col-sub">${esc(formatCurrencyOrg(item.subtotal, brand))}</td>
         </tr>`,
           )
           .join('')}
@@ -892,170 +1896,297 @@ const generarTablaOpcionales = (
     </table>
   </div>`;
 
-const generarResumenTotales = (
+const generarTablaAlcanceSumaAlzada = (
   datos: DatosCotizacionPDF,
-  brand = resolveOrgBranding(datos.branding),
+  itemsOtros: ItemOtroPDF[],
 ): string => {
-  const t = datos.totales;
-  const subtotalOtros = t.subtotalOtros || 0;
-  const usaAiu = Boolean(t.usaAiu && (t.aiuValorTotal || 0) > 0);
-  const etiquetaIva = t.ivaSobreUtilidadAiu && usaAiu
-    ? `${brand.etiquetaImpuesto} (${t.ivaPorcentaje}% s/ Utilidad AIU)`
-    : `${brand.etiquetaImpuesto} (${t.ivaPorcentaje}%)`;
+  type AlcanceRow = {
+    tipoTag: string;
+    descripcion: string;
+    meta?: string;
+    cantidadTexto: string;
+  };
+
+  const rows: AlcanceRow[] = [];
+
+  for (const s of datos.itemsServicios) {
+    const metaParts = [
+      s.equipoEtiqueta ? `Equipo: ${s.equipoEtiqueta}` : null,
+      s.observaciones?.trim() || null,
+    ].filter(Boolean);
+    rows.push({
+      tipoTag: 'Servicio',
+      descripcion: s.descripcion,
+      meta: metaParts.length > 0 ? metaParts.join(' · ') : undefined,
+      cantidadTexto: `${s.cantidad} ${s.unidad}`,
+    });
+  }
+
+  for (const c of datos.itemsComponentes) {
+    const metaParts = [
+      c.equipoEtiqueta ? `Equipo: ${c.equipoEtiqueta}` : null,
+      c.referencia ? `Ref: ${c.referencia}` : null,
+      c.marca ? `Marca: ${c.marca}` : null,
+      c.garantiaMeses ? `Garantía: ${formatMeses(c.garantiaMeses)}` : null,
+    ].filter(Boolean);
+    rows.push({
+      tipoTag: 'Suministro',
+      descripcion: c.descripcion,
+      meta: metaParts.length > 0 ? metaParts.join(' · ') : undefined,
+      cantidadTexto: `${c.cantidad} ${c.unidad}`,
+    });
+  }
+
+  for (const o of itemsOtros) {
+    const rubroTag =
+      o.categoriaRubro === 'POLIZA'
+        ? 'Póliza'
+        : o.categoriaRubro === 'VIATICOS'
+          ? 'Viáticos'
+          : o.categoriaRubro === 'ALQUILER'
+            ? 'Alquiler'
+            : o.categoriaRubro === 'DISPOSICION_AMBIENTAL'
+              ? 'Ambiental'
+              : 'Logística';
+    const metaParts = [
+      o.equipoEtiqueta ? `Equipo: ${o.equipoEtiqueta}` : null,
+      o.detalleCalculo?.trim() || null,
+    ].filter(Boolean);
+    rows.push({
+      tipoTag: rubroTag,
+      descripcion: o.descripcion,
+      meta: metaParts.length > 0 ? metaParts.join(' · ') : undefined,
+      cantidadTexto: `${o.cantidad} ${o.unidad}`,
+    });
+  }
+
+  if (rows.length === 0) return '';
 
   return `
-  <div class="totales-wrapper cot-avoid-break">
-    <div class="totales-box">
-      ${
-        t.subtotalServicios > 0
-          ? `<div class="total-row">
-        <span>Subtotal Servicios</span>
-        <span class="total-value">${esc(formatCurrencyOrg(t.subtotalServicios, brand))}</span>
-      </div>`
-          : ''
-      }
-      ${
-        t.subtotalComponentes > 0
-          ? `<div class="total-row">
-        <span>Subtotal Repuestos e Insumos</span>
-        <span class="total-value">${esc(formatCurrencyOrg(t.subtotalComponentes, brand))}</span>
-      </div>`
-          : ''
-      }
-      ${
-        subtotalOtros > 0
-          ? `<div class="total-row">
-        <span>Subtotal Logística y Otros</span>
-        <span class="total-value">${esc(formatCurrencyOrg(subtotalOtros, brand))}</span>
-      </div>`
-          : ''
-      }
-      <div class="total-row subtotal-strong">
-        <span>SUBTOTAL COSTOS DIRECTOS</span>
-        <span class="total-value">${esc(formatCurrencyOrg(t.subtotalGeneral, brand))}</span>
-      </div>
-      ${
-        t.descuentoPorcentaje > 0
-          ? `<div class="total-row descuento">
-        <span>Descuento Comercial (${t.descuentoPorcentaje}%)</span>
-        <span class="total-value">-${esc(formatCurrencyOrg(t.descuentoValor, brand))}</span>
-      </div>
-      <div class="total-row">
-        <span>Subtotal Neto</span>
-        <span class="total-value">${esc(formatCurrencyOrg(t.subtotalConDescuento, brand))}</span>
-      </div>`
-          : ''
-      }
-      ${
-        usaAiu
-          ? `<div class="total-row aiu-sub">
-        <span>Administración (${t.aiuAdminPorcentaje || 0}%)</span>
-        <span class="total-value">${esc(formatCurrencyOrg(t.aiuAdminValor || 0, brand))}</span>
-      </div>
-      <div class="total-row aiu-sub">
-        <span>Imprevistos (${t.aiuImprevistosPorcentaje || 0}%)</span>
-        <span class="total-value">${esc(formatCurrencyOrg(t.aiuImprevistosValor || 0, brand))}</span>
-      </div>
-      <div class="total-row aiu-sub">
-        <span>Utilidad (${t.aiuUtilidadPorcentaje || 0}%)</span>
-        <span class="total-value">${esc(formatCurrencyOrg(t.aiuUtilidadValor || 0, brand))}</span>
-      </div>
-      <div class="total-row">
-        <span><strong>Total AIU</strong></span>
-        <span class="total-value">${esc(formatCurrencyOrg(t.aiuValorTotal || 0, brand))}</span>
-      </div>`
-          : ''
-      }
-      <div class="total-row iva">
-        <span>${esc(etiquetaIva)}</span>
-        <span class="total-value">${esc(formatCurrencyOrg(t.ivaValor, brand))}</span>
-      </div>
-      <div class="total-row final">
-        <span>TOTAL (${esc(brand.codigoMoneda)})</span>
-        <span class="total-value" style="font-size: 14px;">${esc(formatCurrencyOrg(t.totalCotizacion, brand))}</span>
-      </div>
+  <div class="ed-section">
+    <div class="ed-sec-heading">Alcance del Suministro y Servicio</div>
+    <table class="ed-table sa-table">
+      <thead>
+        <tr>
+          <th class="sa-col-num">#</th>
+          <th class="sa-col-desc">Descripción / Alcance Técnico</th>
+          <th class="sa-col-qty">Cant.</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map(
+            (r, idx) => `
+        <tr>
+          <td class="sa-col-num">${idx + 1}</td>
+          <td>
+            <span class="ed-item-title">${esc(r.descripcion)}</span>
+            <span class="sa-type-tag">${esc(r.tipoTag)}</span>
+            ${r.meta ? `<span class="sa-desc-meta">${esc(r.meta)}</span>` : ''}
+          </td>
+          <td class="sa-col-qty">${esc(r.cantidadTexto)}</td>
+        </tr>`,
+          )
+          .join('')}
+      </tbody>
+    </table>
+  </div>`;
+};
+
+const generarBandaTotalesSumaAlzada = (
+  datos: DatosCotizacionPDF,
+  brand: OrgBrandingContext,
+): string => {
+  const t = datos.totales;
+  const usaAiu = Boolean(t.usaAiu && (t.aiuValorTotal || 0) > 0);
+  const tieneDesc = t.descuentoPorcentaje > 0 && t.descuentoValor > 0;
+  const etiquetaIva =
+    t.ivaSobreUtilidadAiu && usaAiu
+      ? `${brand.etiquetaImpuesto} (${t.ivaPorcentaje}% s/ Util.)`
+      : `${brand.etiquetaImpuesto} (${t.ivaPorcentaje}%)`;
+
+  const celdas: string[] = [];
+
+  if (usaAiu) {
+    // Modo Suma Alzada con AIU (norma tributaria colombiana: compacto y sin subtotales por categoría)
+    celdas.push(`
+      <div class="sa-band-cell">
+        <span class="sa-band-label">${tieneDesc ? 'Subtotal Neto' : 'Subtotal'}</span>
+        <span class="sa-band-value">${esc(formatCurrencyOrg(t.subtotalConDescuento, brand))}</span>
+        ${
+          tieneDesc
+            ? `<span class="sa-band-sub">Bruto ${esc(formatCurrencyOrg(t.subtotalGeneral, brand))} · Desc. ${t.descuentoPorcentaje}%</span>`
+            : ''
+        }
+      </div>`);
+    celdas.push(`
+      <div class="sa-band-cell">
+        <span class="sa-band-label">AIU (${t.aiuAdminPorcentaje || 0}/${t.aiuImprevistosPorcentaje || 0}/${t.aiuUtilidadPorcentaje || 0}%)</span>
+        <span class="sa-band-value">${esc(formatCurrencyOrg(t.aiuValorTotal || 0, brand))}</span>
+        <span class="sa-band-sub">A ${esc(formatCurrencyOrg(t.aiuAdminValor || 0, brand))} · I ${esc(formatCurrencyOrg(t.aiuImprevistosValor || 0, brand))} · U ${esc(formatCurrencyOrg(t.aiuUtilidadValor || 0, brand))}</span>
+      </div>`);
+  } else {
+    // Modo Suma Alzada Estándar (sin AIU)
+    if (tieneDesc) {
+      celdas.push(`
+        <div class="sa-band-cell">
+          <span class="sa-band-label">Subtotal Bruto</span>
+          <span class="sa-band-value">${esc(formatCurrencyOrg(t.subtotalGeneral, brand))}</span>
+        </div>`);
+      celdas.push(`
+        <div class="sa-band-cell">
+          <span class="sa-band-label">Desc. (${t.descuentoPorcentaje}%)</span>
+          <span class="sa-band-value discount">-${esc(formatCurrencyOrg(t.descuentoValor, brand))}</span>
+        </div>`);
+      celdas.push(`
+        <div class="sa-band-cell">
+          <span class="sa-band-label">Subtotal Neto</span>
+          <span class="sa-band-value">${esc(formatCurrencyOrg(t.subtotalConDescuento, brand))}</span>
+        </div>`);
+    } else {
+      celdas.push(`
+        <div class="sa-band-cell">
+          <span class="sa-band-label">Subtotal</span>
+          <span class="sa-band-value">${esc(formatCurrencyOrg(t.subtotalGeneral, brand))}</span>
+        </div>`);
+    }
+  }
+
+  celdas.push(`
+    <div class="sa-band-cell">
+      <span class="sa-band-label">${esc(etiquetaIva)}</span>
+      <span class="sa-band-value">${esc(formatCurrencyOrg(t.ivaValor, brand))}</span>
+    </div>`);
+
+  return `
+  <div class="sa-totals-band avoid-break">
+    <div class="sa-band-intro">
+      <span class="sa-band-intro-title">Resumen de Inversión</span>
+      <span class="sa-band-intro-sub">Suma Alzada · Valores en ${esc(brand.codigoMoneda)}</span>
+    </div>
+    ${celdas.join('')}
+    <div class="sa-band-total">
+      <span class="sa-band-total-label">Total Oferta (${esc(brand.codigoMoneda)})</span>
+      <span class="sa-band-total-value">${esc(formatCurrencyOrg(t.totalCotizacion, brand))}</span>
     </div>
   </div>`;
 };
 
-const generarCondicionesComerciales = (datos: DatosCotizacionPDF): string => `
-  <div class="section cot-section cot-avoid-break">
-    <div class="section-title">CONDICIONES COMERCIALES</div>
-    <div class="condiciones-box">
-      <div class="condiciones-grid">
-        <div class="condicion-item">
-          <span class="condicion-label">Forma de Pago</span>
-          <span class="condicion-value">${esc(datos.formaPago)}</span>
-        </div>
-        <div class="condicion-item">
-          <span class="condicion-label">Tiempo Estimado</span>
-          <span class="condicion-value">${datos.tiempoEstimadoDias ? `${datos.tiempoEstimadoDias} día(s) hábil(es)` : 'A convenir'}</span>
-        </div>
-        <div class="condicion-item">
-          <span class="condicion-label">Garantía</span>
-          <span class="condicion-value">${datos.mesesGarantia} mes(es)</span>
-        </div>
-        <div class="condicion-item">
-          <span class="condicion-label">Validez de Oferta</span>
-          <span class="condicion-value">${datos.diasValidez} días calendario</span>
-        </div>
-      </div>
-      ${
-        datos.observacionesGarantia
-          ? `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed ${MEKANOS_COLORS.border};">
-        <span class="condicion-label">Condiciones de Garantía:</span>
-        <p style="font-size: 8.5px; margin: 3px 0 0 0;">${escMultiline(datos.observacionesGarantia)}</p>
-      </div>`
-          : ''
-      }
-    </div>
-  </div>`;
-
-const generarTerminosCondiciones = (
-  terminos: string | undefined,
-  brand = resolveOrgBranding(),
-  incluyeLogistica = false,
+const generarCondicionesYTerminosAnchoCompleto = (
+  datos: DatosCotizacionPDF,
+  brand: OrgBrandingContext,
+  incluyeLogistica: boolean,
 ): string => {
   const terminosDefault = [
-    `1. Los valores expresados están en ${brand.codigoMoneda} e incluyen el tratamiento tributario de ${brand.etiquetaImpuesto} detallado en el resumen económico.`,
-    '2. El plazo de ejecución inicia a partir de la aprobación escrita u Orden de Compra (PO) del cliente y el cumplimiento de las condiciones de pago acordadas.',
-    '3. La garantía cubre defectos de fabricación y mano de obra ejecutada; no cubre daños por operación indebida, alteraciones eléctricas externas o falta de mantenimiento preventivo.',
-    '4. Cualquier trabajo, repuesto o diagnóstico adicional fuera del alcance descrito será cotizado y aprobado previamente antes de su ejecución.',
+    `1. Valores expresados en ${brand.codigoMoneda} con el tratamiento tributario de ${brand.etiquetaImpuesto} indicado.`,
+    '2. El plazo de ejecución inicia tras la aprobación escrita u Orden de Compra (PO) y el cumplimiento de la forma de pago.',
+    '3. La garantía cubre defectos de fabricación y mano de obra ejecutada; excluye operación indebida o alteraciones externas.',
+    '4. Todo trabajo o repuesto adicional fuera del alcance descrito se cotizará y aprobará previamente.',
     ...(incluyeLogistica
       ? []
-      : ['5. Los costos de movilización, transporte o viáticos fuera del área de cobertura estándar se cotizan de forma independiente cuando apliquen.']),
-    `${incluyeLogistica ? '5' : '6'}. Los precios y disponibilidad de repuestos están sujetos a confirmación después de la fecha de vencimiento de esta oferta.`,
+      : ['5. Movilización, transporte o viáticos fuera del área estándar se cotizan de forma independiente cuando apliquen.']),
+    `${incluyeLogistica ? '5' : '6'}. Precios y disponibilidad sujetos a confirmación posterior al vencimiento de esta oferta.`,
   ].join('\n');
 
   return `
-  <div class="section cot-section cot-avoid-break">
-    <div class="section-title">TÉRMINOS Y CONDICIONES</div>
-    <div class="terminos-box">
-      <div class="terminos-content">${escMultiline(terminos || terminosDefault)}</div>
+  <div class="sa-cond-strip avoid-break">
+    <div class="ed-card-kicker" style="margin-bottom: 5px; padding-bottom: 3px;">Condiciones Comerciales</div>
+    <div class="sa-cond-row">
+      <div>
+        <span class="ed-k">Forma de Pago</span>
+        <div class="ed-cond-val">${esc(datos.formaPago)}</div>
+      </div>
+      <div>
+        <span class="ed-k">Tiempo Estimado</span>
+        <div class="ed-cond-val">${datos.tiempoEstimadoDias ? formatDiasHabiles(datos.tiempoEstimadoDias) : 'A convenir'}</div>
+      </div>
+      <div>
+        <span class="ed-k">Garantía</span>
+        <div class="ed-cond-val">${formatMeses(datos.mesesGarantia)}</div>
+      </div>
+      <div>
+        <span class="ed-k">Validez de Oferta</span>
+        <div class="ed-cond-val">${formatDiasCalendario(datos.diasValidez)}</div>
+      </div>
     </div>
+    ${
+      datos.observacionesGarantia?.trim()
+        ? `<div style="margin-top: 6px; padding-top: 5px; border-top: 1px dashed #CBD5E1; font-size: 7.8px; color: #334155;">
+      <strong>Observaciones de Garantía:</strong> ${escMultiline(datos.observacionesGarantia)}
+    </div>`
+        : ''
+    }
+  </div>
+
+  <div class="sa-terms-strip avoid-break">
+    <div class="ed-card-kicker" style="margin-bottom: 4px; padding-bottom: 3px;">Términos y Condiciones</div>
+    <div class="sa-terms-text">${escMultiline(datos.terminosCondiciones?.trim() || terminosDefault)}</div>
   </div>`;
 };
 
-const generarFirmas = (
-  datos: DatosCotizacionPDF,
-  brand = resolveOrgBranding(datos.branding),
+const generarSeccionOpcionalesSumaAlzada = (
+  items: ItemOpcionalPDF[],
+  brand: OrgBrandingContext,
 ): string => `
-  <div class="firmas-container cot-avoid-break" style="margin-top: 22px;">
-    <div class="firma-box">
-      <div class="firma-line"></div>
-      <div class="firma-label">
-        ${esc(datos.elaboradoPor)}<br/>
-        <small>${esc(datos.cargoElaborador || 'Asesor Comercial')}</small><br/>
-        <small>${esc(brand.nombreComercial)}</small>
-      </div>
+  <div class="sa-opcionales-card avoid-break">
+    <div class="sa-opcionales-head">
+      <span class="sa-opcionales-title">Ítems Opcionales Recomendados (No incluidos en el total)</span>
+      <span class="sa-opcionales-hint">Sujetos a autorización expresa del cliente</span>
     </div>
-    <div class="firma-box">
-      <div class="firma-line"></div>
-      <div class="firma-label">
-        Aceptación y Firma del Cliente<br/>
-        <small>Nombre, Cargo y Orden de Compra (PO)</small>
-      </div>
+    <table class="ed-table">
+      <thead>
+        <tr>
+          <th class="col-num">#</th>
+          <th style="width: auto;">Concepto Opcional</th>
+          <th style="width: 82px; text-align: right;">Cant.</th>
+          <th style="width: 112px; text-align: right;">Valor Adicional</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items
+          .map(
+            (item, idx) => `
+        <tr>
+          <td class="col-num">${idx + 1}</td>
+          <td>
+            <span class="ed-item-title">${esc(item.descripcion)}</span>
+            <span class="sa-type-tag">${esc(item.tipo === 'REPUESTO' ? 'Suministro' : item.tipo === 'SERVICIO' ? 'Servicio' : 'Adicional')}</span>
+            ${item.referencia ? `<span class="sa-desc-meta">Ref: ${esc(item.referencia)}</span>` : ''}
+          </td>
+          <td style="text-align: right; white-space: nowrap; color: #334155;">${item.cantidad} ${esc(item.unidad)}</td>
+          <td class="col-sub">${esc(formatCurrencyOrg(item.subtotal, brand))}</td>
+        </tr>`,
+          )
+          .join('')}
+      </tbody>
+    </table>
+  </div>`;
+
+const generarFirmasSobrias = (
+  datos: DatosCotizacionPDF,
+  brand: OrgBrandingContext,
+): string => {
+  const atencionNombre = datos.atencionANombre?.trim() || '';
+  const atencionCargo = datos.atencionACargo?.trim() || '';
+
+  return `
+  <div class="ed-firmas avoid-break">
+    <div class="ed-firma-col">
+      <div class="ed-firma-space"></div>
+      <div class="ed-firma-name">${esc(datos.elaboradoPor)}</div>
+      <div class="ed-firma-sub">${esc(datos.cargoElaborador || 'Asesor Comercial')} · ${esc(brand.nombreComercial)}</div>
+    </div>
+    <div class="ed-firma-col">
+      <div class="ed-firma-space"></div>
+      <div class="ed-firma-name">Aceptación y Firma del Cliente</div>
+      ${
+        atencionNombre
+          ? `<div class="ed-firma-sub" style="color: #334155; font-weight: 600;">${esc(atencionNombre)}${atencionCargo ? ` · ${esc(atencionCargo)}` : ''}</div>
+      <div class="ed-firma-sub">Firma autorizada y Orden de Compra (PO)</div>`
+          : `<div class="ed-firma-sub">Nombre, Cargo y Orden de Compra (PO)</div>`
+      }
     </div>
   </div>`;
+};
 
 export default generarCotizacionHTML;

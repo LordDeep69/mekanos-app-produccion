@@ -90,6 +90,9 @@ export class ClientesService implements OnModuleInit {
       razon_social: string | null;
       nombre: string;
       nit: string | null;
+      representante_legal?: string | null;
+      cargo_contacto?: string | null;
+      email?: string | null;
       tiene_plantas?: boolean;
       tiene_bombas?: boolean;
       total_equipos?: number;
@@ -190,7 +193,7 @@ export class ClientesService implements OnModuleInit {
     }
 
     try {
-      const [allClients, asesores] = await Promise.all([
+      const [allClients, asesores, firmas] = await Promise.all([
         this.prisma.clientes.findMany({
           include: {
             persona: true,
@@ -249,9 +252,20 @@ export class ClientesService implements OnModuleInit {
             persona: { select: { nombre_completo: true } },
           },
         }),
+        this.prisma.firmas_administrativas
+          .findMany({
+            select: {
+              id_firma_administrativa: true,
+              nombre_de_firma: true,
+              representante_legal: true,
+              email_representante_legal: true,
+            },
+          })
+          .catch(() => []),
       ]);
 
       const asesoresMap = new Map(asesores.map((a) => [a.id_empleado, a]));
+      const firmasMap = new Map(firmas.map((f) => [f.id_firma_administrativa, f]));
 
       this.searchIndexCache = allClients.map((c) => {
         const p = c.persona;
@@ -318,6 +332,21 @@ export class ClientesService implements OnModuleInit {
             : null,
         };
 
+        const firma = c.id_firma_administrativa
+          ? firmasMap.get(c.id_firma_administrativa) || null
+          : null;
+        const repPersona = p?.representante_legal?.trim() || null;
+        const repFirma = firma?.representante_legal?.trim() || null;
+        const representanteLegal = repPersona || repFirma || null;
+        const cargoContacto =
+          !repPersona && repFirma
+            ? firma?.nombre_de_firma?.trim()
+              ? `Administración · ${firma.nombre_de_firma.trim()}`
+              : 'Administración'
+            : null;
+        const emailContacto =
+          p?.email_principal?.trim() || firma?.email_representante_legal?.trim() || null;
+
         return {
           id_cliente: c.id_cliente,
           tipo_cliente: c.tipo_cliente,
@@ -341,6 +370,9 @@ export class ClientesService implements OnModuleInit {
             razon_social: p?.razon_social || null,
             nombre,
             nit: p?.numero_identificacion || null,
+            representante_legal: representanteLegal,
+            cargo_contacto: cargoContacto,
+            email: emailContacto,
             tiene_plantas,
             tiene_bombas,
             total_equipos,

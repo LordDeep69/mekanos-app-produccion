@@ -22,20 +22,100 @@ import {
 import { formatCurrencyWithConfig } from '@/lib/formatters';
 import { getApiErrorMessage } from '@/lib/utils';
 import { useBranding } from '@/providers/branding-provider';
+import { useQueryClient } from '@tanstack/react-query';
 import {
+  AlertTriangle,
+  Briefcase,
   Building2,
   CheckCircle2,
   Coins,
   FileText,
   Globe,
+  HardDrive,
   Loader2,
+  Lock,
   Palette,
   RefreshCw,
   Save,
   ShieldCheck,
+  Sparkles,
+  Wrench,
 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+
+interface FormattedMoneyInputProps {
+  value: number;
+  onChange: (value: number) => void;
+  locale: string;
+  symbol: string;
+  decimals: number;
+  disabled?: boolean;
+}
+
+function FormattedMoneyInput({
+  value,
+  onChange,
+  locale,
+  symbol,
+  decimals,
+  disabled,
+}: FormattedMoneyInputProps) {
+  const [focused, setFocused] = useState(false);
+  const [rawText, setRawText] = useState('');
+
+  const safeDecimals = Math.max(0, Math.min(4, Number(decimals) || 0));
+  const formattedDisplay = new Intl.NumberFormat(locale || 'es-CO', {
+    minimumFractionDigits: safeDecimals,
+    maximumFractionDigits: safeDecimals,
+  }).format(Number.isFinite(value) ? value : 0);
+
+  const parseInput = (txt: string): number => {
+    const cleaned = txt.replace(/[^\d.,]/g, '');
+    if (!cleaned) return 0;
+    if (safeDecimals === 0) {
+      const digits = cleaned.replace(/[.,]/g, '');
+      return Math.max(0, Number(digits) || 0);
+    }
+    const lastSep = Math.max(cleaned.lastIndexOf('.'), cleaned.lastIndexOf(','));
+    if (lastSep === -1) {
+      return Math.max(0, Number(cleaned) || 0);
+    }
+    const intPart = cleaned.slice(0, lastSep).replace(/[.,]/g, '');
+    const decPart = cleaned.slice(lastSep + 1).replace(/[.,]/g, '');
+    const parsed = Number(`${intPart || '0'}.${decPart}`);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  };
+
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-500">
+        {symbol || '$'}
+      </span>
+      <Input
+        type="text"
+        inputMode={safeDecimals > 0 ? 'decimal' : 'numeric'}
+        disabled={disabled}
+        value={focused ? rawText : formattedDisplay}
+        onFocus={() => {
+          setFocused(true);
+          setRawText(value ? String(value) : '');
+        }}
+        onChange={(e) => {
+          const next = e.target.value;
+          setRawText(next);
+          onChange(parseInput(next));
+        }}
+        onBlur={() => {
+          setFocused(false);
+        }}
+        placeholder="0"
+        className="pl-7 font-mono text-right bg-white"
+      />
+    </div>
+  );
+}
 
 const ZONAS_HORARIAS_COMUNES = [
   { value: 'America/Bogota', label: 'Colombia — Bogotá (UTC-5)' },
@@ -72,10 +152,18 @@ const MONEDAS_COMUNES = [
 ];
 
 export default function ConfiguracionEmpresaPage() {
+  const { data: session } = useSession();
+  const queryClient = useQueryClient();
   const { refreshBranding } = useBranding();
   const [form, setForm] = useState<ConfiguracionEmpresa | null>(null);
+  const [activeTab, setActiveTab] = useState('identidad');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const userRoleCode = String(session?.user?.rol || '').toUpperCase();
+  const isSuperAdmin = ['SUPERADMIN', 'SUPER_ADMIN', 'PLATAFORMA', 'PLATFORM_ADMIN'].includes(
+    userRoleCode,
+  );
 
   const loadConfig = async () => {
     setLoading(true);
@@ -171,21 +259,31 @@ export default function ConfiguracionEmpresaPage() {
         garantia_meses_defecto: Number(form.garantia_meses_defecto) || 0,
         validez_cotizacion_dias_defecto: Number(form.validez_cotizacion_dias_defecto) || 30,
         requiere_firma_cliente_defecto: Boolean(form.requiere_firma_cliente_defecto),
-        storage_prefijo_raiz: form.storage_prefijo_raiz.trim(),
+        ...(isSuperAdmin ? { storage_prefijo_raiz: form.storage_prefijo_raiz.trim() } : {}),
         politica_retencion_mobile_dias: Number(form.politica_retencion_mobile_dias) || 30,
         modulo_comercial_activo: Boolean(form.modulo_comercial_activo),
         modulo_inventario_activo: Boolean(form.modulo_inventario_activo),
-        umbral_aprobacion_supervisor: Number(form.umbral_aprobacion_supervisor ?? 5000000),
-        umbral_aprobacion_gerente: Number(form.umbral_aprobacion_gerente ?? 15000000),
-        descuento_max_sin_aprobacion: Number(form.descuento_max_sin_aprobacion ?? 15),
-        margen_minimo_alerta: Number(form.margen_minimo_alerta ?? 25),
-        margen_minimo_aprobacion: Number(form.margen_minimo_aprobacion ?? 18),
+        enable_cpq_governance: Boolean(form.enable_cpq_governance),
+        lock_catalog_unit_price: Boolean(form.lock_catalog_unit_price),
+        cot_mostrar_desglose_precios: Boolean(form.cot_mostrar_desglose_precios),
+        umbral_aprobacion_supervisor: Math.max(0, Number(form.umbral_aprobacion_supervisor ?? 0)),
+        umbral_aprobacion_gerente: Math.max(0, Number(form.umbral_aprobacion_gerente ?? 0)),
+        descuento_max_sin_aprobacion: Math.max(
+          0,
+          Math.min(100, Number(form.descuento_max_sin_aprobacion ?? 0)),
+        ),
+        margen_minimo_alerta: Math.max(0, Math.min(100, Number(form.margen_minimo_alerta ?? 0))),
+        margen_minimo_aprobacion: Math.max(
+          0,
+          Math.min(100, Number(form.margen_minimo_aprobacion ?? 0)),
+        ),
         terminos_cotizacion_defecto: normalizeOptionalStr(form.terminos_cotizacion_defecto),
       };
 
       const updated = await updateConfiguracionEmpresa(payload);
       setForm(updated);
       await refreshBranding(updated);
+      queryClient.invalidateQueries({ queryKey: ['config-org-empresa-cpq'] });
       toast.success('Identidad White-Label y parámetros guardados y aplicados en vivo');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Error al guardar configuración corporativa'));
@@ -294,8 +392,8 @@ export default function ConfiguracionEmpresaPage() {
         </div>
       </Card>
 
-      <Tabs defaultValue="identidad" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 h-auto p-1 gap-1">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 h-auto p-1 gap-1">
           <TabsTrigger value="identidad" className="py-2 gap-1.5">
             <Building2 className="h-4 w-4" /> Identidad y Contacto
           </TabsTrigger>
@@ -306,7 +404,10 @@ export default function ConfiguracionEmpresaPage() {
             <Coins className="h-4 w-4" /> Moneda y Región
           </TabsTrigger>
           <TabsTrigger value="operacion" className="py-2 gap-1.5">
-            <FileText className="h-4 w-4" /> Documentos y Módulos
+            <FileText className="h-4 w-4" /> Documentos y Operación
+          </TabsTrigger>
+          <TabsTrigger value="comercial" className="py-2 gap-1.5">
+            <Briefcase className="h-4 w-4" /> Comercial y CPQ
           </TabsTrigger>
         </TabsList>
 
@@ -627,45 +728,116 @@ export default function ConfiguracionEmpresaPage() {
           </Card>
         </TabsContent>
 
+        {/* PESTAÑA 4: DOCUMENTOS Y OPERACIÓN */}
         <TabsContent value="operacion">
           <div className="space-y-4">
+            {/* Tarjeta 1: Módulos Activos del Ecosistema (arriba del todo) */}
             <Card>
               <CardHeader>
-                <CardTitle>Prefijos de Numeración Documental</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  Módulos Activos del Ecosistema
+                </CardTitle>
                 <CardDescription>
-                  Prefijos utilizados por el motor correlativo transaccional para nuevas entidades.
+                  Activa o desactiva módulos principales según el alcance operativo de la
+                  organización.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-                {(
-                  [
-                    ['prefijo_orden', 'Órdenes'],
-                    ['prefijo_informe', 'Informes'],
-                    ['prefijo_cotizacion', 'Cotizaciones'],
-                    ['prefijo_propuesta', 'Propuestas'],
-                    ['prefijo_contrato', 'Contratos'],
-                    ['prefijo_remision', 'Remisiones'],
-                    ['prefijo_oc', 'Orden Compra'],
-                  ] as const
-                ).map(([field, label]) => (
-                  <div key={field} className="space-y-1.5">
-                    <Label>{label}</Label>
-                    <Input
-                      value={form[field]}
-                      onChange={(e) => updateField(field, e.target.value.toUpperCase())}
-                      className="font-mono uppercase"
-                    />
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between p-3.5 rounded-lg border bg-slate-50/70">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                      <Briefcase className="h-4 w-4 text-slate-600" /> Módulo Comercial Activo
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Cotizaciones comerciales (CPQ), plantillas y propuestas correctivas
+                    </p>
                   </div>
-                ))}
+                  <Switch
+                    checked={form.modulo_comercial_activo}
+                    onCheckedChange={(v) => updateField('modulo_comercial_activo', v)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3.5 rounded-lg border bg-slate-50/70">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-slate-600" /> Módulo Inventario Activo
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      WMS, bodegas, catálogo maestro, compras y remisiones
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.modulo_inventario_activo}
+                    onCheckedChange={(v) => updateField('modulo_inventario_activo', v)}
+                  />
+                </div>
               </CardContent>
             </Card>
 
+            {/* Tarjeta 2: Numeración y Pie de Página Corporativo */}
             <Card>
               <CardHeader>
-                <CardTitle>Parámetros Legales, Almacenamiento y Módulos Activos</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText className="h-4 w-4 text-primary" />
+                  Numeración y Pie de Página Corporativo
+                </CardTitle>
+                <CardDescription>
+                  Prefijos del motor correlativo transaccional y leyenda legal fija en PDFs
+                  corporativos.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                  {(
+                    [
+                      ['prefijo_orden', 'Órdenes'],
+                      ['prefijo_informe', 'Informes'],
+                      ['prefijo_cotizacion', 'Cotizaciones'],
+                      ['prefijo_propuesta', 'Propuestas'],
+                      ['prefijo_contrato', 'Contratos'],
+                      ['prefijo_remision', 'Remisiones'],
+                      ['prefijo_oc', 'Orden Compra'],
+                    ] as const
+                  ).map(([field, label]) => (
+                    <div key={field} className="space-y-1.5">
+                      <Label>{label}</Label>
+                      <Input
+                        value={form[field]}
+                        onChange={(e) => updateField(field, e.target.value.toUpperCase())}
+                        className="font-mono uppercase"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-1.5 pt-2 border-t">
+                  <Label>Texto Pie de Página PDF Corporativo</Label>
+                  <Textarea
+                    rows={2}
+                    value={form.texto_pie_pdf ?? ''}
+                    onChange={(e) => updateField('texto_pie_pdf', e.target.value)}
+                    placeholder="Nota legal, certificación ISO o aviso de confidencialidad del pie de página..."
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Tarjeta 3: Parámetros Operativos de Campo (Órdenes de Servicio) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Wrench className="h-4 w-4 text-primary" />
+                  Parámetros Operativos de Campo (Órdenes de Servicio)
+                </CardTitle>
+                <CardDescription>
+                  Reglas por defecto aplicadas en la ejecución técnica y cierre de órdenes de
+                  servicio.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                   <div className="space-y-1.5">
                     <Label>Garantía por Defecto (meses)</Label>
                     <Input
@@ -678,70 +850,13 @@ export default function ConfiguracionEmpresaPage() {
                       }
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Validez Cotización (días)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={form.validez_cotizacion_dias_defecto}
-                      onChange={(e) =>
-                        updateField('validez_cotizacion_dias_defecto', Number(e.target.value))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Prefijo Raíz Storage (R2/CDN)</Label>
-                    <Input
-                      value={form.storage_prefijo_raiz}
-                      onChange={(e) => updateField('storage_prefijo_raiz', e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Retención App Móvil (días)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={form.politica_retencion_mobile_dias}
-                      onChange={(e) =>
-                        updateField('politica_retencion_mobile_dias', Number(e.target.value))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label>Texto Pie de Página PDF Corporativo</Label>
-                    <Textarea
-                      rows={2}
-                      value={form.texto_pie_pdf ?? ''}
-                      onChange={(e) => updateField('texto_pie_pdf', e.target.value)}
-                      placeholder="Nota legal o certificación ISO del pie de página..."
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Disclaimer Repuestos Suministrados por Cliente</Label>
-                    <Textarea
-                      rows={2}
-                      value={form.texto_disclaimer_repuestos_cliente ?? ''}
-                      onChange={(e) =>
-                        updateField('texto_disclaimer_repuestos_cliente', e.target.value)
-                      }
-                      placeholder="Condición de garantía cuando el cliente aporta repuestos..."
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t">
-                  <div className="flex items-center justify-between p-3 rounded-lg border bg-slate-50">
+                  <div className="md:col-span-2 flex items-center justify-between p-3.5 rounded-lg border bg-slate-50/70 md:mt-5">
                     <div>
-                      <div className="text-sm font-medium flex items-center gap-1.5">
+                      <div className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
                         <ShieldCheck className="h-4 w-4 text-slate-600" /> Firma Cliente Obligatoria
                       </div>
-                      <p className="text-xs text-slate-500">
-                        Exigir firma al finalizar órdenes por defecto
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Exigir firma del cliente al finalizar órdenes de servicio por defecto
                       </p>
                     </div>
                     <Switch
@@ -749,125 +864,407 @@ export default function ConfiguracionEmpresaPage() {
                       onCheckedChange={(v) => updateField('requiere_firma_cliente_defecto', v)}
                     />
                   </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-lg border bg-slate-50">
-                    <div>
-                      <div className="text-sm font-medium flex items-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4 text-slate-600" /> Módulo Comercial Activo
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        Cotizaciones y propuestas correctivas
-                      </p>
-                    </div>
-                    <Switch
-                      checked={form.modulo_comercial_activo}
-                      onCheckedChange={(v) => updateField('modulo_comercial_activo', v)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-lg border bg-slate-50">
-                    <div>
-                      <div className="text-sm font-medium flex items-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4 text-slate-600" /> Módulo Inventario Activo
-                      </div>
-                      <p className="text-xs text-slate-500">WMS, bodegas, compras y remisiones</p>
-                    </div>
-                    <Switch
-                      checked={form.modulo_inventario_activo}
-                      onCheckedChange={(v) => updateField('modulo_inventario_activo', v)}
-                    />
-                  </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Gobernanza Comercial y Rentabilidad de Cotizaciones (CPQ)</CardTitle>
-                <CardDescription>
-                  Umbrales dinámicos de aprobación interna, pisos de margen bruto y términos por defecto para el Hub de Cotizaciones.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                  <div className="space-y-1.5">
-                    <Label>Umbral Supervisor ({form.codigo_moneda})</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={form.umbral_aprobacion_supervisor ?? 5000000}
-                      onChange={(e) =>
-                        updateField('umbral_aprobacion_supervisor', Number(e.target.value))
-                      }
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Umbral Gerente ({form.codigo_moneda})</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={form.umbral_aprobacion_gerente ?? 15000000}
-                      onChange={(e) =>
-                        updateField('umbral_aprobacion_gerente', Number(e.target.value))
-                      }
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Desc. Máx. Sin Aprob. (%)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.5"
-                      value={form.descuento_max_sin_aprobacion ?? 15}
-                      onChange={(e) =>
-                        updateField('descuento_max_sin_aprobacion', Number(e.target.value))
-                      }
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Margen Mín. Alerta (%)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.5"
-                      value={form.margen_minimo_alerta ?? 25}
-                      onChange={(e) =>
-                        updateField('margen_minimo_alerta', Number(e.target.value))
-                      }
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Margen Mín. Gerente (%)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.5"
-                      value={form.margen_minimo_aprobacion ?? 18}
-                      onChange={(e) =>
-                        updateField('margen_minimo_aprobacion', Number(e.target.value))
-                      }
-                      className="font-mono"
-                    />
-                  </div>
-                </div>
                 <div className="space-y-1.5">
-                  <Label>Términos y Condiciones por Defecto de Cotizaciones</Label>
+                  <Label>Disclaimer Repuestos Suministrados por Cliente</Label>
                   <Textarea
-                    rows={3}
-                    value={form.terminos_cotizacion_defecto ?? ''}
-                    onChange={(e) => updateField('terminos_cotizacion_defecto', e.target.value)}
-                    placeholder="Se precargarán automáticamente en toda nueva cotización comercial..."
+                    rows={2}
+                    value={form.texto_disclaimer_repuestos_cliente ?? ''}
+                    onChange={(e) =>
+                      updateField('texto_disclaimer_repuestos_cliente', e.target.value)
+                    }
+                    placeholder="Condición de garantía cuando el cliente aporta sus propios repuestos..."
                   />
                 </div>
               </CardContent>
             </Card>
+
+            {/* Tarjeta 4: Infraestructura y Sincronización Móvil (perfil técnico) */}
+            <Card className="border-slate-200/90">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base text-slate-800">
+                  <HardDrive className="h-4 w-4 text-slate-500" />
+                  Infraestructura y Sincronización Móvil
+                </CardTitle>
+                <CardDescription>
+                  Parámetros técnicos de retención offline y almacenamiento en la nube.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Retención App Móvil (días)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={form.politica_retencion_mobile_dias}
+                    onChange={(e) =>
+                      updateField('politica_retencion_mobile_dias', Number(e.target.value))
+                    }
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Ventana de días que la app móvil conserva órdenes sincronizadas en caché local.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="flex items-center gap-1.5">
+                      Prefijo Raíz Storage (R2/CDN)
+                      {!isSuperAdmin && <Lock className="h-3.5 w-3.5 text-slate-400" />}
+                    </Label>
+                    {isSuperAdmin && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        Superadmin
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    {!isSuperAdmin && (
+                      <Lock className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    )}
+                    <Input
+                      value={form.storage_prefijo_raiz}
+                      readOnly={!isSuperAdmin}
+                      disabled={!isSuperAdmin}
+                      onChange={(e) => updateField('storage_prefijo_raiz', e.target.value)}
+                      className={
+                        !isSuperAdmin
+                          ? 'pl-9 font-mono bg-slate-100 text-slate-600 cursor-not-allowed'
+                          : 'font-mono'
+                      }
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Parámetro técnico de infraestructura
+                    {!isSuperAdmin
+                      ? ' — protegido contra edición accidental (requiere rol Superadmin de Plataforma).'
+                      : ' — precaución: modificarlo cambia la ruta base de nuevos archivos en R2/CDN.'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* PESTAÑA 5: COMERCIAL Y CPQ */}
+        <TabsContent value="comercial">
+          <div className="space-y-4">
+            {!form.modulo_comercial_activo && (
+              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-950">
+                    <p className="font-semibold">
+                      El Módulo Comercial está desactivado.
+                    </p>
+                    <p className="text-xs text-amber-800 mt-0.5">
+                      Actívalo en la pestaña &ldquo;Documentos y Operación&rdquo; para configurar
+                      cotizaciones.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="bg-white border-amber-300 text-amber-900 hover:bg-amber-100 shrink-0"
+                  onClick={() => setActiveTab('operacion')}
+                >
+                  Ir a Documentos y Operación
+                </Button>
+              </div>
+            )}
+
+            <div
+              className={
+                !form.modulo_comercial_activo
+                  ? 'space-y-4 opacity-55 pointer-events-none select-none'
+                  : 'space-y-4'
+              }
+              aria-disabled={!form.modulo_comercial_activo}
+            >
+              {/* Tarjeta 1: Parámetros Base de Cotizaciones */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <FileText className="h-4 w-4 text-primary" />
+                    Parámetros Base de Cotizaciones
+                  </CardTitle>
+                  <CardDescription>
+                    Configuración estándar aplicada automáticamente a toda nueva Cotización
+                    Comercial ({form.prefijo_cotizacion || 'COT'}), sin importar el tamaño de la
+                    empresa.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                    <div className="space-y-1.5">
+                      <Label>Validez Cotización (días)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={365}
+                        disabled={!form.modulo_comercial_activo}
+                        value={form.validez_cotizacion_dias_defecto}
+                        onChange={(e) =>
+                          updateField('validez_cotizacion_dias_defecto', Number(e.target.value))
+                        }
+                      />
+                    </div>
+                    <div className="md:col-span-2 flex items-center justify-between gap-4 p-3.5 rounded-lg border bg-slate-50/70">
+                      <div className="space-y-0.5">
+                        <Label
+                          htmlFor="switch-cot-desglose-pdf"
+                          className="text-sm font-semibold text-slate-800 cursor-pointer"
+                        >
+                          Desglosar precios unitarios y subtotales por rubro en PDF por defecto
+                        </Label>
+                        <p className="text-xs text-slate-500">
+                          Desactivado (recomendado): genera ofertas ejecutivas en modo{' '}
+                          <strong>Suma Alzada</strong> (1 página, sin precios unitarios). Activado:
+                          muestra precios unitarios y subtotales por sección (modo licitación).
+                        </p>
+                      </div>
+                      <Switch
+                        id="switch-cot-desglose-pdf"
+                        disabled={!form.modulo_comercial_activo}
+                        checked={Boolean(form.cot_mostrar_desglose_precios)}
+                        onCheckedChange={(v) => updateField('cot_mostrar_desglose_precios', v)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Términos y Condiciones por Defecto de Cotizaciones</Label>
+                    <Textarea
+                      rows={4}
+                      disabled={!form.modulo_comercial_activo}
+                      value={form.terminos_cotizacion_defecto ?? ''}
+                      onChange={(e) => updateField('terminos_cotizacion_defecto', e.target.value)}
+                      placeholder="Se precargarán automáticamente en toda nueva cotización comercial..."
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tarjeta 2: Gobernanza Comercial y Rentabilidad (CPQ) — Divulgación Progresiva */}
+              <Card>
+                <CardHeader className="pb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <ShieldCheck className="h-4 w-4 text-primary" />
+                        Gobernanza Comercial y Rentabilidad (CPQ)
+                      </CardTitle>
+                      <CardDescription className="mt-0.5">
+                        Reglas opcionales de aprobación interna, pisos de margen y protección de
+                        precios exclusivos para Cotizaciones ({form.prefijo_cotizacion || 'COT'}).
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border bg-slate-50 shrink-0">
+                      <Label
+                        htmlFor="switch-cpq-governance"
+                        className="text-xs font-semibold text-slate-800 cursor-pointer"
+                      >
+                        Activar Flujo de Aprobaciones y Control de Rentabilidad
+                      </Label>
+                      <Switch
+                        id="switch-cpq-governance"
+                        disabled={!form.modulo_comercial_activo}
+                        checked={Boolean(form.enable_cpq_governance)}
+                        onCheckedChange={(v) => updateField('enable_cpq_governance', v)}
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-5">
+                  {!form.enable_cpq_governance ? (
+                    <div className="p-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 text-xs text-slate-600 flex items-center gap-2.5">
+                      <Sparkles className="h-4 w-4 text-slate-400 shrink-0" />
+                      <span>
+                        <strong>Modo ágil activo:</strong> las cotizaciones no requieren aprobación
+                        interna por monto, descuento ni margen.
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Presets rápidos (solo estado local, sin autoguardar) */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200/80">
+                        <span className="text-xs font-medium text-slate-600">
+                          Cargar perfil de referencia (sin guardar automáticamente):
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!form.modulo_comercial_activo}
+                            className="h-8 text-xs bg-white"
+                            onClick={() => {
+                              setForm((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      umbral_aprobacion_supervisor: 2000000,
+                                      umbral_aprobacion_gerente: 8000000,
+                                      descuento_max_sin_aprobacion: 10,
+                                      margen_minimo_alerta: 25,
+                                      margen_minimo_aprobacion: 18,
+                                      lock_catalog_unit_price: false,
+                                    }
+                                  : prev,
+                              );
+                              toast.info(
+                                'Perfil PyME Ágil aplicado al formulario. Pulsa "Guardar Cambios" para confirmar.',
+                              );
+                            }}
+                          >
+                            Perfil PyME Ágil
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!form.modulo_comercial_activo}
+                            className="h-8 text-xs bg-white"
+                            onClick={() => {
+                              setForm((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      umbral_aprobacion_supervisor: 1000000,
+                                      umbral_aprobacion_gerente: 5000000,
+                                      descuento_max_sin_aprobacion: 5,
+                                      margen_minimo_alerta: 30,
+                                      margen_minimo_aprobacion: 22,
+                                      lock_catalog_unit_price: true,
+                                    }
+                                  : prev,
+                              );
+                              toast.info(
+                                'Perfil Industrial Estricto aplicado al formulario. Pulsa "Guardar Cambios" para confirmar.',
+                              );
+                            }}
+                          >
+                            Perfil Industrial Estricto
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* 5 inputs de umbrales y márgenes */}
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                          <div className="space-y-1.5">
+                            <Label>Umbral Supervisor ({form.codigo_moneda})</Label>
+                            <FormattedMoneyInput
+                              value={Number(form.umbral_aprobacion_supervisor ?? 0)}
+                              onChange={(val) => updateField('umbral_aprobacion_supervisor', val)}
+                              locale={form.locale}
+                              symbol={form.simbolo_moneda}
+                              decimals={form.decimales_moneda}
+                              disabled={!form.modulo_comercial_activo}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Umbral Gerente ({form.codigo_moneda})</Label>
+                            <FormattedMoneyInput
+                              value={Number(form.umbral_aprobacion_gerente ?? 0)}
+                              onChange={(val) => updateField('umbral_aprobacion_gerente', val)}
+                              locale={form.locale}
+                              symbol={form.simbolo_moneda}
+                              decimals={form.decimales_moneda}
+                              disabled={!form.modulo_comercial_activo}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Desc. Máx. Sin Aprob. (%)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step="0.5"
+                              disabled={!form.modulo_comercial_activo}
+                              value={form.descuento_max_sin_aprobacion ?? 0}
+                              onChange={(e) =>
+                                updateField(
+                                  'descuento_max_sin_aprobacion',
+                                  Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                                )
+                              }
+                              className="font-mono text-right bg-white"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Margen Mín. Alerta (%)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step="0.5"
+                              disabled={!form.modulo_comercial_activo}
+                              value={form.margen_minimo_alerta ?? 0}
+                              onChange={(e) =>
+                                updateField(
+                                  'margen_minimo_alerta',
+                                  Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                                )
+                              }
+                              className="font-mono text-right bg-white"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Margen Mín. Gerente (%)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step="0.5"
+                              disabled={!form.modulo_comercial_activo}
+                              value={form.margen_minimo_aprobacion ?? 0}
+                              onChange={(e) =>
+                                updateField(
+                                  'margen_minimo_aprobacion',
+                                  Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                                )
+                              }
+                              className="font-mono text-right bg-white"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Deja en <strong>0</strong> cualquier umbral o porcentaje que desees omitir
+                          individualmente. Las cotizaciones sin costos internos registrados omiten el
+                          bloqueo por margen mínimo.
+                        </p>
+                      </div>
+
+                      {/* Switch antifuga lock_catalog_unit_price */}
+                      <div className="flex items-center justify-between p-4 rounded-lg border bg-slate-50/80 gap-4">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                            <Lock className="h-4 w-4 text-slate-600" />
+                            Bloquear edición manual de precios de catálogo en{' '}
+                            {form.prefijo_cotizacion || 'COT'}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Los ítems traídos de catálogo/kits mantienen su precio unitario base
+                            bloqueado y las rebajas solo pueden aplicarse vía Descuento (%). Los
+                            ítems libres/custom sin precio de catálogo siguen siendo editables.
+                          </p>
+                        </div>
+                        <Switch
+                          disabled={!form.modulo_comercial_activo}
+                          checked={Boolean(form.lock_catalog_unit_price)}
+                          onCheckedChange={(v) => updateField('lock_catalog_unit_price', v)}
+                        />
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
       </Tabs>

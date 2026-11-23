@@ -253,7 +253,11 @@ export class PrismaRemisionesRepository {
     }
 
     if (filters?.estado) {
-      where.estado_remision = filters.estado;
+      const upper = String(filters.estado).toUpperCase();
+      const estadoNorm = upper === 'ENTREGADA' ? 'CERRADA' : upper;
+      if (['ABIERTA', 'CERRADA', 'VENCIDA', 'CANCELADA'].includes(estadoNorm)) {
+        where.estado_remision = estadoNorm;
+      }
     }
 
     if (filters?.fecha_desde || filters?.fecha_hasta) {

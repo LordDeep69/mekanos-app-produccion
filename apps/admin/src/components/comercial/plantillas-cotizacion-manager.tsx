@@ -26,7 +26,15 @@ import {
   getModelosOemEam,
 } from '@/features/catalogos-eam/api/catalogos-eam.service';
 import {
-  RUBRO_OTRO_PRESETS,
+  buildUnidadOptions,
+  CpqCreatableCombobox,
+  CpqMoneyInput,
+  CpqSmartNumberInput,
+  matchesAllTokens,
+  RUBRO_OTRO_COMBOBOX_OPTIONS,
+  TIPO_OFERTA_COMBOBOX_OPTIONS,
+} from './cpq-premium-controls';
+import {
   TIPO_COTIZACION_PRESETS,
   type PlantillaCotizacionItem,
   type PlantillaCotizacionRecord,
@@ -136,7 +144,7 @@ function plantillaToDraft(pl: PlantillaCotizacionRecord, asCopy = false): DraftP
 }
 
 export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
-  const { formatCurrency } = useOrgFormatters();
+  const { formatCurrency, locale, currencySymbol } = useOrgFormatters();
   const [search, setSearch] = useState('');
   const [tipoFiltro, setTipoFiltro] = useState('TODOS');
   const [editorOpen, setEditorOpen] = useState(false);
@@ -167,6 +175,7 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
   });
 
   const componentes = useMemo(() => componentesData?.items || [], [componentesData]);
+  const unidadOptions = useMemo(() => buildUnidadOptions(unidadesMedida), [unidadesMedida]);
 
   const tiposFiltroOpciones = useMemo(() => {
     const map = new Map<string, string>();
@@ -194,16 +203,21 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
   }, [arquetipos, draft.id_tipo_equipo]);
 
   const filtradas = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     return plantillas.filter((p) => {
       if (tipoFiltro !== 'TODOS' && p.tipo_cotizacion !== tipoFiltro) return false;
       if (!q) return true;
-      return (
-        p.nombre.toLowerCase().includes(q) ||
-        p.codigo_plantilla.toLowerCase().includes(q) ||
-        (p.descripcion || '').toLowerCase().includes(q) ||
-        (p.tipos_equipo?.nombre_tipo || '').toLowerCase().includes(q)
-      );
+      return matchesAllTokens(q, [
+        p.nombre,
+        p.codigo_plantilla,
+        p.descripcion,
+        p.tipo_cotizacion,
+        p.tipos_equipo?.nombre_tipo,
+        p.modelos_equipo?.marca,
+        p.modelos_equipo?.modelo,
+        p.modulos_tecnicos?.nombre_modulo,
+        ...(p.items || []).map((it) => it.descripcion),
+      ]);
     });
   }, [plantillas, search, tipoFiltro]);
 
@@ -521,12 +535,24 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="space-y-1">
-                <Label>Tipo de Cotización (Abierto)</Label>
-                <Input
-                  list="tpl-tipos-cotizacion"
+                <Label>Tipo de Oferta</Label>
+                <CpqCreatableCombobox
                   value={draft.tipo_cotizacion}
-                  onChange={(e) => setDraft({ ...draft, tipo_cotizacion: e.target.value })}
-                  placeholder="Ej: SUMINISTRO_BATERIAS"
+                  onChange={(v) => setDraft({ ...draft, tipo_cotizacion: v })}
+                  options={TIPO_OFERTA_COMBOBOX_OPTIONS}
+                  placeholder="Seleccionar o crear tipo..."
+                  searchPlaceholder="Buscar o crear tipo (ej. Suministro Baterías)..."
+                  customLabel="Crear tipo"
+                  normalizeCustom={(raw) =>
+                    raw
+                      .trim()
+                      .toUpperCase()
+                      .normalize('NFD')
+                      .replace(/[\u0300-\u036f]/g, '')
+                      .replace(/[^A-Z0-9]+/g, '_')
+                      .replace(/^_+|_+$/g, '')
+                      .slice(0, 40)
+                  }
                 />
               </div>
               <div className="space-y-1">
@@ -837,12 +863,26 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
                             </select>
                           )}
                           {item.tipo_linea === 'OTRO' && (
-                            <Input
-                              list="tpl-rubros-otros"
-                              className="h-7 text-xs bg-white w-52"
-                              placeholder="Categoría (ej. TRANSPORTE)"
+                            <CpqCreatableCombobox
                               value={item.categoria_rubro || ''}
-                              onChange={(e) => updateLine(idx, { categoria_rubro: e.target.value })}
+                              onChange={(v) => updateLine(idx, { categoria_rubro: v })}
+                              options={RUBRO_OTRO_COMBOBOX_OPTIONS}
+                              size="xs"
+                              className="w-56"
+                              minDropdownWidth={260}
+                              placeholder="Categoría del rubro..."
+                              searchPlaceholder="Buscar o crear rubro (ej. Grúa, Póliza)..."
+                              customLabel="Crear rubro"
+                              normalizeCustom={(raw) =>
+                                raw
+                                  .trim()
+                                  .toUpperCase()
+                                  .normalize('NFD')
+                                  .replace(/[\u0300-\u036f]/g, '')
+                                  .replace(/[^A-Z0-9]+/g, '_')
+                                  .replace(/^_+|_+$/g, '')
+                                  .slice(0, 40)
+                              }
                             />
                           )}
                         </div>
@@ -862,55 +902,50 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
                           <Input
                             placeholder="Descripción de la línea *"
                             value={item.descripcion}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => updateLine(idx, { descripcion: e.target.value })}
                             className="h-8 text-xs bg-white"
                           />
                         </div>
-                        <div className="md:col-span-2">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min={0.01}
-                            placeholder="Cant."
-                            value={item.cantidad_base}
-                            onChange={(e) =>
-                              updateLine(idx, { cantidad_base: Number(e.target.value) || 1 })
-                            }
-                            className="h-8 text-xs bg-white"
-                          />
-                        </div>
                         <div className="md:col-span-1">
-                          <Input
-                            list="tpl-unidades-medida"
-                            placeholder="Und"
-                            value={item.unidad || ''}
-                            onChange={(e) => updateLine(idx, { unidad: e.target.value })}
-                            className="h-8 text-xs bg-white"
+                          <CpqSmartNumberInput
+                            min={0.01}
+                            decimals={2}
+                            align="center"
+                            placeholder="Cant."
+                            value={Number(item.cantidad_base || 1)}
+                            onChange={(v) => updateLine(idx, { cantidad_base: v || 1 })}
+                            title="Cantidad base"
                           />
                         </div>
                         <div className="md:col-span-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            placeholder="Costo ref."
-                            value={item.costo_unitario_fijo ?? 0}
-                            onChange={(e) =>
-                              updateLine(idx, { costo_unitario_fijo: Number(e.target.value) || 0 })
-                            }
-                            className="h-8 text-xs bg-white"
+                          <CpqCreatableCombobox
+                            value={item.unidad || ''}
+                            onChange={(v) => updateLine(idx, { unidad: v.slice(0, 20) })}
+                            options={unidadOptions}
+                            size="sm"
+                            minDropdownWidth={240}
+                            placeholder="Unidad"
+                            searchPlaceholder="Buscar unidad (und, hr, gal, kg...)"
+                            customLabel="Usar unidad"
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <CpqMoneyInput
+                            value={Number(item.costo_unitario_fijo ?? 0)}
+                            onChange={(v) => updateLine(idx, { costo_unitario_fijo: v })}
+                            locale={locale}
+                            symbol={currencySymbol}
+                            tone="cost"
                             title="Costo interno de referencia"
                           />
                         </div>
                         <div className="md:col-span-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            placeholder="Precio venta"
-                            value={item.precio_unitario_fijo ?? 0}
-                            onChange={(e) =>
-                              updateLine(idx, { precio_unitario_fijo: Number(e.target.value) || 0 })
-                            }
-                            className="h-8 text-xs bg-white font-mono"
+                          <CpqMoneyInput
+                            value={Number(item.precio_unitario_fijo ?? 0)}
+                            onChange={(v) => updateLine(idx, { precio_unitario_fijo: v })}
+                            locale={locale}
+                            symbol={currencySymbol}
                             title="Precio unitario de venta"
                           />
                         </div>
@@ -971,34 +1006,6 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
                 </div>
               )}
             </div>
-
-            <datalist id="tpl-tipos-cotizacion">
-              {TIPO_COTIZACION_PRESETS.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </datalist>
-            <datalist id="tpl-rubros-otros">
-              {RUBRO_OTRO_PRESETS.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </datalist>
-            <datalist id="tpl-unidades-medida">
-              <option value="servicio">Servicio</option>
-              <option value="global">Global</option>
-              <option value="dia">Día</option>
-              <option value="hora">Hora</option>
-              <option value="dia-tecnico">Día-Técnico</option>
-              <option value="km">Kilómetro</option>
-              {unidadesMedida.map((u) => (
-                <option key={u.codigo} value={u.simbolo || u.codigo}>
-                  {u.nombre} ({u.codigo})
-                </option>
-              ))}
-            </datalist>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>

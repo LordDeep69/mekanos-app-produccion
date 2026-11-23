@@ -579,4 +579,49 @@ SELECT id_cotizacion, id_equipo, 1
  WHERE id_equipo IS NOT NULL
 ON CONFLICT (id_cotizacion, id_equipo) DO NOTHING;
 
+-- 13. Gobernanza CPQ progresiva y bloqueo antifuga de precio unitario de catalogo
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'configuracion_organizacion'
+       AND column_name = 'enable_cpq_governance'
+  ) THEN
+    ALTER TABLE public.configuracion_organizacion
+      ADD COLUMN enable_cpq_governance BOOLEAN NOT NULL DEFAULT false;
+
+    -- Empresas existentes que ya tienen reglas configuradas conservan la gobernanza activa
+    UPDATE public.configuracion_organizacion
+       SET enable_cpq_governance = true
+     WHERE COALESCE(umbral_aprobacion_supervisor, 0) > 0
+        OR COALESCE(umbral_aprobacion_gerente, 0) > 0
+        OR COALESCE(descuento_max_sin_aprobacion, 0) > 0
+        OR COALESCE(margen_minimo_aprobacion, 0) > 0;
+  END IF;
+END $$;
+
+ALTER TABLE public.configuracion_organizacion
+  ADD COLUMN IF NOT EXISTS lock_catalog_unit_price BOOLEAN NOT NULL DEFAULT false;
+
 COMMIT;
+
+-- 14. Alineacion enum comercial de articulos maestros (fuera de transaccion para compatibilidad PostgreSQL)
+ALTER TYPE public.tipo_componente_comercial_enum ADD VALUE IF NOT EXISTS 'HOMOLOGADO';
+
+-- =============================================================================
+-- Presentación Dual PDF Cotizaciones (Suma Alzada por defecto vs Detallado)
+-- =============================================================================
+ALTER TABLE IF EXISTS public.configuracion_organizacion
+  ADD COLUMN IF NOT EXISTS cot_mostrar_desglose_precios BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE IF EXISTS public.cotizaciones
+  ADD COLUMN IF NOT EXISTS mostrar_desglose_precios BOOLEAN NOT NULL DEFAULT false;
+
+-- =============================================================================
+-- Destinatario Comercial ("Atención a / Representante") por Cotización
+-- =============================================================================
+ALTER TABLE IF EXISTS public.cotizaciones
+  ADD COLUMN IF NOT EXISTS atencion_a_nombre VARCHAR(200),
+  ADD COLUMN IF NOT EXISTS atencion_a_cargo  VARCHAR(120);

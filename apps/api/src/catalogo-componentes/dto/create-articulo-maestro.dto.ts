@@ -13,7 +13,11 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { destino_articulo_enum, origen_costo_enum } from '@prisma/client';
+import {
+  destino_articulo_enum,
+  origen_costo_enum,
+  tipo_componente_comercial_enum,
+} from '@prisma/client';
 
 export { destino_articulo_enum as DestinoArticulo, origen_costo_enum as OrigenCosto };
 
@@ -185,10 +189,16 @@ export class CreateArticuloMaestroDto {
   @MaxLength(10)
   codigo_unidad_medida?: string;
 
-  @ApiPropertyOptional({ description: 'Tipo comercial (ORIGINAL, GENERICO, HOMOLOGADO)', default: 'ORIGINAL' })
+  @ApiPropertyOptional({
+    description: 'Tipo comercial (ORIGINAL, HOMOLOGADO, GENERICO, REMANUFACTURADO)',
+    enum: tipo_componente_comercial_enum,
+    default: tipo_componente_comercial_enum.ORIGINAL,
+  })
   @IsOptional()
-  @IsString()
-  tipo_comercial?: string = 'ORIGINAL';
+  @IsEnum(tipo_componente_comercial_enum, {
+    message: 'tipo_comercial debe ser ORIGINAL, HOMOLOGADO, GENERICO o REMANUFACTURADO',
+  })
+  tipo_comercial?: tipo_componente_comercial_enum = tipo_componente_comercial_enum.ORIGINAL;
 
   // ==========================================
   // 2. POLIMORFISMO: DESTINO OPERATIVO Y BANDERAS

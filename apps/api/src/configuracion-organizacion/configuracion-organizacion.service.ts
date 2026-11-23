@@ -51,6 +51,9 @@ export interface ConfiguracionOrganizacionContext {
   politica_retencion_mobile_dias: number;
   modulo_comercial_activo: boolean;
   modulo_inventario_activo: boolean;
+  enable_cpq_governance: boolean;
+  lock_catalog_unit_price: boolean;
+  cot_mostrar_desglose_precios: boolean;
   umbral_aprobacion_supervisor: number;
   umbral_aprobacion_gerente: number;
   descuento_max_sin_aprobacion: number;
@@ -109,6 +112,9 @@ const DEFAULT_ORG_CONTEXT: ConfiguracionOrganizacionContext = {
   politica_retencion_mobile_dias: 30,
   modulo_comercial_activo: true,
   modulo_inventario_activo: true,
+  enable_cpq_governance: false,
+  lock_catalog_unit_price: false,
+  cot_mostrar_desglose_precios: false,
   umbral_aprobacion_supervisor: 5000000,
   umbral_aprobacion_gerente: 15000000,
   descuento_max_sin_aprobacion: 15,
@@ -153,6 +159,9 @@ export class ConfiguracionOrganizacionService {
       politica_retencion_mobile_dias: Number(
         row.politica_retencion_mobile_dias ?? DEFAULT_ORG_CONTEXT.politica_retencion_mobile_dias,
       ),
+      enable_cpq_governance: Boolean(row.enable_cpq_governance ?? false),
+      lock_catalog_unit_price: Boolean(row.lock_catalog_unit_price ?? false),
+      cot_mostrar_desglose_precios: Boolean(row.cot_mostrar_desglose_precios ?? false),
       umbral_aprobacion_supervisor: Number(
         row.umbral_aprobacion_supervisor ?? DEFAULT_ORG_CONTEXT.umbral_aprobacion_supervisor,
       ),
@@ -242,16 +251,22 @@ export class ConfiguracionOrganizacionService {
   async updateEmpresa(
     dto: UpdateConfiguracionOrganizacionDto,
     userId?: number,
+    isSuperAdmin = false,
   ): Promise<ConfiguracionOrganizacionContext> {
+    const safeDto: UpdateConfiguracionOrganizacionDto = { ...dto };
+    if (!isSuperAdmin) {
+      delete safeDto.storage_prefijo_raiz;
+    }
+
     const updated = await this.prisma.configuracion_organizacion.upsert({
       where: { id_configuracion: 1 },
       create: {
         id_configuracion: 1,
-        ...dto,
+        ...safeDto,
         modificado_por: userId ?? null,
       },
       update: {
-        ...dto,
+        ...safeDto,
         modificado_por: userId ?? null,
       },
     });

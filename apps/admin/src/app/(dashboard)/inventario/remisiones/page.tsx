@@ -56,7 +56,9 @@ import { toast } from 'sonner';
 
 const ESTADO_REM_STYLE: Record<string, string> = {
   ABIERTA: 'bg-amber-100 text-amber-800 border-amber-200',
+  CERRADA: 'bg-emerald-100 text-emerald-800 border-emerald-200',
   ENTREGADA: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  VENCIDA: 'bg-slate-200 text-slate-700 border-slate-300',
   CANCELADA: 'bg-rose-100 text-rose-800 border-rose-200',
 };
 
@@ -177,9 +179,13 @@ export default function RemisionesPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase text-slate-500">Entregadas</p>
+            <p className="text-xs font-semibold uppercase text-slate-500">Entregadas / Cerradas</p>
             <p className="text-2xl font-bold text-emerald-700 mt-1">
-              {remisiones.filter((r) => r.estado_remision === 'ENTREGADA').length}
+              {
+                remisiones.filter(
+                  (r) => r.estado_remision === 'CERRADA' || r.estado_remision === 'ENTREGADA',
+                ).length
+              }
             </p>
           </CardContent>
         </Card>
@@ -195,7 +201,8 @@ export default function RemisionesPage() {
               <SelectContent>
                 <SelectItem value="TODOS">Todos los estados</SelectItem>
                 <SelectItem value="ABIERTA">Abierta</SelectItem>
-                <SelectItem value="ENTREGADA">Entregada</SelectItem>
+                <SelectItem value="CERRADA">Entregada / Cerrada</SelectItem>
+                <SelectItem value="VENCIDA">Vencida</SelectItem>
                 <SelectItem value="CANCELADA">Cancelada</SelectItem>
               </SelectContent>
             </Select>

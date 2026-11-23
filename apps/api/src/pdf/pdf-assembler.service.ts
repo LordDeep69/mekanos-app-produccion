@@ -20,7 +20,7 @@ import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
 import {
   OrgBrandingContext,
   buildOrgBranding,
-  formatDateOrg,
+  formatCalendarDateOrg,
 } from './org-branding.types';
 import { InformeFilenameInput, buildInformeFilename } from './pdf-naming.helper';
 import { PdfService, TipoInforme } from './pdf.service';
@@ -426,10 +426,16 @@ export class PdfAssemblerService {
    * (soporte Multi-Equipo N:M, Logística/Viáticos/Pólizas visibles, Ítems Opcionales y AIU).
    */
   async assembleCotizacionPdf(idOrCotizacion: number | any): Promise<AssembledCotizacionPdf> {
-    const brand = await this.resolveBranding();
-    const cot =
+    const [brand, orgGov, cot] = await Promise.all([
+      this.resolveBranding(),
+      this.prisma.configuracion_organizacion
+        .findUnique({
+          where: { id_configuracion: 1 },
+          select: { enable_cpq_governance: true },
+        })
+        .catch(() => null),
       typeof idOrCotizacion === 'number'
-        ? ((await this.prisma.cotizaciones.findUnique({
+        ? (this.prisma.cotizaciones.findUnique({
             where: { id_cotizacion: idOrCotizacion },
             include: {
               clientes: { include: { persona: true } },
@@ -472,8 +478,9 @@ export class PdfAssemblerService {
                 orderBy: [{ orden_item: 'asc' }, { id_item_otro: 'asc' }],
               },
             },
-          })) as any)
-        : idOrCotizacion;
+          }) as Promise<any>)
+        : Promise.resolve(idOrCotizacion),
+    ]);
 
     const idRef = typeof idOrCotizacion === 'number' ? idOrCotizacion : cot?.id_cotizacion;
     if (!cot) {
@@ -611,16 +618,40 @@ export class PdfAssemblerService {
           ? mapEquipoPdf(cot.equipos)
           : undefined;
 
+    const ESTADO_MAP: Record<number, string> = {
+      1: 'BORRADOR',
+      2: 'EN_REVISION',
+      3: 'APROBADA_INTERNA',
+      4: 'ENVIADA',
+      5: 'APROBADA_CLIENTE',
+      6: 'RECHAZADA',
+      7: 'VENCIDA',
+    };
+    const estadoCodigo = String(
+      cot.estados_cotizacion?.codigo_estado || ESTADO_MAP[Number(cot.id_estado)] || 'BORRADOR',
+    )
+      .trim()
+      .toUpperCase();
+    const estadosNoAutorizados = new Set(['BORRADOR', 'EN_REVISION', 'RECHAZADA']);
+    const mostrarMarcaAguaBorrador =
+      Boolean(orgGov?.enable_cpq_governance) && estadosNoAutorizados.has(estadoCodigo);
+
     const datosCotizacion: DatosCotizacionPDF = {
       branding: brand,
       numeroCotizacion: cot.numero_cotizacion || `COT-${idRef ?? ''}`,
       tipoCotizacion: cot.tipo_cotizacion || undefined,
       moneda: cot.moneda || brand.codigoMoneda,
-      fechaCotizacion: formatDateOrg(fechaBase, brand),
-      fechaVencimiento: formatDateOrg(fechaVencBase, brand),
+      fechaCotizacion: formatCalendarDateOrg(cot.fecha_cotizacion ?? fechaBase, brand),
+      fechaVencimiento: formatCalendarDateOrg(cot.fecha_vencimiento ?? fechaVencBase, brand),
       diasValidez,
       version: cot.version || 1,
       ordenCompraCliente: cot.orden_compra_cliente || undefined,
+      estadoCodigo,
+      mostrarMarcaAguaBorrador,
+      textoMarcaAgua: 'BORRADOR — PENDIENTE DE APROBACIÓN',
+      mostrarDesglosePrecios: Boolean(cot.mostrar_desglose_precios ?? false),
+      atencionANombre: cot.atencion_a_nombre?.trim() || undefined,
+      atencionACargo: cot.atencion_a_cargo?.trim() || undefined,
       cliente: {
         nombre: clienteNombre,
         nit: clientePersona?.numero_identificacion || undefined,
@@ -635,7 +666,7 @@ export class PdfAssemblerService {
           clientePersona?.celular ||
           undefined,
         email: cot.sedes_cliente?.email_sede || clientePersona?.email_principal || undefined,
-        contacto: cot.sedes_cliente?.contacto_sede || undefined,
+        contacto: cot.atencion_a_nombre?.trim() || undefined,
       },
       equipo: equipoUnico,
       equipos: equiposMulti.length > 0 ? equiposMulti : equipoUnico ? [equipoUnico] : [],

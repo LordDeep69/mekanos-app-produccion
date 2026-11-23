@@ -86,6 +86,11 @@ export interface OrdenPdfData {
 @Injectable()
 export class PdfService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PdfService.name);
+  private sharedBrowser: puppeteer.Browser | null = null;
+  private browserLaunchPromise: Promise<puppeteer.Browser> | null = null;
+  private activePages = 0;
+  private idleTimer: NodeJS.Timeout | null = null;
+  private readonly BROWSER_IDLE_TTL_MS = 45_000;
 
   constructor(
     @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
@@ -94,7 +99,44 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.logger.log('📋 PdfService listo (browser aislado bajo demanda para control de memoria)');
+    this.logger.log('📋 PdfService listo (browser cálido bajo demanda con auto-cierre por inactividad)');
+  }
+
+  private async acquireBrowser(): Promise<puppeteer.Browser> {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    if (this.sharedBrowser && this.sharedBrowser.connected) {
+      return this.sharedBrowser;
+    }
+    if (!this.browserLaunchPromise) {
+      this.browserLaunchPromise = this.launchBrowser()
+        .then((b) => {
+          this.sharedBrowser = b;
+          b.on('disconnected', () => {
+            if (this.sharedBrowser === b) this.sharedBrowser = null;
+          });
+          return b;
+        })
+        .finally(() => {
+          this.browserLaunchPromise = null;
+        });
+    }
+    return this.browserLaunchPromise;
+  }
+
+  private scheduleIdleBrowserClose(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    if (this.activePages > 0 || !this.sharedBrowser) return;
+    this.idleTimer = setTimeout(async () => {
+      if (this.activePages > 0 || !this.sharedBrowser) return;
+      const b = this.sharedBrowser;
+      this.sharedBrowser = null;
+      this.idleTimer = null;
+      await b.close().catch(() => {});
+    }, this.BROWSER_IDLE_TTL_MS);
+    this.idleTimer.unref?.();
   }
 
   /**
@@ -128,8 +170,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Ejecuta la renderización HTML->PDF garantizando cierre simétrico por petición
-   * (sin compartir instancia mutable entre peticiones concurrentes ni fugas de RAM).
+   * Ejecuta la renderización HTML->PDF reutilizando el browser cálido (con página aislada
+   * por petición y auto-cierre por inactividad para mantener la RAM en 0 en reposo).
    */
   private async renderHtmlToPdf(
     html: string,
@@ -141,8 +183,10 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       timeout: 90000,
     },
     waitMsPostLoad = 0,
+    fastLoad = false,
   ): Promise<Buffer> {
-    const browser = await this.launchBrowser();
+    const browser = await this.acquireBrowser();
+    this.activePages += 1;
     const page = await browser.newPage();
 
     try {
@@ -165,7 +209,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           );
 
       await page.setContent(htmlConEncoding, {
-        waitUntil: ['networkidle0', 'load'],
+        waitUntil: fastLoad ? 'load' : ['networkidle0', 'load'],
         timeout: 90000,
       });
 
@@ -177,7 +221,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       return Buffer.from(pdfBuffer);
     } finally {
       await page.close().catch(() => {});
-      await browser.close().catch(() => {});
+      this.activePages = Math.max(0, this.activePages - 1);
+      this.scheduleIdleBrowserClose();
     }
   }
 
@@ -1242,6 +1287,15 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * Hook del ciclo de vida Nest (cada generación usa su propia instancia aislada y la cierra en finally).
    */
   async onModuleDestroy(): Promise<void> {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    if (this.sharedBrowser) {
+      const b = this.sharedBrowser;
+      this.sharedBrowser = null;
+      await b.close().catch(() => {});
+    }
     this.logger.log('🔒 PdfService finalizado');
   }
 
@@ -1430,19 +1484,47 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       const html = this.obtenerHTML('COTIZACION', { ...datosCotizacion, branding: brand }, brand);
       const filename = this.generarFilename('COTIZACION', datosCotizacion.numeroCotizacion, brand);
 
-      const buffer = await this.renderHtmlToPdf(html, {
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '15mm', bottom: '15mm', left: '10mm', right: '10mm' },
-        displayHeaderFooter: true,
-        headerTemplate: '<div></div>',
-        footerTemplate: `
-          <div style="font-size: 8px; width: 100%; text-align: center; color: #666;">
-            <span>Cotización ${datosCotizacion.numeroCotizacion} - Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
+      const escFooter = (s: string) =>
+        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const ciudadPais = [brand.ciudadDefecto, brand.paisDefecto].filter(Boolean).join(', ');
+      const footerFiscal = escFooter(
+        [
+          brand.razonSocial || brand.nombreComercial,
+          brand.numeroIdFiscal
+            ? `${brand.tipoIdFiscal || 'NIT'}: ${brand.numeroIdFiscal}`
+            : null,
+          ciudadPais || null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      );
+      const footerNota = brand.textoPiePdf?.trim() ? escFooter(brand.textoPiePdf.trim()) : '';
+      const footerRight = escFooter(datosCotizacion.numeroCotizacion);
+
+      const buffer = await this.renderHtmlToPdf(
+        html,
+        {
+          format: 'A4',
+          printBackground: true,
+          margin: { top: '14mm', bottom: '18mm', left: '14mm', right: '14mm' },
+          displayHeaderFooter: true,
+          headerTemplate: '<div></div>',
+          footerTemplate: `
+          <div style="width: 100%; padding: 0 14mm; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size: 7.2px; color: #64748B;">
+            <div style="border-top: 1px solid #E2E8F0; padding-top: 5px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+              <div style="min-width: 0; max-width: 74%; line-height: 1.35;">
+                <div style="color: #475569; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${footerFiscal}</div>
+                ${footerNota ? `<div style="color: #64748B; font-style: italic; font-size: 6.8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;">${footerNota}</div>` : ''}
+              </div>
+              <div style="white-space: nowrap; font-variant-numeric: tabular-nums; color: #475569; font-weight: 500; padding-top: 0.5px;">${footerRight} · Página <span class="pageNumber"></span> de <span class="totalPages"></span></div>
+            </div>
           </div>
         `,
-        timeout: 60000,
-      });
+          timeout: 60000,
+        },
+        0,
+        true,
+      );
 
       this.logger.log(`✅ PDF de cotización generado: ${filename} (${buffer.length} bytes)`);
 

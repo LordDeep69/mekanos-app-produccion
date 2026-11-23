@@ -49,6 +49,7 @@ export class CreateCotizacionHandler implements ICommandHandler<CreateCotizacion
           tasa_impuesto_defecto: true,
           garantia_meses_defecto: true,
           terminos_cotizacion_defecto: true,
+          cot_mostrar_desglose_precios: true,
         },
       })
       .catch(() => null);
@@ -78,6 +79,12 @@ export class CreateCotizacionHandler implements ICommandHandler<CreateCotizacion
       id_cliente: command.id_cliente,
       id_sede: command.id_sede,
       id_equipo: idEquipoPrincipal,
+      atencion_a_nombre: extras.atencion_a_nombre?.trim()
+        ? extras.atencion_a_nombre.trim().slice(0, 200)
+        : null,
+      atencion_a_cargo: extras.atencion_a_cargo?.trim()
+        ? extras.atencion_a_cargo.trim().slice(0, 120)
+        : null,
       tipo_cotizacion: extras.tipo_cotizacion || 'SERVICIO_TECNICO',
       id_plantilla_origen: extras.id_plantilla_origen,
       id_propuesta_origen: extras.id_propuesta_origen,
@@ -106,6 +113,10 @@ export class CreateCotizacionHandler implements ICommandHandler<CreateCotizacion
       iva_valor: 0,
       total_cotizacion: 0,
       modo_agrupacion_pdf: extras.modo_agrupacion_pdf || 'POR_CATEGORIA',
+      mostrar_desglose_precios:
+        extras.mostrar_desglose_precios !== undefined
+          ? Boolean(extras.mostrar_desglose_precios)
+          : Boolean(org?.cot_mostrar_desglose_precios ?? false),
       forma_pago: command.forma_pago || 'CONTADO',
       terminos_condiciones:
         command.terminos_condiciones ?? org?.terminos_cotizacion_defecto ?? undefined,

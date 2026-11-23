@@ -32,6 +32,18 @@ export class CreateCotizacionDto {
   @IsNumber({}, { message: 'id_equipo debe ser un número' })
   id_equipo?: number;
 
+  @ApiPropertyOptional({ description: 'Destinatario comercial ("Atención a / Representante")', example: 'Ing. María Fernanda Gómez' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  atencion_a_nombre?: string | null;
+
+  @ApiPropertyOptional({ description: 'Cargo o dependencia del destinatario comercial', example: 'Administración' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  atencion_a_cargo?: string | null;
+
   @ApiPropertyOptional({
     description: 'Lista N:M de IDs de equipos cubiertos por esta cotización',
     type: [Number],
@@ -151,6 +163,11 @@ export class CreateCotizacionDto {
   @IsString()
   @MaxLength(30)
   modo_agrupacion_pdf?: string;
+
+  @ApiPropertyOptional({ description: 'Desglosar precios unitarios y subtotales por rubro en PDF (false = Suma Alzada compacta)', default: false })
+  @IsOptional()
+  @IsBoolean()
+  mostrar_desglose_precios?: boolean;
 
   @ApiPropertyOptional({ description: 'Tiempo estimado en días', example: 5 })
   @IsOptional()

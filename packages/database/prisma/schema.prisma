@@ -531,6 +531,8 @@ model cotizaciones {
   id_cliente                   Int
   id_sede                      Int?
   id_equipo                    Int?
+  atencion_a_nombre            String?                        @db.VarChar(200)
+  atencion_a_cargo             String?                        @db.VarChar(120)
   fecha_cotizacion             DateTime?                      @default(dbgenerated("CURRENT_DATE")) @db.Date
   fecha_vencimiento            DateTime                       @db.Date
   dias_validez                 Int?                           @default(15)
@@ -572,6 +574,7 @@ model cotizaciones {
   observaciones_aprobacion_cliente String?
   orden_compra_cliente         String?                        @db.VarChar(80)
   modo_agrupacion_pdf          String                         @default("POR_CATEGORIA") @db.VarChar(30)
+  mostrar_desglose_precios     Boolean                        @default(false)
   forma_pago                   String?                        @default("CONTADO") @db.VarChar(100)
   terminos_condiciones         String?
   meses_garantia               Int?                           @default(3)
@@ -2889,6 +2892,7 @@ enum tipo_combustible_enum {
 /// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 enum tipo_componente_comercial_enum {
   ORIGINAL
+  HOMOLOGADO
   GENERICO
   REMANUFACTURADO
 }
@@ -3500,6 +3504,9 @@ model configuracion_organizacion {
   politica_retencion_mobile_dias     Int      @default(30)
   modulo_comercial_activo            Boolean  @default(true)
   modulo_inventario_activo           Boolean  @default(true)
+  enable_cpq_governance              Boolean  @default(false)
+  lock_catalog_unit_price            Boolean  @default(false)
+  cot_mostrar_desglose_precios       Boolean  @default(false)
   umbral_aprobacion_supervisor       Decimal  @default(5000000.00) @db.Decimal(14, 2)
   umbral_aprobacion_gerente          Decimal  @default(15000000.00) @db.Decimal(14, 2)
   descuento_max_sin_aprobacion       Decimal  @default(15.00) @db.Decimal(5, 2)

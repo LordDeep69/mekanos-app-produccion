@@ -80,6 +80,209 @@ export class CotizacionCalculoService {
   }
 
   /**
+   * Calcula todos los totales CPQ en memoria con precisión Decimal(12,2) sin roundtrips a BD.
+   * Fuente única de verdad compartida entre `recalcularTotales` y `guardarStudioCompleto`.
+   */
+  calcularTotalesEnMemoria(input: {
+    cotizacion: {
+      descuento_porcentaje?: Decimal | number | null;
+      iva_porcentaje?: Decimal | number | null;
+      usa_aiu?: boolean | null;
+      aiu_admin_porcentaje?: Decimal | number | null;
+      aiu_imprevistos_porcentaje?: Decimal | number | null;
+      aiu_utilidad_porcentaje?: Decimal | number | null;
+      iva_sobre_utilidad_aiu?: boolean | null;
+    };
+    tasaImpuestoDefecto?: Decimal | number | null;
+    itemsServicios: Array<{
+      cantidad: Decimal | number;
+      precio_unitario: Decimal | number;
+      descuento_porcentaje?: Decimal | number | null;
+      costo_unitario?: Decimal | number | null;
+      es_opcional?: boolean | null;
+      iva_aplicable?: boolean | null;
+    }>;
+    itemsComponentes: Array<{
+      cantidad: Decimal | number;
+      precio_unitario: Decimal | number;
+      descuento_porcentaje?: Decimal | number | null;
+      costo_unitario?: Decimal | number | null;
+      es_opcional?: boolean | null;
+      iva_aplicable?: boolean | null;
+    }>;
+    itemsOtros: Array<{
+      cantidad: Decimal | number;
+      precio_unitario: Decimal | number;
+      descuento_porcentaje?: Decimal | number | null;
+      costo_unitario?: Decimal | number | null;
+      visible_cliente?: boolean | null;
+      es_opcional?: boolean | null;
+      iva_aplicable?: boolean | null;
+    }>;
+  }): CalculoTotalesResult {
+    const { cotizacion, tasaImpuestoDefecto, itemsServicios, itemsComponentes, itemsOtros } = input;
+
+    let subtotalServicios = new Decimal(0);
+    let subtotalComponentes = new Decimal(0);
+    let subtotalOtros = new Decimal(0);
+    let subtotalOpcionales = new Decimal(0);
+    let subtotalGravableBruto = new Decimal(0);
+    let costoTotal = new Decimal(0);
+
+    for (const item of itemsServicios) {
+      const subtotalItem = this.calcularSubtotalItem(
+        item.cantidad,
+        item.precio_unitario,
+        item.descuento_porcentaje,
+      );
+      if (item.es_opcional) {
+        subtotalOpcionales = subtotalOpcionales.plus(subtotalItem);
+      } else {
+        subtotalServicios = subtotalServicios.plus(subtotalItem);
+        if (item.iva_aplicable !== false) {
+          subtotalGravableBruto = subtotalGravableBruto.plus(subtotalItem);
+        }
+        costoTotal = costoTotal.plus(this.calcularCostoItem(item.cantidad, item.costo_unitario));
+      }
+    }
+
+    for (const item of itemsComponentes) {
+      const subtotalItem = this.calcularSubtotalItem(
+        item.cantidad,
+        item.precio_unitario,
+        item.descuento_porcentaje,
+      );
+      if (item.es_opcional) {
+        subtotalOpcionales = subtotalOpcionales.plus(subtotalItem);
+      } else {
+        subtotalComponentes = subtotalComponentes.plus(subtotalItem);
+        if (item.iva_aplicable !== false) {
+          subtotalGravableBruto = subtotalGravableBruto.plus(subtotalItem);
+        }
+        costoTotal = costoTotal.plus(this.calcularCostoItem(item.cantidad, item.costo_unitario));
+      }
+    }
+
+    for (const item of itemsOtros) {
+      const subtotalItem = this.calcularSubtotalItem(
+        item.cantidad,
+        item.precio_unitario,
+        item.descuento_porcentaje,
+      );
+      const costoUnitarioEfectivo =
+        Number(item.costo_unitario || 0) > 0
+          ? item.costo_unitario
+          : item.visible_cliente === false
+            ? item.precio_unitario
+            : new Decimal(0);
+
+      if (item.es_opcional) {
+        if (item.visible_cliente !== false) {
+          subtotalOpcionales = subtotalOpcionales.plus(subtotalItem);
+        }
+      } else {
+        costoTotal = costoTotal.plus(this.calcularCostoItem(item.cantidad, costoUnitarioEfectivo));
+        if (item.visible_cliente !== false) {
+          subtotalOtros = subtotalOtros.plus(subtotalItem);
+          if (item.iva_aplicable !== false) {
+            subtotalGravableBruto = subtotalGravableBruto.plus(subtotalItem);
+          }
+        }
+      }
+    }
+
+    const subtotalGeneral = new Decimal(
+      subtotalServicios.plus(subtotalComponentes).plus(subtotalOtros).toFixed(2),
+    );
+    const descuentoPorcentaje = cotizacion.descuento_porcentaje
+      ? new Decimal(cotizacion.descuento_porcentaje.toString())
+      : new Decimal(0);
+    const descuentoFactor = new Decimal(1).minus(descuentoPorcentaje.dividedBy(100));
+
+    const descuentoValor = new Decimal(
+      subtotalGeneral.times(descuentoPorcentaje.dividedBy(100)).toFixed(2),
+    );
+    const subtotalConDescuento = new Decimal(subtotalGeneral.minus(descuentoValor).toFixed(2));
+
+    const usaAiu = Boolean(cotizacion.usa_aiu);
+    const aiuAdminPct = usaAiu
+      ? new Decimal(cotizacion.aiu_admin_porcentaje?.toString() || '0')
+      : new Decimal(0);
+    const aiuImprevPct = usaAiu
+      ? new Decimal(cotizacion.aiu_imprevistos_porcentaje?.toString() || '0')
+      : new Decimal(0);
+    const aiuUtilPct = usaAiu
+      ? new Decimal(cotizacion.aiu_utilidad_porcentaje?.toString() || '0')
+      : new Decimal(0);
+
+    const aiuAdminValor = new Decimal(
+      subtotalConDescuento.times(aiuAdminPct.dividedBy(100)).toFixed(2),
+    );
+    const aiuImprevistosValor = new Decimal(
+      subtotalConDescuento.times(aiuImprevPct.dividedBy(100)).toFixed(2),
+    );
+    const aiuUtilidadValor = new Decimal(
+      subtotalConDescuento.times(aiuUtilPct.dividedBy(100)).toFixed(2),
+    );
+    const aiuValorTotal = new Decimal(
+      aiuAdminValor.plus(aiuImprevistosValor).plus(aiuUtilidadValor).toFixed(2),
+    );
+
+    const ivaPorcentaje =
+      cotizacion.iva_porcentaje !== null && cotizacion.iva_porcentaje !== undefined
+        ? new Decimal(cotizacion.iva_porcentaje.toString())
+        : new Decimal(tasaImpuestoDefecto?.toString() || '0');
+
+    const ivaSobreUtilidadAiu = usaAiu && Boolean(cotizacion.iva_sobre_utilidad_aiu);
+    let baseGravableIva: Decimal;
+    if (ivaSobreUtilidadAiu) {
+      baseGravableIva = aiuUtilidadValor;
+    } else {
+      const baseGravableNeta = new Decimal(
+        subtotalGravableBruto.times(descuentoFactor).toFixed(2),
+      );
+      baseGravableIva = usaAiu
+        ? new Decimal(baseGravableNeta.plus(aiuValorTotal).toFixed(2))
+        : baseGravableNeta;
+    }
+
+    const ivaValor = new Decimal(baseGravableIva.times(ivaPorcentaje.dividedBy(100)).toFixed(2));
+
+    const ingresoNetoSinIva = new Decimal(subtotalConDescuento.plus(aiuValorTotal).toFixed(2));
+    const totalCotizacion = new Decimal(ingresoNetoSinIva.plus(ivaValor).toFixed(2));
+    const costoEstimadoFinal = new Decimal(costoTotal.toFixed(2));
+    const utilidadBruta = new Decimal(ingresoNetoSinIva.minus(costoEstimadoFinal).toFixed(2));
+    const margenBrutoPct = ingresoNetoSinIva.gt(0)
+      ? new Decimal(utilidadBruta.dividedBy(ingresoNetoSinIva).times(100).toFixed(2))
+      : new Decimal(0);
+
+    return {
+      subtotal_servicios: new Decimal(subtotalServicios.toFixed(2)),
+      subtotal_componentes: new Decimal(subtotalComponentes.toFixed(2)),
+      subtotal_otros: new Decimal(subtotalOtros.toFixed(2)),
+      subtotal_general: subtotalGeneral,
+      subtotal_opcionales: new Decimal(subtotalOpcionales.toFixed(2)),
+      descuento_valor: descuentoValor,
+      subtotal_con_descuento: subtotalConDescuento,
+      usa_aiu: usaAiu,
+      aiu_admin_valor: aiuAdminValor,
+      aiu_imprevistos_valor: aiuImprevistosValor,
+      aiu_utilidad_valor: aiuUtilidadValor,
+      aiu_valor_total: aiuValorTotal,
+      iva_sobre_utilidad_aiu: ivaSobreUtilidadAiu,
+      iva_porcentaje: ivaPorcentaje,
+      iva_valor: ivaValor,
+      total_cotizacion: totalCotizacion,
+      costo_total_estimado: costoEstimadoFinal,
+      utilidad_bruta_estimada: utilidadBruta,
+      margen_bruto_porcentaje: margenBrutoPct,
+      cantidad_items_servicios: itemsServicios.length,
+      cantidad_items_componentes: itemsComponentes.length,
+      cantidad_items_otros: itemsOtros.length,
+    };
+  }
+
+  /**
    * Recalcula todos los subtotales, AIU, IVA, total cliente y rentabilidad interna,
    * actualizando de forma consistente en BD.
    */
@@ -121,14 +324,7 @@ export class CotizacionCalculoService {
       throw new NotFoundException(`Cotización ${idCotizacion} no encontrada`);
     }
 
-    let subtotalServicios = new Decimal(0);
-    let subtotalComponentes = new Decimal(0);
-    let subtotalOtros = new Decimal(0);
-    let subtotalOpcionales = new Decimal(0);
-    let subtotalGravableBruto = new Decimal(0);
-    let costoTotal = new Decimal(0);
-
-    // 1. Servicios
+    const pendingLineUpdates: Promise<unknown>[] = [];
     for (const item of itemsServicios) {
       const subtotalItem = this.calcularSubtotalItem(
         item.cantidad,
@@ -136,24 +332,14 @@ export class CotizacionCalculoService {
         item.descuento_porcentaje,
       );
       if (!item.subtotal || !subtotalItem.equals(item.subtotal)) {
-        await this.prisma.items_cotizacion_servicios.update({
-          where: { id_item_servicio: item.id_item_servicio },
-          data: { subtotal: subtotalItem },
-        });
-      }
-
-      if (item.es_opcional) {
-        subtotalOpcionales = subtotalOpcionales.plus(subtotalItem);
-      } else {
-        subtotalServicios = subtotalServicios.plus(subtotalItem);
-        if (item.iva_aplicable !== false) {
-          subtotalGravableBruto = subtotalGravableBruto.plus(subtotalItem);
-        }
-        costoTotal = costoTotal.plus(this.calcularCostoItem(item.cantidad, item.costo_unitario));
+        pendingLineUpdates.push(
+          this.prisma.items_cotizacion_servicios.update({
+            where: { id_item_servicio: item.id_item_servicio },
+            data: { subtotal: subtotalItem },
+          }),
+        );
       }
     }
-
-    // 2. Componentes / Repuestos
     for (const item of itemsComponentes) {
       const subtotalItem = this.calcularSubtotalItem(
         item.cantidad,
@@ -161,24 +347,14 @@ export class CotizacionCalculoService {
         item.descuento_porcentaje,
       );
       if (!item.subtotal || !subtotalItem.equals(item.subtotal)) {
-        await this.prisma.items_cotizacion_componentes.update({
-          where: { id_item_componente: item.id_item_componente },
-          data: { subtotal: subtotalItem },
-        });
-      }
-
-      if (item.es_opcional) {
-        subtotalOpcionales = subtotalOpcionales.plus(subtotalItem);
-      } else {
-        subtotalComponentes = subtotalComponentes.plus(subtotalItem);
-        if (item.iva_aplicable !== false) {
-          subtotalGravableBruto = subtotalGravableBruto.plus(subtotalItem);
-        }
-        costoTotal = costoTotal.plus(this.calcularCostoItem(item.cantidad, item.costo_unitario));
+        pendingLineUpdates.push(
+          this.prisma.items_cotizacion_componentes.update({
+            where: { id_item_componente: item.id_item_componente },
+            data: { subtotal: subtotalItem },
+          }),
+        );
       }
     }
-
-    // 3. Otros rubros (Logística, Viáticos, Pólizas, Alquiler, Disposición Ambiental)
     for (const item of itemsOtros) {
       const subtotalItem = this.calcularSubtotalItem(
         item.cantidad,
@@ -186,150 +362,50 @@ export class CotizacionCalculoService {
         item.descuento_porcentaje,
       );
       if (!item.subtotal || !subtotalItem.equals(item.subtotal)) {
-        await this.prisma.items_cotizacion_otros.update({
-          where: { id_item_otro: item.id_item_otro },
-          data: { subtotal: subtotalItem },
-        });
-      }
-
-      const costoUnitarioEfectivo =
-        Number(item.costo_unitario || 0) > 0
-          ? item.costo_unitario
-          : item.visible_cliente === false
-            ? item.precio_unitario
-            : new Decimal(0);
-
-      if (item.es_opcional) {
-        if (item.visible_cliente !== false) {
-          subtotalOpcionales = subtotalOpcionales.plus(subtotalItem);
-        }
-      } else {
-        costoTotal = costoTotal.plus(this.calcularCostoItem(item.cantidad, costoUnitarioEfectivo));
-        if (item.visible_cliente !== false) {
-          subtotalOtros = subtotalOtros.plus(subtotalItem);
-          if (item.iva_aplicable !== false) {
-            subtotalGravableBruto = subtotalGravableBruto.plus(subtotalItem);
-          }
-        }
+        pendingLineUpdates.push(
+          this.prisma.items_cotizacion_otros.update({
+            where: { id_item_otro: item.id_item_otro },
+            data: { subtotal: subtotalItem },
+          }),
+        );
       }
     }
 
-    // 4. Subtotal General y Descuento Global
-    const subtotalGeneral = new Decimal(
-      subtotalServicios.plus(subtotalComponentes).plus(subtotalOtros).toFixed(2),
-    );
-    const descuentoPorcentaje = cotizacion.descuento_porcentaje
-      ? new Decimal(cotizacion.descuento_porcentaje.toString())
-      : new Decimal(0);
-    const descuentoFactor = new Decimal(1).minus(descuentoPorcentaje.dividedBy(100));
-
-    const descuentoValor = new Decimal(
-      subtotalGeneral.times(descuentoPorcentaje.dividedBy(100)).toFixed(2),
-    );
-    const subtotalConDescuento = new Decimal(subtotalGeneral.minus(descuentoValor).toFixed(2));
-
-    // 5. AIU Opcional
-    const usaAiu = Boolean(cotizacion.usa_aiu);
-    const aiuAdminPct = usaAiu
-      ? new Decimal(cotizacion.aiu_admin_porcentaje?.toString() || '0')
-      : new Decimal(0);
-    const aiuImprevPct = usaAiu
-      ? new Decimal(cotizacion.aiu_imprevistos_porcentaje?.toString() || '0')
-      : new Decimal(0);
-    const aiuUtilPct = usaAiu
-      ? new Decimal(cotizacion.aiu_utilidad_porcentaje?.toString() || '0')
-      : new Decimal(0);
-
-    const aiuAdminValor = new Decimal(
-      subtotalConDescuento.times(aiuAdminPct.dividedBy(100)).toFixed(2),
-    );
-    const aiuImprevistosValor = new Decimal(
-      subtotalConDescuento.times(aiuImprevPct.dividedBy(100)).toFixed(2),
-    );
-    const aiuUtilidadValor = new Decimal(
-      subtotalConDescuento.times(aiuUtilPct.dividedBy(100)).toFixed(2),
-    );
-    const aiuValorTotal = new Decimal(
-      aiuAdminValor.plus(aiuImprevistosValor).plus(aiuUtilidadValor).toFixed(2),
-    );
-
-    // 6. IVA (respeta 0% explícito; solo hace fallback si es null/undefined)
-    const ivaPorcentaje =
-      cotizacion.iva_porcentaje !== null && cotizacion.iva_porcentaje !== undefined
-        ? new Decimal(cotizacion.iva_porcentaje.toString())
-        : new Decimal(orgConfig?.tasa_impuesto_defecto?.toString() || '0');
-
-    const ivaSobreUtilidadAiu = usaAiu && Boolean(cotizacion.iva_sobre_utilidad_aiu);
-    let baseGravableIva: Decimal;
-    if (ivaSobreUtilidadAiu) {
-      baseGravableIva = aiuUtilidadValor;
-    } else {
-      const baseGravableNeta = new Decimal(
-        subtotalGravableBruto.times(descuentoFactor).toFixed(2),
-      );
-      baseGravableIva = usaAiu
-        ? new Decimal(baseGravableNeta.plus(aiuValorTotal).toFixed(2))
-        : baseGravableNeta;
-    }
-
-    const ivaValor = new Decimal(baseGravableIva.times(ivaPorcentaje.dividedBy(100)).toFixed(2));
-
-    // 7. Total Cliente & Rentabilidad Privada
-    const ingresoNetoSinIva = new Decimal(subtotalConDescuento.plus(aiuValorTotal).toFixed(2));
-    const totalCotizacion = new Decimal(ingresoNetoSinIva.plus(ivaValor).toFixed(2));
-    const costoEstimadoFinal = new Decimal(costoTotal.toFixed(2));
-    const utilidadBruta = new Decimal(ingresoNetoSinIva.minus(costoEstimadoFinal).toFixed(2));
-    const margenBrutoPct = ingresoNetoSinIva.gt(0)
-      ? new Decimal(utilidadBruta.dividedBy(ingresoNetoSinIva).times(100).toFixed(2))
-      : new Decimal(0);
-
-    await this.prisma.cotizaciones.update({
-      where: { id_cotizacion: idCotizacion },
-      data: {
-        subtotal_servicios: new Decimal(subtotalServicios.toFixed(2)),
-        subtotal_componentes: new Decimal(subtotalComponentes.toFixed(2)),
-        subtotal_otros: new Decimal(subtotalOtros.toFixed(2)),
-        subtotal_general: subtotalGeneral,
-        subtotal_opcionales: new Decimal(subtotalOpcionales.toFixed(2)),
-        descuento_valor: descuentoValor,
-        subtotal_con_descuento: subtotalConDescuento,
-        aiu_admin_valor: aiuAdminValor,
-        aiu_imprevistos_valor: aiuImprevistosValor,
-        aiu_utilidad_valor: aiuUtilidadValor,
-        aiu_valor_total: aiuValorTotal,
-        iva_valor: ivaValor,
-        total_cotizacion: totalCotizacion,
-        costo_total_estimado: costoEstimadoFinal,
-        utilidad_bruta_estimada: utilidadBruta,
-        margen_bruto_porcentaje: margenBrutoPct,
-        fecha_modificacion: new Date(),
-      },
+    const result = this.calcularTotalesEnMemoria({
+      cotizacion,
+      tasaImpuestoDefecto: orgConfig?.tasa_impuesto_defecto,
+      itemsServicios,
+      itemsComponentes,
+      itemsOtros,
     });
 
-    return {
-      subtotal_servicios: new Decimal(subtotalServicios.toFixed(2)),
-      subtotal_componentes: new Decimal(subtotalComponentes.toFixed(2)),
-      subtotal_otros: new Decimal(subtotalOtros.toFixed(2)),
-      subtotal_general: subtotalGeneral,
-      subtotal_opcionales: new Decimal(subtotalOpcionales.toFixed(2)),
-      descuento_valor: descuentoValor,
-      subtotal_con_descuento: subtotalConDescuento,
-      usa_aiu: usaAiu,
-      aiu_admin_valor: aiuAdminValor,
-      aiu_imprevistos_valor: aiuImprevistosValor,
-      aiu_utilidad_valor: aiuUtilidadValor,
-      aiu_valor_total: aiuValorTotal,
-      iva_sobre_utilidad_aiu: ivaSobreUtilidadAiu,
-      iva_porcentaje: ivaPorcentaje,
-      iva_valor: ivaValor,
-      total_cotizacion: totalCotizacion,
-      costo_total_estimado: costoEstimadoFinal,
-      utilidad_bruta_estimada: utilidadBruta,
-      margen_bruto_porcentaje: margenBrutoPct,
-      cantidad_items_servicios: itemsServicios.length,
-      cantidad_items_componentes: itemsComponentes.length,
-      cantidad_items_otros: itemsOtros.length,
-    };
+    await Promise.all([
+      ...pendingLineUpdates,
+      this.prisma.cotizaciones.update({
+        where: { id_cotizacion: idCotizacion },
+        data: {
+          subtotal_servicios: result.subtotal_servicios,
+          subtotal_componentes: result.subtotal_componentes,
+          subtotal_otros: result.subtotal_otros,
+          subtotal_general: result.subtotal_general,
+          subtotal_opcionales: result.subtotal_opcionales,
+          descuento_valor: result.descuento_valor,
+          subtotal_con_descuento: result.subtotal_con_descuento,
+          aiu_admin_valor: result.aiu_admin_valor,
+          aiu_imprevistos_valor: result.aiu_imprevistos_valor,
+          aiu_utilidad_valor: result.aiu_utilidad_valor,
+          aiu_valor_total: result.aiu_valor_total,
+          iva_valor: result.iva_valor,
+          total_cotizacion: result.total_cotizacion,
+          costo_total_estimado: result.costo_total_estimado,
+          utilidad_bruta_estimada: result.utilidad_bruta_estimada,
+          margen_bruto_porcentaje: result.margen_bruto_porcentaje,
+          fecha_modificacion: new Date(),
+        },
+      }),
+    ]);
+
+    return result;
   }
 
   async actualizarDescuento(

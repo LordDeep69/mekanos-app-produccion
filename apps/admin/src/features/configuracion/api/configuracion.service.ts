@@ -57,6 +57,9 @@ export interface ConfiguracionEmpresa extends ConfiguracionPublica {
   requiere_firma_cliente_defecto: boolean;
   storage_prefijo_raiz: string;
   politica_retencion_mobile_dias: number;
+  enable_cpq_governance?: boolean;
+  lock_catalog_unit_price?: boolean;
+  cot_mostrar_desglose_precios?: boolean;
   umbral_aprobacion_supervisor?: number;
   umbral_aprobacion_gerente?: number;
   descuento_max_sin_aprobacion?: number;

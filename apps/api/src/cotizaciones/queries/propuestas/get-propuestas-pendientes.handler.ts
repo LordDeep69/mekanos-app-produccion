@@ -15,21 +15,50 @@ export class GetPropuestasPendientesHandler implements IQueryHandler<GetPropuest
 
     // Obtener estado BORRADOR (propuestas pendientes)
     const estadoBorrador = await this.prisma.estados_cotizacion.findFirst({
-      where: { nombre_estado: 'BORRADOR' },
+      where: {
+        OR: [
+          { codigo_estado: 'BORRADOR' },
+          { nombre_estado: { equals: 'BORRADOR', mode: 'insensitive' } },
+        ],
+      },
     });
 
-    // Construir filtros dinámicos
+    // Construir filtros dinámicos sobre columnas reales de propuestas_correctivo
     const where: any = {
-      id_estado: estadoBorrador?.id_estado,
+      id_estado: estadoBorrador?.id_estado ?? 1,
       id_orden_servicio_generada: null, // No convertidas aún
     };
 
     if (tipoPropuesta) {
-      where.tipo_propuesta = tipoPropuesta;
+      const upper = tipoPropuesta.toUpperCase();
+      if (
+        upper === 'CORRECTIVO' ||
+        upper === 'PREVENTIVO_URGENTE' ||
+        upper === 'MEJORA' ||
+        upper === 'EXTENSION_GARANTIA'
+      ) {
+        where.categoria = upper;
+      } else if (upper === 'REEMPLAZO') {
+        where.categoria = 'CORRECTIVO';
+      } else if (upper === 'PREDICTIVO') {
+        where.categoria = 'PREVENTIVO_URGENTE';
+      }
     }
 
     if (urgencia) {
-      where.urgencia_propuesta = urgencia;
+      const urgUpper = urgencia.toUpperCase();
+      const mapUrgPrio: Record<string, string> = {
+        BAJA: 'NORMAL',
+        MEDIA: 'ALTA',
+        ALTA: 'URGENTE',
+        CRITICA: 'EMERGENCIA',
+        NORMAL: 'NORMAL',
+        URGENTE: 'URGENTE',
+        EMERGENCIA: 'EMERGENCIA',
+      };
+      if (mapUrgPrio[urgUpper]) {
+        where.prioridad = mapUrgPrio[urgUpper];
+      }
     }
 
     // Obtener propuestas con relaciones

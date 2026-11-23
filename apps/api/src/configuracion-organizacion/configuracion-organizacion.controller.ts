@@ -54,8 +54,19 @@ export class ConfiguracionOrganizacionController {
   @ApiResponse({ status: 200, description: 'Configuración actualizada correctamente' })
   updateEmpresa(
     @Body() dto: UpdateConfiguracionOrganizacionDto,
-    @CurrentUser('id') userId: number,
+    @CurrentUser() user: any,
   ) {
-    return this.configOrgService.updateEmpresa(dto, userId);
+    const roleCodes: string[] = [];
+    if (user?.rol) roleCodes.push(String(user.rol).toUpperCase());
+    if (Array.isArray(user?.roles)) {
+      for (const r of user.roles) {
+        if (typeof r === 'string') roleCodes.push(r.toUpperCase());
+        else if (r?.codigo) roleCodes.push(String(r.codigo).toUpperCase());
+      }
+    }
+    const isSuperAdmin = roleCodes.some((r) =>
+      ['SUPERADMIN', 'SUPER_ADMIN', 'PLATAFORMA', 'PLATFORM_ADMIN'].includes(r),
+    );
+    return this.configOrgService.updateEmpresa(dto, user?.id, isSuperAdmin);
   }
 }

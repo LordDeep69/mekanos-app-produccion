@@ -24,6 +24,8 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       fecha_cotizacion: c.fecha_cotizacion ?? new Date(),
       id_sede: c.id_sede ?? undefined,
       id_equipo: c.id_equipo ?? undefined,
+      atencion_a_nombre: c.atencion_a_nombre ?? undefined,
+      atencion_a_cargo: c.atencion_a_cargo ?? undefined,
       id_plantilla_origen: c.id_plantilla_origen ?? undefined,
       id_propuesta_origen: c.id_propuesta_origen ?? undefined,
       tipo_cotizacion: c.tipo_cotizacion ?? 'SERVICIO_TECNICO',
@@ -35,6 +37,7 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       observaciones_aprobacion_cliente: c.observaciones_aprobacion_cliente ?? undefined,
       orden_compra_cliente: c.orden_compra_cliente ?? undefined,
       modo_agrupacion_pdf: c.modo_agrupacion_pdf ?? 'POR_CATEGORIA',
+      mostrar_desglose_precios: Boolean(c.mostrar_desglose_precios ?? false),
       descripcion_general: c.descripcion_general ?? undefined,
       alcance_trabajo: c.alcance_trabajo ?? undefined,
       exclusiones: c.exclusiones ?? undefined,
@@ -112,6 +115,12 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
         id_cliente: data.id_cliente!,
         id_sede: data.id_sede,
         id_equipo: data.id_equipo,
+        atencion_a_nombre: data.atencion_a_nombre?.trim()
+          ? data.atencion_a_nombre.trim().slice(0, 200)
+          : null,
+        atencion_a_cargo: data.atencion_a_cargo?.trim()
+          ? data.atencion_a_cargo.trim().slice(0, 120)
+          : null,
         tipo_cotizacion: data.tipo_cotizacion || 'SERVICIO_TECNICO',
         id_plantilla_origen: data.id_plantilla_origen,
         id_propuesta_origen: data.id_propuesta_origen,
@@ -146,6 +155,7 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
         observaciones_garantia: data.observaciones_garantia,
         tiempo_estimado_dias: data.tiempo_estimado_dias,
         modo_agrupacion_pdf: data.modo_agrupacion_pdf || 'POR_CATEGORIA',
+        mostrar_desglose_precios: Boolean(data.mostrar_desglose_precios ?? false),
         version: data.version || 1,
         id_cotizacion_padre: data.id_cotizacion_padre,
         metadata: data.metadata,
@@ -382,6 +392,16 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
 
     if (data.id_sede !== undefined) updateData.id_sede = data.id_sede;
     if (data.id_equipo !== undefined) updateData.id_equipo = data.id_equipo;
+    if (data.atencion_a_nombre !== undefined) {
+      updateData.atencion_a_nombre = data.atencion_a_nombre?.trim()
+        ? data.atencion_a_nombre.trim().slice(0, 200)
+        : null;
+    }
+    if (data.atencion_a_cargo !== undefined) {
+      updateData.atencion_a_cargo = data.atencion_a_cargo?.trim()
+        ? data.atencion_a_cargo.trim().slice(0, 120)
+        : null;
+    }
     if (data.tipo_cotizacion !== undefined) updateData.tipo_cotizacion = data.tipo_cotizacion;
     if (data.id_plantilla_origen !== undefined)
       updateData.id_plantilla_origen = data.id_plantilla_origen;
@@ -433,6 +453,8 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       updateData.observaciones_garantia = data.observaciones_garantia;
     if (data.modo_agrupacion_pdf !== undefined)
       updateData.modo_agrupacion_pdf = data.modo_agrupacion_pdf;
+    if (data.mostrar_desglose_precios !== undefined)
+      updateData.mostrar_desglose_precios = Boolean(data.mostrar_desglose_precios);
     if (data.aprobada_internamente_por !== undefined)
       updateData.aprobada_internamente_por = data.aprobada_internamente_por;
     if (data.fecha_aprobacion_interna !== undefined)

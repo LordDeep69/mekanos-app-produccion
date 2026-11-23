@@ -18,7 +18,17 @@ import {
   formatCorrelativeCode,
   reserveNextSequenceCounter,
 } from '../common/utils/sequence-counter.helper';
-import { destino_articulo_enum, origen_costo_enum, Prisma } from '@prisma/client';
+import {
+  PG_ACCENT_FROM,
+  PG_ACCENT_TO,
+  tokenizeSearchQuery,
+} from '../common/utils/search-tokens.helper';
+import {
+  destino_articulo_enum,
+  origen_costo_enum,
+  Prisma,
+  tipo_componente_comercial_enum,
+} from '@prisma/client';
 
 @Injectable()
 export class ArticulosService {
@@ -375,7 +385,7 @@ export class ArticulosService {
       }
     }
 
-    let unidadTexto = dto.unidad_medida?.trim() || 'UNIDAD';
+    let unidadTexto = (dto.unidad_medida?.trim() || 'UNIDAD').slice(0, 20);
     if (dto.codigo_unidad_medida) {
       const codigoUnidad = dto.codigo_unidad_medida.trim().toUpperCase();
       const unidadEntity = await this.prisma.unidades_medida.findUnique({
@@ -385,7 +395,10 @@ export class ArticulosService {
         throw new NotFoundException(`La unidad de medida '${dto.codigo_unidad_medida}' no existe.`);
       }
       if (!dto.unidad_medida || dto.unidad_medida === 'UNIDAD') {
-        unidadTexto = unidadEntity.nombre;
+        const nom = unidadEntity.nombre.trim();
+        unidadTexto = (nom.length <= 20 ? nom : unidadEntity.simbolo || unidadEntity.codigo)
+          .trim()
+          .slice(0, 20);
       }
     }
 
@@ -479,7 +492,7 @@ export class ArticulosService {
             descripcion_corta: dto.descripcion_corta?.trim() || null,
             descripcion_detallada: dto.descripcion_detallada?.trim() || null,
             especificaciones_tecnicas: dto.especificaciones_tecnicas || undefined,
-            tipo_comercial: (dto.tipo_comercial as any) || 'ORIGINAL',
+            tipo_comercial: dto.tipo_comercial || tipo_componente_comercial_enum.ORIGINAL,
             destino_articulo: dto.destino_articulo || destino_articulo_enum.INSUMO_SERVICIO,
             es_comprable: dto.es_comprable !== undefined ? dto.es_comprable : true,
             es_inventariable: dto.es_inventariable !== undefined ? dto.es_inventariable : true,
@@ -1045,7 +1058,7 @@ export class ArticulosService {
 
     // 4. Validar y sincronizar codigo_unidad_medida si se suministra
     let unidadTexto: string | null | undefined =
-      dto.unidad_medida !== undefined ? dto.unidad_medida?.trim() || null : undefined;
+      dto.unidad_medida !== undefined ? dto.unidad_medida?.trim().slice(0, 20) || null : undefined;
 
     if (dto.codigo_unidad_medida !== undefined) {
       if (dto.codigo_unidad_medida) {
@@ -1059,7 +1072,10 @@ export class ArticulosService {
           );
         }
         if (!unidadTexto || unidadTexto === 'UNIDAD') {
-          unidadTexto = unidadEntity.nombre;
+          const nom = unidadEntity.nombre.trim();
+          unidadTexto = (nom.length <= 20 ? nom : unidadEntity.simbolo || unidadEntity.codigo)
+            .trim()
+            .slice(0, 20);
         }
       }
     }
@@ -1165,7 +1181,7 @@ export class ArticulosService {
       }
 
       if (dto.tipo_comercial !== undefined) {
-        data.tipo_comercial = dto.tipo_comercial as any;
+        data.tipo_comercial = dto.tipo_comercial;
       }
 
       if (dto.destino_articulo !== undefined) {
@@ -1401,22 +1417,47 @@ export class ArticulosService {
     }
 
     if (filtros.q && filtros.q.trim() !== '') {
-      const q = filtros.q.trim();
-      where.OR = [
-        { codigo_interno: { contains: q, mode: 'insensitive' } },
-        { referencia_fabricante: { contains: q, mode: 'insensitive' } },
-        { descripcion_corta: { contains: q, mode: 'insensitive' } },
-        { marca: { contains: q, mode: 'insensitive' } },
-        { marcas: { nombre: { contains: q, mode: 'insensitive' } } },
-        { categorias_componente: { nombre: { contains: q, mode: 'insensitive' } } },
-        {
-          articulos_proveedores: {
-            some: {
-              referencia_proveedor: { contains: q, mode: 'insensitive' },
-            },
-          },
-        },
-      ];
+      const tokens = tokenizeSearchQuery(filtros.q);
+      if (tokens.length > 0) {
+        const tokenClauses = tokens.map((tok) => {
+          const pattern = `%${tok}%`;
+          return Prisma.sql`(
+            translate(lower(COALESCE(cc.codigo_interno, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+            OR translate(lower(COALESCE(cc.referencia_fabricante, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+            OR translate(lower(COALESCE(cc.descripcion_corta, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+            OR translate(lower(COALESCE(cc.marca, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+            OR translate(lower(COALESCE(m.nombre, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+            OR translate(lower(COALESCE(cat.nombre, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+            OR EXISTS (
+              SELECT 1 FROM articulos_proveedores ap
+              WHERE ap.id_componente = cc.id_componente
+                AND translate(lower(COALESCE(ap.referencia_proveedor, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+            )
+          )`;
+        });
+
+        const matchedRows = await this.prisma.$queryRaw<{ id_componente: number }[]>(
+          Prisma.sql`
+            SELECT cc.id_componente
+            FROM catalogo_componentes cc
+            LEFT JOIN marcas m ON m.id_marca = cc.id_marca
+            LEFT JOIN categorias_componente cat ON cat.id_categoria = cc.id_categoria
+            WHERE ${Prisma.join(tokenClauses, ' AND ')}
+          `,
+        );
+
+        const matchedIds = matchedRows.map((r) => r.id_componente);
+        const searchIdCondition = { id_componente: { in: matchedIds } };
+        if (where.AND) {
+          if (Array.isArray(where.AND)) {
+            (where.AND as any[]).push(searchIdCondition);
+          } else {
+            where.AND = [where.AND, searchIdCondition];
+          }
+        } else {
+          where.AND = [searchIdCondition];
+        }
+      }
     }
 
     const page = filtros.page ? Math.max(1, filtros.page) : undefined;

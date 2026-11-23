@@ -56,10 +56,13 @@ export interface ClienteSelector {
   id_cliente: number;
   codigo_cliente?: string;
   nombre_sede?: string;
+  cargo_contacto?: string | null;
   persona?: {
     nombre_comercial?: string;
     razon_social?: string;
     numero_identificacion?: string;
+    representante_legal?: string | null;
+    email_principal?: string | null;
   };
 }
 
@@ -69,6 +72,9 @@ export interface SedeCliente {
   direccion?: string;
   ciudad?: string;
   es_principal: boolean;
+  contacto_sede?: string | null;
+  cargo_contacto?: string | null;
+  email_sede?: string | null;
 }
 
 export interface EquipoSelector {
@@ -271,6 +277,9 @@ export async function getClientesSelector(params?: {
       codigo_cliente?: string;
       nombre: string;
       nit?: string;
+      representante_legal?: string | null;
+      cargo_contacto?: string | null;
+      email?: string | null;
     }>;
   }>(`/clientes/selector?${queryParams.toString()}`);
 
@@ -278,10 +287,13 @@ export async function getClientesSelector(params?: {
   return (response.data.data || []).map((c) => ({
     id_cliente: c.id_cliente,
     codigo_cliente: c.codigo_cliente,
+    cargo_contacto: c.cargo_contacto ?? null,
     persona: {
       nombre_comercial: c.nombre,
       razon_social: c.nombre,
       numero_identificacion: c.nit,
+      representante_legal: c.representante_legal ?? null,
+      email_principal: c.email ?? null,
     },
   }));
 }

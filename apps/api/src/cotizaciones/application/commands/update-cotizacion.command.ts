@@ -20,6 +20,8 @@ export class UpdateCotizacionCommand {
     public readonly meses_garantia?: number,
     public readonly observaciones_garantia?: string,
     public readonly extras?: {
+      atencion_a_nombre?: string | null;
+      atencion_a_cargo?: string | null;
       equipos_ids?: number[];
       tipo_cotizacion?: string;
       moneda?: string;
@@ -30,6 +32,7 @@ export class UpdateCotizacionCommand {
       aiu_utilidad_porcentaje?: number;
       iva_sobre_utilidad_aiu?: boolean;
       modo_agrupacion_pdf?: string;
+      mostrar_desglose_precios?: boolean;
     },
   ) {}
 }

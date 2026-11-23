@@ -21,6 +21,8 @@ export class CreateCotizacionCommand {
     public readonly meses_garantia?: number,
     public readonly observaciones_garantia?: string,
     public readonly extras?: {
+      atencion_a_nombre?: string | null;
+      atencion_a_cargo?: string | null;
       equipos_ids?: number[];
       tipo_cotizacion?: string;
       id_plantilla_origen?: number;
@@ -32,6 +34,7 @@ export class CreateCotizacionCommand {
       aiu_utilidad_porcentaje?: number;
       iva_sobre_utilidad_aiu?: boolean;
       modo_agrupacion_pdf?: string;
+      mostrar_desglose_precios?: boolean;
       user_id?: number;
       user_empleado_id?: number | null;
     },

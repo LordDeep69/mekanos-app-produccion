@@ -4,6 +4,12 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
+import { Prisma } from '@prisma/client';
+import {
+  PG_ACCENT_FROM,
+  PG_ACCENT_TO,
+  tokenizeSearchQuery,
+} from '../common/utils/search-tokens.helper';
 import { CreateCatalogoServiciosDto } from './dto/create-catalogo-servicios.dto';
 import { UpdateCatalogoServiciosDto } from './dto/update-catalogo-servicios.dto';
 
@@ -57,20 +63,34 @@ export class CatalogoServiciosService {
         ];
       }
 
-      if (search) {
-        const s = search.trim();
-        const searchConditions = [
-          { nombre_servicio: { contains: s, mode: 'insensitive' } },
-          { codigo_servicio: { contains: s, mode: 'insensitive' } },
-        ];
-        if (where.OR) {
-          where.AND = [
-            { OR: where.OR },
-            { OR: searchConditions },
-          ];
-          delete where.OR;
-        } else {
-          where.OR = searchConditions;
+      if (search && search.trim() !== '') {
+        const tokens = tokenizeSearchQuery(search);
+        if (tokens.length > 0) {
+          const tokenClauses = tokens.map((tok) => {
+            const pattern = `%${tok}%`;
+            return Prisma.sql`(
+              translate(lower(COALESCE(cs.nombre_servicio, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+              OR translate(lower(COALESCE(cs.codigo_servicio, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+              OR translate(lower(COALESCE(cs.categoria::text, '')), ${PG_ACCENT_FROM}, ${PG_ACCENT_TO}) LIKE ${pattern}
+            )`;
+          });
+
+          const matchedRows = await this.prisma.$queryRaw<{ id_servicio: number }[]>(
+            Prisma.sql`
+              SELECT cs.id_servicio
+              FROM catalogo_servicios cs
+              WHERE ${Prisma.join(tokenClauses, ' AND ')}
+            `,
+          );
+
+          const matchedIds = matchedRows.map((r) => r.id_servicio);
+          const searchIdCondition = { id_servicio: { in: matchedIds } };
+          if (where.OR) {
+            where.AND = [{ OR: where.OR }, searchIdCondition];
+            delete where.OR;
+          } else {
+            where.AND = [searchIdCondition];
+          }
         }
       }
       

@@ -787,11 +787,12 @@ export function ArticuloForm({
               <Label htmlFor="tipo_comercial" className="text-xs font-semibold text-gray-700">
                 Tipo Comercial de la Pieza
               </Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { id: 'ORIGINAL', label: 'Original / OEM', icon: '⭐', desc: 'Pieza de fábrica' },
                   { id: 'HOMOLOGADO', label: 'Homologado', icon: '🛡️', desc: 'Certificado OEM' },
                   { id: 'GENERICO', label: 'Genérico', icon: '⚙️', desc: 'Aftermarket' },
+                  { id: 'REMANUFACTURADO', label: 'Remanufacturado', icon: '♻️', desc: 'Reconstruido' },
                 ].map((tc) => {
                   const isSelected = watch('tipo_comercial') === tc.id;
                   return (

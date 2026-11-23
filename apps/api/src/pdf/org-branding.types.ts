@@ -347,3 +347,51 @@ export function formatDateOrg(
     return parsed.toLocaleDateString('es-CO');
   }
 }
+
+/**
+ * Formatea fechas calendario puras (`@db.Date` / `YYYY-MM-DD`) sin desplazamiento por zona horaria.
+ * Evita el desfase de -1 día al formatear `2026-11-22T00:00:00.000Z` en zonas UTC-5.
+ */
+export function formatCalendarDateOrg(
+  date: Date | string | null | undefined,
+  branding?: Partial<OrgBrandingContext> | null,
+): string {
+  if (!date) return 'N/A';
+
+  let year: number;
+  let month: number;
+  let day: number;
+
+  if (typeof date === 'string') {
+    const match = date.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      year = Number(match[1]);
+      month = Number(match[2]);
+      day = Number(match[3]);
+    } else {
+      const parsed = new Date(date);
+      if (isNaN(parsed.getTime())) return 'N/A';
+      year = parsed.getUTCFullYear();
+      month = parsed.getUTCMonth() + 1;
+      day = parsed.getUTCDate();
+    }
+  } else {
+    if (isNaN(date.getTime())) return 'N/A';
+    year = date.getUTCFullYear();
+    month = date.getUTCMonth() + 1;
+    day = date.getUTCDate();
+  }
+
+  const neutralUtc = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  const brand = resolveOrgBranding(branding);
+  try {
+    return new Intl.DateTimeFormat(brand.locale || 'es-CO', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(neutralUtc);
+  } catch {
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+  }
+}

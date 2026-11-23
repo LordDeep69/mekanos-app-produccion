@@ -1,4 +1,5 @@
 import { PrismaService } from '@mekanos/database';
+import { Prisma } from '@prisma/client';
 import {
   BadRequestException,
   Inject,
@@ -252,9 +253,13 @@ export class CotizacionesCpqService {
     dto: GuardarStudioCompletoDto,
     userId?: number,
   ) {
-    await this.assertBorrador(idCotizacion);
-
-    // Pre-cargar costos de catálogo para componentes sin costo explícito
+    const srvIds = Array.from(
+      new Set(
+        (dto.items_servicios || [])
+          .map((s) => s.id_servicio)
+          .filter((id): id is number => typeof id === 'number' && id > 0),
+      ),
+    );
     const compIds = Array.from(
       new Set(
         (dto.items_componentes || [])
@@ -262,150 +267,232 @@ export class CotizacionesCpqService {
           .filter((id): id is number => typeof id === 'number' && id > 0),
       ),
     );
-    const compCatalogoMap = new Map<
-      number,
-      { precio_compra: number; id_tipo_componente: number | null }
-    >();
-    if (compIds.length > 0) {
-      const comps = await this.prisma.catalogo_componentes.findMany({
-        where: { id_componente: { in: compIds } },
-        select: { id_componente: true, precio_compra: true, id_tipo_componente: true },
-      });
-      for (const c of comps) {
-        compCatalogoMap.set(c.id_componente, {
-          precio_compra: Number(c.precio_compra || 0),
-          id_tipo_componente: c.id_tipo_componente,
-        });
+
+    // 1. Pre-lectura paralela única (evita roundtrips secuenciales a BD remota)
+    const [cotActual, orgPol, srvsCat, compsCat] = await Promise.all([
+      this.prisma.cotizaciones.findUnique({
+        where: { id_cotizacion: idCotizacion },
+        select: {
+          id_cotizacion: true,
+          id_estado: true,
+          id_plantilla_origen: true,
+          descuento_porcentaje: true,
+          iva_porcentaje: true,
+          usa_aiu: true,
+          aiu_admin_porcentaje: true,
+          aiu_imprevistos_porcentaje: true,
+          aiu_utilidad_porcentaje: true,
+          iva_sobre_utilidad_aiu: true,
+          cotizaciones_equipos: {
+            select: { id_equipo: true, orden_secuencia: true, notas_alcance: true },
+            orderBy: { orden_secuencia: 'asc' },
+          },
+        },
+      }),
+      this.prisma.configuracion_organizacion
+        .findUnique({
+          where: { id_configuracion: 1 },
+          select: {
+            enable_cpq_governance: true,
+            lock_catalog_unit_price: true,
+            tasa_impuesto_defecto: true,
+          },
+        })
+        .catch(() => null),
+      srvIds.length > 0
+        ? this.prisma.catalogo_servicios.findMany({
+            where: { id_servicio: { in: srvIds } },
+            select: { id_servicio: true, precio_base: true },
+          })
+        : Promise.resolve([]),
+      compIds.length > 0
+        ? this.prisma.catalogo_componentes.findMany({
+            where: { id_componente: { in: compIds } },
+            select: {
+              id_componente: true,
+              precio_compra: true,
+              precio_venta: true,
+              id_tipo_componente: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    if (!cotActual) {
+      throw new NotFoundException(`Cotización ${idCotizacion} no encontrada`);
+    }
+    if (cotActual.id_estado !== 1) {
+      throw new BadRequestException(
+        'Solo se pueden editar cotizaciones en estado BORRADOR. Use "Reabrir como nueva versión" para modificar.',
+      );
+    }
+
+    const lockCatalogUnitPrice = Boolean(
+      orgPol?.enable_cpq_governance && orgPol?.lock_catalog_unit_price,
+    );
+
+    const srvCatalogoMap = new Map<number, { precio_base: number }>();
+    if (lockCatalogUnitPrice) {
+      for (const s of srvsCat) {
+        srvCatalogoMap.set(s.id_servicio, { precio_base: Number(s.precio_base || 0) });
       }
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      // 1. Cabecera
-      const headerData: any = {
-        fecha_modificacion: new Date(),
-        ...(userId ? { modificado_por: userId } : {}),
-      };
-      if (dto.id_cliente !== undefined) headerData.id_cliente = dto.id_cliente;
-      if (dto.id_sede !== undefined) headerData.id_sede = dto.id_sede;
-      if (dto.elaborada_por !== undefined) headerData.elaborada_por = dto.elaborada_por;
-      if (dto.tipo_cotizacion !== undefined) headerData.tipo_cotizacion = dto.tipo_cotizacion;
-      if (dto.id_plantilla_origen !== undefined) {
-        headerData.id_plantilla_origen = dto.id_plantilla_origen;
-        if (dto.id_plantilla_origen) {
-          const prevCot = await tx.cotizaciones.findUnique({
-            where: { id_cotizacion: idCotizacion },
-            select: { id_plantilla_origen: true },
-          });
-          if (prevCot?.id_plantilla_origen !== dto.id_plantilla_origen) {
-            await tx.plantillas_cotizacion
-              .update({
-                where: { id_plantilla: dto.id_plantilla_origen },
-                data: { veces_usada: { increment: 1 } },
-              })
-              .catch(() => undefined);
-          }
-        }
-      }
-      if (dto.moneda !== undefined) headerData.moneda = dto.moneda;
-      if (dto.fecha_cotizacion !== undefined)
-        headerData.fecha_cotizacion = new Date(dto.fecha_cotizacion);
-      if (dto.fecha_vencimiento !== undefined)
-        headerData.fecha_vencimiento = new Date(dto.fecha_vencimiento);
-      if (dto.fecha_cotizacion && dto.fecha_vencimiento) {
-        headerData.dias_validez = Math.max(
-          1,
-          Math.round(
-            (new Date(dto.fecha_vencimiento).getTime() -
-              new Date(dto.fecha_cotizacion).getTime()) /
-              86400_000,
-          ),
-        );
-      }
-      if (dto.asunto !== undefined) headerData.asunto = dto.asunto;
-      if (dto.descripcion_general !== undefined)
-        headerData.descripcion_general = dto.descripcion_general;
-      if (dto.alcance_trabajo !== undefined) headerData.alcance_trabajo = dto.alcance_trabajo;
-      if (dto.exclusiones !== undefined) headerData.exclusiones = dto.exclusiones;
-      if (dto.descuento_porcentaje !== undefined)
-        headerData.descuento_porcentaje = dto.descuento_porcentaje;
-      if (dto.iva_porcentaje !== undefined) headerData.iva_porcentaje = dto.iva_porcentaje;
-      if (dto.usa_aiu !== undefined) headerData.usa_aiu = dto.usa_aiu;
-      if (dto.aiu_admin_porcentaje !== undefined)
-        headerData.aiu_admin_porcentaje = dto.aiu_admin_porcentaje;
-      if (dto.aiu_imprevistos_porcentaje !== undefined)
-        headerData.aiu_imprevistos_porcentaje = dto.aiu_imprevistos_porcentaje;
-      if (dto.aiu_utilidad_porcentaje !== undefined)
-        headerData.aiu_utilidad_porcentaje = dto.aiu_utilidad_porcentaje;
-      if (dto.iva_sobre_utilidad_aiu !== undefined)
-        headerData.iva_sobre_utilidad_aiu = dto.iva_sobre_utilidad_aiu;
-      if (dto.modo_agrupacion_pdf !== undefined)
-        headerData.modo_agrupacion_pdf = dto.modo_agrupacion_pdf;
-      if (dto.forma_pago !== undefined) headerData.forma_pago = dto.forma_pago;
-      if (dto.terminos_condiciones !== undefined)
-        headerData.terminos_condiciones = dto.terminos_condiciones;
-      if (dto.meses_garantia !== undefined) headerData.meses_garantia = dto.meses_garantia;
-      if (dto.observaciones_garantia !== undefined)
-        headerData.observaciones_garantia = dto.observaciones_garantia;
-      if (dto.tiempo_estimado_dias !== undefined)
-        headerData.tiempo_estimado_dias = dto.tiempo_estimado_dias;
-
-      // 2. Equipos N:M
-      if (dto.equipos !== undefined || dto.equipos_ids !== undefined) {
-        const vistos = new Set<number>();
-        const eqRows: Array<{ id_equipo: number; orden_secuencia: number; notas_alcance: string | null }> = [];
-        if (dto.equipos) {
-          dto.equipos.forEach((eq, idx) => {
-            if (Number.isInteger(eq.id_equipo) && eq.id_equipo > 0 && !vistos.has(eq.id_equipo)) {
-              vistos.add(eq.id_equipo);
-              eqRows.push({
-                id_equipo: eq.id_equipo,
-                orden_secuencia: eq.orden_secuencia ?? idx + 1,
-                notas_alcance: eq.notas_alcance ?? null,
-              });
-            }
-          });
-        } else if (dto.equipos_ids) {
-          dto.equipos_ids.forEach((idEq, idx) => {
-            if (Number.isInteger(idEq) && idEq > 0 && !vistos.has(idEq)) {
-              vistos.add(idEq);
-              eqRows.push({ id_equipo: idEq, orden_secuencia: idx + 1, notas_alcance: null });
-            }
-          });
-        }
-        await tx.cotizaciones_equipos.deleteMany({ where: { id_cotizacion: idCotizacion } });
-        if (eqRows.length > 0) {
-          await tx.cotizaciones_equipos.createMany({
-            data: eqRows.map((e) => ({ id_cotizacion: idCotizacion, ...e })),
-          });
-        }
-        headerData.id_equipo = eqRows.length > 0 ? eqRows[0].id_equipo : null;
-      }
-
-      await tx.cotizaciones.update({
-        where: { id_cotizacion: idCotizacion },
-        data: headerData,
+    const compCatalogoMap = new Map<
+      number,
+      { precio_compra: number; precio_venta: number; id_tipo_componente: number | null }
+    >();
+    for (const c of compsCat) {
+      compCatalogoMap.set(c.id_componente, {
+        precio_compra: Number(c.precio_compra || 0),
+        precio_venta: Number(c.precio_venta || 0),
+        id_tipo_componente: c.id_tipo_componente,
       });
+    }
 
-      // 3. Servicios
-      if (dto.items_servicios !== undefined) {
-        await tx.items_cotizacion_servicios.deleteMany({
-          where: { id_cotizacion: idCotizacion },
+    // 2. Preparación de cabecera y lote atómico batch (1 ciclo transaccional sin roundtrips por línea)
+    const headerData: any = {
+      fecha_modificacion: new Date(),
+      ...(userId ? { modificado_por: userId } : {}),
+    };
+    if (dto.id_cliente !== undefined) headerData.id_cliente = dto.id_cliente;
+    if (dto.id_sede !== undefined) headerData.id_sede = dto.id_sede;
+    if (dto.atencion_a_nombre !== undefined) {
+      headerData.atencion_a_nombre = dto.atencion_a_nombre?.trim()
+        ? dto.atencion_a_nombre.trim().slice(0, 200)
+        : null;
+    }
+    if (dto.atencion_a_cargo !== undefined) {
+      headerData.atencion_a_cargo = dto.atencion_a_cargo?.trim()
+        ? dto.atencion_a_cargo.trim().slice(0, 120)
+        : null;
+    }
+    if (dto.elaborada_por !== undefined) headerData.elaborada_por = dto.elaborada_por;
+    if (dto.tipo_cotizacion !== undefined) {
+      headerData.tipo_cotizacion = dto.tipo_cotizacion.trim().slice(0, 40) || 'SERVICIO_TECNICO';
+    }
+    const debeIncrementarPlantilla =
+      dto.id_plantilla_origen !== undefined &&
+      Boolean(dto.id_plantilla_origen) &&
+      cotActual.id_plantilla_origen !== dto.id_plantilla_origen;
+    if (dto.id_plantilla_origen !== undefined) {
+      headerData.id_plantilla_origen = dto.id_plantilla_origen;
+    }
+    if (dto.moneda !== undefined) headerData.moneda = dto.moneda;
+    if (dto.fecha_cotizacion !== undefined)
+      headerData.fecha_cotizacion = new Date(dto.fecha_cotizacion);
+    if (dto.fecha_vencimiento !== undefined)
+      headerData.fecha_vencimiento = new Date(dto.fecha_vencimiento);
+    if (dto.fecha_cotizacion && dto.fecha_vencimiento) {
+      headerData.dias_validez = Math.max(
+        1,
+        Math.round(
+          (new Date(dto.fecha_vencimiento).getTime() -
+            new Date(dto.fecha_cotizacion).getTime()) /
+            86400_000,
+        ),
+      );
+    }
+    if (dto.asunto !== undefined) headerData.asunto = dto.asunto;
+    if (dto.descripcion_general !== undefined)
+      headerData.descripcion_general = dto.descripcion_general;
+    if (dto.alcance_trabajo !== undefined) headerData.alcance_trabajo = dto.alcance_trabajo;
+    if (dto.exclusiones !== undefined) headerData.exclusiones = dto.exclusiones;
+    if (dto.descuento_porcentaje !== undefined)
+      headerData.descuento_porcentaje = dto.descuento_porcentaje;
+    if (dto.iva_porcentaje !== undefined) headerData.iva_porcentaje = dto.iva_porcentaje;
+    if (dto.usa_aiu !== undefined) headerData.usa_aiu = dto.usa_aiu;
+    if (dto.aiu_admin_porcentaje !== undefined)
+      headerData.aiu_admin_porcentaje = dto.aiu_admin_porcentaje;
+    if (dto.aiu_imprevistos_porcentaje !== undefined)
+      headerData.aiu_imprevistos_porcentaje = dto.aiu_imprevistos_porcentaje;
+    if (dto.aiu_utilidad_porcentaje !== undefined)
+      headerData.aiu_utilidad_porcentaje = dto.aiu_utilidad_porcentaje;
+    if (dto.iva_sobre_utilidad_aiu !== undefined)
+      headerData.iva_sobre_utilidad_aiu = dto.iva_sobre_utilidad_aiu;
+    if (dto.modo_agrupacion_pdf !== undefined)
+      headerData.modo_agrupacion_pdf = dto.modo_agrupacion_pdf;
+    if (dto.mostrar_desglose_precios !== undefined)
+      headerData.mostrar_desglose_precios = Boolean(dto.mostrar_desglose_precios);
+    if (dto.forma_pago !== undefined) headerData.forma_pago = dto.forma_pago;
+    if (dto.terminos_condiciones !== undefined)
+      headerData.terminos_condiciones = dto.terminos_condiciones;
+    if (dto.meses_garantia !== undefined) headerData.meses_garantia = dto.meses_garantia;
+    if (dto.observaciones_garantia !== undefined)
+      headerData.observaciones_garantia = dto.observaciones_garantia;
+    if (dto.tiempo_estimado_dias !== undefined)
+      headerData.tiempo_estimado_dias = dto.tiempo_estimado_dias;
+
+    const txOps: Prisma.PrismaPromise<any>[] = [];
+
+    // Equipos N:M (solo reescribir si cambió la lista de equipos vinculados)
+    let eqRowsToInsert: Array<{
+      id_equipo: number;
+      orden_secuencia: number;
+      notas_alcance: string | null;
+    }> | null = null;
+    let shouldDeleteEquipos = false;
+
+    if (dto.equipos !== undefined || dto.equipos_ids !== undefined) {
+      const vistos = new Set<number>();
+      const eqRows: Array<{ id_equipo: number; orden_secuencia: number; notas_alcance: string | null }> = [];
+      if (dto.equipos) {
+        dto.equipos.forEach((eq, idx) => {
+          if (Number.isInteger(eq.id_equipo) && eq.id_equipo > 0 && !vistos.has(eq.id_equipo)) {
+            vistos.add(eq.id_equipo);
+            eqRows.push({
+              id_equipo: eq.id_equipo,
+              orden_secuencia: eq.orden_secuencia ?? idx + 1,
+              notas_alcance: eq.notas_alcance ?? null,
+            });
+          }
         });
-        if (dto.items_servicios.length > 0) {
-          await tx.items_cotizacion_servicios.createMany({
-            data: dto.items_servicios.map((s, idx) => ({
+      } else if (dto.equipos_ids) {
+        dto.equipos_ids.forEach((idEq, idx) => {
+          if (Number.isInteger(idEq) && idEq > 0 && !vistos.has(idEq)) {
+            vistos.add(idEq);
+            eqRows.push({ id_equipo: idEq, orden_secuencia: idx + 1, notas_alcance: null });
+          }
+        });
+      }
+      const prevEq = cotActual.cotizaciones_equipos || [];
+      const equiposCambiaron =
+        prevEq.length !== eqRows.length ||
+        eqRows.some(
+          (e, i) =>
+            prevEq[i]?.id_equipo !== e.id_equipo ||
+            prevEq[i]?.orden_secuencia !== e.orden_secuencia ||
+            (prevEq[i]?.notas_alcance ?? null) !== e.notas_alcance,
+        );
+      if (equiposCambiaron) {
+        shouldDeleteEquipos = true;
+        eqRowsToInsert = eqRows;
+      }
+      headerData.id_equipo = eqRows.length > 0 ? eqRows[0].id_equipo : null;
+    }
+
+    // Preparar filas normalizadas de Servicios, Componentes y Otros (necesarias tanto para BD como cálculo en memoria)
+    const serviciosData =
+      dto.items_servicios !== undefined
+        ? dto.items_servicios.map((s, idx) => {
+            const srvCat = s.id_servicio ? srvCatalogoMap.get(s.id_servicio) : undefined;
+            const precioEfectivo =
+              lockCatalogUnitPrice && srvCat && srvCat.precio_base > 0
+                ? srvCat.precio_base
+                : s.precio_unitario;
+            return {
               id_cotizacion: idCotizacion,
               id_servicio: s.id_servicio ?? null,
               id_equipo: s.id_equipo ?? null,
               descripcion_personalizada: s.descripcion_personalizada ?? null,
               cantidad: s.cantidad,
-              unidad: s.unidad || 'servicio',
+              unidad: (s.unidad || 'servicio').trim().slice(0, 20),
               costo_unitario: s.costo_unitario ?? 0,
-              precio_unitario: s.precio_unitario,
+              precio_unitario: precioEfectivo,
               descuento_porcentaje: s.descuento_porcentaje ?? 0,
               subtotal: this.calcularSubtotalLinea(
                 s.cantidad,
-                s.precio_unitario,
+                precioEfectivo,
                 s.descuento_porcentaje ?? 0,
               ),
               es_opcional: Boolean(s.es_opcional),
@@ -415,100 +502,249 @@ export class CotizacionesCpqService {
               justificacion_precio: s.justificacion_precio ?? null,
               orden_item: s.orden_item ?? idx + 1,
               registrado_por: userId ?? null,
-            })),
-          });
-        }
-      }
+            };
+          })
+        : undefined;
 
-      // 4. Componentes / Repuestos
-      if (dto.items_componentes !== undefined) {
-        await tx.items_cotizacion_componentes.deleteMany({
-          where: { id_cotizacion: idCotizacion },
-        });
-        if (dto.items_componentes.length > 0) {
-          await tx.items_cotizacion_componentes.createMany({
-            data: dto.items_componentes.map((c, idx) => {
-              const cat = c.id_componente ? compCatalogoMap.get(c.id_componente) : undefined;
-              return {
-                id_cotizacion: idCotizacion,
-                id_componente: c.id_componente ?? null,
-                id_tipo_componente: c.id_tipo_componente ?? cat?.id_tipo_componente ?? null,
-                id_equipo: c.id_equipo ?? null,
-                descripcion: c.descripcion.trim(),
-                referencia_manual: c.referencia_manual ?? null,
-                marca_manual: c.marca_manual ?? null,
-                cantidad: c.cantidad,
-                unidad: c.unidad || 'unidad',
-                costo_unitario: c.costo_unitario ?? cat?.precio_compra ?? 0,
-                precio_unitario: c.precio_unitario,
-                descuento_porcentaje: c.descuento_porcentaje ?? 0,
-                subtotal: this.calcularSubtotalLinea(
-                  c.cantidad,
-                  c.precio_unitario,
-                  c.descuento_porcentaje ?? 0,
-                ),
-                es_opcional: Boolean(c.es_opcional),
-                iva_aplicable: c.iva_aplicable !== false,
-                seccion_titulo: c.seccion_titulo ?? null,
-                garantia_meses: c.garantia_meses ?? null,
-                observaciones_garantia: c.observaciones_garantia ?? null,
-                observaciones: c.observaciones ?? null,
-                orden_item: c.orden_item ?? idx + 1,
-                registrado_por: userId ?? null,
-              };
-            }),
-          });
-        }
-      }
+    const componentesData =
+      dto.items_componentes !== undefined
+        ? dto.items_componentes.map((c, idx) => {
+            const cat = c.id_componente ? compCatalogoMap.get(c.id_componente) : undefined;
+            const precioEfectivo =
+              lockCatalogUnitPrice && cat && cat.precio_venta > 0
+                ? cat.precio_venta
+                : c.precio_unitario;
+            return {
+              id_cotizacion: idCotizacion,
+              id_componente: c.id_componente ?? null,
+              id_tipo_componente: c.id_tipo_componente ?? cat?.id_tipo_componente ?? null,
+              id_equipo: c.id_equipo ?? null,
+              descripcion: c.descripcion.trim(),
+              referencia_manual: c.referencia_manual ?? null,
+              marca_manual: c.marca_manual ?? null,
+              cantidad: c.cantidad,
+              unidad: (c.unidad || 'unidad').trim().slice(0, 20),
+              costo_unitario: c.costo_unitario ?? cat?.precio_compra ?? 0,
+              precio_unitario: precioEfectivo,
+              descuento_porcentaje: c.descuento_porcentaje ?? 0,
+              subtotal: this.calcularSubtotalLinea(
+                c.cantidad,
+                precioEfectivo,
+                c.descuento_porcentaje ?? 0,
+              ),
+              es_opcional: Boolean(c.es_opcional),
+              iva_aplicable: c.iva_aplicable !== false,
+              seccion_titulo: c.seccion_titulo ?? null,
+              garantia_meses: c.garantia_meses ?? null,
+              observaciones_garantia: c.observaciones_garantia ?? null,
+              observaciones: c.observaciones ?? null,
+              orden_item: c.orden_item ?? idx + 1,
+              registrado_por: userId ?? null,
+            };
+          })
+        : undefined;
 
-      // 5. Otros Rubros (Logística / Viáticos / Pólizas)
-      if (dto.items_otros !== undefined) {
-        await tx.items_cotizacion_otros.deleteMany({
-          where: { id_cotizacion: idCotizacion },
-        });
-        if (dto.items_otros.length > 0) {
-          await tx.items_cotizacion_otros.createMany({
-            data: dto.items_otros.map((o, idx) => {
-              const cant = o.cantidad ?? 1;
-              const pu = o.precio_unitario ?? 0;
-              const desc = o.descuento_porcentaje ?? 0;
-              return {
-                id_cotizacion: idCotizacion,
-                id_equipo: o.id_equipo ?? null,
-                categoria_rubro: (o.categoria_rubro || 'OTRO').toUpperCase(),
-                descripcion: o.descripcion.trim(),
-                detalle_calculo: o.detalle_calculo ?? null,
-                cantidad: cant,
-                unidad: o.unidad || 'global',
-                costo_unitario: o.costo_unitario ?? 0,
-                precio_unitario: pu,
-                descuento_porcentaje: desc,
-                subtotal: this.calcularSubtotalLinea(cant, pu, desc),
-                visible_cliente: o.visible_cliente !== false,
-                es_opcional: Boolean(o.es_opcional),
-                iva_aplicable: o.iva_aplicable !== false,
-                orden_item: o.orden_item ?? idx + 1,
-                observaciones: o.observaciones ?? null,
-                registrado_por: userId ?? null,
-              };
-            }),
-          });
-        }
-      }
+    const otrosData =
+      dto.items_otros !== undefined
+        ? dto.items_otros.map((o, idx) => {
+            const cant = o.cantidad ?? 1;
+            const pu = o.precio_unitario ?? 0;
+            const desc = o.descuento_porcentaje ?? 0;
+            return {
+              id_cotizacion: idCotizacion,
+              id_equipo: o.id_equipo ?? null,
+              categoria_rubro: (o.categoria_rubro || 'OTRO').toUpperCase(),
+              descripcion: o.descripcion.trim(),
+              detalle_calculo: o.detalle_calculo ?? null,
+              cantidad: cant,
+              unidad: (o.unidad || 'global').trim().slice(0, 20),
+              costo_unitario: o.costo_unitario ?? 0,
+              precio_unitario: pu,
+              descuento_porcentaje: desc,
+              subtotal: this.calcularSubtotalLinea(cant, pu, desc),
+              visible_cliente: o.visible_cliente !== false,
+              es_opcional: Boolean(o.es_opcional),
+              iva_aplicable: o.iva_aplicable !== false,
+              orden_item: o.orden_item ?? idx + 1,
+              observaciones: o.observaciones ?? null,
+              registrado_por: userId ?? null,
+            };
+          })
+        : undefined;
+
+    // Cuando el Studio envía las 3 listas completas, calculamos los totales exactos en memoria (0 ms)
+    // y los persistimos atómicamente dentro del mismo UPDATE (ahorra 5 lecturas + 1 UPDATE a BD remota).
+    const puedeCalcularEnMemoria =
+      serviciosData !== undefined && componentesData !== undefined && otrosData !== undefined;
+
+    if (puedeCalcularEnMemoria) {
+      const totales = this.calculoService.calcularTotalesEnMemoria({
+        cotizacion: {
+          descuento_porcentaje:
+            dto.descuento_porcentaje !== undefined
+              ? dto.descuento_porcentaje
+              : cotActual.descuento_porcentaje,
+          iva_porcentaje:
+            dto.iva_porcentaje !== undefined ? dto.iva_porcentaje : cotActual.iva_porcentaje,
+          usa_aiu: dto.usa_aiu !== undefined ? dto.usa_aiu : cotActual.usa_aiu,
+          aiu_admin_porcentaje:
+            dto.aiu_admin_porcentaje !== undefined
+              ? dto.aiu_admin_porcentaje
+              : cotActual.aiu_admin_porcentaje,
+          aiu_imprevistos_porcentaje:
+            dto.aiu_imprevistos_porcentaje !== undefined
+              ? dto.aiu_imprevistos_porcentaje
+              : cotActual.aiu_imprevistos_porcentaje,
+          aiu_utilidad_porcentaje:
+            dto.aiu_utilidad_porcentaje !== undefined
+              ? dto.aiu_utilidad_porcentaje
+              : cotActual.aiu_utilidad_porcentaje,
+          iva_sobre_utilidad_aiu:
+            dto.iva_sobre_utilidad_aiu !== undefined
+              ? dto.iva_sobre_utilidad_aiu
+              : cotActual.iva_sobre_utilidad_aiu,
+        },
+        tasaImpuestoDefecto: orgPol?.tasa_impuesto_defecto,
+        itemsServicios: serviciosData,
+        itemsComponentes: componentesData,
+        itemsOtros: otrosData,
+      });
+
+      Object.assign(headerData, {
+        subtotal_servicios: totales.subtotal_servicios,
+        subtotal_componentes: totales.subtotal_componentes,
+        subtotal_otros: totales.subtotal_otros,
+        subtotal_general: totales.subtotal_general,
+        subtotal_opcionales: totales.subtotal_opcionales,
+        descuento_valor: totales.descuento_valor,
+        subtotal_con_descuento: totales.subtotal_con_descuento,
+        aiu_admin_valor: totales.aiu_admin_valor,
+        aiu_imprevistos_valor: totales.aiu_imprevistos_valor,
+        aiu_utilidad_valor: totales.aiu_utilidad_valor,
+        aiu_valor_total: totales.aiu_valor_total,
+        iva_valor: totales.iva_valor,
+        total_cotizacion: totales.total_cotizacion,
+        costo_total_estimado: totales.costo_total_estimado,
+        utilidad_bruta_estimada: totales.utilidad_bruta_estimada,
+        margen_bruto_porcentaje: totales.margen_bruto_porcentaje,
+      });
+    }
+
+    // Un solo CTE PostgreSQL elimina las tablas hijas modificadas en 1 único roundtrip ACID
+    const deleteCtes: Prisma.Sql[] = [];
+    if (shouldDeleteEquipos) {
+      deleteCtes.push(
+        Prisma.sql`del_eq AS (DELETE FROM cotizaciones_equipos WHERE id_cotizacion = ${idCotizacion})`,
+      );
+    }
+    if (serviciosData !== undefined) {
+      deleteCtes.push(
+        Prisma.sql`del_srv AS (DELETE FROM items_cotizacion_servicios WHERE id_cotizacion = ${idCotizacion})`,
+      );
+    }
+    if (componentesData !== undefined) {
+      deleteCtes.push(
+        Prisma.sql`del_cmp AS (DELETE FROM items_cotizacion_componentes WHERE id_cotizacion = ${idCotizacion})`,
+      );
+    }
+    if (otrosData !== undefined) {
+      deleteCtes.push(
+        Prisma.sql`del_otr AS (DELETE FROM items_cotizacion_otros WHERE id_cotizacion = ${idCotizacion})`,
+      );
+    }
+    if (deleteCtes.length > 0) {
+      txOps.push(
+        this.prisma.$executeRaw(Prisma.sql`WITH ${Prisma.join(deleteCtes, ', ')} SELECT 1`),
+      );
+    }
+
+    txOps.push(
+      this.prisma.cotizaciones.update({
+        where: { id_cotizacion: idCotizacion },
+        data: headerData,
+      }),
+    );
+
+    if (eqRowsToInsert && eqRowsToInsert.length > 0) {
+      txOps.push(
+        this.prisma.cotizaciones_equipos.createMany({
+          data: eqRowsToInsert.map((e) => ({ id_cotizacion: idCotizacion, ...e })),
+        }),
+      );
+    }
+
+    if (serviciosData && serviciosData.length > 0) {
+      txOps.push(this.prisma.items_cotizacion_servicios.createMany({ data: serviciosData }));
+    }
+
+    if (componentesData && componentesData.length > 0) {
+      txOps.push(this.prisma.items_cotizacion_componentes.createMany({ data: componentesData }));
+    }
+
+    if (otrosData && otrosData.length > 0) {
+      txOps.push(this.prisma.items_cotizacion_otros.createMany({ data: otrosData }));
+    }
+
+    await this.prisma.$transaction(txOps);
+
+    if (!puedeCalcularEnMemoria) {
+      await this.calculoService.recalcularTotales(idCotizacion);
+    }
+
+    const [cotActualizada] = await Promise.all([
+      this.cotizacionesRepository.findById(idCotizacion, {
+        cliente: true,
+        sede: true,
+        equipo: true,
+        estado: true,
+        items_servicios: true,
+        items_componentes: true,
+        aprobaciones: true,
+        historial_envios: true,
+      }),
+      debeIncrementarPlantilla && dto.id_plantilla_origen
+        ? this.prisma.plantillas_cotizacion
+            .update({
+              where: { id_plantilla: dto.id_plantilla_origen },
+              data: { veces_usada: { increment: 1 } },
+            })
+            .catch(() => undefined)
+        : Promise.resolve(),
+    ]);
+
+    return cotActualizada;
+  }
+
+  /**
+   * Actualización ultraligera de preferencia visual PDF (`mostrar_desglose_precios`),
+   * sin alterar montos ni ítems de la cotización.
+   */
+  async actualizarPresentacionPdf(
+    idCotizacion: number,
+    mostrarDesglosePrecios: boolean,
+    userId?: number,
+  ) {
+    const existe = await this.prisma.cotizaciones.findUnique({
+      where: { id_cotizacion: idCotizacion },
+      select: { id_cotizacion: true },
     });
-
-    await this.calculoService.recalcularTotales(idCotizacion);
-
-    return this.cotizacionesRepository.findById(idCotizacion, {
-      cliente: true,
-      sede: true,
-      equipo: true,
-      estado: true,
-      items_servicios: true,
-      items_componentes: true,
-      aprobaciones: true,
-      historial_envios: true,
+    if (!existe) {
+      throw new NotFoundException(`Cotización ${idCotizacion} no encontrada`);
+    }
+    const updated = await this.prisma.cotizaciones.update({
+      where: { id_cotizacion: idCotizacion },
+      data: {
+        mostrar_desglose_precios: Boolean(mostrarDesglosePrecios),
+        fecha_modificacion: new Date(),
+        ...(userId ? { modificado_por: userId } : {}),
+      },
+      select: {
+        id_cotizacion: true,
+        mostrar_desglose_precios: true,
+        fecha_modificacion: true,
+      },
     });
+    return updated;
   }
 
   // ==================== REABRIR BORRADOR (CON SNAPSHOT DE VERSIÓN) ====================
@@ -611,6 +847,8 @@ export class CotizacionesCpqService {
           id_cliente: origen.id_cliente,
           id_sede: origen.id_sede,
           id_equipo: origen.id_equipo,
+          atencion_a_nombre: origen.atencion_a_nombre,
+          atencion_a_cargo: origen.atencion_a_cargo,
           tipo_cotizacion: origen.tipo_cotizacion,
           id_plantilla_origen: origen.id_plantilla_origen,
           moneda: origen.moneda,
@@ -630,6 +868,7 @@ export class CotizacionesCpqService {
           iva_sobre_utilidad_aiu: origen.iva_sobre_utilidad_aiu,
           iva_porcentaje: origen.iva_porcentaje,
           modo_agrupacion_pdf: origen.modo_agrupacion_pdf,
+          mostrar_desglose_precios: Boolean(origen.mostrar_desglose_precios ?? false),
           forma_pago: origen.forma_pago,
           terminos_condiciones: origen.terminos_condiciones,
           meses_garantia: origen.meses_garantia,
@@ -1239,6 +1478,13 @@ export class CotizacionesCpqService {
         numeroOrden = formatCorrelativeCode(safePrefix, year, reserved.sequence, 4);
       }
 
+      const rawPrioridad = String(dto.prioridad || 'NORMAL').toUpperCase();
+      const prioridadValida: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA' = (
+        ['NORMAL', 'ALTA', 'URGENTE', 'EMERGENCIA'] as const
+      ).includes(rawPrioridad as any)
+        ? (rawPrioridad as 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA')
+        : 'NORMAL';
+
       const os = await tx.ordenes_servicio.create({
         data: {
           numero_orden: numeroOrden,
@@ -1247,7 +1493,7 @@ export class CotizacionesCpqService {
           id_equipo: equiposIds[0],
           id_tipo_servicio: idTipoServicio,
           fecha_programada: dto.fecha_programada ? new Date(dto.fecha_programada) : new Date(),
-          prioridad: (dto.prioridad as any) || 'NORMAL',
+          prioridad: prioridadValida,
           origen_solicitud: 'PROGRAMADO',
           id_tecnico_asignado: dto.id_tecnico_asignado ?? null,
           fecha_asignacion: dto.id_tecnico_asignado ? new Date() : null,

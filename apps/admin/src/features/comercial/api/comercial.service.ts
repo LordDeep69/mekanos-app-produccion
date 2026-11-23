@@ -131,6 +131,8 @@ export interface CotizacionRecord {
   id_cliente: number;
   id_sede?: number | null;
   id_equipo?: number | null;
+  atencion_a_nombre?: string | null;
+  atencion_a_cargo?: string | null;
   tipo_cotizacion?: string;
   id_plantilla_origen?: number | null;
   id_propuesta_origen?: number | null;
@@ -171,6 +173,7 @@ export interface CotizacionRecord {
   orden_compra_cliente?: string | null;
   observaciones_rechazo?: string | null;
   modo_agrupacion_pdf?: string | null;
+  mostrar_desglose_precios?: boolean;
   forma_pago?: string | null;
   terminos_condiciones?: string | null;
   meses_garantia?: number | null;
@@ -178,6 +181,7 @@ export interface CotizacionRecord {
   tiempo_estimado_dias?: number | null;
   id_orden_servicio_generada?: number | null;
   fecha_conversion_os?: string | null;
+  fecha_modificacion?: string | null;
   elaborada_por?: number;
   estado?: CotizacionEstado;
   estados_cotizacion?: CotizacionEstado;
@@ -188,11 +192,18 @@ export interface CotizacionRecord {
       razon_social?: string | null;
       nombre_comercial?: string | null;
       nombre_completo?: string | null;
+      representante_legal?: string | null;
       email_principal?: string | null;
       numero_identificacion?: string | null;
     } | null;
   } | null;
-  sede?: { id_sede: number; nombre_sede: string; email_sede?: string | null } | null;
+  sede?: {
+    id_sede: number;
+    nombre_sede: string;
+    email_sede?: string | null;
+    contacto_sede?: string | null;
+    cargo_contacto?: string | null;
+  } | null;
   equipo?: {
     id_equipo?: number;
     codigo_equipo?: string;
@@ -216,6 +227,8 @@ export interface CreateCotizacionPayload {
   id_cliente: number;
   id_sede?: number;
   id_equipo?: number;
+  atencion_a_nombre?: string | null;
+  atencion_a_cargo?: string | null;
   equipos_ids?: number[];
   tipo_cotizacion?: string;
   id_plantilla_origen?: number;
@@ -234,6 +247,7 @@ export interface CreateCotizacionPayload {
   aiu_utilidad_porcentaje?: number;
   iva_sobre_utilidad_aiu?: boolean;
   modo_agrupacion_pdf?: string;
+  mostrar_desglose_precios?: boolean;
   tiempo_estimado_dias?: number;
   forma_pago?: string;
   terminos_condiciones?: string;
@@ -245,6 +259,8 @@ export interface CreateCotizacionPayload {
 export interface GuardarStudioPayload {
   id_cliente?: number;
   id_sede?: number | null;
+  atencion_a_nombre?: string | null;
+  atencion_a_cargo?: string | null;
   elaborada_por?: number;
   tipo_cotizacion?: string;
   id_plantilla_origen?: number | null;
@@ -263,6 +279,7 @@ export interface GuardarStudioPayload {
   aiu_utilidad_porcentaje?: number;
   iva_sobre_utilidad_aiu?: boolean;
   modo_agrupacion_pdf?: string;
+  mostrar_desglose_precios?: boolean;
   forma_pago?: string;
   terminos_condiciones?: string | null;
   meses_garantia?: number;
@@ -898,9 +915,31 @@ export async function rechazarCotizacionCliente(
   return res.data;
 }
 
+export async function actualizarPresentacionPdfCotizacion(
+  id: number,
+  mostrarDesglosePrecios: boolean,
+): Promise<{
+  id_cotizacion: number;
+  mostrar_desglose_precios: boolean;
+  fecha_modificacion?: string;
+}> {
+  const res = await apiClient.patch(`/cotizaciones/${id}/presentacion-pdf`, {
+    mostrar_desglose_precios: mostrarDesglosePrecios,
+  });
+  return res.data;
+}
+
+export async function fetchCotizacionPdfBlob(id: number, forceRefresh = false): Promise<Blob> {
+  const res = await apiClient.get<Blob>(`/cotizaciones/${id}/pdf`, {
+    params: forceRefresh ? { refresh: '1' } : undefined,
+    responseType: 'blob',
+  });
+  return new Blob([res.data], { type: 'application/pdf' });
+}
+
 export async function downloadCotizacionPdf(id: number, numeroCotizacion?: string): Promise<void> {
-  const res = await apiClient.get<Blob>(`/cotizaciones/${id}/pdf`, { responseType: 'blob' });
-  const blobUrl = URL.createObjectURL(res.data);
+  const blob = await fetchCotizacionPdfBlob(id);
+  const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = blobUrl;
   a.download = `${numeroCotizacion || `COTIZACION-${id}`}.pdf`;
