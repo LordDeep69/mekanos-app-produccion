@@ -949,12 +949,18 @@ const generarSeccionInsumosMultiEquipo = (
     { bg: '#fce7f3', border: '#db2777', header: '#be185d' },
   ];
 
+  const esGrupoGeneral = (eq: EvidenciasPorEquipoPDF['equipo']) =>
+    eq.idOrdenEquipo === 0 || eq.ordenSecuencia === 999;
+
   const equiposConInsumos = evidenciasPorEquipo
     .map((grupo, idx) => {
       const { equipo, evidencias } = grupo;
+      const esGeneral = esGrupoGeneral(equipo);
       const nombreEquipo =
         equipo.nombreSistema || equipo.nombreEquipo || `Equipo ${equipo.ordenSecuencia}`;
-      const color = coloresEquipo[idx % coloresEquipo.length];
+      const color = esGeneral
+        ? { bg: '#f8fafc', border: '#64748b', header: '#334155' }
+        : coloresEquipo[idx % coloresEquipo.length];
 
       // ✅ FIX 17-DIC-2025: Buscar evidencia de insumos usando la función precisa
       const evidenciaInsumos = evidencias?.find((e: any) => {
@@ -964,11 +970,18 @@ const generarSeccionInsumosMultiEquipo = (
 
       if (!evidenciaInsumos) return '';
 
+      const headerTexto = esGeneral
+        ? `📦 INSUMOS GENERALES DEL SERVICIO`
+        : `🔧 EQUIPO ${equipo.ordenSecuencia}: ${nombreEquipo.toUpperCase()}${
+            equipo.codigoEquipo
+              ? `<span style="font-weight: normal; font-size: 10px; opacity: 0.9;"> (${equipo.codigoEquipo})</span>`
+              : ''
+          }`;
+
       return `
     <div style="margin-bottom: 15px; border: 2px solid ${color.border}; border-radius: 8px; overflow: hidden;">
       <div style="background: ${color.header}; color: white; padding: 8px 15px; font-weight: bold; font-size: 11px;">
-        🔧 EQUIPO ${equipo.ordenSecuencia}: ${nombreEquipo.toUpperCase()}
-        ${equipo.codigoEquipo ? `<span style="font-weight: normal; font-size: 10px; opacity: 0.9;"> (${equipo.codigoEquipo})</span>` : ''}
+        ${headerTexto}
       </div>
       <div style="padding: 12px; background: ${color.bg};">
         <div class="insumos-photo">
@@ -987,9 +1000,19 @@ const generarSeccionInsumosMultiEquipo = (
 
   if (equiposConInsumos.length === 0) return '';
 
+  const totalRealesInsumos = evidenciasPorEquipo.filter(
+    (g) =>
+      !esGrupoGeneral(g.equipo) &&
+      g.evidencias?.some((e: any) => esEvidenciaInsumos(e.caption || '')),
+  ).length;
+  const subtituloInsumos =
+    totalRealesInsumos > 0
+      ? ` - MULTI-EQUIPOS (${totalRealesInsumos} ${totalRealesInsumos === 1 ? 'equipo' : 'equipos'})`
+      : '';
+
   return `
   <div class="section">
-    <div class="section-title">📦 VERIFICACIÓN DE INSUMOS UTILIZADOS - MULTI-EQUIPOS (${equiposConInsumos.length} equipos)</div>
+    <div class="section-title">📦 VERIFICACIÓN DE INSUMOS UTILIZADOS${subtituloInsumos}</div>
     ${equiposConInsumos.join('')}
   </div>
   `;
@@ -1018,9 +1041,19 @@ const generarEvidenciasMultiEquipo = (
     `;
   }
 
+  const esGrupoGeneral = (eq: EvidenciasPorEquipoPDF['equipo']) =>
+    eq.idOrdenEquipo === 0 || eq.ordenSecuencia === 999;
+
+  const totalEquiposReales = evidenciasPorEquipo.filter(
+    (g) => !esGrupoGeneral(g.equipo),
+  ).length;
+  const etiquetaEquipos =
+    totalEquiposReales === 1 ? '1 equipo' : `${totalEquiposReales} equipos`;
+
   const equiposHTML = evidenciasPorEquipo
     .map((grupo, equipoIdx) => {
       const { equipo, evidencias } = grupo;
+      const esGeneral = esGrupoGeneral(equipo);
       const nombreEquipo =
         equipo.nombreSistema || equipo.nombreEquipo || `Equipo ${equipo.ordenSecuencia}`;
 
@@ -1087,13 +1120,22 @@ const generarEvidenciasMultiEquipo = (
         { bg: '#fef3c7', border: '#d97706', header: '#b45309' },
         { bg: '#fce7f3', border: '#db2777', header: '#be185d' },
       ];
-      const color = coloresEquipo[equipoIdx % coloresEquipo.length];
+      const color = esGeneral
+        ? { bg: '#f8fafc', border: '#64748b', header: '#334155' }
+        : coloresEquipo[equipoIdx % coloresEquipo.length];
+
+      const headerTexto = esGeneral
+        ? `📷 FOTOGRAFÍAS GENERALES DEL SERVICIO`
+        : `⚡ GENERADOR ${equipo.ordenSecuencia}: ${nombreEquipo.toUpperCase()}${
+            equipo.codigoEquipo
+              ? `<span style="font-weight: normal; font-size: 11px; opacity: 0.9;"> (${equipo.codigoEquipo})</span>`
+              : ''
+          }`;
 
       return `
     <div style="margin-bottom: 20px; border: 2px solid ${color.border}; border-radius: 8px; overflow: hidden;">
       <div style="background: ${color.header}; color: white; padding: 10px 15px; font-weight: bold; font-size: 13px;">
-        ⚡ GENERADOR ${equipo.ordenSecuencia}: ${nombreEquipo.toUpperCase()}
-        ${equipo.codigoEquipo ? `<span style="font-weight: normal; font-size: 11px; opacity: 0.9;"> (${equipo.codigoEquipo})</span>` : ''}
+        ${headerTexto}
       </div>
       <div style="padding: 10px; background: ${color.bg};">
         ${tiposHTML || '<div style="text-align: center; color: #666; padding: 10px;">Sin evidencias para este equipo</div>'}
@@ -1105,7 +1147,7 @@ const generarEvidenciasMultiEquipo = (
 
   return `
   <div class="section">
-    <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO - MULTI-EQUIPOS (${evidenciasPorEquipo.length} equipos)</div>
+    <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO - MULTI-EQUIPOS (${etiquetaEquipos})</div>
     ${equiposHTML}
   </div>
 `;

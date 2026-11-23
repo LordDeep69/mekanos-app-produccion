@@ -26,6 +26,7 @@ import { PrismaOrdenServicioRepository } from './infrastructure/prisma-orden-ser
 // Services
 import { FinalizacionOrdenService } from './services/finalizacion-orden.service';
 import { ProgresoRegistroService } from './services/progreso-registro.service';
+import { TransferenciaOrdenService } from './services/transferencia-orden.service';
 
 // Módulos externos (para FinalizarOrden)
 import { ConfigParametrosModule } from '../config-parametros/config-parametros.module';
@@ -82,10 +83,11 @@ import { StorageModule } from '../storage/storage.module';
     GetOrdenByIdHandler,
     GetOrdenesHandler,
 
-    // Services (Finalizacion Completa y Telemetría en Tiempo Real)
+    // Services (Finalizacion Completa, Telemetría y Transferencia Inteligente)
     FinalizacionOrdenService,
     ProgresoRegistroService,
+    TransferenciaOrdenService,
   ],
-  exports: ['IOrdenServicioRepository', ProgresoRegistroService], // Export usando el token y servicio
+  exports: ['IOrdenServicioRepository', ProgresoRegistroService, TransferenciaOrdenService], // Export usando el token y servicio
 })
 export class OrdenesModule { }

@@ -1678,6 +1678,9 @@ export class PdfController {
             idOrdenEquipo: oe.id_orden_equipo,
             ordenSecuencia: oe.orden_secuencia || 1,
             nombreSistema: oe.nombre_sistema || oe.equipos?.nombre_equipo || 'Equipo',
+            codigoEquipo: oe.equipos?.codigo_equipo || undefined,
+            nombreEquipo: oe.equipos?.nombre_equipo || undefined,
+            estado: oe.estado || 'PENDIENTE',
           },
           evidencias: evidenciasEquipo,
         };

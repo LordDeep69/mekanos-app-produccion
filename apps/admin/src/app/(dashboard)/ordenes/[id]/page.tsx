@@ -20,7 +20,6 @@ import {
     getPrioridadColor,
     getTecnicoLabel,
     getTecnicoNombre,
-    transferirDatosOrden,
     useActividadesOrden,
     useAddServicioOrden,
     useAsignarTecnico,
@@ -58,6 +57,7 @@ import { GaleriaFotosGenerales } from '@/features/ordenes/components/galeria-fot
 import { BarraSutilDescargaEvidencias } from '@/features/ordenes/components/descargar-evidencias-modal';
 import { GestionInformeSection } from '@/features/ordenes/components/gestion-informe-section';
 import { HistorialEmailsSection } from '@/features/ordenes/components/historial-emails-section';
+import { TransferirDatosModal } from '@/features/ordenes/components/transferir-datos-modal';
 import { HistorialEstados } from '@/features/ordenes/components/historial-estados';
 import { HorariosServicioSection } from '@/features/ordenes/components/horarios-servicio-section';
 import { MedicionCardAdvanced, ResumenMediciones } from '@/features/ordenes/components/medicion-card-advanced';
@@ -3378,29 +3378,6 @@ export default function OrdenDetallePage() {
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [motivoCancelacion, setMotivoCancelacion] = useState('');
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
-    const [transferSearchText, setTransferSearchText] = useState('');
-    const [transferSearchResults, setTransferSearchResults] = useState<any[]>([]);
-    const [transferSelectedOrder, setTransferSelectedOrder] = useState<any | null>(null);
-    const [transferLoading, setTransferLoading] = useState(false);
-    const [transferSearching, setTransferSearching] = useState(false);
-    // 🛡️ 03-OCT-2026: la clave del payload es `estadisticas` (ver transferirDatosOrden
-    // en ordenes.service.ts). El tipo declaraba `stats`, así que el resumen de
-    // conteos que se muestra al usuario quedaba siempre en undefined aunque la
-    // transferencia hubiera copiado todo correctamente. Tipo explícito para que
-    // TypeScript detecte esta clase de desalineación en el futuro.
-    const [transferResult, setTransferResult] = useState<{
-        success: boolean;
-        message: string;
-        estadisticas?: {
-            camposDirectos: boolean;
-            ordenesEquipos: number;
-            actividadesEjecutadas: number;
-            evidenciasFotograficas: number;
-            medicionesServicio: number;
-            componentesUsados: number;
-            ordenesActividadesPlan: number;
-        };
-    } | null>(null);
 
     const router = useRouter();
     const { data, isLoading, isError, refetch } = useOrden(id);
@@ -3460,49 +3437,6 @@ export default function OrdenDetallePage() {
             refetch();
         } catch (error) {
             console.error('Error al cancelar orden:', error);
-        }
-    };
-
-    // ✅ FIX 13-MAR-2026: Buscar órdenes para transferencia
-    const handleTransferSearch = async () => {
-        if (!transferSearchText.trim()) return;
-        setTransferSearching(true);
-        setTransferSelectedOrder(null);
-        try {
-            const result = await getOrdenes({ busqueda: transferSearchText.trim(), limit: 10 });
-            const filtradas = (result.data || []).filter((o: any) => o.id_orden_servicio !== orden?.id_orden_servicio);
-            setTransferSearchResults(filtradas);
-        } catch (err) {
-            console.error('Error buscando órdenes:', err);
-            setTransferSearchResults([]);
-        } finally {
-            setTransferSearching(false);
-        }
-    };
-
-    // ✅ FIX 13-MAR-2026: Ejecutar transferencia de datos
-    const handleTransferirDatos = async () => {
-        if (!orden || !transferSelectedOrder) return;
-        setTransferLoading(true);
-        setTransferResult(null);
-        try {
-            const result = await transferirDatosOrden(
-                orden.id_orden_servicio,
-                transferSelectedOrder.id_orden_servicio
-            );
-            setTransferResult({
-                success: true,
-                message: result.message,
-                estadisticas: result.estadisticas,
-            });
-            refetch();
-        } catch (error: any) {
-            setTransferResult({
-                success: false,
-                message: error?.response?.data?.message || error?.message || 'Error al transferir datos',
-            });
-        } finally {
-            setTransferLoading(false);
         }
     };
 
@@ -3762,13 +3696,7 @@ export default function OrdenDetallePage() {
                         <ActionButton
                             icon={ArrowRightLeft}
                             label="Transferir Datos"
-                            onClick={() => {
-                                setIsTransferModalOpen(true);
-                                setTransferSearchText('');
-                                setTransferSearchResults([]);
-                                setTransferSelectedOrder(null);
-                                setTransferResult(null);
-                            }}
+                            onClick={() => setIsTransferModalOpen(true)}
                         />
                     )}
                     <ActionButton
@@ -3809,210 +3737,15 @@ export default function OrdenDetallePage() {
                 orden={orden}
             />
 
-            {/* Modal de Transferencia de Datos */}
-            {isTransferModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden">
-                        <div className="p-5 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-                            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                                <ArrowRightLeft className="h-5 w-5 text-blue-600" />
-                                Transferir Datos a esta Orden
-                            </h2>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Copiar todos los datos de otra orden hacia <strong className="font-mono text-blue-700">{orden.numero_orden}</strong>
-                            </p>
-                        </div>
-
-                        {/* Resultado */}
-                        {transferResult ? (
-                            <div className="p-6 space-y-4">
-                                <div className={cn(
-                                    "p-4 rounded-xl border flex items-start gap-3",
-                                    transferResult.success
-                                        ? "bg-green-50 border-green-200"
-                                        : "bg-red-50 border-red-200"
-                                )}>
-                                    {transferResult.success ? (
-                                        <CheckCircle2 className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />
-                                    ) : (
-                                        <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
-                                    )}
-                                    <div>
-                                        <p className={cn("font-bold", transferResult.success ? "text-green-800" : "text-red-800")}>
-                                            {transferResult.success ? 'Transferencia Exitosa' : 'Error en Transferencia'}
-                                        </p>
-                                        <p className={cn("text-sm mt-1", transferResult.success ? "text-green-700" : "text-red-700")}>
-                                            {transferResult.message}
-                                        </p>
-                                        {transferResult.estadisticas && (
-                                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                                                {/* Nota: `ordenesEquipos` siempre es 0 por diseño —
-                                                    los equipos NO se transfieren. Se conserva la fila
-                                                    para no cambiar el layout, con el valor real. */}
-                                                <span className="text-green-700">Equipos: <strong>{transferResult.estadisticas.ordenesEquipos}</strong> <span className="text-green-500">(conservados)</span></span>
-                                                <span className="text-green-700">Actividades: <strong>{transferResult.estadisticas.actividadesEjecutadas}</strong></span>
-                                                <span className="text-green-700">Evidencias: <strong>{transferResult.estadisticas.evidenciasFotograficas}</strong></span>
-                                                <span className="text-green-700">Mediciones: <strong>{transferResult.estadisticas.medicionesServicio}</strong></span>
-                                                <span className="text-green-700">Componentes: <strong>{transferResult.estadisticas.componentesUsados}</strong></span>
-                                                <span className="text-green-700">Plan Act.: <strong>{transferResult.estadisticas.ordenesActividadesPlan}</strong></span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={() => { setIsTransferModalOpen(false); setTransferResult(null); }}
-                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-                                    >
-                                        Cerrar
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
-                                    {/* Búsqueda de orden origen */}
-                                    <div>
-                                        <label className="text-sm font-bold text-gray-700 mb-2 block">
-                                            Buscar Orden Origen
-                                        </label>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={transferSearchText}
-                                                onChange={(e) => setTransferSearchText(e.target.value)}
-                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleTransferSearch(); } }}
-                                                placeholder="Ej: OS-202603-0049"
-                                                className="flex-1 px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
-                                            />
-                                            <button
-                                                onClick={handleTransferSearch}
-                                                disabled={!transferSearchText.trim() || transferSearching}
-                                                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-                                            >
-                                                {transferSearching ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <Search className="h-4 w-4" />
-                                                )}
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Resultados de búsqueda */}
-                                    {transferSearchResults.length > 0 && (
-                                        <div className="space-y-2">
-                                            <p className="text-xs text-gray-500 font-medium">
-                                                {transferSearchResults.length} orden(es) encontrada(s) - Seleccione la orden origen:
-                                            </p>
-                                            {transferSearchResults.map((o: any) => (
-                                                <button
-                                                    key={o.id_orden_servicio}
-                                                    onClick={() => setTransferSelectedOrder(o)}
-                                                    className={cn(
-                                                        "w-full text-left p-3 rounded-xl border-2 transition-all",
-                                                        transferSelectedOrder?.id_orden_servicio === o.id_orden_servicio
-                                                            ? "border-blue-500 bg-blue-50"
-                                                            : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
-                                                    )}
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="font-mono font-bold text-sm text-gray-900">{o.numero_orden}</span>
-                                                        <span className={cn(
-                                                            "px-2 py-0.5 rounded-full text-[10px] font-bold",
-                                                            getEstadoColor(o.estados_orden?.codigo_estado)
-                                                        )}>
-                                                            {o.estados_orden?.nombre_estado || 'N/A'}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-xs text-gray-500 mt-1 truncate">
-                                                        {getClienteNombre(o)} - {o.equipos?.codigo_equipo || 'Sin equipo'}
-                                                    </p>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {transferSearchResults.length === 0 && transferSearchText && !transferSearching && (
-                                        <p className="text-sm text-gray-400 text-center py-4">
-                                            No se encontraron órdenes. Intente con otro término.
-                                        </p>
-                                    )}
-
-                                    {/* Resumen de transferencia */}
-                                    {transferSelectedOrder && (
-                                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
-                                            <p className="text-sm font-bold text-amber-800 flex items-center gap-2">
-                                                <AlertCircle className="h-4 w-4" />
-                                                Confirmar Transferencia
-                                            </p>
-                                            <p className="text-sm text-amber-700">
-                                                Se copiarán <strong>TODOS</strong> los datos de:
-                                            </p>
-                                            <div className="flex items-center gap-2 text-sm font-mono">
-                                                <span className="font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded">
-                                                    {transferSelectedOrder.numero_orden}
-                                                </span>
-                                                <ArrowRightLeft className="h-4 w-4 text-amber-600" />
-                                                <span className="font-bold text-green-700 bg-green-100 px-2 py-1 rounded">
-                                                    {orden.numero_orden}
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-amber-600 mt-1">
-                                                Esto incluye: actividades, evidencias, mediciones, firmas, componentes y observaciones.
-                                                Los datos existentes en la orden destino serán reemplazados.
-                                            </p>
-                                            <div className="text-xs text-amber-700 bg-amber-100/60 rounded-lg p-2.5 space-y-1">
-                                                <p className="font-semibold flex items-center gap-1.5">
-                                                    <ShieldCheck className="h-3.5 w-3.5" />
-                                                    Se conservan (no se transfieren):
-                                                </p>
-                                                <p>
-                                                    • <strong>Técnico asignado</strong> — sigue siendo {(() => {
-                                                        const p = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona;
-                                                        const nombre = p
-                                                            ? [p.primer_nombre, p.primer_apellido].filter(Boolean).join(' ').trim()
-                                                            : '';
-                                                        return nombre || 'el de la orden destino';
-                                                    })()}
-                                                </p>
-                                                <p>
-                                                    • <strong>Equipos</strong> — se mantiene {orden.equipos?.codigo_equipo || 'el de la orden destino'}
-                                                </p>
-                                                <p className="text-amber-600">
-                                                    La operación queda registrada en el historial de estados para auditoría.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Footer */}
-                                <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
-                                    <button
-                                        onClick={() => setIsTransferModalOpen(false)}
-                                        disabled={transferLoading}
-                                        className="flex-1 py-2.5 px-4 text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-all disabled:opacity-50"
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button
-                                        onClick={handleTransferirDatos}
-                                        disabled={!transferSelectedOrder || transferLoading}
-                                        className="flex-1 py-2.5 px-4 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        {transferLoading ? (
-                                            <><Loader2 className="h-4 w-4 animate-spin" /> Transfiriendo...</>
-                                        ) : (
-                                            <><ArrowRightLeft className="h-4 w-4" /> Transferir Datos</>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+            {/* Modal de Transferencia Inteligente de Datos (v2.0) */}
+            <TransferirDatosModal
+                isOpen={isTransferModalOpen}
+                onClose={() => setIsTransferModalOpen(false)}
+                ordenDestino={orden}
+                onSuccess={() => {
+                    refetch();
+                }}
+            />
 
             {/* Modal de Eliminación (HARD DELETE) */}
             {isDeleteModalOpen && (

@@ -674,13 +674,152 @@ export async function deleteOrden(
 }
 
 /**
- * ✅ FIX 13-MAR-2026: Transferir datos completos de una orden a otra
- * Copia todos los datos (actividades, evidencias, mediciones, firmas, componentes, etc.)
+ * ✅ TRANSFERENCIA INTELIGENTE DE DATOS ENTRE ÓRDENES (v2.0)
+ * Tipos compartidos para previsualización, mapeo 1:1 por equipo y ejecución atómica.
  */
-export async function transferirDatosOrden(
-    idOrdenDestino: number,
-    idOrdenOrigen: number
-): Promise<{
+export type AccionEquipoTransferencia =
+    | 'MAPEAR_A_DESTINO'
+    | 'AGREGAR_A_DESTINO'
+    | 'DESCARTAR';
+
+export type TipoCoincidenciaEquipo =
+    | 'EXACTA_ID_EQUIPO'
+    | 'EXACTA_CODIGO_SERIE'
+    | 'SUGERIDA_MISMO_TIPO'
+    | 'SUGERIDA_POSICIONAL'
+    | 'SIN_DESTINO';
+
+export interface EquipoTransferenciaInfo {
+    idOrdenEquipo: number;
+    esVirtual: boolean;
+    ordenSecuencia: number;
+    idEquipo: number;
+    codigoEquipo: string;
+    nombreEquipo: string;
+    nombreSistema: string | null;
+    numeroSerie: string | null;
+    idTipoEquipo: number | null;
+    nombreTipoEquipo: string;
+    estado: string | null;
+}
+
+export interface ConteosEquipoOrigen {
+    actividades: number;
+    mediciones: number;
+    evidencias: number;
+    pendientes: number;
+}
+
+export interface SugerenciaMapeoEquipo {
+    origen: EquipoTransferenciaInfo;
+    conteos: ConteosEquipoOrigen;
+    tipoCoincidencia: TipoCoincidenciaEquipo;
+    accionSugerida: AccionEquipoTransferencia;
+    idOrdenEquipoDestinoSugerido: number | null;
+    destinoSugerido: EquipoTransferenciaInfo | null;
+    tiposCompatibles: boolean;
+    puedeAgregarADestino: boolean;
+    motivoNoAgregar?: string | null;
+    nota: string;
+}
+
+export interface AdvertenciaTransferencia {
+    nivel: 'info' | 'warning' | 'danger';
+    codigo: string;
+    mensaje: string;
+}
+
+export interface MapeoEquipoTransferenciaInput {
+    idOrdenEquipoOrigen: number;
+    accion: AccionEquipoTransferencia;
+    idOrdenEquipoDestino?: number | null;
+}
+
+export interface OpcionesTransferenciaInput {
+    incluirActividades?: boolean;
+    incluirMediciones?: boolean;
+    soloMedicionesCompatibles?: boolean;
+    incluirEvidenciasEquipo?: boolean;
+    incluirFotosGenerales?: boolean;
+    incluirObservaciones?: boolean;
+    incluirFirmas?: boolean;
+    incluirComponentes?: boolean;
+    copiarPlanActividades?: boolean;
+    incluirPendientes?: boolean;
+    conservarDescripcionDestino?: boolean;
+}
+
+export interface PreviewTransferenciaResponse {
+    puedeTransferir: boolean;
+    bloqueos: string[];
+    advertencias: AdvertenciaTransferencia[];
+    origen: {
+        id: number;
+        numero: string;
+        estado: string;
+        estadoNombre: string;
+        idCliente: number;
+        nombreCliente: string;
+        idTipoServicio: number | null;
+        nombreTipoServicio: string;
+        totalEquipos: number;
+        esMultiEquipo: boolean;
+        tieneDatosLegacySinFk: boolean;
+        equipos: EquipoTransferenciaInfo[];
+    };
+    destino: {
+        id: number;
+        numero: string;
+        estado: string;
+        estadoNombre: string;
+        idCliente: number;
+        nombreCliente: string;
+        idTipoServicio: number | null;
+        nombreTipoServicio: string;
+        tieneDescripcionInicial: boolean;
+        totalEquipos: number;
+        esMultiEquipo: boolean;
+        equipos: EquipoTransferenciaInfo[];
+        datosExistentesQueSeSobrescribiran: {
+            actividades: number;
+            mediciones: number;
+            evidencias: number;
+            lotesGaleria: number;
+            componentes: number;
+            planActividades: number;
+            pendientes: number;
+        };
+    };
+    compatibilidad: {
+        mismoCliente: boolean;
+        mismoTipoServicio: boolean;
+        todosMismoTipoEquipo: boolean;
+        hayCruceDeTipos: boolean;
+        coincidenciasExactas: number;
+        coincidenciasSugeridas: number;
+        equiposExcedentesOrigen: number;
+        equiposDestinoSinAsignar: EquipoTransferenciaInfo[];
+    };
+    resumenDatosOrigen: {
+        totalActividades: number;
+        totalMediciones: number;
+        medicionesIncompatiblesEstimadas: number;
+        totalEvidenciasEquipo: number;
+        totalFotosGenerales: number;
+        totalFotosHuerfanasComoGenerales: number;
+        totalLotesGaleria: number;
+        totalComponentes: number;
+        totalPlanActividades: number;
+        totalPendientes: number;
+        tieneFirmaTecnico: boolean;
+        tieneFirmaCliente: boolean;
+        tieneObservaciones: boolean;
+    };
+    mapeoSugerido: SugerenciaMapeoEquipo[];
+    opcionesSugeridas: Required<OpcionesTransferenciaInput>;
+}
+
+export interface ResultadoTransferenciaOrden {
     success: boolean;
     message: string;
     ordenOrigen: { id: number; numero: string };
@@ -688,16 +827,65 @@ export async function transferirDatosOrden(
     estadisticas: {
         camposDirectos: boolean;
         ordenesEquipos: number;
+        equiposMapeados: number;
+        equiposAgregados: number;
+        equiposDescartados: number;
         actividadesEjecutadas: number;
+        actividadesDescartadas: number;
         evidenciasFotograficas: number;
+        evidenciasEquipo: number;
+        evidenciasGenerales: number;
+        evidenciasDescartadas: number;
+        lotesGaleria: number;
         medicionesServicio: number;
+        medicionesDescartadas: number;
+        medicionesIncompatiblesOmitidas: number;
         componentesUsados: number;
         ordenesActividadesPlan: number;
+        pendientesTransferidos: number;
     };
-}> {
-    const response = await apiClient.post(
-        `${ORDENES_BASE}/${idOrdenDestino}/transferir-datos`,
+    mapeoAplicado: Array<{
+        idOrdenEquipoOrigen: number;
+        equipoOrigenNombre: string;
+        accion: AccionEquipoTransferencia;
+        idOrdenEquipoDestino: number | null;
+        equipoDestinoNombre: string | null;
+    }>;
+}
+
+/**
+ * Previsualiza la transferencia inteligente (mapeo 1:1, conteos por equipo, advertencias y defaults)
+ */
+export async function previsualizarTransferenciaOrden(
+    idOrdenDestino: number,
+    idOrdenOrigen: number
+): Promise<PreviewTransferenciaResponse> {
+    const response = await apiClient.post<PreviewTransferenciaResponse>(
+        `${ORDENES_BASE}/${idOrdenDestino}/transferir-datos/preview`,
         { idOrdenOrigen }
+    );
+    return response.data;
+}
+
+/**
+ * Transfiere datos completos de una orden a otra con mapeo 1:1 y opciones granulares.
+ * Retrocompatible si se llama solo con (idOrdenDestino, idOrdenOrigen).
+ */
+export async function transferirDatosOrden(
+    idOrdenDestino: number,
+    idOrdenOrigen: number,
+    config?: {
+        mapeoEquipos?: MapeoEquipoTransferenciaInput[];
+        opciones?: OpcionesTransferenciaInput;
+    }
+): Promise<ResultadoTransferenciaOrden> {
+    const response = await apiClient.post<ResultadoTransferenciaOrden>(
+        `${ORDENES_BASE}/${idOrdenDestino}/transferir-datos`,
+        {
+            idOrdenOrigen,
+            ...(config?.mapeoEquipos ? { mapeoEquipos: config.mapeoEquipos } : {}),
+            ...(config?.opciones ? { opciones: config.opciones } : {}),
+        }
     );
     return response.data;
 }
