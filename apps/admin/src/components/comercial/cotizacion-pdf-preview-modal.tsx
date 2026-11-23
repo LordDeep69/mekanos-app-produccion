@@ -15,6 +15,10 @@ import {
   type CotizacionRecord,
 } from '@/features/comercial/api/comercial.service';
 import { COMERCIAL_KEYS } from '@/features/comercial/hooks/use-comercial';
+import {
+  getConfiguracionEmpresa,
+  type ConfiguracionEmpresa,
+} from '@/features/configuracion/api/configuracion.service';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
@@ -94,6 +98,33 @@ export function CotizacionPdfPreviewModal({
     },
   });
 
+  // Lee siempre firma fresca de configuración de empresa (gobernanza + marca blanca)
+  // para garantizar 0% caché fantasma cuando se altera /configuracion/empresa.
+  const { data: orgCfg } = useQuery<ConfiguracionEmpresa>({
+    queryKey: ['config-org-empresa-cpq'],
+    queryFn: () => getConfiguracionEmpresa(),
+    enabled: open,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
+  const orgSignature = useMemo(() => {
+    if (!orgCfg) return 'org:pending';
+    return [
+      orgCfg.fecha_modificacion ?? '',
+      orgCfg.enable_cpq_governance ? '1' : '0',
+      orgCfg.lock_catalog_unit_price ? '1' : '0',
+      orgCfg.cot_mostrar_desglose_precios ? '1' : '0',
+      orgCfg.umbral_aprobacion_supervisor ?? 0,
+      orgCfg.umbral_aprobacion_gerente ?? 0,
+      orgCfg.descuento_max_sin_aprobacion ?? 0,
+      orgCfg.margen_minimo_alerta ?? 0,
+      orgCfg.margen_minimo_aprobacion ?? 0,
+      orgCfg.color_primario ?? '',
+      orgCfg.texto_pie_pdf ?? '',
+    ].join('|');
+  }, [orgCfg]);
+
   const {
     data: pdfBlob,
     isFetching,
@@ -106,6 +137,7 @@ export function CotizacionPdfPreviewModal({
       cotizacionId,
       activeDesglose ? 'detallado' : 'suma-alzada',
       cacheKey ?? version ?? 'v1',
+      orgSignature,
     ],
     queryFn: () => {
       const force = forceNextRefreshRef.current;
@@ -113,8 +145,9 @@ export function CotizacionPdfPreviewModal({
       return fetchCotizacionPdfBlob(cotizacionId!, force);
     },
     enabled: open && Boolean(cotizacionId) && !toggleModeMut.isPending,
-    staleTime: 2 * 60_000,
-    gcTime: 5 * 60_000,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
     retry: 1,
   });
 
@@ -197,7 +230,8 @@ export function CotizacionPdfPreviewModal({
                   )}
                 </DialogTitle>
                 <DialogDescription className="text-[11px] text-slate-500">
-                  Documento comercial corporativo listo para revisión, comparación de formato o descarga.
+                  Documento comercial corporativo listo para revisión, comparación de formato o
+                  descarga.
                 </DialogDescription>
               </div>
             </div>

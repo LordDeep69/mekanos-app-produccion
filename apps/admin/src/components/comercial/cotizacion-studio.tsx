@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   ESTADO_LABELS_COTIZACION,
   getEstadoCodigoCotizacion,
+  guardarFirmaCotizacion,
   RUBRO_OTRO_PRESETS,
   type ConvertirCotizacionOrdenResponse,
   type CotizacionRecord,
@@ -31,9 +32,14 @@ import {
   type PlantillaCotizacionRecord,
 } from '@/features/comercial/api/comercial.service';
 import { EamSelect } from '@/components/ui/eam-select';
+import {
+  DigitalSignatureModal,
+  normalizeSignatureDataUri,
+} from '@/components/shared/digital-signature-modal';
 import { CotizacionPdfPreviewModal } from './cotizacion-pdf-preview-modal';
 import {
   buildUnidadOptions,
+  CpqBulletListEditor,
   CpqCreatableCombobox,
   CpqMoneyInput,
   CpqSmartNumberInput,
@@ -44,9 +50,11 @@ import {
 } from './cpq-premium-controls';
 import {
   useCotizacionDetalle,
+  useCotizacionFirmaActions,
   useCotizacionItemActions,
   useCotizacionWorkflowActions,
   useCreateCotizacion,
+  useFirmasHistorialEmpleado,
   useGuardarStudioCotizacion,
   useMotivosRechazo,
   usePlantillasCotizacion,
@@ -93,6 +101,7 @@ import {
   Lock,
   Mail,
   Package,
+  Pen,
   Plus,
   RotateCcw,
   Save,
@@ -101,8 +110,11 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
+  Star,
   Trash2,
   Truck,
+  User,
+  UserCheck,
   Users,
   Utensils,
   Wrench,
@@ -202,7 +214,8 @@ export function CotizacionStudio({
   const { data: orgConfig } = useQuery<ConfiguracionEmpresa>({
     queryKey: ['config-org-empresa-cpq'],
     queryFn: () => getConfiguracionEmpresa(),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   if (cotizacionId && (loadingCot || !detalle)) {
@@ -266,9 +279,7 @@ function CotizacionStudioEditor({
   const [atencionANombre, setAtencionANombre] = useState<string>(
     cotizacion?.atencion_a_nombre || '',
   );
-  const [atencionACargo, setAtencionACargo] = useState<string>(
-    cotizacion?.atencion_a_cargo || '',
-  );
+  const [atencionACargo, setAtencionACargo] = useState<string>(cotizacion?.atencion_a_cargo || '');
   const [elaboradaPor, setElaboradaPor] = useState<string>(
     cotizacion?.elaborada_por ? String(cotizacion.elaborada_por) : '',
   );
@@ -321,9 +332,7 @@ function CotizacionStudioEditor({
         3,
     ),
   );
-  const [obsGarantia, setObsGarantia] = useState<string>(
-    cotizacion?.observaciones_garantia || '',
-  );
+  const [obsGarantia, setObsGarantia] = useState<string>(cotizacion?.observaciones_garantia || '');
   const [terminosCondiciones, setTerminosCondiciones] = useState<string>(
     cotizacion?.terminos_condiciones ||
       initialPlantilla?.terminos_condiciones ||
@@ -355,10 +364,14 @@ function CotizacionStudioEditor({
     Number(cotizacion?.aiu_utilidad_porcentaje ?? initialPlantilla?.aiu_utilidad_porcentaje ?? 5),
   );
   const [ivaSobreUtilidadAiu, setIvaSobreUtilidadAiu] = useState<boolean>(
-    Boolean(cotizacion?.iva_sobre_utilidad_aiu ?? initialPlantilla?.iva_sobre_utilidad_aiu ?? false),
+    Boolean(
+      cotizacion?.iva_sobre_utilidad_aiu ?? initialPlantilla?.iva_sobre_utilidad_aiu ?? false,
+    ),
   );
   const [mostrarDesglosePrecios, setMostrarDesglosePrecios] = useState<boolean>(
-    Boolean(cotizacion?.mostrar_desglose_precios ?? orgConfig?.cot_mostrar_desglose_precios ?? false),
+    Boolean(
+      cotizacion?.mostrar_desglose_precios ?? orgConfig?.cot_mostrar_desglose_precios ?? false,
+    ),
   );
 
   // Equipos N:M seleccionados
@@ -378,7 +391,9 @@ function CotizacionStudioEditor({
         id_servicio: s.id_servicio ?? null,
         id_equipo: s.id_equipo ?? null,
         descripcion:
-          s.descripcion_personalizada || s.catalogo_servicios?.nombre_servicio || 'Servicio Técnico',
+          s.descripcion_personalizada ||
+          s.catalogo_servicios?.nombre_servicio ||
+          'Servicio Técnico',
         cantidad: Number(s.cantidad) || 1,
         unidad: s.unidad || 'servicio',
         costo_unitario: Number(s.costo_unitario || 0),
@@ -537,6 +552,34 @@ function CotizacionStudioEditor({
   const [q2oObs, setQ2oObs] = useState('');
   const [q2oResultado, setQ2oResultado] = useState<ConvertirCotizacionOrdenResponse | null>(null);
 
+  // Firmas Digitales Opcionales (reutiliza firmas_digitales de OS)
+  const [firmaAsesorLocal, setFirmaAsesorLocal] = useState<{
+    id_firma_digital?: number;
+    firma_base64: string;
+  } | null>(() =>
+    cotizacion?.firma_asesor?.firma_base64
+      ? {
+          id_firma_digital: cotizacion.firma_asesor.id_firma_digital,
+          firma_base64: cotizacion.firma_asesor.firma_base64,
+        }
+      : null,
+  );
+  const [firmaClienteLocal, setFirmaClienteLocal] = useState<{
+    id_firma_digital?: number;
+    firma_base64: string;
+  } | null>(() =>
+    cotizacion?.firma_cliente?.firma_base64
+      ? {
+          id_firma_digital: cotizacion.firma_cliente.id_firma_digital,
+          firma_base64: cotizacion.firma_cliente.firma_base64,
+        }
+      : null,
+  );
+  const [firmasExpandido, setFirmasExpandido] = useState<boolean>(() =>
+    Boolean(cotizacion?.firma_asesor?.firma_base64 || cotizacion?.firma_cliente?.firma_base64),
+  );
+  const [firmaModalTipo, setFirmaModalTipo] = useState<'ASESOR' | 'CLIENTE' | null>(null);
+
   // Queries
   const { data: clientes = [] } = useClientesSelector();
   const { data: sedes = [] } = useSedesCliente(clienteId ? Number(clienteId) : undefined);
@@ -582,9 +625,44 @@ function CotizacionStudioEditor({
   const createMut = useCreateCotizacion();
   const guardarStudioMut = useGuardarStudioCotizacion(cotizacion?.id_cotizacion ?? null);
   const itemActions = useCotizacionItemActions(cotizacion?.id_cotizacion ?? null);
+  const firmaActions = useCotizacionFirmaActions(cotizacion?.id_cotizacion ?? null);
   const workflow = useCotizacionWorkflowActions();
 
   const empleados = useMemo(() => empleadosData?.data || [], [empleadosData]);
+
+  const asesorActivoId = useMemo(() => {
+    const parsed = Number(elaboradaPor);
+    if (Number.isInteger(parsed) && parsed > 0) return parsed;
+    return empleados[0]?.id_empleado ?? null;
+  }, [elaboradaPor, empleados]);
+
+  const asesorActivoNombre = useMemo(() => {
+    const emp = empleados.find((e) => e.id_empleado === asesorActivoId);
+    const fromEmp = emp ? getNombreCompleto(emp.persona) : '';
+    if (fromEmp && fromEmp !== 'Sin nombre') return fromEmp;
+
+    const pCot = cotizacion?.elaborador?.persona;
+    const fromCot = pCot
+      ? pCot.nombre_completo?.trim() ||
+        [pCot.primer_nombre, pCot.segundo_nombre, pCot.primer_apellido, pCot.segundo_apellido]
+          .filter(Boolean)
+          .join(' ')
+          .trim()
+      : '';
+    if (fromCot && fromCot !== 'Sin nombre') return fromCot;
+
+    return 'Asesor Responsable';
+  }, [empleados, asesorActivoId, cotizacion?.elaborador?.persona]);
+
+  const { data: historialFirmasAsesor = [], isLoading: loadingHistorialFirmasAsesor } =
+    useFirmasHistorialEmpleado(asesorActivoId, firmaAsesorLocal?.id_firma_digital ?? null);
+
+  const firmaEstandarAsesor = useMemo(
+    () => historialFirmasAsesor.find((f) => f.es_estandar) || historialFirmasAsesor[0] || null,
+    [historialFirmasAsesor],
+  );
+
+  const canManageFirmas = estadoCodigo !== 'RECHAZADA' && estadoCodigo !== 'VENCIDA';
   const articulosMaestro = useMemo(
     () => catalogoArticulosData?.items || [],
     [catalogoArticulosData],
@@ -797,11 +875,7 @@ function CotizacionStudioEditor({
     for (const o of otrosRows) {
       const sub = calcSub(o.cantidad, o.precio_unitario, o.descuento_porcentaje);
       const costoUnitEfectivo =
-        (o.costo_unitario || 0) > 0
-          ? o.costo_unitario
-          : !o.visible_cliente
-            ? o.precio_unitario
-            : 0;
+        (o.costo_unitario || 0) > 0 ? o.costo_unitario : !o.visible_cliente ? o.precio_unitario : 0;
 
       if (o.es_opcional) {
         if (o.visible_cliente) subOpcionales += sub;
@@ -951,7 +1025,8 @@ function CotizacionStudioEditor({
     const nuevosOtros: OtroRow[] = [];
 
     for (const it of pl.items || []) {
-      const cant = Math.round(Number(it.cantidad_base || 1) * (it.es_por_equipo ? mult : 1) * 100) / 100;
+      const cant =
+        Math.round(Number(it.cantidad_base || 1) * (it.es_por_equipo ? mult : 1) * 100) / 100;
       if (it.tipo_linea === 'SERVICIO') {
         const srvCat = it.id_servicio
           ? serviciosCatalogo.find((s) => s.id_servicio === it.id_servicio)
@@ -1083,9 +1158,18 @@ function CotizacionStudioEditor({
 
   const addOtroPreset = (categoria: string, label: string) => {
     const defaults: Record<string, { desc: string; und: string }> = {
-      TRANSPORTE: { desc: 'Transporte técnico y movilización de equipos/herramientas', und: 'global' },
-      VIATICOS: { desc: 'Viáticos de personal técnico (alimentación y hospedaje)', und: 'dia-tecnico' },
-      POLIZA: { desc: 'Constitución de pólizas de cumplimiento y calidad del servicio', und: 'global' },
+      TRANSPORTE: {
+        desc: 'Transporte técnico y movilización de equipos/herramientas',
+        und: 'global',
+      },
+      VIATICOS: {
+        desc: 'Viáticos de personal técnico (alimentación y hospedaje)',
+        und: 'dia-tecnico',
+      },
+      POLIZA: {
+        desc: 'Constitución de pólizas de cumplimiento y calidad del servicio',
+        und: 'global',
+      },
       ALQUILER: { desc: 'Alquiler de equipo auxiliar / grúa / andamio certificado', und: 'dia' },
       DISPOSICION_AMBIENTAL: {
         desc: 'Disposición ambiental final certificada de residuos peligrosos (RESPEL)',
@@ -1263,6 +1347,23 @@ function CotizacionStudioEditor({
     }
 
     if (creada?.id_cotizacion) {
+      // Persistir firmas digitales opcionales si fueron pre-adjuntadas antes de crear la cotización
+      if (firmaAsesorLocal?.firma_base64 || firmaAsesorLocal?.id_firma_digital) {
+        await guardarFirmaCotizacion(creada.id_cotizacion, 'ASESOR', {
+          id_firma_digital: firmaAsesorLocal.id_firma_digital,
+          firma_base64: firmaAsesorLocal.id_firma_digital
+            ? undefined
+            : firmaAsesorLocal.firma_base64,
+        }).catch(() => null);
+      }
+      if (firmaClienteLocal?.firma_base64 || firmaClienteLocal?.id_firma_digital) {
+        await guardarFirmaCotizacion(creada.id_cotizacion, 'CLIENTE', {
+          id_firma_digital: firmaClienteLocal.id_firma_digital,
+          firma_base64: firmaClienteLocal.id_firma_digital
+            ? undefined
+            : firmaClienteLocal.firma_base64,
+        }).catch(() => null);
+      }
       router.replace(`/comercial/cotizaciones/${creada.id_cotizacion}`);
       return creada.id_cotizacion;
     }
@@ -1540,11 +1641,7 @@ function CotizacionStudioEditor({
                     <CheckCircle2 className="h-4 w-4 mr-1.5" />
                     Aprobada por Cliente
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => setRechazarOpen(true)}
-                  >
+                  <Button size="sm" variant="destructive" onClick={() => setRechazarOpen(true)}>
                     <XCircle className="h-4 w-4 mr-1.5" />
                     Rechazada
                   </Button>
@@ -1574,17 +1671,18 @@ function CotizacionStudioEditor({
                 </Button>
               )}
 
-              {!isEditable && !(estadoCodigo === 'APROBADA_CLIENTE' && cotizacion.id_orden_servicio_generada) && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setReabrirOpen(true)}
-                  title="Archiva snapshot de versión y vuelve a BORRADOR para editar"
-                >
-                  <RotateCcw className="h-4 w-4 mr-1.5" />
-                  Reabrir (v{(cotizacion.version || 1) + 1})
-                </Button>
-              )}
+              {!isEditable &&
+                !(estadoCodigo === 'APROBADA_CLIENTE' && cotizacion.id_orden_servicio_generada) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setReabrirOpen(true)}
+                    title="Archiva snapshot de versión y vuelve a BORRADOR para editar"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1.5" />
+                    Reabrir (v{(cotizacion.version || 1) + 1})
+                  </Button>
+                )}
             </>
           )}
         </div>
@@ -1593,7 +1691,8 @@ function CotizacionStudioEditor({
       {!isEditable && (
         <div className="px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center justify-between gap-2">
           <span>
-            Esta cotización está en estado <strong>{ESTADO_LABELS_COTIZACION[estadoCodigo]}</strong> y se muestra en modo lectura para proteger el historial comercial.
+            Esta cotización está en estado <strong>{ESTADO_LABELS_COTIZACION[estadoCodigo]}</strong>{' '}
+            y se muestra en modo lectura para proteger el historial comercial.
           </span>
           {isEdit && !cotizacion?.id_orden_servicio_generada && (
             <Button
@@ -1643,7 +1742,8 @@ function CotizacionStudioEditor({
                           ? clienteSeleccionado.nombre_sede ||
                             clienteSeleccionado.persona?.nombre_comercial ||
                             clienteSeleccionado.persona?.razon_social
-                          : cotizacion?.cliente?.persona?.razon_social || 'Buscar y seleccionar cliente...'}
+                          : cotizacion?.cliente?.persona?.razon_social ||
+                            'Buscar y seleccionar cliente...'}
                       </span>
                       <Search className="h-3.5 w-3.5 text-slate-400 shrink-0 ml-2" />
                     </button>
@@ -1881,9 +1981,7 @@ function CotizacionStudioEditor({
                       >
                         <span className="font-mono font-bold">{eq.codigo}</span>
                         <span className="max-w-[180px] truncate">{eq.nombre}</span>
-                        {eq.tipo && (
-                          <span className="text-[10px] opacity-75">· {eq.tipo}</span>
-                        )}
+                        {eq.tipo && <span className="text-[10px] opacity-75">· {eq.tipo}</span>}
                         {isEditable && (
                           <button
                             type="button"
@@ -1903,7 +2001,8 @@ function CotizacionStudioEditor({
                   <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 bg-slate-50/40">
                     {equiposFiltrados.length === 0 ? (
                       <p className="p-3 text-xs text-slate-500 text-center">
-                        Este cliente no tiene equipos registrados en la sede seleccionada (puedes cotizar igualmente sin equipo).
+                        Este cliente no tiene equipos registrados en la sede seleccionada (puedes
+                        cotizar igualmente sin equipo).
                       </p>
                     ) : (
                       equiposFiltrados.map((eq) => {
@@ -2034,35 +2133,37 @@ function CotizacionStudioEditor({
                   ) : (
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-0.5">
-                        {plantillasVisibles.map(({ plantilla: fullTpl, total_items, subtotal_estimado }) => (
-                          <button
-                            key={fullTpl.id_plantilla}
-                            type="button"
-                            onClick={() => applyPlantillaLocal(fullTpl, false)}
-                            className="group text-left px-3 py-2.5 rounded-xl bg-slate-50/70 hover:bg-emerald-50/50 border border-slate-200/90 hover:border-emerald-300 hover:shadow-sm transition-all flex items-start justify-between gap-2.5"
-                          >
-                            <div className="flex items-start gap-2.5 min-w-0">
-                              <div className="h-7 w-7 mt-0.5 rounded-lg bg-primary/10 text-primary group-hover:bg-emerald-100 group-hover:text-emerald-700 flex items-center justify-center shrink-0 transition-colors">
-                                <Layers className="h-3.5 w-3.5" />
+                        {plantillasVisibles.map(
+                          ({ plantilla: fullTpl, total_items, subtotal_estimado }) => (
+                            <button
+                              key={fullTpl.id_plantilla}
+                              type="button"
+                              onClick={() => applyPlantillaLocal(fullTpl, false)}
+                              className="group text-left px-3 py-2.5 rounded-xl bg-slate-50/70 hover:bg-emerald-50/50 border border-slate-200/90 hover:border-emerald-300 hover:shadow-sm transition-all flex items-start justify-between gap-2.5"
+                            >
+                              <div className="flex items-start gap-2.5 min-w-0">
+                                <div className="h-7 w-7 mt-0.5 rounded-lg bg-primary/10 text-primary group-hover:bg-emerald-100 group-hover:text-emerald-700 flex items-center justify-center shrink-0 transition-colors">
+                                  <Layers className="h-3.5 w-3.5" />
+                                </div>
+                                <div className="min-w-0 space-y-0.5">
+                                  <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 line-clamp-2 leading-snug">
+                                    {fullTpl.nombre}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">
+                                    {total_items} líneas · ×{Math.max(1, equiposIds.length)} eq.
+                                    {subtotal_estimado > 0
+                                      ? ` · Est. ${formatCurrency(subtotal_estimado)}`
+                                      : ''}
+                                  </p>
+                                </div>
                               </div>
-                              <div className="min-w-0 space-y-0.5">
-                                <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 line-clamp-2 leading-snug">
-                                  {fullTpl.nombre}
-                                </p>
-                                <p className="text-[11px] text-slate-500">
-                                  {total_items} líneas · ×{Math.max(1, equiposIds.length)} eq.
-                                  {subtotal_estimado > 0
-                                    ? ` · Est. ${formatCurrency(subtotal_estimado)}`
-                                    : ''}
-                                </p>
-                              </div>
-                            </div>
-                            <span className="inline-flex items-center gap-0.5 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-colors mt-0.5">
-                              Aplicar
-                              <ArrowRight className="h-2.5 w-2.5" />
-                            </span>
-                          </button>
-                        ))}
+                              <span className="inline-flex items-center gap-0.5 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-colors mt-0.5">
+                                Aplicar
+                                <ArrowRight className="h-2.5 w-2.5" />
+                              </span>
+                            </button>
+                          ),
+                        )}
 
                         {/* Kits OEM BOM detectados */}
                         {bomKitsVisibles.map((kit) => (
@@ -2134,7 +2235,9 @@ function CotizacionStudioEditor({
             </CardHeader>
             <CardContent className="p-4 sm:p-5 space-y-3">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Asunto / Título Comercial *</Label>
+                <Label className="text-xs font-semibold text-slate-700">
+                  Asunto / Título Comercial *
+                </Label>
                 <Input
                   disabled={!isEditable}
                   value={asunto}
@@ -2161,12 +2264,16 @@ function CotizacionStudioEditor({
                       : 'Agregar descripción general, alcance incluido y exclusiones (opcional)'}
                   </span>
                   {!alcanceExpandido &&
-                    [descripcionGeneral, alcanceTrabajo, exclusiones].filter((t) => t.trim()).length > 0 && (
+                    [descripcionGeneral, alcanceTrabajo, exclusiones].filter((t) => t.trim())
+                      .length > 0 && (
                       <Badge
                         variant="outline"
                         className="text-[10px] ml-1 bg-primary/5 text-primary border-primary/20"
                       >
-                        {[descripcionGeneral, alcanceTrabajo, exclusiones].filter((t) => t.trim()).length}{' '}
+                        {
+                          [descripcionGeneral, alcanceTrabajo, exclusiones].filter((t) => t.trim())
+                            .length
+                        }{' '}
                         con texto
                       </Badge>
                     )}
@@ -2193,24 +2300,24 @@ function CotizacionStudioEditor({
                       <Label className="text-xs font-semibold text-emerald-800">
                         Alcance Incluido
                       </Label>
-                      <Textarea
+                      <CpqBulletListEditor
+                        variant="incluido"
                         disabled={!isEditable}
-                        rows={3}
                         value={alcanceTrabajo}
-                        onChange={(e) => setAlcanceTrabajo(e.target.value)}
-                        placeholder="• Actividades técnicas incluidas..."
-                        className="bg-white text-xs"
+                        onChange={setAlcanceTrabajo}
+                        placeholder="Escribe actividad incluida y presiona Enter..."
+                        emptyMessage="Sin ítems de alcance definidos."
                       />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-semibold text-rose-800">Exclusiones</Label>
-                      <Textarea
+                      <CpqBulletListEditor
+                        variant="exclusion"
                         disabled={!isEditable}
-                        rows={3}
                         value={exclusiones}
-                        onChange={(e) => setExclusiones(e.target.value)}
-                        placeholder="• Conceptos no contemplados en esta oferta..."
-                        className="bg-white text-xs"
+                        onChange={setExclusiones}
+                        placeholder="Escribe una exclusión y presiona Enter..."
+                        emptyMessage="Sin exclusiones registradas."
                       />
                     </div>
                   </div>
@@ -2299,7 +2406,8 @@ function CotizacionStudioEditor({
                     <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100">
                       {serviciosFiltrados.length === 0 ? (
                         <div className="p-3 text-xs text-slate-500">
-                          Sin coincidencias en catálogo. Usa &ldquo;+ Línea Libre&rdquo; para un servicio a medida.
+                          Sin coincidencias en catálogo. Usa &ldquo;+ Línea Libre&rdquo; para un
+                          servicio a medida.
                         </div>
                       ) : (
                         serviciosFiltrados.map((s) => {
@@ -2378,7 +2486,10 @@ function CotizacionStudioEditor({
               {serviciosRows.length === 0 ? (
                 <div className="py-3.5 px-4 flex items-center justify-center gap-2 text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
                   <Wrench className="h-3.5 w-3.5 text-slate-300 shrink-0" />
-                  <span>Sin servicios agregados aún. Busca en el catálogo arriba o añade una línea libre.</span>
+                  <span>
+                    Sin servicios agregados aún. Busca en el catálogo arriba o añade una línea
+                    libre.
+                  </span>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -2389,7 +2500,11 @@ function CotizacionStudioEditor({
                     {showCostosInternos && (
                       <div className="col-span-2 text-right text-amber-700/80">Costo Interno</div>
                     )}
-                    <div className={showCostosInternos ? 'col-span-2 text-right' : 'col-span-3 text-right'}>
+                    <div
+                      className={
+                        showCostosInternos ? 'col-span-2 text-right' : 'col-span-3 text-right'
+                      }
+                    >
                       Precio Venta
                     </div>
                     <div className="col-span-2 text-right pr-1">Subtotal</div>
@@ -2469,7 +2584,9 @@ function CotizacionStudioEditor({
                           )}
                           <div
                             className={
-                              showCostosInternos ? 'col-span-4 md:col-span-2' : 'col-span-5 md:col-span-3'
+                              showCostosInternos
+                                ? 'col-span-4 md:col-span-2'
+                                : 'col-span-5 md:col-span-3'
                             }
                           >
                             <CpqMoneyInput
@@ -2517,7 +2634,10 @@ function CotizacionStudioEditor({
                                 minDropdownWidth={230}
                               />
                             </div>
-                            <div className="flex items-center gap-1.5" title="Descuento por línea (%)">
+                            <div
+                              className="flex items-center gap-1.5"
+                              title="Descuento por línea (%)"
+                            >
                               <span className="text-[11px] font-medium text-slate-400">Desc.</span>
                               <div className="w-16">
                                 <CpqSmartNumberInput
@@ -2548,7 +2668,9 @@ function CotizacionStudioEditor({
                                       i === idx
                                         ? {
                                             ...r,
-                                            id_equipo: e.target.value ? Number(e.target.value) : null,
+                                            id_equipo: e.target.value
+                                              ? Number(e.target.value)
+                                              : null,
                                           }
                                         : r,
                                     ),
@@ -2682,7 +2804,8 @@ function CotizacionStudioEditor({
                     <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto divide-y divide-slate-100">
                       {componentesFiltrados.length === 0 ? (
                         <div className="p-3 text-xs text-slate-500">
-                          Sin coincidencias en el Catálogo Maestro. Usa &ldquo;+ Repuesto Manual&rdquo; sin restricciones.
+                          Sin coincidencias en el Catálogo Maestro. Usa &ldquo;+ Repuesto
+                          Manual&rdquo; sin restricciones.
                         </div>
                       ) : (
                         componentesFiltrados.map((c) => {
@@ -2805,7 +2928,10 @@ function CotizacionStudioEditor({
               {componentesRows.length === 0 ? (
                 <div className="py-3.5 px-4 flex items-center justify-center gap-2 text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
                   <Package className="h-3.5 w-3.5 text-slate-300 shrink-0" />
-                  <span>Sin repuestos ni insumos agregados. Busca en el catálogo WMS o importa un Kit BOM OEM.</span>
+                  <span>
+                    Sin repuestos ni insumos agregados. Busca en el catálogo WMS o importa un Kit
+                    BOM OEM.
+                  </span>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -2816,7 +2942,11 @@ function CotizacionStudioEditor({
                     {showCostosInternos && (
                       <div className="col-span-2 text-right text-amber-700/80">Costo Compra</div>
                     )}
-                    <div className={showCostosInternos ? 'col-span-2 text-right' : 'col-span-3 text-right'}>
+                    <div
+                      className={
+                        showCostosInternos ? 'col-span-2 text-right' : 'col-span-3 text-right'
+                      }
+                    >
                       Precio Venta
                     </div>
                     <div className="col-span-2 text-right pr-1">Subtotal</div>
@@ -2900,7 +3030,9 @@ function CotizacionStudioEditor({
                           )}
                           <div
                             className={
-                              showCostosInternos ? 'col-span-4 md:col-span-2' : 'col-span-5 md:col-span-3'
+                              showCostosInternos
+                                ? 'col-span-4 md:col-span-2'
+                                : 'col-span-5 md:col-span-3'
                             }
                           >
                             <CpqMoneyInput
@@ -2972,7 +3104,10 @@ function CotizacionStudioEditor({
                                 minDropdownWidth={230}
                               />
                             </div>
-                            <div className="flex items-center gap-1.5" title="Descuento por línea (%)">
+                            <div
+                              className="flex items-center gap-1.5"
+                              title="Descuento por línea (%)"
+                            >
                               <span className="text-[11px] font-medium text-slate-400">Desc.</span>
                               <div className="w-16">
                                 <CpqSmartNumberInput
@@ -3003,7 +3138,9 @@ function CotizacionStudioEditor({
                                       i === idx
                                         ? {
                                             ...r,
-                                            id_equipo: e.target.value ? Number(e.target.value) : null,
+                                            id_equipo: e.target.value
+                                              ? Number(e.target.value)
+                                              : null,
                                           }
                                         : r,
                                     ),
@@ -3126,7 +3263,10 @@ function CotizacionStudioEditor({
               {otrosRows.length === 0 ? (
                 <div className="py-3.5 px-4 flex items-center justify-center gap-2 text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
                   <Truck className="h-3.5 w-3.5 text-slate-300 shrink-0" />
-                  <span>Sin gastos de transporte, viáticos ni pólizas. Usa los accesos rápidos arriba (facturables o absorbidos).</span>
+                  <span>
+                    Sin gastos de transporte, viáticos ni pólizas. Usa los accesos rápidos arriba
+                    (facturables o absorbidos).
+                  </span>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -3140,274 +3280,281 @@ function CotizacionStudioEditor({
                     <div className="col-span-1 text-right">Subtotal</div>
                   </div>
                   {otrosRows.map((row, idx) => {
-                  const sub =
-                    Math.round(
-                      row.cantidad *
-                        row.precio_unitario *
-                        (1 - row.descuento_porcentaje / 100) *
-                        100,
-                    ) / 100;
-                  return (
-                    <div
-                      key={row.uid}
-                      className={`p-3 rounded-xl border space-y-2.5 transition-all hover:border-slate-300 ${
-                        !row.visible_cliente
-                          ? 'bg-amber-50/50 border-amber-200 border-dashed'
-                          : row.es_opcional
-                            ? 'bg-slate-50/80 border-dashed border-slate-300'
-                            : 'bg-white border-slate-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.03)]'
-                      }`}
-                    >
-                      <div className="grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-12 md:col-span-2">
-                          <CpqCreatableCombobox
-                            size="sm"
-                            disabled={!isEditable}
-                            value={row.categoria_rubro}
-                            onChange={(val) =>
-                              setOtrosRows((prev) =>
-                                prev.map((r, i) =>
-                                  i === idx ? { ...r, categoria_rubro: val } : r,
-                                ),
-                              )
-                            }
-                            options={RUBRO_OTRO_COMBOBOX_OPTIONS}
-                            placeholder="Categoría..."
-                            searchPlaceholder="Buscar o crear rubro..."
-                            customLabel="Crear rubro"
-                            normalizeCustom={(raw) =>
-                              raw
-                                .normalize('NFD')
-                                .replace(/[\u0300-\u036f]/g, '')
-                                .toUpperCase()
-                                .replace(/[^A-Z0-9]+/g, '_')
-                                .replace(/^_+|_+$/g, '')
-                                .slice(0, 40)
-                            }
-                            minDropdownWidth={230}
-                          />
-                        </div>
-                        <div className="col-span-12 md:col-span-4">
-                          <Input
-                            disabled={!isEditable}
-                            value={row.descripcion}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) =>
-                              setOtrosRows((prev) =>
-                                prev.map((r, i) =>
-                                  i === idx ? { ...r, descripcion: e.target.value } : r,
-                                ),
-                              )
-                            }
-                            placeholder="Concepto del rubro *"
-                            className="h-8 text-xs font-medium"
-                          />
-                        </div>
-                        <div className="col-span-4 md:col-span-1">
-                          <CpqSmartNumberInput
-                            min={0.01}
-                            decimals={2}
-                            align="center"
-                            disabled={!isEditable}
-                            value={row.cantidad}
-                            onChange={(val) =>
-                              setOtrosRows((prev) =>
-                                prev.map((r, i) => (i === idx ? { ...r, cantidad: val } : r)),
-                              )
-                            }
-                          />
-                        </div>
-                        <div className="col-span-4 md:col-span-2">
-                          <CpqMoneyInput
-                            tone="cost"
-                            disabled={!isEditable}
-                            value={row.costo_unitario}
-                            locale={moneyLocale}
-                            symbol={moneySymbol}
-                            decimals={moneyDecimals}
-                            onChange={(val) =>
-                              setOtrosRows((prev) =>
-                                prev.map((r, i) =>
-                                  i === idx ? { ...r, costo_unitario: val } : r,
-                                ),
-                              )
-                            }
-                            title="Costo Interno Real"
-                          />
-                        </div>
-                        <div className="col-span-4 md:col-span-2">
-                          <CpqMoneyInput
-                            disabled={!isEditable || !row.visible_cliente}
-                            value={row.visible_cliente ? row.precio_unitario : 0}
-                            locale={moneyLocale}
-                            symbol={moneySymbol}
-                            decimals={moneyDecimals}
-                            onChange={(val) =>
-                              setOtrosRows((prev) =>
-                                prev.map((r, i) =>
-                                  i === idx ? { ...r, precio_unitario: val } : r,
-                                ),
-                              )
-                            }
-                            title="Precio Facturable al Cliente"
-                          />
-                        </div>
-                        <div className="col-span-12 md:col-span-1 text-right font-mono text-xs font-bold text-slate-800">
-                          {row.visible_cliente ? formatCurrency(sub) : 'Absorb.'}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px] text-slate-600">
-                        <div className="flex flex-wrap items-center gap-2.5">
-                          <div className="w-28">
+                    const sub =
+                      Math.round(
+                        row.cantidad *
+                          row.precio_unitario *
+                          (1 - row.descuento_porcentaje / 100) *
+                          100,
+                      ) / 100;
+                    return (
+                      <div
+                        key={row.uid}
+                        className={`p-3 rounded-xl border space-y-2.5 transition-all hover:border-slate-300 ${
+                          !row.visible_cliente
+                            ? 'bg-amber-50/50 border-amber-200 border-dashed'
+                            : row.es_opcional
+                              ? 'bg-slate-50/80 border-dashed border-slate-300'
+                              : 'bg-white border-slate-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.03)]'
+                        }`}
+                      >
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <div className="col-span-12 md:col-span-2">
                             <CpqCreatableCombobox
-                              size="xs"
+                              size="sm"
                               disabled={!isEditable}
-                              value={row.unidad}
+                              value={row.categoria_rubro}
                               onChange={(val) =>
                                 setOtrosRows((prev) =>
-                                  prev.map((r, i) => (i === idx ? { ...r, unidad: val } : r)),
+                                  prev.map((r, i) =>
+                                    i === idx ? { ...r, categoria_rubro: val } : r,
+                                  ),
                                 )
                               }
-                              options={unidadOptions}
-                              placeholder="Unidad"
-                              searchPlaceholder="Buscar unidad (ej. global, día, km)..."
-                              customLabel="Usar unidad"
+                              options={RUBRO_OTRO_COMBOBOX_OPTIONS}
+                              placeholder="Categoría..."
+                              searchPlaceholder="Buscar o crear rubro..."
+                              customLabel="Crear rubro"
+                              normalizeCustom={(raw) =>
+                                raw
+                                  .normalize('NFD')
+                                  .replace(/[\u0300-\u036f]/g, '')
+                                  .toUpperCase()
+                                  .replace(/[^A-Z0-9]+/g, '_')
+                                  .replace(/^_+|_+$/g, '')
+                                  .slice(0, 40)
+                              }
                               minDropdownWidth={230}
                             />
                           </div>
-                          {row.visible_cliente && (
-                            <div className="flex items-center gap-1.5" title="Descuento por línea (%)">
-                              <span className="text-[11px] font-medium text-slate-400">Desc.</span>
-                              <div className="w-16">
-                                <CpqSmartNumberInput
-                                  min={0}
-                                  max={100}
-                                  decimals={1}
-                                  suffix="%"
-                                  disabled={!isEditable}
-                                  value={row.descuento_porcentaje}
-                                  onChange={(val) =>
-                                    setOtrosRows((prev) =>
-                                      prev.map((r, i) =>
-                                        i === idx ? { ...r, descuento_porcentaje: val } : r,
-                                      ),
-                                    )
-                                  }
-                                  className="h-7 text-[11px]"
-                                />
-                              </div>
-                            </div>
-                          )}
-                          {equiposSeleccionadosInfo.length > 1 && (
-                            <select
+                          <div className="col-span-12 md:col-span-4">
+                            <Input
                               disabled={!isEditable}
-                              value={row.id_equipo ?? ''}
+                              value={row.descripcion}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) =>
                                 setOtrosRows((prev) =>
                                   prev.map((r, i) =>
-                                    i === idx
-                                      ? {
-                                          ...r,
-                                          id_equipo: e.target.value ? Number(e.target.value) : null,
-                                        }
-                                      : r,
+                                    i === idx ? { ...r, descripcion: e.target.value } : r,
                                   ),
                                 )
                               }
-                              className="border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white max-w-[160px]"
-                            >
-                              <option value="">Todos los equipos</option>
-                              {equiposSeleccionadosInfo.map((eq) => (
-                                <option key={eq.id} value={eq.id}>
-                                  {eq.codigo}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          <input
-                            disabled={!isEditable}
-                            value={row.detalle_calculo || ''}
-                            onChange={(e) =>
-                              setOtrosRows((prev) =>
-                                prev.map((r, i) =>
-                                  i === idx ? { ...r, detalle_calculo: e.target.value } : r,
-                                ),
-                              )
-                            }
-                            placeholder="Fórmula (ej. 2 técnicos × 2 días)"
-                            className="w-48 border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white"
-                          />
-                          <label className="flex items-center gap-1 cursor-pointer font-medium text-slate-800">
-                            <input
-                              type="checkbox"
+                              placeholder="Concepto del rubro *"
+                              className="h-8 text-xs font-medium"
+                            />
+                          </div>
+                          <div className="col-span-4 md:col-span-1">
+                            <CpqSmartNumberInput
+                              min={0.01}
+                              decimals={2}
+                              align="center"
                               disabled={!isEditable}
-                              checked={row.visible_cliente}
-                              onChange={(e) =>
+                              value={row.cantidad}
+                              onChange={(val) =>
                                 setOtrosRows((prev) =>
-                                  prev.map((r, i) =>
-                                    i === idx ? { ...r, visible_cliente: e.target.checked } : r,
-                                  ),
+                                  prev.map((r, i) => (i === idx ? { ...r, cantidad: val } : r)),
                                 )
                               }
                             />
-                            Visible al cliente
-                          </label>
-                          {!row.visible_cliente && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-semibold">
-                              Costo interno absorbido
-                            </span>
-                          )}
-                          {row.visible_cliente && (
-                            <>
-                              <label className="flex items-center gap-1 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  disabled={!isEditable}
-                                  checked={row.iva_aplicable}
-                                  onChange={(e) =>
-                                    setOtrosRows((prev) =>
-                                      prev.map((r, i) =>
-                                        i === idx ? { ...r, iva_aplicable: e.target.checked } : r,
-                                      ),
-                                    )
-                                  }
-                                />
-                                {taxLabel}
-                              </label>
-                              <label className="flex items-center gap-1 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  disabled={!isEditable}
-                                  checked={row.es_opcional}
-                                  onChange={(e) =>
-                                    setOtrosRows((prev) =>
-                                      prev.map((r, i) =>
-                                        i === idx ? { ...r, es_opcional: e.target.checked } : r,
-                                      ),
-                                    )
-                                  }
-                                />
-                                Opcional
-                              </label>
-                            </>
+                          </div>
+                          <div className="col-span-4 md:col-span-2">
+                            <CpqMoneyInput
+                              tone="cost"
+                              disabled={!isEditable}
+                              value={row.costo_unitario}
+                              locale={moneyLocale}
+                              symbol={moneySymbol}
+                              decimals={moneyDecimals}
+                              onChange={(val) =>
+                                setOtrosRows((prev) =>
+                                  prev.map((r, i) =>
+                                    i === idx ? { ...r, costo_unitario: val } : r,
+                                  ),
+                                )
+                              }
+                              title="Costo Interno Real"
+                            />
+                          </div>
+                          <div className="col-span-4 md:col-span-2">
+                            <CpqMoneyInput
+                              disabled={!isEditable || !row.visible_cliente}
+                              value={row.visible_cliente ? row.precio_unitario : 0}
+                              locale={moneyLocale}
+                              symbol={moneySymbol}
+                              decimals={moneyDecimals}
+                              onChange={(val) =>
+                                setOtrosRows((prev) =>
+                                  prev.map((r, i) =>
+                                    i === idx ? { ...r, precio_unitario: val } : r,
+                                  ),
+                                )
+                              }
+                              title="Precio Facturable al Cliente"
+                            />
+                          </div>
+                          <div className="col-span-12 md:col-span-1 text-right font-mono text-xs font-bold text-slate-800">
+                            {row.visible_cliente ? formatCurrency(sub) : 'Absorb.'}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px] text-slate-600">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <div className="w-28">
+                              <CpqCreatableCombobox
+                                size="xs"
+                                disabled={!isEditable}
+                                value={row.unidad}
+                                onChange={(val) =>
+                                  setOtrosRows((prev) =>
+                                    prev.map((r, i) => (i === idx ? { ...r, unidad: val } : r)),
+                                  )
+                                }
+                                options={unidadOptions}
+                                placeholder="Unidad"
+                                searchPlaceholder="Buscar unidad (ej. global, día, km)..."
+                                customLabel="Usar unidad"
+                                minDropdownWidth={230}
+                              />
+                            </div>
+                            {row.visible_cliente && (
+                              <div
+                                className="flex items-center gap-1.5"
+                                title="Descuento por línea (%)"
+                              >
+                                <span className="text-[11px] font-medium text-slate-400">
+                                  Desc.
+                                </span>
+                                <div className="w-16">
+                                  <CpqSmartNumberInput
+                                    min={0}
+                                    max={100}
+                                    decimals={1}
+                                    suffix="%"
+                                    disabled={!isEditable}
+                                    value={row.descuento_porcentaje}
+                                    onChange={(val) =>
+                                      setOtrosRows((prev) =>
+                                        prev.map((r, i) =>
+                                          i === idx ? { ...r, descuento_porcentaje: val } : r,
+                                        ),
+                                      )
+                                    }
+                                    className="h-7 text-[11px]"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {equiposSeleccionadosInfo.length > 1 && (
+                              <select
+                                disabled={!isEditable}
+                                value={row.id_equipo ?? ''}
+                                onChange={(e) =>
+                                  setOtrosRows((prev) =>
+                                    prev.map((r, i) =>
+                                      i === idx
+                                        ? {
+                                            ...r,
+                                            id_equipo: e.target.value
+                                              ? Number(e.target.value)
+                                              : null,
+                                          }
+                                        : r,
+                                    ),
+                                  )
+                                }
+                                className="border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white max-w-[160px]"
+                              >
+                                <option value="">Todos los equipos</option>
+                                {equiposSeleccionadosInfo.map((eq) => (
+                                  <option key={eq.id} value={eq.id}>
+                                    {eq.codigo}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            <input
+                              disabled={!isEditable}
+                              value={row.detalle_calculo || ''}
+                              onChange={(e) =>
+                                setOtrosRows((prev) =>
+                                  prev.map((r, i) =>
+                                    i === idx ? { ...r, detalle_calculo: e.target.value } : r,
+                                  ),
+                                )
+                              }
+                              placeholder="Fórmula (ej. 2 técnicos × 2 días)"
+                              className="w-48 border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white"
+                            />
+                            <label className="flex items-center gap-1 cursor-pointer font-medium text-slate-800">
+                              <input
+                                type="checkbox"
+                                disabled={!isEditable}
+                                checked={row.visible_cliente}
+                                onChange={(e) =>
+                                  setOtrosRows((prev) =>
+                                    prev.map((r, i) =>
+                                      i === idx ? { ...r, visible_cliente: e.target.checked } : r,
+                                    ),
+                                  )
+                                }
+                              />
+                              Visible al cliente
+                            </label>
+                            {!row.visible_cliente && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-semibold">
+                                Costo interno absorbido
+                              </span>
+                            )}
+                            {row.visible_cliente && (
+                              <>
+                                <label className="flex items-center gap-1 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    disabled={!isEditable}
+                                    checked={row.iva_aplicable}
+                                    onChange={(e) =>
+                                      setOtrosRows((prev) =>
+                                        prev.map((r, i) =>
+                                          i === idx ? { ...r, iva_aplicable: e.target.checked } : r,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                  {taxLabel}
+                                </label>
+                                <label className="flex items-center gap-1 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    disabled={!isEditable}
+                                    checked={row.es_opcional}
+                                    onChange={(e) =>
+                                      setOtrosRows((prev) =>
+                                        prev.map((r, i) =>
+                                          i === idx ? { ...r, es_opcional: e.target.checked } : r,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                  Opcional
+                                </label>
+                              </>
+                            )}
+                          </div>
+                          {isEditable && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOtrosRows((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              className="text-rose-500 hover:text-rose-700 p-1"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           )}
                         </div>
-                        {isEditable && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setOtrosRows((prev) => prev.filter((_, i) => i !== idx))
-                            }
-                            className="text-rose-500 hover:text-rose-700 p-1"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -3490,6 +3637,299 @@ function CotizacionStudioEditor({
                   placeholder="Si se deja vacío, el PDF aplicará los términos estándar White-Label de la organización..."
                   className="text-xs bg-white"
                 />
+              </div>
+
+              {/* Bloque Colapsable: Firmas Digitales Opcionales */}
+              <div className="pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setFirmasExpandido((prev) => !prev)}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100/80 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Pen className="h-4 w-4 text-primary shrink-0" />
+                    <span className="text-xs font-bold text-slate-800">
+                      Firmas Digitales (Opcional)
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={
+                        firmaAsesorLocal || firmaClienteLocal
+                          ? 'text-[10px] bg-emerald-50 border-emerald-300 text-emerald-800 font-semibold'
+                          : 'text-[10px] bg-white border-slate-200 text-slate-500'
+                      }
+                    >
+                      {(firmaAsesorLocal ? 1 : 0) + (firmaClienteLocal ? 1 : 0)}/2 adjuntas
+                    </Badge>
+                    {!firmaAsesorLocal && firmaEstandarAsesor && (
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                        <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-500" />
+                        Firma estándar disponible
+                      </span>
+                    )}
+                  </div>
+                  {firmasExpandido ? (
+                    <ChevronUp className="h-4 w-4 text-slate-500 shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
+                  )}
+                </button>
+
+                {firmasExpandido && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                    {/* Tarjeta 1: Firma del Asesor / Emisor */}
+                    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden flex flex-col">
+                      <div className="px-3.5 py-2 bg-emerald-50/70 border-b border-emerald-100 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <UserCheck className="h-4 w-4 text-emerald-700 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate">
+                              Firma Asesor Emisor
+                            </p>
+                            <p className="text-[10px] text-slate-500 truncate">
+                              {asesorActivoNombre}
+                            </p>
+                          </div>
+                        </div>
+                        {firmaAsesorLocal ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 text-[10px]">
+                            Adjunta
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-slate-500 bg-white">
+                            Línea física
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="p-3 flex-1 flex flex-col justify-between gap-2.5">
+                        {firmaAsesorLocal ? (
+                          <>
+                            <div className="h-20 rounded-lg border border-slate-200 bg-slate-50/40 flex items-center justify-center p-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={normalizeSignatureDataUri(firmaAsesorLocal.firma_base64) || ''}
+                                alt="Firma del Asesor Emisor"
+                                className="max-h-16 max-w-full object-contain mix-blend-multiply"
+                              />
+                            </div>
+                            {canManageFirmas && (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-[11px]"
+                                  disabled={
+                                    firmaActions.guardarFirma.isPending ||
+                                    firmaActions.eliminarFirma.isPending
+                                  }
+                                  onClick={() => setFirmaModalTipo('ASESOR')}
+                                >
+                                  <Pen className="h-3 w-3 mr-1" /> Cambiar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-[11px] text-rose-700 hover:text-rose-800 hover:bg-rose-50"
+                                  disabled={firmaActions.eliminarFirma.isPending}
+                                  onClick={async () => {
+                                    if (isEdit && cotizacion) {
+                                      await firmaActions.eliminarFirma.mutateAsync('ASESOR');
+                                    }
+                                    setFirmaAsesorLocal(null);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3 mr-1" /> Quitar
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-3 text-center space-y-1.5">
+                              <p className="text-[11px] text-slate-500 leading-snug">
+                                Sin firma adjunta — En el PDF aparecerá línea para firma física.
+                              </p>
+                              {firmaEstandarAsesor && canManageFirmas && (
+                                <button
+                                  type="button"
+                                  disabled={firmaActions.guardarFirma.isPending}
+                                  onClick={async () => {
+                                    if (isEdit && cotizacion) {
+                                      const res = await firmaActions.guardarFirma.mutateAsync({
+                                        tipo: 'ASESOR',
+                                        payload: {
+                                          id_firma_digital: firmaEstandarAsesor.id_firma_digital,
+                                        },
+                                      });
+                                      setFirmaAsesorLocal({
+                                        id_firma_digital:
+                                          res.data.firma_asesor?.id_firma_digital ??
+                                          firmaEstandarAsesor.id_firma_digital,
+                                        firma_base64:
+                                          res.data.firma_asesor?.firma_base64 ||
+                                          firmaEstandarAsesor.firma_base64,
+                                      });
+                                    } else {
+                                      setFirmaAsesorLocal({
+                                        id_firma_digital: firmaEstandarAsesor.id_firma_digital,
+                                        firma_base64: firmaEstandarAsesor.firma_base64,
+                                      });
+                                      toast.success(
+                                        'Firma estándar del asesor precargada (se guardará al crear la cotización)',
+                                      );
+                                    }
+                                  }}
+                                  className="w-full mt-1 p-2 rounded-lg border border-amber-300 bg-amber-50/80 hover:bg-amber-100/80 transition-colors flex items-center justify-between gap-2 text-left"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="h-8 w-14 rounded bg-white border border-amber-200 flex items-center justify-center p-0.5 shrink-0">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={
+                                          normalizeSignatureDataUri(
+                                            firmaEstandarAsesor.firma_base64,
+                                          ) || ''
+                                        }
+                                        alt="Firma estándar"
+                                        className="max-h-7 max-w-full object-contain mix-blend-multiply"
+                                      />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                                        <Star className="h-3 w-3 fill-amber-400 text-amber-500 shrink-0" />
+                                        Usar firma estándar en 1 clic
+                                      </p>
+                                      <p className="text-[10px] text-amber-700 truncate">
+                                        {firmaEstandarAsesor.veces_usada} uso
+                                        {firmaEstandarAsesor.veces_usada !== 1 ? 's' : ''}{' '}
+                                        registrado
+                                        {firmaEstandarAsesor.veces_usada !== 1 ? 's' : ''}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </button>
+                              )}
+                            </div>
+                            {canManageFirmas && (
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-[11px]"
+                                  onClick={() => setFirmaModalTipo('ASESOR')}
+                                >
+                                  <Pen className="h-3 w-3 mr-1" /> Dibujar o Subir Firma
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tarjeta 2: Firma de Aceptación del Cliente (Opcional) */}
+                    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden flex flex-col">
+                      <div className="px-3.5 py-2 bg-indigo-50/70 border-b border-indigo-100 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <User className="h-4 w-4 text-indigo-700 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate">
+                              Firma Cliente — Opcional
+                            </p>
+                            <p className="text-[10px] text-slate-500 truncate">
+                              {atencionANombre.trim()
+                                ? `${atencionANombre.trim()}${atencionACargo.trim() ? ` · ${atencionACargo.trim()}` : ''}`
+                                : 'Para cierres presenciales o aprobación firmada'}
+                            </p>
+                          </div>
+                        </div>
+                        {firmaClienteLocal ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 text-[10px]">
+                            Adjunta
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-slate-500 bg-white">
+                            Línea física
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="p-3 flex-1 flex flex-col justify-between gap-2.5">
+                        {firmaClienteLocal ? (
+                          <>
+                            <div className="h-20 rounded-lg border border-slate-200 bg-slate-50/40 flex items-center justify-center p-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={
+                                  normalizeSignatureDataUri(firmaClienteLocal.firma_base64) || ''
+                                }
+                                alt="Firma de Aceptación del Cliente"
+                                className="max-h-16 max-w-full object-contain mix-blend-multiply"
+                              />
+                            </div>
+                            {canManageFirmas && (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-[11px]"
+                                  disabled={
+                                    firmaActions.guardarFirma.isPending ||
+                                    firmaActions.eliminarFirma.isPending
+                                  }
+                                  onClick={() => setFirmaModalTipo('CLIENTE')}
+                                >
+                                  <Pen className="h-3 w-3 mr-1" /> Cambiar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-[11px] text-rose-700 hover:text-rose-800 hover:bg-rose-50"
+                                  disabled={firmaActions.eliminarFirma.isPending}
+                                  onClick={async () => {
+                                    if (isEdit && cotizacion) {
+                                      await firmaActions.eliminarFirma.mutateAsync('CLIENTE');
+                                    }
+                                    setFirmaClienteLocal(null);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3 mr-1" /> Quitar
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-3 text-center flex items-center justify-center min-h-[80px]">
+                              <p className="text-[11px] text-slate-500 leading-snug">
+                                Sin firma adjunta — En el PDF aparecerá línea para firma física.
+                              </p>
+                            </div>
+                            {canManageFirmas && (
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-[11px]"
+                                  onClick={() => setFirmaModalTipo('CLIENTE')}
+                                >
+                                  <Pen className="h-3 w-3 mr-1" /> Adjuntar Firma Cliente
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -3625,7 +4065,9 @@ function CotizacionStudioEditor({
                     </label>
                     <div className="flex justify-between text-xs font-semibold text-slate-700 pt-1 border-t border-slate-200">
                       <span>Total AIU</span>
-                      <span className="font-mono">{formatCurrency(resumenFinanciero.aiuTotal)}</span>
+                      <span className="font-mono">
+                        {formatCurrency(resumenFinanciero.aiuTotal)}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -3657,7 +4099,9 @@ function CotizacionStudioEditor({
 
               {/* TOTAL CLIENTE */}
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase text-primary">Total Oferta Cliente</span>
+                <span className="text-xs font-bold uppercase text-primary">
+                  Total Oferta Cliente
+                </span>
                 <span className="text-xl font-extrabold font-mono text-primary">
                   {formatCurrency(resumenFinanciero.totalCotizacion)}
                 </span>
@@ -3823,7 +4267,8 @@ function CotizacionStudioEditor({
           <DialogHeader>
             <DialogTitle>Enviar a Aprobación Interna</DialogTitle>
             <DialogDescription>
-              Guardaremos tus cambios actuales y evaluaremos la cotización contra las políticas comerciales de la organización.
+              Guardaremos tus cambios actuales y evaluaremos la cotización contra las políticas
+              comerciales de la organización.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -3934,7 +4379,8 @@ function CotizacionStudioEditor({
               Registrar Aprobación del Cliente
             </DialogTitle>
             <DialogDescription>
-              Una vez aprobada por el cliente podrás convertir esta cotización en Orden de Servicio con un clic.
+              Una vez aprobada por el cliente podrás convertir esta cotización en Orden de Servicio
+              con un clic.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -4045,7 +4491,8 @@ function CotizacionStudioEditor({
           <DialogHeader>
             <DialogTitle>Reabrir Cotización para Edición</DialogTitle>
             <DialogDescription>
-              El estado actual se archivará automáticamente como snapshot inmutable en el historial de versiones antes de regresar a BORRADOR.
+              El estado actual se archivará automáticamente como snapshot inmutable en el historial
+              de versiones antes de regresar a BORRADOR.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1">
@@ -4086,7 +4533,8 @@ function CotizacionStudioEditor({
           <DialogHeader>
             <DialogTitle>Guardar como Plantilla Estándar CPQ</DialogTitle>
             <DialogDescription>
-              Se guardarán los servicios, repuestos, logística, alcance y configuración AIU en el Hub de Plantillas para reutilizarlos en futuras cotizaciones.
+              Se guardarán los servicios, repuestos, logística, alcance y configuración AIU en el
+              Hub de Plantillas para reutilizarlos en futuras cotizaciones.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -4142,7 +4590,8 @@ function CotizacionStudioEditor({
               Convertir Cotización a Orden de Servicio
             </DialogTitle>
             <DialogDescription>
-              Genera una Orden de Servicio multi-equipo vinculada automáticamente a {cotizacion?.numero_cotizacion} y verifica disponibilidad en inventario WMS.
+              Genera una Orden de Servicio multi-equipo vinculada automáticamente a{' '}
+              {cotizacion?.numero_cotizacion} y verifica disponibilidad en inventario WMS.
             </DialogDescription>
           </DialogHeader>
 
@@ -4164,11 +4613,16 @@ function CotizacionStudioEditor({
               {q2oResultado.diagnostico_inventario.total_repuestos_catalogo > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-bold uppercase text-slate-600">
-                    Diagnóstico de Inventario WMS ({q2oResultado.diagnostico_inventario.listos_para_remision} listos · {q2oResultado.diagnostico_inventario.con_deficit_compra} con déficit)
+                    Diagnóstico de Inventario WMS (
+                    {q2oResultado.diagnostico_inventario.listos_para_remision} listos ·{' '}
+                    {q2oResultado.diagnostico_inventario.con_deficit_compra} con déficit)
                   </p>
                   <div className="max-h-48 overflow-y-auto border rounded-lg divide-y text-xs">
                     {q2oResultado.diagnostico_inventario.items.map((it) => (
-                      <div key={it.id_componente} className="p-2.5 flex items-center justify-between gap-2">
+                      <div
+                        key={it.id_componente}
+                        className="p-2.5 flex items-center justify-between gap-2"
+                      >
                         <div className="min-w-0">
                           <p className="font-medium text-slate-800 truncate">{it.descripcion}</p>
                           <p className="text-[11px] text-slate-500">
@@ -4206,7 +4660,8 @@ function CotizacionStudioEditor({
               {equiposIds.length === 0 && (
                 <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
-                  Esta cotización no tiene equipos vinculados. Reábrela y vincula al menos un equipo antes de convertirla.
+                  Esta cotización no tiene equipos vinculados. Reábrela y vincula al menos un equipo
+                  antes de convertirla.
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
@@ -4293,8 +4748,10 @@ function CotizacionStudioEditor({
                       payload: {
                         fecha_programada: q2oFecha,
                         prioridad: q2oPrioridad,
-                        id_tipo_servicio: q2oTipoServId !== 'AUTO' ? Number(q2oTipoServId) : undefined,
-                        id_tecnico_asignado: q2oTecnicoId !== 'NONE' ? Number(q2oTecnicoId) : undefined,
+                        id_tipo_servicio:
+                          q2oTipoServId !== 'AUTO' ? Number(q2oTipoServId) : undefined,
+                        id_tecnico_asignado:
+                          q2oTecnicoId !== 'NONE' ? Number(q2oTecnicoId) : undefined,
                         observaciones: q2oObs.trim() || undefined,
                       },
                     });
@@ -4312,6 +4769,113 @@ function CotizacionStudioEditor({
         </DialogContent>
       </Dialog>
 
+      <DigitalSignatureModal
+        open={firmaModalTipo !== null}
+        onClose={() => setFirmaModalTipo(null)}
+        roleVariant={firmaModalTipo === 'CLIENTE' ? 'cliente' : 'emisor'}
+        title={
+          firmaModalTipo === 'CLIENTE'
+            ? 'Firma de Aceptación del Cliente (Opcional)'
+            : 'Firma del Asesor / Emisor'
+        }
+        subtitle={
+          firmaModalTipo === 'CLIENTE'
+            ? 'Dibuje, suba o ajuste el firmante del cliente para el cierre comercial'
+            : `Dibuje, suba una imagen o reutilice una firma estándar de ${asesorActivoNombre}`
+        }
+        existingSignatureDataUri={
+          firmaModalTipo === 'CLIENTE'
+            ? (firmaClienteLocal?.firma_base64 ?? null)
+            : (firmaAsesorLocal?.firma_base64 ?? null)
+        }
+        showSignerFields={firmaModalTipo === 'CLIENTE'}
+        signerSectionLabel="Destinatario / Firmante del Cliente"
+        initialNombre={atencionANombre}
+        initialCargo={atencionACargo}
+        historyItems={firmaModalTipo === 'ASESOR' ? historialFirmasAsesor : []}
+        historyLoading={firmaModalTipo === 'ASESOR' ? loadingHistorialFirmasAsesor : false}
+        historyTitle={`Firmas estándares de ${asesorActivoNombre}`}
+        historyEmptyText="Sin firmas previas registradas para este asesor."
+        isSaving={firmaActions.guardarFirma.isPending || firmaActions.eliminarFirma.isPending}
+        onRemove={
+          (firmaModalTipo === 'ASESOR' && firmaAsesorLocal) ||
+          (firmaModalTipo === 'CLIENTE' && firmaClienteLocal)
+            ? async () => {
+                const tipoActual = firmaModalTipo!;
+                if (isEdit && cotizacion) {
+                  await firmaActions.eliminarFirma.mutateAsync(tipoActual);
+                }
+                if (tipoActual === 'ASESOR') setFirmaAsesorLocal(null);
+                else setFirmaClienteLocal(null);
+                setFirmaModalTipo(null);
+              }
+            : undefined
+        }
+        onSave={async (result) => {
+          const tipoActual = firmaModalTipo;
+          if (!tipoActual) return;
+
+          if (tipoActual === 'CLIENTE') {
+            if (result.nombre_firmante !== undefined) setAtencionANombre(result.nombre_firmante);
+            if (result.cargo_firmante !== undefined) setAtencionACargo(result.cargo_firmante);
+          }
+
+          if (isEdit && cotizacion) {
+            const payload: {
+              firma_base64?: string;
+              id_firma_digital?: number;
+              atencion_a_nombre?: string;
+              atencion_a_cargo?: string;
+            } = {};
+            if (result.id_firma_digital) {
+              payload.id_firma_digital = result.id_firma_digital;
+            } else if (result.firma_base64) {
+              payload.firma_base64 = result.firma_base64;
+            }
+            if (tipoActual === 'CLIENTE') {
+              payload.atencion_a_nombre = result.nombre_firmante;
+              payload.atencion_a_cargo = result.cargo_firmante;
+            }
+
+            if (
+              payload.id_firma_digital ||
+              payload.firma_base64 ||
+              payload.atencion_a_nombre !== undefined ||
+              payload.atencion_a_cargo !== undefined
+            ) {
+              const res = await firmaActions.guardarFirma.mutateAsync({
+                tipo: tipoActual,
+                payload,
+              });
+              if (tipoActual === 'ASESOR' && res.data.firma_asesor?.firma_base64) {
+                setFirmaAsesorLocal({
+                  id_firma_digital: res.data.firma_asesor.id_firma_digital,
+                  firma_base64: res.data.firma_asesor.firma_base64,
+                });
+              } else if (tipoActual === 'CLIENTE' && res.data.firma_cliente?.firma_base64) {
+                setFirmaClienteLocal({
+                  id_firma_digital: res.data.firma_cliente.id_firma_digital,
+                  firma_base64: res.data.firma_cliente.firma_base64,
+                });
+              }
+            }
+          } else {
+            // Cotización nueva aún no guardada: mantener en estado local hasta pulsar Guardar
+            if (result.firma_base64) {
+              const localFirma = {
+                id_firma_digital: result.id_firma_digital,
+                firma_base64: result.firma_base64,
+              };
+              if (tipoActual === 'ASESOR') setFirmaAsesorLocal(localFirma);
+              else setFirmaClienteLocal(localFirma);
+              toast.success('Firma preparada (se guardará automáticamente al crear la cotización)');
+            }
+          }
+
+          setFirmaModalTipo(null);
+        }}
+      />
+
       <CotizacionPdfPreviewModal
         open={pdfPreviewOpen}
         onOpenChange={setPdfPreviewOpen}
@@ -4319,7 +4883,21 @@ function CotizacionStudioEditor({
         numeroCotizacion={cotizacion?.numero_cotizacion}
         version={cotizacion?.version}
         estadoLabel={ESTADO_LABELS_COTIZACION[estadoCodigo] || estadoCodigo}
-        cacheKey={`${cotizacion?.fecha_modificacion ?? ''}-${cotizacion?.version ?? 1}-${cotizacion?.total_cotizacion ?? 0}-${cotizacion?.id_estado ?? 0}-${cotizacion?.items_servicios?.length ?? 0}-${cotizacion?.items_componentes?.length ?? 0}-${cotizacion?.items_otros?.length ?? 0}`}
+        cacheKey={[
+          cotizacion?.fecha_modificacion ?? '',
+          cotizacion?.version ?? 1,
+          cotizacion?.total_cotizacion ?? 0,
+          cotizacion?.id_estado ?? 0,
+          cotizacion?.items_servicios?.length ?? 0,
+          cotizacion?.items_componentes?.length ?? 0,
+          cotizacion?.items_otros?.length ?? 0,
+          firmaAsesorLocal?.id_firma_digital ?? (firmaAsesorLocal ? 'local' : 0),
+          firmaClienteLocal?.id_firma_digital ?? (firmaClienteLocal ? 'local' : 0),
+          atencionANombre,
+          atencionACargo,
+          orgConfig?.enable_cpq_governance ? 'gov1' : 'gov0',
+          orgConfig?.fecha_modificacion ?? '',
+        ].join('-')}
         mostrarDesglosePrecios={mostrarDesglosePrecios}
         onDesgloseChange={setMostrarDesglosePrecios}
       />

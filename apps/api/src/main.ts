@@ -42,7 +42,7 @@ async function bootstrap(): Promise<void> {
     // 🛡️ SEGURIDAD: Función de sanitización para evitar fuga de contraseñas y tokens en logs
     const sanitizeLogData = (data: any): any => {
       if (!data || typeof data !== 'object') return data;
-      if (Array.isArray(data)) return data.map(item => sanitizeLogData(item));
+      if (Array.isArray(data)) return data.map((item) => sanitizeLogData(item));
 
       const sensitiveKeys = new Set([
         'password',
@@ -62,7 +62,11 @@ async function bootstrap(): Promise<void> {
       for (const [key, value] of Object.entries(data)) {
         if (sensitiveKeys.has(key.toLowerCase())) {
           sanitized[key] = '********';
-        } else if (typeof value === 'string' && value.startsWith('data:image/') && value.length > 100) {
+        } else if (
+          typeof value === 'string' &&
+          value.startsWith('data:image/') &&
+          value.length > 100
+        ) {
           sanitized[key] = `${value.substring(0, 30)}... [${value.length} bytes base64]`;
         } else if (typeof value === 'object' && value !== null) {
           sanitized[key] = sanitizeLogData(value);
@@ -86,7 +90,9 @@ async function bootstrap(): Promise<void> {
       // Capturar el final de la respuesta para loguear el status
       res.on('finish', () => {
         const duration = Date.now() - new Date(timestamp).getTime();
-        console.log(`[${new Date().toISOString()}] [RESPONSE] ${method} ${url} - Status: ${res.statusCode} (${duration}ms)`);
+        console.log(
+          `[${new Date().toISOString()}] [RESPONSE] ${method} ${url} - Status: ${res.statusCode} (${duration}ms)`,
+        );
       });
 
       next();
@@ -104,7 +110,8 @@ async function bootstrap(): Promise<void> {
 
     const swaggerConfig = new DocumentBuilder()
       .setTitle(appName)
-      .setDescription(`
+      .setDescription(
+        `
         ## Plataforma Enterprise Asset Management (EAM / CMMS) White-Label
         
         ### API de Backend para:
@@ -122,7 +129,8 @@ async function bootstrap(): Promise<void> {
         
         ### Autenticación:
         Usar Bearer Token JWT obtenido en \`/api/auth/login\`
-      `)
+      `,
+      )
       .setVersion('1.0.0')
       .setContact(appName, appWebsite, appContactEmail)
       .addBearerAuth(
@@ -139,7 +147,10 @@ async function bootstrap(): Promise<void> {
       .addTag('Auth', 'Autenticación y autorización')
       .addTag('FASE 1 - Equipos', 'Gestión de equipos, componentes y fichas técnicas')
       .addTag('FASE 2 - Usuarios', 'Clientes, empleados, proveedores y roles')
-      .addTag('FASE 3 - Órdenes de Servicio', 'Órdenes de servicio, workflow y finalización completa')
+      .addTag(
+        'FASE 3 - Órdenes de Servicio',
+        'Órdenes de servicio, workflow y finalización completa',
+      )
       .addTag('FASE 4 - Cotizaciones', 'Cotizaciones comerciales y flujo de aprobación')
       .addTag('FASE 4 - Propuestas Correctivo', 'Propuestas de mantenimiento correctivo')
       .addTag('FASE 5 - Inventario', 'Productos, movimientos y alertas de stock')
@@ -183,7 +194,7 @@ async function bootstrap(): Promise<void> {
     } else if (corsOrigin) {
       // Combinar dominios de env con los por defecto
       const envOrigins = corsOrigin.includes(',')
-        ? corsOrigin.split(',').map(o => o.trim())
+        ? corsOrigin.split(',').map((o) => o.trim())
         : [corsOrigin];
       origins = [...new Set([...defaultOrigins, ...envOrigins])];
     } else {
@@ -195,7 +206,13 @@ async function bootstrap(): Promise<void> {
       origin: origins,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Cache-Control',
+        'Pragma',
+        'ngrok-skip-browser-warning',
+      ],
     });
     console.log('✅ [DEBUG 7/10] CORS habilitado');
 
@@ -235,7 +252,9 @@ async function bootstrap(): Promise<void> {
     app.useGlobalFilters(new AllExceptionsFilter());
 
     const port = process.env.PORT || 3000;
-    console.log(`🔧 [DEBUG 10/10] Iniciando listener puerto ${port} en :: (IPv4 + IPv6 dual-stack)...`);
+    console.log(
+      `🔧 [DEBUG 10/10] Iniciando listener puerto ${port} en :: (IPv4 + IPv6 dual-stack)...`,
+    );
 
     // ⚡ FIX 04-NOV-2026: `0.0.0.0` solo acepta IPv4. El navegador resuelve
     // `localhost` a ::1 primero, lo que añadía ~180 ms de fallback por request.
@@ -256,9 +275,10 @@ async function bootstrap(): Promise<void> {
 
     // ✅ DEBUG Windows: Keep-alive explícito
     setInterval(() => {
-      console.log(`[KEEPALIVE] ${new Date().toISOString()} - Server still running (PID: ${process.pid})`);
+      console.log(
+        `[KEEPALIVE] ${new Date().toISOString()} - Server still running (PID: ${process.pid})`,
+      );
     }, 30000); // Log cada 30 segundos
-
   } catch (error) {
     console.error('❌ [FATAL] Error en bootstrap:', error);
     console.error('❌ [FATAL] Stack trace:', (error as Error)?.stack);

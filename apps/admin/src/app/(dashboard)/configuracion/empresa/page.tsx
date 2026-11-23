@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Briefcase,
   Building2,
+  Check,
   CheckCircle2,
   Coins,
   FileText,
@@ -41,6 +42,7 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
+import { COMERCIAL_KEYS } from '@/features/comercial/hooks/use-comercial';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -150,6 +152,38 @@ const MONEDAS_COMUNES = [
   { code: 'ARS', symbol: '$', decimals: 2, label: 'ARS - Peso argentino' },
   { code: 'BRL', symbol: 'R$', decimals: 2, label: 'BRL - Real brasileño' },
 ];
+
+const CPQ_PRESET_PYME_AGIL = {
+  umbral_aprobacion_supervisor: 2000000,
+  umbral_aprobacion_gerente: 8000000,
+  descuento_max_sin_aprobacion: 10,
+  margen_minimo_alerta: 25,
+  margen_minimo_aprobacion: 18,
+  lock_catalog_unit_price: false,
+} as const;
+
+const CPQ_PRESET_INDUSTRIAL_ESTRICTO = {
+  umbral_aprobacion_supervisor: 1000000,
+  umbral_aprobacion_gerente: 5000000,
+  descuento_max_sin_aprobacion: 5,
+  margen_minimo_alerta: 30,
+  margen_minimo_aprobacion: 22,
+  lock_catalog_unit_price: true,
+} as const;
+
+function matchesCpqPreset(
+  form: ConfiguracionEmpresa,
+  preset: typeof CPQ_PRESET_PYME_AGIL | typeof CPQ_PRESET_INDUSTRIAL_ESTRICTO,
+): boolean {
+  return (
+    Number(form.umbral_aprobacion_supervisor ?? 0) === preset.umbral_aprobacion_supervisor &&
+    Number(form.umbral_aprobacion_gerente ?? 0) === preset.umbral_aprobacion_gerente &&
+    Number(form.descuento_max_sin_aprobacion ?? 0) === preset.descuento_max_sin_aprobacion &&
+    Number(form.margen_minimo_alerta ?? 0) === preset.margen_minimo_alerta &&
+    Number(form.margen_minimo_aprobacion ?? 0) === preset.margen_minimo_aprobacion &&
+    Boolean(form.lock_catalog_unit_price) === preset.lock_catalog_unit_price
+  );
+}
 
 export default function ConfiguracionEmpresaPage() {
   const { data: session } = useSession();
@@ -283,7 +317,13 @@ export default function ConfiguracionEmpresaPage() {
       const updated = await updateConfiguracionEmpresa(payload);
       setForm(updated);
       await refreshBranding(updated);
-      queryClient.invalidateQueries({ queryKey: ['config-org-empresa-cpq'] });
+      // Sincronía global instantánea: invalida config empresa, cotizaciones y remueve Blobs PDF previos
+      queryClient.setQueryData(['config-org-empresa-cpq'], updated);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['config-org-empresa-cpq'] }),
+        queryClient.invalidateQueries({ queryKey: COMERCIAL_KEYS.cotizaciones }),
+      ]);
+      queryClient.removeQueries({ queryKey: ['cotizacion-pdf-preview'] });
       toast.success('Identidad White-Label y parámetros guardados y aplicados en vivo');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Error al guardar configuración corporativa'));
@@ -956,9 +996,7 @@ export default function ConfiguracionEmpresaPage() {
                 <div className="flex items-start gap-2.5">
                   <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                   <div className="text-sm text-amber-950">
-                    <p className="font-semibold">
-                      El Módulo Comercial está desactivado.
-                    </p>
+                    <p className="font-semibold">El Módulo Comercial está desactivado.</p>
                     <p className="text-xs text-amber-800 mt-0.5">
                       Actívalo en la pestaña &ldquo;Documentos y Operación&rdquo; para configurar
                       cotizaciones.
@@ -1090,68 +1128,89 @@ export default function ConfiguracionEmpresaPage() {
                     </div>
                   ) : (
                     <>
-                      {/* Presets rápidos (solo estado local, sin autoguardar) */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200/80">
-                        <span className="text-xs font-medium text-slate-600">
-                          Cargar perfil de referencia (sin guardar automáticamente):
-                        </span>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!form.modulo_comercial_activo}
-                            className="h-8 text-xs bg-white"
-                            onClick={() => {
-                              setForm((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      umbral_aprobacion_supervisor: 2000000,
-                                      umbral_aprobacion_gerente: 8000000,
-                                      descuento_max_sin_aprobacion: 10,
-                                      margen_minimo_alerta: 25,
-                                      margen_minimo_aprobacion: 18,
-                                      lock_catalog_unit_price: false,
-                                    }
-                                  : prev,
-                              );
-                              toast.info(
-                                'Perfil PyME Ágil aplicado al formulario. Pulsa "Guardar Cambios" para confirmar.',
-                              );
-                            }}
-                          >
-                            Perfil PyME Ágil
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!form.modulo_comercial_activo}
-                            className="h-8 text-xs bg-white"
-                            onClick={() => {
-                              setForm((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      umbral_aprobacion_supervisor: 1000000,
-                                      umbral_aprobacion_gerente: 5000000,
-                                      descuento_max_sin_aprobacion: 5,
-                                      margen_minimo_alerta: 30,
-                                      margen_minimo_aprobacion: 22,
-                                      lock_catalog_unit_price: true,
-                                    }
-                                  : prev,
-                              );
-                              toast.info(
-                                'Perfil Industrial Estricto aplicado al formulario. Pulsa "Guardar Cambios" para confirmar.',
-                              );
-                            }}
-                          >
-                            Perfil Industrial Estricto
-                          </Button>
-                        </div>
-                      </div>
+                      {/* Presets rápidos con detección reactiva de perfil activo */}
+                      {(() => {
+                        const isPymeAgil = matchesCpqPreset(form, CPQ_PRESET_PYME_AGIL);
+                        const isIndustrialEstricto = matchesCpqPreset(
+                          form,
+                          CPQ_PRESET_INDUSTRIAL_ESTRICTO,
+                        );
+                        const isPersonalizado = !isPymeAgil && !isIndustrialEstricto;
+
+                        return (
+                          <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200/80">
+                            <span className="text-xs font-medium text-slate-600">
+                              Cargar perfil de referencia (sin guardar automáticamente):
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!form.modulo_comercial_activo}
+                                className={
+                                  isPymeAgil
+                                    ? 'h-8 text-xs bg-emerald-50 border-emerald-500 text-emerald-800 font-semibold hover:bg-emerald-100/80 hover:text-emerald-900 shadow-xs'
+                                    : 'h-8 text-xs bg-white text-slate-700 hover:bg-slate-100'
+                                }
+                                onClick={() => {
+                                  setForm((prev) =>
+                                    prev ? { ...prev, ...CPQ_PRESET_PYME_AGIL } : prev,
+                                  );
+                                  toast.info(
+                                    'Perfil PyME Ágil aplicado al formulario. Pulsa "Guardar Cambios" para confirmar.',
+                                  );
+                                }}
+                              >
+                                {isPymeAgil && (
+                                  <Check className="h-3.5 w-3.5 mr-1 text-emerald-600 shrink-0" />
+                                )}
+                                Perfil PyME Ágil
+                                {isPymeAgil && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white leading-none">
+                                    Activo
+                                  </span>
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!form.modulo_comercial_activo}
+                                className={
+                                  isIndustrialEstricto
+                                    ? 'h-8 text-xs bg-emerald-50 border-emerald-500 text-emerald-800 font-semibold hover:bg-emerald-100/80 hover:text-emerald-900 shadow-xs'
+                                    : 'h-8 text-xs bg-white text-slate-700 hover:bg-slate-100'
+                                }
+                                onClick={() => {
+                                  setForm((prev) =>
+                                    prev ? { ...prev, ...CPQ_PRESET_INDUSTRIAL_ESTRICTO } : prev,
+                                  );
+                                  toast.info(
+                                    'Perfil Industrial Estricto aplicado al formulario. Pulsa "Guardar Cambios" para confirmar.',
+                                  );
+                                }}
+                              >
+                                {isIndustrialEstricto && (
+                                  <Check className="h-3.5 w-3.5 mr-1 text-emerald-600 shrink-0" />
+                                )}
+                                Perfil Industrial Estricto
+                                {isIndustrialEstricto && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white leading-none">
+                                    Activo
+                                  </span>
+                                )}
+                              </Button>
+                              {isPersonalizado && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                                  Configuración Personalizada
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* 5 inputs de umbrales y márgenes */}
                       <div className="space-y-2">
@@ -1235,8 +1294,8 @@ export default function ConfiguracionEmpresaPage() {
                         </div>
                         <p className="text-[11px] text-slate-500">
                           Deja en <strong>0</strong> cualquier umbral o porcentaje que desees omitir
-                          individualmente. Las cotizaciones sin costos internos registrados omiten el
-                          bloqueo por margen mínimo.
+                          individualmente. Las cotizaciones sin costos internos registrados omiten
+                          el bloqueo por margen mínimo.
                         </p>
                       </div>
 

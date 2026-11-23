@@ -66,6 +66,7 @@ export interface ConfiguracionEmpresa extends ConfiguracionPublica {
   margen_minimo_alerta?: number;
   margen_minimo_aprobacion?: number;
   terminos_cotizacion_defecto?: string | null;
+  fecha_modificacion?: string | null;
 }
 
 export const DEFAULT_BRANDING: ConfiguracionPublica = {

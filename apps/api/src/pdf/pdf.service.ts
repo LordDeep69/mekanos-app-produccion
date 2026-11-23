@@ -99,7 +99,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.logger.log('📋 PdfService listo (browser cálido bajo demanda con auto-cierre por inactividad)');
+    this.logger.log(
+      '📋 PdfService listo (browser cálido bajo demanda con auto-cierre por inactividad)',
+    );
   }
 
   private async acquireBrowser(): Promise<puppeteer.Browser> {
@@ -142,15 +144,21 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   /**
    * Resuelve el contexto visual/fiscal de la organización (con cache de logo en memoria).
    */
-  async resolveBranding(override?: Partial<OrgBrandingContext> | null): Promise<OrgBrandingContext> {
-    if (override && (override as OrgBrandingContext).nombreComercial && (override as OrgBrandingContext).colores) {
+  async resolveBranding(
+    override?: Partial<OrgBrandingContext> | null,
+  ): Promise<OrgBrandingContext> {
+    if (
+      override &&
+      (override as OrgBrandingContext).nombreComercial &&
+      (override as OrgBrandingContext).colores
+    ) {
       return resolveOrgBranding(override);
     }
     if (!this.configOrgService) {
       return resolveOrgBranding(override);
     }
     const [ctx, logoUri] = await Promise.all([
-      this.configOrgService.getContext().catch(() => null),
+      this.configOrgService.getContext(true).catch(() => null),
       typeof this.configOrgService.resolveLogoDataUri === 'function'
         ? this.configOrgService.resolveLogoDataUri().catch(() => null)
         : Promise.resolve(null),
@@ -257,7 +265,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
       const filename = this.generarFilename(options.tipoInforme, options.datos.numeroOrden, brand);
       const elapsed = Date.now() - startTime;
-      this.logger.log(`✅ PDF listo en ${elapsed}ms - Tamaño: ${(buffer.length / 1024).toFixed(2)} KB`);
+      this.logger.log(
+        `✅ PDF listo en ${elapsed}ms - Tamaño: ${(buffer.length / 1024).toFixed(2)} KB`,
+      );
 
       return {
         buffer,
@@ -336,8 +346,13 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       };
     } catch (error: unknown) {
       const err = error as Error;
-      this.logger.error(`❌ Error generando PDF documento ${tipoInforme}: ${err.message}`, err.stack);
-      throw new InternalServerErrorException(`Error generando PDF (${tipoInforme}): ${err.message}`);
+      this.logger.error(
+        `❌ Error generando PDF documento ${tipoInforme}: ${err.message}`,
+        err.stack,
+      );
+      throw new InternalServerErrorException(
+        `Error generando PDF (${tipoInforme}): ${err.message}`,
+      );
     }
   }
 
@@ -1350,7 +1365,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     const brand = await this.resolveBranding();
     const datosPrueba: DatosOrdenPDF = {
       cliente: 'Cliente Demostración S.A.',
-      direccion: [brand.direccionLinea1, brand.ciudadDefecto].filter(Boolean).join(', ') || 'Dirección Principal',
+      direccion:
+        [brand.direccionLinea1, brand.ciudadDefecto].filter(Boolean).join(', ') ||
+        'Dirección Principal',
       marcaEquipo: 'Demo OEM',
       serieEquipo: 'EAM-2026-001',
       tipoEquipo: 'GENERADOR',
@@ -1428,8 +1445,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         { parametro: 'Frecuencia', valor: 60, unidad: 'Hz', nivelAlerta: 'OK' },
       ],
       evidencias: [],
-      observaciones:
-        'Equipo operando bajo parámetros normales de servicio.',
+      observaciones: 'Equipo operando bajo parámetros normales de servicio.',
     };
 
     return this.generarPDF({
@@ -1485,14 +1501,16 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       const filename = this.generarFilename('COTIZACION', datosCotizacion.numeroCotizacion, brand);
 
       const escFooter = (s: string) =>
-        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        s
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
       const ciudadPais = [brand.ciudadDefecto, brand.paisDefecto].filter(Boolean).join(', ');
       const footerFiscal = escFooter(
         [
           brand.razonSocial || brand.nombreComercial,
-          brand.numeroIdFiscal
-            ? `${brand.tipoIdFiscal || 'NIT'}: ${brand.numeroIdFiscal}`
-            : null,
+          brand.numeroIdFiscal ? `${brand.tipoIdFiscal || 'NIT'}: ${brand.numeroIdFiscal}` : null,
           ciudadPais || null,
         ]
           .filter(Boolean)

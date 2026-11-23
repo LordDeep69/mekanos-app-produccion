@@ -17,11 +17,7 @@ import {
 } from '../config-parametros/parametros-override.helper';
 import { ConfiguracionOrganizacionService } from '../configuracion-organizacion/configuracion-organizacion.service';
 import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
-import {
-  OrgBrandingContext,
-  buildOrgBranding,
-  formatCalendarDateOrg,
-} from './org-branding.types';
+import { OrgBrandingContext, buildOrgBranding, formatCalendarDateOrg } from './org-branding.types';
 import { InformeFilenameInput, buildInformeFilename } from './pdf-naming.helper';
 import { PdfService, TipoInforme } from './pdf.service';
 import {
@@ -103,7 +99,10 @@ export class PdfAssemblerService {
                             include: { unidad_defecto: true },
                           },
                         },
-                        orderBy: [{ grupo_visual: 'asc' as const }, { orden_visual: 'asc' as const }],
+                        orderBy: [
+                          { grupo_visual: 'asc' as const },
+                          { orden_visual: 'asc' as const },
+                        ],
                       },
                     },
                   },
@@ -357,12 +356,7 @@ export class PdfAssemblerService {
       observaciones_tecnico: orden.observaciones_tecnico || undefined,
       repuestosWms: this.buildRepuestosWmsResumen(orden),
       repuestosDetallados: this.extraerRepuestosDetallados(orden),
-      equipoDetalle: this.extraerEquipoDetallado(
-        orden,
-        datosModulo,
-        contadorPrevio,
-        brand,
-      ),
+      equipoDetalle: this.extraerEquipoDetallado(orden, datosModulo, contadorPrevio, brand),
       placaUniversal: orden.equipos
         ? EquipoSpecsReader.getPlacaUniversal(orden.equipos)
         : undefined,
@@ -428,12 +422,14 @@ export class PdfAssemblerService {
   async assembleCotizacionPdf(idOrCotizacion: number | any): Promise<AssembledCotizacionPdf> {
     const [brand, orgGov, cot] = await Promise.all([
       this.resolveBranding(),
-      this.prisma.configuracion_organizacion
-        .findUnique({
-          where: { id_configuracion: 1 },
-          select: { enable_cpq_governance: true },
-        })
-        .catch(() => null),
+      this.prisma.configuracion_organizacion?.findUnique
+        ? this.prisma.configuracion_organizacion
+            .findUnique({
+              where: { id_configuracion: 1 },
+              select: { enable_cpq_governance: true },
+            })
+            .catch(() => null)
+        : Promise.resolve(null),
       typeof idOrCotizacion === 'number'
         ? (this.prisma.cotizaciones.findUnique({
             where: { id_cotizacion: idOrCotizacion },
@@ -457,6 +453,22 @@ export class PdfAssemblerService {
               },
               empleados: { include: { persona: true } },
               estados_cotizacion: true,
+              firma_asesor: {
+                select: {
+                  id_firma_digital: true,
+                  firma_base64: true,
+                  formato_firma: true,
+                  fecha_captura: true,
+                },
+              },
+              firma_cliente: {
+                select: {
+                  id_firma_digital: true,
+                  firma_base64: true,
+                  formato_firma: true,
+                  fecha_captura: true,
+                },
+              },
               items_cotizacion_servicios: {
                 include: {
                   catalogo_servicios: true,
@@ -487,8 +499,12 @@ export class PdfAssemblerService {
       throw new NotFoundException(`Cotización con ID ${idRef ?? ''} no encontrada`);
     }
 
-    const serviciosActivos = (cot.items_cotizacion_servicios || []).filter((i: any) => !i.es_opcional);
-    const componentesActivos = (cot.items_cotizacion_componentes || []).filter((i: any) => !i.es_opcional);
+    const serviciosActivos = (cot.items_cotizacion_servicios || []).filter(
+      (i: any) => !i.es_opcional,
+    );
+    const componentesActivos = (cot.items_cotizacion_componentes || []).filter(
+      (i: any) => !i.es_opcional,
+    );
     const otrosVisiblesActivos = (cot.items_cotizacion_otros || []).filter(
       (i: any) => !i.es_opcional && i.visible_cliente !== false,
     );
@@ -509,10 +525,8 @@ export class PdfAssemblerService {
         .filter((i: any) => i.es_opcional)
         .map((i: any) => ({
           tipo: 'REPUESTO' as const,
-          descripcion:
-            i.descripcion || i.catalogo_componentes?.descripcion_corta || 'Componente',
-          referencia:
-            i.catalogo_componentes?.codigo_interno || i.referencia_manual || undefined,
+          descripcion: i.descripcion || i.catalogo_componentes?.descripcion_corta || 'Componente',
+          referencia: i.catalogo_componentes?.codigo_interno || i.referencia_manual || undefined,
           cantidad: Number(i.cantidad) || 1,
           unidad: i.unidad || 'unidad',
           precioUnitario: Number(i.precio_unitario) || 0,
@@ -533,15 +547,24 @@ export class PdfAssemblerService {
     const subtotalServicios =
       cot.subtotal_servicios != null
         ? Number(cot.subtotal_servicios)
-        : serviciosActivos.reduce((acc: number, item: any) => acc + (Number(item.subtotal) || 0), 0);
+        : serviciosActivos.reduce(
+            (acc: number, item: any) => acc + (Number(item.subtotal) || 0),
+            0,
+          );
     const subtotalComponentes =
       cot.subtotal_componentes != null
         ? Number(cot.subtotal_componentes)
-        : componentesActivos.reduce((acc: number, item: any) => acc + (Number(item.subtotal) || 0), 0);
+        : componentesActivos.reduce(
+            (acc: number, item: any) => acc + (Number(item.subtotal) || 0),
+            0,
+          );
     const subtotalOtros =
       cot.subtotal_otros != null
         ? Number(cot.subtotal_otros)
-        : otrosVisiblesActivos.reduce((acc: number, item: any) => acc + (Number(item.subtotal) || 0), 0);
+        : otrosVisiblesActivos.reduce(
+            (acc: number, item: any) => acc + (Number(item.subtotal) || 0),
+            0,
+          );
     const subtotalGeneral =
       cot.subtotal_general != null
         ? Number(cot.subtotal_general)
@@ -570,9 +593,7 @@ export class PdfAssemblerService {
     const ivaPorcentaje =
       cot.iva_porcentaje != null ? Number(cot.iva_porcentaje) : brand.tasaImpuestoDefecto;
     const ivaValor =
-      cot.iva_valor != null
-        ? Number(cot.iva_valor)
-        : (subtotalConDescuento * ivaPorcentaje) / 100;
+      cot.iva_valor != null ? Number(cot.iva_valor) : (subtotalConDescuento * ivaPorcentaje) / 100;
     const totalCotizacion =
       cot.total_cotizacion != null
         ? Number(cot.total_cotizacion)
@@ -636,6 +657,18 @@ export class PdfAssemblerService {
     const mostrarMarcaAguaBorrador =
       Boolean(orgGov?.enable_cpq_governance) && estadosNoAutorizados.has(estadoCodigo);
 
+    const buildFirmaDataUri = (
+      firma?: { firma_base64?: string | null; formato_firma?: string | null } | null,
+    ) => {
+      const raw = firma?.firma_base64?.trim();
+      if (!raw) return undefined;
+      if (raw.startsWith('data:image/')) return raw;
+      const fmt =
+        (firma?.formato_firma || 'png').toLowerCase().replace(/[^a-z0-9+.-]/g, '') || 'png';
+      const mime = fmt === 'jpg' ? 'jpeg' : fmt;
+      return `data:image/${mime};base64,${raw}`;
+    };
+
     const datosCotizacion: DatosCotizacionPDF = {
       branding: brand,
       numeroCotizacion: cot.numero_cotizacion || `COT-${idRef ?? ''}`,
@@ -677,9 +710,7 @@ export class PdfAssemblerService {
       itemsServicios: serviciosActivos.map((item: any, idx: number) => ({
         orden: item.orden_item ?? idx + 1,
         descripcion:
-          item.descripcion_personalizada ||
-          item.catalogo_servicios?.nombre_servicio ||
-          'Servicio',
+          item.descripcion_personalizada || item.catalogo_servicios?.nombre_servicio || 'Servicio',
         equipoEtiqueta: item.equipos?.codigo_equipo || undefined,
         cantidad: Number(item.cantidad) || 1,
         unidad: item.unidad || 'UND',
@@ -748,6 +779,8 @@ export class PdfAssemblerService {
       terminosCondiciones: cot.terminos_condiciones || undefined,
       elaboradoPor,
       cargoElaborador: 'Asesor Comercial',
+      firmaAsesorDataUri: buildFirmaDataUri(cot.firma_asesor),
+      firmaClienteDataUri: buildFirmaDataUri(cot.firma_cliente),
     };
 
     return {
@@ -891,7 +924,9 @@ export class PdfAssemblerService {
     };
   }
 
-  mapTipoEquipo(nombre: string | undefined): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string {
+  mapTipoEquipo(
+    nombre: string | undefined,
+  ): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string {
     if (!nombre) return 'EQUIPO';
     const nombreUpper = nombre.toUpperCase();
     if (nombreUpper.includes('BOMBA')) return 'BOMBA';
@@ -1009,7 +1044,9 @@ export class PdfAssemblerService {
       undefined;
     const sede = orden.sedes_cliente?.nombre_sede || orden.clientes?.nombre_sede || undefined;
 
-    const contadorDesdeActividad = this.extraerContadorDesdeActividades(orden.actividades_ejecutadas);
+    const contadorDesdeActividad = this.extraerContadorDesdeActividades(
+      orden.actividades_ejecutadas,
+    );
     const horometroInterv =
       contadorIntervencionOverride ??
       datosModulo?.horasTrabajo ??
@@ -1307,8 +1344,15 @@ export class PdfAssemblerService {
       return orden.ordenes_equipos.map((oe: any, idx: number) => ({
         equipo: this.buildEquipoOrdenDescriptor(oe),
         mediciones: Array.from(unicas.entries()).map(([param, meds]) => {
-          const sorted = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
-          return this.mapMedicionConOverride(sorted[idx] || sorted[0], orden, oe.id_orden_equipo, param);
+          const sorted = [...meds].sort(
+            (a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0),
+          );
+          return this.mapMedicionConOverride(
+            sorted[idx] || sorted[0],
+            orden,
+            oe.id_orden_equipo,
+            param,
+          );
         }),
       }));
     }
@@ -1425,7 +1469,10 @@ export class PdfAssemblerService {
         orderBy: [{ fecha_lectura: 'desc' }, { id_lectura: 'desc' }],
       });
       const fechaCorte =
-        lecturaActualRow?.fecha_lectura ?? orden.fecha_fin_real ?? orden.fecha_creacion ?? new Date();
+        lecturaActualRow?.fecha_lectura ??
+        orden.fecha_fin_real ??
+        orden.fecha_creacion ??
+        new Date();
       const lecturaPreviaRow = await this.prisma.lecturas_horometro.findFirst({
         where: {
           id_equipo: idEquipo,
@@ -1531,7 +1578,11 @@ export class PdfAssemblerService {
     return completo || persona.nombre_completo || fallback;
   }
 
-  private resolverNombreFirmanteCliente(orden: any, firmaCliente: any, clientePersona: any): string | undefined {
+  private resolverNombreFirmanteCliente(
+    orden: any,
+    firmaCliente: any,
+    clientePersona: any,
+  ): string | undefined {
     if (orden.nombre_quien_recibe && orden.nombre_quien_recibe !== 'Cliente') {
       return orden.nombre_quien_recibe;
     }

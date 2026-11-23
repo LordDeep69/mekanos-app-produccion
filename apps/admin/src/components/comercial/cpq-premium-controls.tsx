@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import type { UnidadMedida } from '@/types/compras.types';
-import { Check, ChevronDown, Lock, Plus, Search, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Lock, Plus, Search, X } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -25,10 +25,7 @@ export function normalizeSearchText(value?: string | null): string {
 /**
  * Coincidencia tokenizada multi-palabra (AND entre tokens, OR entre campos, sin tildes ni orden rígido).
  */
-export function matchesAllTokens(
-  query: string,
-  fields: Array<string | null | undefined>,
-): boolean {
+export function matchesAllTokens(query: string, fields: Array<string | null | undefined>): boolean {
   const tokens = normalizeSearchText(query).split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return true;
   const normalizedFields = fields.map((f) => normalizeSearchText(f)).filter(Boolean);
@@ -97,13 +94,11 @@ export function CpqCreatableCombobox({
   } | null>(null);
 
   const selectedMatch = useMemo(() => {
-    const v = String(value || '').trim().toLowerCase();
+    const v = String(value || '')
+      .trim()
+      .toLowerCase();
     if (!v) return null;
-    return (
-      options.find(
-        (o) => o.value.toLowerCase() === v || o.label.toLowerCase() === v,
-      ) || null
-    );
+    return options.find((o) => o.value.toLowerCase() === v || o.label.toLowerCase() === v) || null;
   }, [options, value]);
 
   const displayLabel = useMemo(() => {
@@ -142,9 +137,7 @@ export function CpqCreatableCombobox({
   const hasExactMatch = useMemo(() => {
     if (!trimmedQuery) return true;
     const lower = trimmedQuery.toLowerCase();
-    return options.some(
-      (o) => o.value.toLowerCase() === lower || o.label.toLowerCase() === lower,
-    );
+    return options.some((o) => o.value.toLowerCase() === lower || o.label.toLowerCase() === lower);
   }, [options, trimmedQuery]);
 
   const updatePosition = () => {
@@ -169,10 +162,7 @@ export function CpqCreatableCombobox({
 
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (
-        triggerRef.current?.contains(target) ||
-        popoverRef.current?.contains(target)
-      ) {
+      if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) {
         return;
       }
       setOpen(false);
@@ -228,7 +218,9 @@ export function CpqCreatableCombobox({
       >
         <span className="flex items-center gap-1.5 min-w-0 truncate">
           {icon && <span className="shrink-0 text-slate-400">{icon}</span>}
-          <span className={cn('truncate font-medium', !displayLabel && 'text-slate-400 font-normal')}>
+          <span
+            className={cn('truncate font-medium', !displayLabel && 'text-slate-400 font-normal')}
+          >
             {displayLabel || placeholder}
           </span>
         </span>
@@ -310,7 +302,9 @@ export function CpqCreatableCombobox({
                   )}
                   {items.map((opt) => {
                     const isActive =
-                      String(value || '').trim().toLowerCase() === opt.value.toLowerCase();
+                      String(value || '')
+                        .trim()
+                        .toLowerCase() === opt.value.toLowerCase();
                     return (
                       <button
                         key={`${groupName}-${opt.value}`}
@@ -582,21 +576,111 @@ export function CpqMoneyInput({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const UNIDADES_COMERCIALES_CURADAS: CpqComboboxOption[] = [
-  { value: 'und', label: 'und', description: 'Unidad', badge: 'UND', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'servicio', label: 'servicio', description: 'Servicio Técnico', badge: 'SRV', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'global', label: 'global', description: 'Suma Global / Paquete', badge: 'GLB', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'hr', label: 'hr', description: 'Hora de Labor / Alquiler', badge: 'HR', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'dia', label: 'día', description: 'Día Operativo', badge: 'DIA', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'dia-tecnico', label: 'día-técnico', description: 'Jornada por Técnico', badge: 'D-T', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'gal', label: 'gal', description: 'Galón (Fluidos / Aceite)', badge: 'GAL', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'L', label: 'L', description: 'Litro', badge: 'LT', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'kg', label: 'kg', description: 'Kilogramo', badge: 'KG', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'm', label: 'm', description: 'Metro Lineal', badge: 'M', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'km', label: 'km', description: 'Kilómetro (Transporte)', badge: 'KM', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'kit', label: 'kit', description: 'Kit / Juego Completo', badge: 'KIT', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'par', label: 'par', description: 'Par', badge: 'PAR', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'caja', label: 'caja', description: 'Caja', badge: 'CAJ', group: 'Unidades Comerciales Frecuentes' },
-  { value: 'rollo', label: 'rollo', description: 'Rollo', badge: 'ROL', group: 'Unidades Comerciales Frecuentes' },
+  {
+    value: 'und',
+    label: 'und',
+    description: 'Unidad',
+    badge: 'UND',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'servicio',
+    label: 'servicio',
+    description: 'Servicio Técnico',
+    badge: 'SRV',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'global',
+    label: 'global',
+    description: 'Suma Global / Paquete',
+    badge: 'GLB',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'hr',
+    label: 'hr',
+    description: 'Hora de Labor / Alquiler',
+    badge: 'HR',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'dia',
+    label: 'día',
+    description: 'Día Operativo',
+    badge: 'DIA',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'dia-tecnico',
+    label: 'día-técnico',
+    description: 'Jornada por Técnico',
+    badge: 'D-T',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'gal',
+    label: 'gal',
+    description: 'Galón (Fluidos / Aceite)',
+    badge: 'GAL',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'L',
+    label: 'L',
+    description: 'Litro',
+    badge: 'LT',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'kg',
+    label: 'kg',
+    description: 'Kilogramo',
+    badge: 'KG',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'm',
+    label: 'm',
+    description: 'Metro Lineal',
+    badge: 'M',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'km',
+    label: 'km',
+    description: 'Kilómetro (Transporte)',
+    badge: 'KM',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'kit',
+    label: 'kit',
+    description: 'Kit / Juego Completo',
+    badge: 'KIT',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'par',
+    label: 'par',
+    description: 'Par',
+    badge: 'PAR',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'caja',
+    label: 'caja',
+    description: 'Caja',
+    badge: 'CAJ',
+    group: 'Unidades Comerciales Frecuentes',
+  },
+  {
+    value: 'rollo',
+    label: 'rollo',
+    description: 'Rollo',
+    badge: 'ROL',
+    group: 'Unidades Comerciales Frecuentes',
+  },
 ];
 
 export function buildUnidadOptions(unidadesBd: UnidadMedida[]): CpqComboboxOption[] {
@@ -683,21 +767,371 @@ export const TIPO_OFERTA_COMBOBOX_OPTIONS: CpqComboboxOption[] = [
 ];
 
 export const RUBRO_OTRO_COMBOBOX_OPTIONS: CpqComboboxOption[] = [
-  { value: 'TRANSPORTE', label: 'Transporte / Movilización', badge: 'TRN', group: 'Rubros Frecuentes' },
+  {
+    value: 'TRANSPORTE',
+    label: 'Transporte / Movilización',
+    badge: 'TRN',
+    group: 'Rubros Frecuentes',
+  },
   { value: 'VIATICOS', label: 'Viáticos / Estadía', badge: 'VIA', group: 'Rubros Frecuentes' },
   { value: 'POLIZA', label: 'Póliza / Garantía', badge: 'POL', group: 'Rubros Frecuentes' },
   { value: 'ALQUILER', label: 'Alquiler Equipos / Grúa', badge: 'ALQ', group: 'Rubros Frecuentes' },
-  { value: 'DISPOSICION_AMBIENTAL', label: 'Disposición Ambiental', badge: 'AMB', group: 'Rubros Frecuentes' },
-  { value: 'SUBCONTRATO', label: 'Subcontrato Especializado', badge: 'SUB', group: 'Rubros Frecuentes' },
+  {
+    value: 'DISPOSICION_AMBIENTAL',
+    label: 'Disposición Ambiental',
+    badge: 'AMB',
+    group: 'Rubros Frecuentes',
+  },
+  {
+    value: 'SUBCONTRATO',
+    label: 'Subcontrato Especializado',
+    badge: 'SUB',
+    group: 'Rubros Frecuentes',
+  },
   { value: 'OTRO', label: 'Otro Rubro', badge: 'OTR', group: 'Rubros Frecuentes' },
 ];
 
 export const FORMA_PAGO_COMBOBOX_OPTIONS: CpqComboboxOption[] = [
-  { value: 'CONTADO', label: 'Contado', description: 'Pago al recibir factura o entrega', badge: '0d', group: 'Formas de Pago Frecuentes' },
-  { value: 'CREDITO 15 DIAS', label: 'Crédito 15 días', description: 'Factura a 15 días calendario', badge: '15d', group: 'Formas de Pago Frecuentes' },
-  { value: 'CREDITO 30 DIAS', label: 'Crédito 30 días', description: 'Factura a 30 días calendario', badge: '30d', group: 'Formas de Pago Frecuentes' },
-  { value: 'CREDITO 45 DIAS', label: 'Crédito 45 días', description: 'Factura a 45 días calendario', badge: '45d', group: 'Formas de Pago Frecuentes' },
-  { value: 'CREDITO 60 DIAS', label: 'Crédito 60 días', description: 'Factura a 60 días calendario', badge: '60d', group: 'Formas de Pago Frecuentes' },
-  { value: '50% ANTICIPO / 50% CONTRA ENTREGA', label: '50% Anticipo / 50% Contra Entrega', description: 'Anticipo para inicio y saldo al cierre', badge: '50/50', group: 'Anticipos y Parciales' },
-  { value: '30% ANTICIPO / 70% CONTRA ENTREGA', label: '30% Anticipo / 70% Contra Entrega', description: 'Anticipo inicial y saldo contra acta', badge: '30/70', group: 'Anticipos y Parciales' },
+  {
+    value: 'CONTADO',
+    label: 'Contado',
+    description: 'Pago al recibir factura o entrega',
+    badge: '0d',
+    group: 'Formas de Pago Frecuentes',
+  },
+  {
+    value: 'CREDITO 15 DIAS',
+    label: 'Crédito 15 días',
+    description: 'Factura a 15 días calendario',
+    badge: '15d',
+    group: 'Formas de Pago Frecuentes',
+  },
+  {
+    value: 'CREDITO 30 DIAS',
+    label: 'Crédito 30 días',
+    description: 'Factura a 30 días calendario',
+    badge: '30d',
+    group: 'Formas de Pago Frecuentes',
+  },
+  {
+    value: 'CREDITO 45 DIAS',
+    label: 'Crédito 45 días',
+    description: 'Factura a 45 días calendario',
+    badge: '45d',
+    group: 'Formas de Pago Frecuentes',
+  },
+  {
+    value: 'CREDITO 60 DIAS',
+    label: 'Crédito 60 días',
+    description: 'Factura a 60 días calendario',
+    badge: '60d',
+    group: 'Formas de Pago Frecuentes',
+  },
+  {
+    value: '50% ANTICIPO / 50% CONTRA ENTREGA',
+    label: '50% Anticipo / 50% Contra Entrega',
+    description: 'Anticipo para inicio y saldo al cierre',
+    badge: '50/50',
+    group: 'Anticipos y Parciales',
+  },
+  {
+    value: '30% ANTICIPO / 70% CONTRA ENTREGA',
+    label: '30% Anticipo / 70% Contra Entrega',
+    description: 'Anticipo inicial y saldo contra acta',
+    badge: '30/70',
+    group: 'Anticipos y Parciales',
+  },
 ];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5. CONSTRUCTOR ESTRUCTURADO DE ÍTEMS (ALCANCE INCLUIDO / EXCLUSIONES)
+//    Serializa y lee desde texto plano separado por `\n` (100% compatible con BD)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const BULLET_PREFIX_RE = /^(?:[-•*–—·✓✔✕✖✗▪▸►]+|\d+[.)])\s+/;
+
+export function cleanCpqBulletLine(raw: string): string {
+  let text = String(raw || '').trim();
+  // Retira viñetas o guiones repetidos al inicio (ej. "• - Texto")
+  while (BULLET_PREFIX_RE.test(text)) {
+    text = text.replace(BULLET_PREFIX_RE, '').trim();
+  }
+  return text;
+}
+
+export function parseCpqBulletLines(value?: string | null): string[] {
+  if (!value) return [];
+  return String(value).split(/\r?\n/).map(cleanCpqBulletLine).filter(Boolean);
+}
+
+export interface CpqBulletListEditorProps {
+  value: string;
+  onChange: (nextValue: string) => void;
+  variant: 'incluido' | 'exclusion';
+  placeholder?: string;
+  emptyMessage?: string;
+  disabled?: boolean;
+  className?: string;
+}
+
+export function CpqBulletListEditor({
+  value,
+  onChange,
+  variant,
+  placeholder,
+  emptyMessage,
+  disabled = false,
+  className,
+}: CpqBulletListEditorProps) {
+  const [draft, setDraft] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
+
+  const items = useMemo(() => parseCpqBulletLines(value), [value]);
+
+  const commitItems = (nextItems: string[]) => {
+    const cleaned = nextItems.map(cleanCpqBulletLine).filter(Boolean);
+    onChange(cleaned.join('\n'));
+  };
+
+  const handleAddDraft = () => {
+    if (disabled) return;
+    const lines = parseCpqBulletLines(draft);
+    if (lines.length === 0) return;
+    commitItems([...items, ...lines]);
+    setDraft('');
+  };
+
+  const handlePasteDraft = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    const pasted = e.clipboardData?.getData('text') || '';
+    if (!/[\r\n]/.test(pasted)) return;
+    const lines = parseCpqBulletLines(pasted);
+    if (lines.length === 0) return;
+    e.preventDefault();
+    const combined = [...items];
+    const currentPrefix = cleanCpqBulletLine(draft);
+    if (currentPrefix) combined.push(currentPrefix);
+    combined.push(...lines);
+    commitItems(combined);
+    setDraft('');
+  };
+
+  const handleRemove = (idx: number) => {
+    if (disabled) return;
+    if (editingIndex === idx) {
+      setEditingIndex(null);
+      setEditingText('');
+    }
+    commitItems(items.filter((_, i) => i !== idx));
+  };
+
+  const handleMove = (idx: number, direction: -1 | 1) => {
+    if (disabled) return;
+    const target = idx + direction;
+    if (target < 0 || target >= items.length) return;
+    const next = [...items];
+    const [moved] = next.splice(idx, 1);
+    next.splice(target, 0, moved);
+    if (editingIndex === idx) setEditingIndex(target);
+    else if (editingIndex === target) setEditingIndex(idx);
+    commitItems(next);
+  };
+
+  const startEditing = (idx: number) => {
+    if (disabled) return;
+    setEditingIndex(idx);
+    setEditingText(items[idx] ?? '');
+  };
+
+  const commitEditing = () => {
+    if (editingIndex === null) return;
+    const cleaned = cleanCpqBulletLine(editingText);
+    const next = [...items];
+    if (!cleaned) {
+      next.splice(editingIndex, 1);
+    } else {
+      next[editingIndex] = cleaned;
+    }
+    setEditingIndex(null);
+    setEditingText('');
+    commitItems(next);
+  };
+
+  const cancelEditing = () => {
+    setEditingIndex(null);
+    setEditingText('');
+  };
+
+  const isIncluido = variant === 'incluido';
+
+  return (
+    <div
+      className={cn(
+        'rounded-lg border bg-white overflow-hidden transition-colors',
+        isIncluido ? 'border-emerald-200/90' : 'border-rose-200/90',
+        disabled && 'opacity-75 bg-slate-50/70',
+        className,
+      )}
+    >
+      {/* Input rápido superior */}
+      {!disabled && (
+        <div
+          className={cn(
+            'flex items-center gap-1.5 p-2 border-b',
+            isIncluido ? 'bg-emerald-50/40 border-emerald-100' : 'bg-rose-50/40 border-rose-100',
+          )}
+        >
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onPaste={handlePasteDraft}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAddDraft();
+              }
+            }}
+            placeholder={
+              placeholder ||
+              (isIncluido
+                ? 'Escribe un ítem incluido y presiona Enter (o pega varias líneas)...'
+                : 'Escribe una exclusión y presiona Enter (o pega varias líneas)...')
+            }
+            className="flex-1 min-w-0 h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/60 placeholder:text-slate-400"
+          />
+          <button
+            type="button"
+            onClick={handleAddDraft}
+            disabled={!cleanCpqBulletLine(draft)}
+            className={cn(
+              'h-8 px-2.5 rounded-md text-xs font-semibold inline-flex items-center gap-1 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed',
+              isIncluido
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'bg-rose-600 text-white hover:bg-rose-700',
+            )}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Agregar
+          </button>
+        </div>
+      )}
+
+      {/* Lista de ítems */}
+      <div className="p-2 space-y-1.5 max-h-56 overflow-y-auto">
+        {items.length === 0 ? (
+          <p className="text-[11px] text-slate-400 italic text-center py-3 px-2">
+            {emptyMessage ||
+              (isIncluido
+                ? 'Sin ítems de alcance definidos aún.'
+                : 'Sin exclusiones registradas aún.')}
+          </p>
+        ) : (
+          items.map((item, idx) => {
+            const isEditing = editingIndex === idx;
+            return (
+              <div
+                key={`${idx}-${item.slice(0, 24)}`}
+                className={cn(
+                  'group flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors',
+                  isIncluido
+                    ? 'bg-emerald-50/30 border-emerald-100/90 hover:bg-emerald-50/60'
+                    : 'bg-rose-50/30 border-rose-100/90 hover:bg-rose-50/60',
+                )}
+              >
+                <span
+                  className={cn(
+                    'h-4 w-4 rounded-full flex items-center justify-center shrink-0',
+                    isIncluido ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700',
+                  )}
+                  aria-hidden="true"
+                >
+                  {isIncluido ? (
+                    <Check className="h-2.5 w-2.5 stroke-[2.75]" />
+                  ) : (
+                    <X className="h-2.5 w-2.5 stroke-[2.75]" />
+                  )}
+                </span>
+
+                {isEditing ? (
+                  <input
+                    type="text"
+                    autoFocus
+                    value={editingText}
+                    onChange={(e) => setEditingText(e.target.value)}
+                    onBlur={commitEditing}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitEditing();
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancelEditing();
+                      }
+                    }}
+                    className="flex-1 min-w-0 h-6 px-2 text-xs bg-white border border-primary/50 rounded focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => startEditing(idx)}
+                    title={disabled ? undefined : 'Clic para editar este ítem'}
+                    className={cn(
+                      'flex-1 min-w-0 text-left text-slate-800 leading-snug break-words',
+                      !disabled && 'cursor-text hover:text-slate-950',
+                    )}
+                  >
+                    {item}
+                  </button>
+                )}
+
+                {!disabled && !isEditing && (
+                  <div className="flex items-center gap-0.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => handleMove(idx, -1)}
+                      title="Subir"
+                      className="p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-white disabled:opacity-25 disabled:cursor-not-allowed"
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === items.length - 1}
+                      onClick={() => handleMove(idx, 1)}
+                      title="Bajar"
+                      className="p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-white disabled:opacity-25 disabled:cursor-not-allowed"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(idx)}
+                      title="Eliminar ítem"
+                      className="p-0.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Pie informativo con conteo */}
+      <div className="px-2.5 py-1 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+        <span>
+          {items.length} {items.length === 1 ? 'ítem' : 'ítems'}
+        </span>
+        {!disabled && (
+          <span className="text-slate-400">Clic para editar · Pegar multilínea admitido</span>
+        )}
+      </div>
+    </div>
+  );
+}

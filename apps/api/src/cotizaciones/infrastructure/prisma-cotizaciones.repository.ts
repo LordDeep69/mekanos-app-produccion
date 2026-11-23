@@ -76,6 +76,8 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       id_cotizacion_padre: c.id_cotizacion_padre ?? undefined,
       id_orden_servicio_generada: c.id_orden_servicio_generada ?? undefined,
       fecha_conversion_os: c.fecha_conversion_os ?? undefined,
+      id_firma_asesor: c.id_firma_asesor ?? undefined,
+      id_firma_cliente: c.id_firma_cliente ?? undefined,
       aprobada_internamente_por: c.aprobada_internamente_por ?? undefined,
       fecha_aprobacion_interna: c.fecha_aprobacion_interna ?? undefined,
       modificado_por: c.modificado_por ?? undefined,
@@ -88,6 +90,8 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       items_componentes: c.items_cotizacion_componentes ?? c.items_componentes ?? undefined,
       items_otros: c.items_cotizacion_otros ?? c.items_otros ?? undefined,
       plantilla_origen: c.plantilla_origen ?? undefined,
+      firma_asesor: c.firma_asesor ?? undefined,
+      firma_cliente: c.firma_cliente ?? undefined,
       aprobaciones: c.aprobaciones_cotizacion ?? c.aprobaciones ?? undefined,
       versiones: c.versiones_cotizacion ?? undefined,
       historial_envios: c.historial_envios ?? undefined,
@@ -253,6 +257,30 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
             tipo_cotizacion: true,
           },
         },
+        firma_asesor: includeItems
+          ? {
+              select: {
+                id_firma_digital: true,
+                id_persona: true,
+                tipo_firma: true,
+                firma_base64: true,
+                formato_firma: true,
+                fecha_captura: true,
+              },
+            }
+          : false,
+        firma_cliente: includeItems
+          ? {
+              select: {
+                id_firma_digital: true,
+                id_persona: true,
+                tipo_firma: true,
+                firma_base64: true,
+                formato_firma: true,
+                fecha_captura: true,
+              },
+            }
+          : false,
         items_cotizacion_servicios: includeRelations?.items_servicios
           ? {
               orderBy: [{ orden_item: 'asc' }, { id_item_servicio: 'asc' }],

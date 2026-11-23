@@ -1,13 +1,8 @@
 import { PrismaService } from '@mekanos/database';
 import { Prisma } from '@prisma/client';
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
+import { createHash } from 'crypto';
 import {
   formatCorrelativeCode,
   reserveNextSequenceCounter,
@@ -17,6 +12,7 @@ import { CotizacionesRepository } from '../domain/cotizaciones.repository.interf
 import {
   ConvertirCotizacionOrdenDto,
   CreateItemOtroDto,
+  GuardarFirmaCotizacionDto,
   GuardarStudioCompletoDto,
   SyncEquiposCotizacionDto,
   UpdateItemOtroDto,
@@ -78,7 +74,11 @@ export class CotizacionesCpqService {
   async syncEquipos(idCotizacion: number, dto: SyncEquiposCotizacionDto) {
     await this.assertBorrador(idCotizacion);
 
-    const itemsNormalizados: Array<{ id_equipo: number; orden_secuencia: number; notas_alcance?: string }> = [];
+    const itemsNormalizados: Array<{
+      id_equipo: number;
+      orden_secuencia: number;
+      notas_alcance?: string;
+    }> = [];
     const vistos = new Set<number>();
 
     if (dto.equipos && dto.equipos.length > 0) {
@@ -387,8 +387,7 @@ export class CotizacionesCpqService {
       headerData.dias_validez = Math.max(
         1,
         Math.round(
-          (new Date(dto.fecha_vencimiento).getTime() -
-            new Date(dto.fecha_cotizacion).getTime()) /
+          (new Date(dto.fecha_vencimiento).getTime() - new Date(dto.fecha_cotizacion).getTime()) /
             86400_000,
         ),
       );
@@ -435,7 +434,11 @@ export class CotizacionesCpqService {
 
     if (dto.equipos !== undefined || dto.equipos_ids !== undefined) {
       const vistos = new Set<number>();
-      const eqRows: Array<{ id_equipo: number; orden_secuencia: number; notas_alcance: string | null }> = [];
+      const eqRows: Array<{
+        id_equipo: number;
+        orden_secuencia: number;
+        notas_alcance: string | null;
+      }> = [];
       if (dto.equipos) {
         dto.equipos.forEach((eq, idx) => {
           if (Number.isInteger(eq.id_equipo) && eq.id_equipo > 0 && !vistos.has(eq.id_equipo)) {
@@ -986,9 +989,7 @@ export class CotizacionesCpqService {
   // ==================== SMART MATCH CONTEXTUAL (EQUIPOS GEMELOS + PLANTILLAS + BOM OEM) ====================
 
   async obtenerSugerenciasContextuales(equiposIds: number[], tipoCotizacion?: string) {
-    const cleanIds = Array.from(
-      new Set(equiposIds.filter((id) => Number.isInteger(id) && id > 0)),
-    );
+    const cleanIds = Array.from(new Set(equiposIds.filter((id) => Number.isInteger(id) && id > 0)));
 
     const equipos =
       cleanIds.length > 0
@@ -1090,7 +1091,11 @@ export class CotizacionesCpqService {
         equipos: g.equipos,
       })),
       ...Array.from(tipoGroups.values())
-        .filter((tg) => tg.equipos.length > 1 && !Array.from(modeloGroups.values()).some((m) => m.equipos.length === tg.equipos.length))
+        .filter(
+          (tg) =>
+            tg.equipos.length > 1 &&
+            !Array.from(modeloGroups.values()).some((m) => m.equipos.length === tg.equipos.length),
+        )
         .map((tg) => ({
           tipo_agrupacion: 'TIPO_EQUIPO' as const,
           es_gemelo_multiple: tg.equipos.length > 1,
@@ -1112,7 +1117,9 @@ export class CotizacionesCpqService {
         items: {
           orderBy: { orden_item: 'asc' },
           include: {
-            catalogo_servicios: { select: { id_servicio: true, nombre_servicio: true, precio_base: true } },
+            catalogo_servicios: {
+              select: { id_servicio: true, nombre_servicio: true, precio_base: true },
+            },
             catalogo_componentes: {
               select: {
                 id_componente: true,
@@ -1168,9 +1175,17 @@ export class CotizacionesCpqService {
           const cant = Number(it.cantidad_base) * mult;
           let pu = Number(it.precio_unitario_fijo ?? 0);
           if (it.usar_precio_catalogo) {
-            if (it.tipo_linea === 'SERVICIO' && it.catalogo_servicios?.precio_base !== null && it.catalogo_servicios?.precio_base !== undefined) {
+            if (
+              it.tipo_linea === 'SERVICIO' &&
+              it.catalogo_servicios?.precio_base !== null &&
+              it.catalogo_servicios?.precio_base !== undefined
+            ) {
               pu = Number(it.catalogo_servicios.precio_base);
-            } else if (it.tipo_linea === 'COMPONENTE' && it.catalogo_componentes?.precio_venta !== null && it.catalogo_componentes?.precio_venta !== undefined) {
+            } else if (
+              it.tipo_linea === 'COMPONENTE' &&
+              it.catalogo_componentes?.precio_venta !== null &&
+              it.catalogo_componentes?.precio_venta !== undefined
+            ) {
               pu = Number(it.catalogo_componentes.precio_venta);
             }
           }
@@ -1343,7 +1358,9 @@ export class CotizacionesCpqService {
       servicios_compatibles: serviciosCompatibles.map((s) => ({
         ...s,
         precio_base: Number(s.precio_base || 0),
-        duracion_estimada_horas: s.duracion_estimada_horas ? Number(s.duracion_estimada_horas) : null,
+        duracion_estimada_horas: s.duracion_estimada_horas
+          ? Number(s.duracion_estimada_horas)
+          : null,
       })),
       repuestos_compatibles: repuestosCompatibles.map((r) => ({
         ...r,
@@ -1369,7 +1386,9 @@ export class CotizacionesCpqService {
         clientes: { include: { persona: true } },
         cotizaciones_equipos: {
           orderBy: { orden_secuencia: 'asc' },
-          include: { equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } } },
+          include: {
+            equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
+          },
         },
         items_cotizacion_servicios: {
           where: { es_opcional: false },
@@ -1458,7 +1477,9 @@ export class CotizacionesCpqService {
 
     const descripcionOrden = [
       `Generada desde Cotización ${cotizacion.numero_cotizacion}: ${cotizacion.asunto}`,
-      cotizacion.orden_compra_cliente ? `Orden de Compra Cliente (PO): ${cotizacion.orden_compra_cliente}` : null,
+      cotizacion.orden_compra_cliente
+        ? `Orden de Compra Cliente (PO): ${cotizacion.orden_compra_cliente}`
+        : null,
       cotizacion.alcance_trabajo ? `Alcance:\n${cotizacion.alcance_trabajo}` : null,
       dto.observaciones ? `Notas de programación:\n${dto.observaciones}` : null,
     ]
@@ -1638,10 +1659,11 @@ export class CotizacionesCpqService {
           fecha_vencimiento: vencimiento,
           dias_validez: diasValidez,
           id_estado: 1,
-          asunto: `Correctivo ${propuesta.numero_propuesta}${propuesta.equipos?.nombre_equipo ? ` - ${propuesta.equipos.nombre_equipo}` : ''}`.slice(
-            0,
-            300,
-          ),
+          asunto:
+            `Correctivo ${propuesta.numero_propuesta}${propuesta.equipos?.nombre_equipo ? ` - ${propuesta.equipos.nombre_equipo}` : ''}`.slice(
+              0,
+              300,
+            ),
           descripcion_general: `Hallazgo reportado en OS ${ordenOrigen?.numero_orden || propuesta.id_orden_servicio}:\n${propuesta.descripcion_problema}`,
           alcance_trabajo: propuesta.solucion_propuesta,
           iva_porcentaje: org?.tasa_impuesto_defecto ?? 19,
@@ -1726,6 +1748,343 @@ export class CotizacionesCpqService {
     return {
       message: `Propuesta ${propuesta.numero_propuesta} escalada a Cotización ${cotizacion.numero_cotizacion}`,
       cotizacion: completa,
+    };
+  }
+
+  // ==================== FIRMAS DIGITALES OPCIONALES (REUTILIZA firmas_digitales) ====================
+
+  /**
+   * Obtiene hasta 3 firmas históricas agrupadas por hash_firma para un empleado (Asesor/Técnico),
+   * marcando como estándar la de mayor uso (empate -> la más reciente).
+   */
+  async obtenerFirmasHistorialEmpleado(idEmpleado: number, excludeFirmaId?: number) {
+    if (!Number.isInteger(idEmpleado) || idEmpleado <= 0) {
+      return { success: true, data: [] };
+    }
+
+    const empleado = await this.prisma.empleados.findUnique({
+      where: { id_empleado: idEmpleado },
+      select: { id_persona: true },
+    });
+    if (!empleado?.id_persona) {
+      return { success: true, data: [] };
+    }
+
+    const firmas = await this.prisma.firmas_digitales.findMany({
+      where: {
+        id_persona: empleado.id_persona,
+        activa: true,
+        tipo_firma: { in: ['ASESOR', 'TECNICO', 'GERENTE', 'ADMINISTRATIVA'] },
+        ...(excludeFirmaId ? { id_firma_digital: { not: excludeFirmaId } } : {}),
+      },
+      select: {
+        id_firma_digital: true,
+        firma_base64: true,
+        hash_firma: true,
+        fecha_registro: true,
+        es_firma_principal: true,
+      },
+      orderBy: { fecha_registro: 'desc' },
+      take: 25,
+    });
+
+    const porHash = new Map<
+      string,
+      { id: number; base64: string; fecha: Date | null; veces: number; principal: boolean }
+    >();
+
+    for (const f of firmas) {
+      if (!f.firma_base64) continue;
+      const existente = porHash.get(f.hash_firma);
+      if (existente) {
+        existente.veces += 1;
+        if (f.es_firma_principal) existente.principal = true;
+        if (f.fecha_registro && (!existente.fecha || f.fecha_registro > existente.fecha)) {
+          existente.id = f.id_firma_digital;
+          existente.base64 = f.firma_base64;
+          existente.fecha = f.fecha_registro;
+        }
+      } else {
+        porHash.set(f.hash_firma, {
+          id: f.id_firma_digital,
+          base64: f.firma_base64,
+          fecha: f.fecha_registro ?? null,
+          veces: 1,
+          principal: Boolean(f.es_firma_principal),
+        });
+      }
+    }
+
+    const lista = Array.from(porHash.values()).map((info) => ({
+      id_firma_digital: info.id,
+      firma_base64: info.base64,
+      veces_usada: info.veces,
+      fecha_captura: info.fecha,
+      es_principal: info.principal,
+    }));
+
+    lista.sort(
+      (a, b) =>
+        Number(b.es_principal) - Number(a.es_principal) ||
+        b.veces_usada - a.veces_usada ||
+        (b.fecha_captura?.getTime() || 0) - (a.fecha_captura?.getTime() || 0),
+    );
+
+    const maxVeces = lista.length > 0 ? lista[0].veces_usada : 0;
+
+    return {
+      success: true,
+      data: lista.slice(0, 3).map((f, idx) => ({
+        id_firma_digital: f.id_firma_digital,
+        firma_base64: f.firma_base64,
+        veces_usada: f.veces_usada,
+        fecha_captura: f.fecha_captura,
+        es_estandar: idx === 0 || (f.veces_usada === maxVeces && maxVeces > 0),
+      })),
+    };
+  }
+
+  async guardarFirmaCotizacion(
+    idCotizacion: number,
+    tipoRaw: string,
+    dto: GuardarFirmaCotizacionDto,
+    userId: number,
+  ) {
+    const tipo = String(tipoRaw || '')
+      .trim()
+      .toUpperCase();
+    if (tipo !== 'ASESOR' && tipo !== 'CLIENTE') {
+      throw new BadRequestException('Tipo de firma inválido. Use ASESOR o CLIENTE.');
+    }
+
+    const cot = await this.prisma.cotizaciones.findUnique({
+      where: { id_cotizacion: idCotizacion },
+      select: {
+        id_cotizacion: true,
+        id_estado: true,
+        elaborada_por: true,
+        id_cliente: true,
+        id_firma_asesor: true,
+        id_firma_cliente: true,
+        empleados: { select: { id_persona: true } },
+        clientes: { select: { id_persona: true } },
+      },
+    });
+
+    if (!cot) {
+      throw new NotFoundException(`Cotización #${idCotizacion} no encontrada`);
+    }
+
+    if (cot.id_estado === 6 || cot.id_estado === 7) {
+      throw new BadRequestException(
+        'No se pueden adjuntar firmas a una cotización RECHAZADA o VENCIDA.',
+      );
+    }
+
+    let firmaId: number | null = null;
+    let firmaRecord: {
+      id_firma_digital: number;
+      tipo_firma: string;
+      firma_base64: string;
+      formato_firma: string | null;
+      fecha_captura: Date | null;
+    } | null = null;
+
+    if (dto.id_firma_digital) {
+      const existing = await this.prisma.firmas_digitales.findUnique({
+        where: { id_firma_digital: dto.id_firma_digital },
+        select: {
+          id_firma_digital: true,
+          tipo_firma: true,
+          firma_base64: true,
+          formato_firma: true,
+          fecha_captura: true,
+        },
+      });
+      if (!existing) {
+        throw new NotFoundException(`Firma digital #${dto.id_firma_digital} no encontrada`);
+      }
+      firmaId = existing.id_firma_digital;
+      firmaRecord = existing;
+    } else if (dto.firma_base64?.trim()) {
+      let base64Clean = dto.firma_base64.trim();
+      let formato = 'PNG';
+      const dataUriMatch = base64Clean.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
+      if (dataUriMatch) {
+        formato = dataUriMatch[1].toUpperCase().slice(0, 10);
+        base64Clean = dataUriMatch[2];
+      }
+
+      const idPersona =
+        tipo === 'ASESOR'
+          ? (cot.empleados?.id_persona ?? null)
+          : (cot.clientes?.id_persona ?? null);
+
+      let resolvedPersonaId: number | null = idPersona ?? null;
+      if (!resolvedPersonaId) {
+        const userRow = await this.prisma.usuarios.findUnique({
+          where: { id_usuario: userId },
+          select: { id_persona: true },
+        });
+        resolvedPersonaId = userRow?.id_persona ?? null;
+      }
+
+      if (!resolvedPersonaId) {
+        throw new BadRequestException(
+          'No se encontró una persona asociada para registrar la firma digital.',
+        );
+      }
+
+      const hashFirma = createHash('sha256').update(base64Clean).digest('hex').slice(0, 64);
+
+      const nuevaFirma = await this.prisma.firmas_digitales.create({
+        data: {
+          id_persona: resolvedPersonaId,
+          tipo_firma: tipo as any,
+          firma_base64: base64Clean,
+          formato_firma: formato,
+          hash_firma: hashFirma,
+          es_firma_principal: false,
+          activa: true,
+          registrada_por: userId,
+          fecha_captura: new Date(),
+          fecha_registro: new Date(),
+        },
+        select: {
+          id_firma_digital: true,
+          tipo_firma: true,
+          firma_base64: true,
+          formato_firma: true,
+          fecha_captura: true,
+        },
+      });
+      firmaId = nuevaFirma.id_firma_digital;
+      firmaRecord = nuevaFirma;
+    } else if (
+      tipo === 'CLIENTE' &&
+      (dto.atencion_a_nombre !== undefined || dto.atencion_a_cargo !== undefined)
+    ) {
+      // Permite actualizar solo los datos del firmante cliente conservando la firma existente
+      firmaId = cot.id_firma_cliente ?? null;
+    } else {
+      throw new BadRequestException(
+        'Debe enviar firma_base64, id_firma_digital o datos del firmante.',
+      );
+    }
+
+    const updateData: Prisma.cotizacionesUpdateInput = {
+      modificado_por: userId,
+      fecha_modificacion: new Date(),
+    };
+
+    if (tipo === 'ASESOR' && firmaId !== null) {
+      updateData.firma_asesor = { connect: { id_firma_digital: firmaId } };
+    }
+    if (tipo === 'CLIENTE') {
+      if (firmaId !== null) {
+        updateData.firma_cliente = { connect: { id_firma_digital: firmaId } };
+      }
+      if (dto.atencion_a_nombre !== undefined) {
+        updateData.atencion_a_nombre = dto.atencion_a_nombre.trim()
+          ? dto.atencion_a_nombre.trim().slice(0, 200)
+          : null;
+      }
+      if (dto.atencion_a_cargo !== undefined) {
+        updateData.atencion_a_cargo = dto.atencion_a_cargo.trim()
+          ? dto.atencion_a_cargo.trim().slice(0, 120)
+          : null;
+      }
+    }
+
+    const updated = await this.prisma.cotizaciones.update({
+      where: { id_cotizacion: idCotizacion },
+      data: updateData,
+      select: {
+        id_cotizacion: true,
+        id_firma_asesor: true,
+        id_firma_cliente: true,
+        atencion_a_nombre: true,
+        atencion_a_cargo: true,
+        fecha_modificacion: true,
+        firma_asesor: {
+          select: {
+            id_firma_digital: true,
+            tipo_firma: true,
+            firma_base64: true,
+            formato_firma: true,
+            fecha_captura: true,
+          },
+        },
+        firma_cliente: {
+          select: {
+            id_firma_digital: true,
+            tipo_firma: true,
+            firma_base64: true,
+            formato_firma: true,
+            fecha_captura: true,
+          },
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message:
+        tipo === 'ASESOR'
+          ? 'Firma del Asesor adjuntada correctamente'
+          : 'Firma de Aceptación del Cliente actualizada correctamente',
+      data: {
+        id_cotizacion: updated.id_cotizacion,
+        tipo,
+        id_firma_asesor: updated.id_firma_asesor,
+        id_firma_cliente: updated.id_firma_cliente,
+        firma_asesor: updated.firma_asesor ?? (tipo === 'ASESOR' ? firmaRecord : null),
+        firma_cliente: updated.firma_cliente ?? (tipo === 'CLIENTE' ? firmaRecord : null),
+        atencion_a_nombre: updated.atencion_a_nombre,
+        atencion_a_cargo: updated.atencion_a_cargo,
+        fecha_modificacion: updated.fecha_modificacion,
+      },
+    };
+  }
+
+  async eliminarFirmaCotizacion(idCotizacion: number, tipoRaw: string, userId: number) {
+    const tipo = String(tipoRaw || '')
+      .trim()
+      .toUpperCase();
+    if (tipo !== 'ASESOR' && tipo !== 'CLIENTE') {
+      throw new BadRequestException('Tipo de firma inválido. Use ASESOR o CLIENTE.');
+    }
+
+    const cot = await this.prisma.cotizaciones.findUnique({
+      where: { id_cotizacion: idCotizacion },
+      select: { id_cotizacion: true },
+    });
+    if (!cot) {
+      throw new NotFoundException(`Cotización #${idCotizacion} no encontrada`);
+    }
+
+    const updated = await this.prisma.cotizaciones.update({
+      where: { id_cotizacion: idCotizacion },
+      data: {
+        ...(tipo === 'ASESOR' ? { id_firma_asesor: null } : { id_firma_cliente: null }),
+        modificado_por: userId,
+        fecha_modificacion: new Date(),
+      },
+      select: {
+        id_cotizacion: true,
+        id_firma_asesor: true,
+        id_firma_cliente: true,
+        fecha_modificacion: true,
+      },
+    });
+
+    return {
+      success: true,
+      message:
+        tipo === 'ASESOR'
+          ? 'Firma del Asesor desvinculada de la cotización'
+          : 'Firma del Cliente desvinculada de la cotización',
+      data: updated,
     };
   }
 }

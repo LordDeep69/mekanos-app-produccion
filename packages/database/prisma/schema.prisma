@@ -584,6 +584,8 @@ model cotizaciones {
   id_cotizacion_padre          Int?
   id_orden_servicio_generada   Int?
   fecha_conversion_os          DateTime?                      @db.Timestamp(6)
+  id_firma_asesor              Int?
+  id_firma_cliente             Int?
   metadata                     Json?
   elaborada_por                Int
   fecha_creacion               DateTime?                      @default(now()) @db.Timestamp(6)
@@ -608,6 +610,8 @@ model cotizaciones {
   cotizaciones_equipos         cotizaciones_equipos[]
   plantilla_origen             plantillas_cotizacion?         @relation(fields: [id_plantilla_origen], references: [id_plantilla], onDelete: SetNull)
   propuesta_origen             propuestas_correctivo?         @relation("cotizaciones_propuesta_origen", fields: [id_propuesta_origen], references: [id_propuesta], onDelete: SetNull)
+  firma_asesor                 firmas_digitales?              @relation("cotizaciones_id_firma_asesorTofirmas_digitales", fields: [id_firma_asesor], references: [id_firma_digital], onDelete: SetNull)
+  firma_cliente                firmas_digitales?              @relation("cotizaciones_id_firma_clienteTofirmas_digitales", fields: [id_firma_cliente], references: [id_firma_digital], onDelete: SetNull)
   remisiones                   remisiones[]
   versiones_cotizacion         versiones_cotizacion[]
 
@@ -1176,6 +1180,8 @@ model firmas_digitales {
   persona                                                              personas                @relation(fields: [id_persona], references: [id_persona], onDelete: NoAction, map: "fk_firma_persona")
   ordenes_servicio_ordenes_servicio_id_firma_tecnicoTofirmas_digitales ordenes_servicio[]      @relation("ordenes_servicio_id_firma_tecnicoTofirmas_digitales")
   ordenes_servicio                                                     ordenes_servicio[]
+  cotizaciones_firma_asesor                                            cotizaciones[]          @relation("cotizaciones_id_firma_asesorTofirmas_digitales")
+  cotizaciones_firma_cliente                                           cotizaciones[]          @relation("cotizaciones_id_firma_clienteTofirmas_digitales")
 
   @@index([hash_firma], map: "idx_firma_hash")
 }

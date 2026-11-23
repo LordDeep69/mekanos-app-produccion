@@ -205,6 +205,9 @@ export class PdfController {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${resultado.filename}"`);
     res.setHeader('Content-Length', resultado.size);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.status(HttpStatus.OK).send(resultado.buffer);
 
     setImmediate(async () => {
@@ -250,6 +253,54 @@ export class PdfController {
 
     const forceRefresh = refresh === '1' || refresh === 'true';
 
+    const buildCotPdfStamp = (
+      meta: {
+        fecha_modificacion?: Date | string | null;
+        version?: number | null;
+        id_estado?: number | null;
+        total_cotizacion?: any;
+        mostrar_desglose_precios?: boolean | null;
+        atencion_a_nombre?: string | null;
+        atencion_a_cargo?: string | null;
+        id_firma_asesor?: number | null;
+        id_firma_cliente?: number | null;
+      },
+      orgMeta: {
+        enable_cpq_governance?: boolean | null;
+        fecha_modificacion?: Date | string | null;
+        color_primario?: string | null;
+        texto_pie_pdf?: string | null;
+      } | null,
+    ) => {
+      const cotTs = meta.fecha_modificacion ? new Date(meta.fecha_modificacion).getTime() : 0;
+      const orgTs = orgMeta?.fecha_modificacion
+        ? new Date(orgMeta.fecha_modificacion).getTime()
+        : 0;
+      const pieHash = orgMeta?.texto_pie_pdf
+        ? createHash('sha1').update(orgMeta.texto_pie_pdf).digest('hex').slice(0, 8)
+        : '0';
+      return [
+        cotTs,
+        meta.version || 1,
+        meta.id_estado || 0,
+        meta.total_cotizacion?.toString() || '0',
+        `desg:${meta.mostrar_desglose_precios ? 1 : 0}`,
+        `fa:${meta.id_firma_asesor || 0}`,
+        `fc:${meta.id_firma_cliente || 0}`,
+        `at:${meta.atencion_a_nombre || ''}|${meta.atencion_a_cargo || ''}`,
+        `gov:${orgMeta?.enable_cpq_governance ? 1 : 0}`,
+        `org:${orgTs}`,
+        `clr:${orgMeta?.color_primario || ''}`,
+        `pie:${pieHash}`,
+      ].join('-');
+    };
+
+    const applyNoCachePdfHeaders = () => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    };
+
     // Verificación rápida de huella para reutilizar PDF si la cotización o la configuración no cambiaron
     if (!forceRefresh) {
       const cached = this.cotizacionPdfCache.get(idNumerico);
@@ -263,12 +314,21 @@ export class PdfController {
               id_estado: true,
               total_cotizacion: true,
               mostrar_desglose_precios: true,
+              atencion_a_nombre: true,
+              atencion_a_cargo: true,
+              id_firma_asesor: true,
+              id_firma_cliente: true,
             },
           }),
           this.prisma.configuracion_organizacion
             .findUnique({
               where: { id_configuracion: 1 },
-              select: { enable_cpq_governance: true, fecha_modificacion: true },
+              select: {
+                enable_cpq_governance: true,
+                fecha_modificacion: true,
+                color_primario: true,
+                texto_pie_pdf: true,
+              },
             })
             .catch(() => null),
         ]);
@@ -276,11 +336,12 @@ export class PdfController {
           this.cotizacionPdfCache.delete(idNumerico);
           throw new NotFoundException(`Cotización #${idNumerico} no encontrada`);
         }
-        const stamp = `${meta.fecha_modificacion?.getTime() || 0}-${meta.version || 1}-${meta.id_estado}-${meta.total_cotizacion?.toString() || '0'}-desg:${meta.mostrar_desglose_precios ? 1 : 0}-gov:${orgMeta?.enable_cpq_governance ? 1 : 0}-org:${orgMeta?.fecha_modificacion?.getTime() || 0}`;
+        const stamp = buildCotPdfStamp(meta, orgMeta);
         if (cached.stamp === stamp) {
           res.setHeader('Content-Type', 'application/pdf');
           res.setHeader('Content-Disposition', `inline; filename="${cached.filename}"`);
           res.setHeader('Content-Length', cached.buffer.length);
+          applyNoCachePdfHeaders();
           res.setHeader('X-PDF-Cache', 'HIT');
           res.status(HttpStatus.OK).send(cached.buffer);
           return;
@@ -293,13 +354,18 @@ export class PdfController {
       this.prisma.configuracion_organizacion
         .findUnique({
           where: { id_configuracion: 1 },
-          select: { enable_cpq_governance: true, fecha_modificacion: true },
+          select: {
+            enable_cpq_governance: true,
+            fecha_modificacion: true,
+            color_primario: true,
+            texto_pie_pdf: true,
+          },
         })
         .catch(() => null),
     ]);
     const resultado = await this.pdfService.generarPDFCotizacion(datosCotizacion);
 
-    const stamp = `${cotizacion?.fecha_modificacion ? new Date(cotizacion.fecha_modificacion).getTime() : 0}-${cotizacion?.version || 1}-${cotizacion?.id_estado || 0}-${cotizacion?.total_cotizacion?.toString() || '0'}-desg:${cotizacion?.mostrar_desglose_precios ? 1 : 0}-gov:${orgMetaPost?.enable_cpq_governance ? 1 : 0}-org:${orgMetaPost?.fecha_modificacion?.getTime() || 0}`;
+    const stamp = buildCotPdfStamp(cotizacion || {}, orgMetaPost);
     if (this.cotizacionPdfCache.size >= this.COT_PDF_CACHE_MAX) {
       const oldestKey = this.cotizacionPdfCache.keys().next().value;
       if (oldestKey !== undefined) this.cotizacionPdfCache.delete(oldestKey);
@@ -314,6 +380,7 @@ export class PdfController {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${resultado.filename}"`);
     res.setHeader('Content-Length', resultado.size);
+    applyNoCachePdfHeaders();
     res.setHeader('X-PDF-Cache', 'MISS');
     res.status(HttpStatus.OK).send(resultado.buffer);
   }
@@ -334,6 +401,9 @@ export class PdfController {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${resultado.filename}"`);
     res.setHeader('Content-Length', resultado.size);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.status(HttpStatus.OK).send(resultado.buffer);
   }
 
@@ -353,6 +423,9 @@ export class PdfController {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${resultado.filename}"`);
     res.setHeader('Content-Length', resultado.size);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.status(HttpStatus.OK).send(resultado.buffer);
   }
 

@@ -166,9 +166,11 @@ export interface DatosCotizacionPDF {
   observacionesGarantia?: string;
   terminosCondiciones?: string;
 
-  // Elaboración
+  // Elaboración y Firmas Digitales opcionales
   elaboradoPor: string;
   cargoElaborador?: string;
+  firmaAsesorDataUri?: string;
+  firmaClienteDataUri?: string;
 }
 
 const esc = (v?: string | number | null): string => escapeBrandHtml(v == null ? '' : String(v));
@@ -176,8 +178,7 @@ const esc = (v?: string | number | null): string => escapeBrandHtml(v == null ? 
 const escMultiline = (v?: string | null): string =>
   escapeBrandHtml(v || '').replace(/\r?\n/g, '<br/>');
 
-const formatDiasHabiles = (n: number): string =>
-  n === 1 ? '1 día hábil' : `${n} días hábiles`;
+const formatDiasHabiles = (n: number): string => (n === 1 ? '1 día hábil' : `${n} días hábiles`);
 
 const formatMeses = (n: number): string => (n === 1 ? '1 mes' : `${n} meses`);
 
@@ -221,11 +222,7 @@ export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
     : baseBrand;
 
   const equiposList: EquipoCotizacionPDF[] =
-    datos.equipos && datos.equipos.length > 0
-      ? datos.equipos
-      : datos.equipo
-        ? [datos.equipo]
-        : [];
+    datos.equipos && datos.equipos.length > 0 ? datos.equipos : datos.equipo ? [datos.equipo] : [];
 
   const itemsOtros = datos.itemsOtros || [];
   const itemsOpcionales = datos.itemsOpcionales || [];
@@ -235,17 +232,35 @@ export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
     ? `<div class="gov-watermark-layer" aria-hidden="true"><span class="gov-watermark-text">${esc(datos.textoMarcaAgua || 'BORRADOR — PENDIENTE DE APROBACIÓN')}</span></div>`
     : '';
 
+  const firmasHtml = generarFirmasSobrias(datos, brand);
   let bodyContentHtml = '';
 
   if (!mostrarDesglose) {
     // ═══════════════════════════════════════════════════════════════════════
     // LAYOUT A (POR DEFECTO): MODO EJECUTIVO "SUMA ALZADA" (1 PÁGINA)
     // ═══════════════════════════════════════════════════════════════════════
+    const condicionesHtml = generarCondicionesAnchoCompleto(datos);
+    const terminosHtml = generarTerminosAnchoCompleto(datos, brand, itemsOtros.length > 0);
+    const cierreAntihuerfanosHtml =
+      itemsOpcionales.length > 0
+        ? `
+      ${condicionesHtml}
+      ${terminosHtml}
+      <div class="closing-keep-together">
+        ${generarSeccionOpcionalesSumaAlzada(itemsOpcionales, brand)}
+        ${firmasHtml}
+      </div>`
+        : `
+      ${condicionesHtml}
+      <div class="closing-keep-together">
+        ${terminosHtml}
+        ${firmasHtml}
+      </div>`;
+
     bodyContentHtml = `
       ${generarTablaAlcanceSumaAlzada(datos, itemsOtros)}
       ${generarBandaTotalesSumaAlzada(datos, brand)}
-      ${generarCondicionesYTerminosAnchoCompleto(datos, brand, itemsOtros.length > 0)}
-      ${itemsOpcionales.length > 0 ? generarSeccionOpcionalesSumaAlzada(itemsOpcionales, brand) : ''}
+      ${cierreAntihuerfanosHtml}
     `;
   } else {
     // ═══════════════════════════════════════════════════════════════════════
@@ -260,15 +275,28 @@ export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
       datos.itemsComponentes.length > 0
         ? generarTablaComponentes(datos.itemsComponentes, brand, ++secIdx)
         : '';
-    const otrosHtml =
-      itemsOtros.length > 0 ? generarTablaOtros(itemsOtros, brand, ++secIdx) : '';
+    const otrosHtml = itemsOtros.length > 0 ? generarTablaOtros(itemsOtros, brand, ++secIdx) : '';
+    const cierreBalanceadoHtml = generarBloqueCierreBalanceado(datos, brand, itemsOtros.length > 0);
+
+    const cierreAntihuerfanosHtml =
+      itemsOpcionales.length > 0
+        ? `
+      ${cierreBalanceadoHtml}
+      <div class="closing-keep-together">
+        ${generarSeccionOpcionales(itemsOpcionales, brand)}
+        ${firmasHtml}
+      </div>`
+        : `
+      <div class="closing-keep-together">
+        ${cierreBalanceadoHtml}
+        ${firmasHtml}
+      </div>`;
 
     bodyContentHtml = `
       ${serviciosHtml}
       ${componentesHtml}
       ${otrosHtml}
-      ${generarBloqueCierreBalanceado(datos, brand, itemsOtros.length > 0)}
-      ${itemsOpcionales.length > 0 ? generarSeccionOpcionales(itemsOpcionales, brand) : ''}
+      ${cierreAntihuerfanosHtml}
     `;
   }
 
@@ -292,7 +320,6 @@ export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {
     ${generarBloqueClienteYEquipos(datos, equiposList, brand)}
     ${generarObjetoOferta(datos)}
     ${bodyContentHtml}
-    ${generarFirmasSobrias(datos, brand)}
   </div>
 </body>
 </html>`;
@@ -670,8 +697,75 @@ const editorialStyles = `
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    margin-bottom: 3px;
+    margin-bottom: 5px;
     display: block;
+  }
+
+  .ed-alcance-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3.5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ed-alcance-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    padding: 2.5px 5px;
+    border-radius: 3px;
+    font-size: 7.9px;
+    line-height: 1.35;
+    color: #1E293B;
+    break-inside: avoid;
+  }
+
+  .ed-alcance-box.incluido .ed-alcance-item {
+    background: #F0FDF4;
+    border: 1px solid #DCFCE7;
+  }
+
+  .ed-alcance-box.exclusiones .ed-alcance-item {
+    background: #FFF1F2;
+    border: 1px solid #FFE4E6;
+  }
+
+  .ed-alcance-ico {
+    width: 11px;
+    height: 11px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .ed-alcance-ico.incluido {
+    background: #D1FAE5;
+    color: #059669;
+  }
+
+  .ed-alcance-ico.exclusiones {
+    background: #FFE4E6;
+    color: #E11D48;
+  }
+
+  .ed-alcance-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mode-compact .ed-alcance-list {
+    gap: 3px;
+  }
+
+  .mode-compact .ed-alcance-item {
+    padding: 3.5px 8px;
+    font-size: 7.5px;
+    line-height: 1.28;
   }
 
   /* 5. Títulos de sección y tablas elegantes */
@@ -993,12 +1087,19 @@ const editorialStyles = `
     line-height: 1.45;
   }
 
-  /* 8. Firmas Sobrias sobre fondo blanco */
+  /* Contenedor antihuérfanos: último bloque previo + firmas siempre viajan juntos */
+  .closing-keep-together {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* 8. Firmas Sobrias con Dimensionamiento Adaptativo y Líneas 100% Colineales */
   .ed-firmas {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    align-items: start;
     gap: 36px;
-    margin-top: 26px;
+    margin-top: 22px;
     padding: 0 8px;
   }
 
@@ -1006,10 +1107,35 @@ const editorialStyles = `
     text-align: center;
   }
 
-  .ed-firma-space {
-    height: 44px;
+  /* Caso A: Ninguna firma digital adjunta -> espacio compacto idéntico en ambas columnas */
+  .ed-firma-space.is-physical {
+    height: 26px;
+    border-bottom: 1px solid #94A3B8;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  /* Caso B: Al menos una firma digital adjunta -> altura fija idéntica en ambas columnas para líneas colineales */
+  .ed-firma-space.has-digital {
+    height: 46px;
     border-bottom: 1px solid #94A3B8;
     margin-bottom: 6px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .ed-firma-img {
+    width: auto;
+    height: auto;
+    max-width: 185px;
+    max-height: 44px;
+    object-fit: contain;
+    mix-blend-mode: multiply;
+    margin-bottom: -2px;
+    display: block;
   }
 
   .ed-firma-name {
@@ -1030,45 +1156,85 @@ const editorialStyles = `
      LAYOUT A (POR DEFECTO): MODO EJECUTIVO "SUMA ALZADA" (1 PÁGINA)
      ═════════════════════════════════════════════════════════════════════════ */
   .mode-compact .top-accent-bar {
-    margin-bottom: 10px;
+    margin-bottom: 7px;
   }
 
   .mode-compact .ed-header {
-    padding-bottom: 9px;
-    margin-bottom: 9px;
+    padding-bottom: 7px;
+    margin-bottom: 7px;
   }
 
   .mode-compact .ed-cards-2col {
-    margin-bottom: 9px;
+    margin-bottom: 7px;
   }
 
   .mode-compact .ed-card {
-    padding: 8px 11px;
+    padding: 6.5px 10px;
   }
 
   .mode-compact .ed-objeto {
-    padding: 7px 11px;
-    margin-bottom: 9px;
+    padding: 6px 10px;
+    margin-bottom: 7px;
+  }
+
+  .mode-compact .ed-alcance-grid {
+    margin-top: 5px;
+    padding-top: 5px;
+    gap: 6px;
+  }
+
+  .mode-compact .ed-alcance-box {
+    padding: 5px 7px;
   }
 
   .mode-compact .ed-section {
-    margin-bottom: 8px;
+    margin-bottom: 7px;
+  }
+
+  .mode-compact .ed-sec-heading {
+    margin-bottom: 4.5px;
   }
 
   .mode-compact .ed-table th {
-    padding: 5.5px 8px;
+    padding: 4.5px 7px;
   }
 
   .mode-compact .ed-table td {
-    padding: 5.5px 8px;
+    padding: 4.5px 7px;
+  }
+
+  .mode-compact .sa-totals-band {
+    margin-top: 6px;
+    margin-bottom: 7px;
+  }
+
+  .mode-compact .sa-cond-strip {
+    padding: 6px 10px;
+    margin-bottom: 7px;
+  }
+
+  .mode-compact .sa-terms-strip {
+    padding: 6px 10px;
+    margin-bottom: 7px;
+  }
+
+  .mode-compact .sa-terms-text {
+    font-size: 8px;
+    line-height: 1.38;
+  }
+
+  .mode-compact .sa-opcionales-card {
+    padding: 6.5px 9px;
+    margin-top: 6px;
+    margin-bottom: 6px;
   }
 
   .mode-compact .ed-firmas {
-    margin-top: 18px;
+    margin-top: 10px;
   }
 
-  .mode-compact .ed-firma-space {
-    height: 36px;
+  .mode-compact .ed-firma-space.has-digital {
+    height: 46px;
   }
 
   .sa-table th.sa-col-num { width: 32px; text-align: center; }
@@ -1285,10 +1451,7 @@ const editorialStyles = `
   }
 `;
 
-const generarHeaderEditorial = (
-  datos: DatosCotizacionPDF,
-  brand: OrgBrandingContext,
-): string => {
+const generarHeaderEditorial = (datos: DatosCotizacionPDF, brand: OrgBrandingContext): string => {
   const tipoLabel = formatTipoLabel(datos.tipoCotizacion);
 
   const lineaFiscal = [
@@ -1415,9 +1578,7 @@ const generarBloqueClienteYEquipos = (
   if (equipos.length === 1) {
     const eq = equipos[0];
     const marcaModelo =
-      [eq.marca, eq.modelo].filter((x) => x && x !== 'N/A').join(' · ') ||
-      eq.nombreEquipo ||
-      '-';
+      [eq.marca, eq.modelo].filter((x) => x && x !== 'N/A').join(' · ') || eq.nombreEquipo || '-';
     return `
   <div class="ed-cards-2col avoid-break">
     <div class="ed-card">
@@ -1514,9 +1675,43 @@ const generarBloqueClienteYEquipos = (
   </div>`;
 };
 
+const parseAlcanceLineas = (texto?: string): string[] => {
+  if (!texto) return [];
+  const prefixRe = /^(?:[-•*–—·✓✔✕✖✗▪▸►]+|\d+[.)])\s+/;
+  return String(texto)
+    .split(/\r?\n/)
+    .map((line) => {
+      let clean = line.trim();
+      while (prefixRe.test(clean)) {
+        clean = clean.replace(prefixRe, '').trim();
+      }
+      return clean;
+    })
+    .filter(Boolean);
+};
+
+const SVG_CHECK_MICRO = `<svg width="7" height="7" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.2 6.2L4.8 8.8L9.8 3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const SVG_CROSS_MICRO = `<svg width="7" height="7" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+
+const generarListaAlcanceHtml = (items: string[], tipo: 'incluido' | 'exclusiones'): string => {
+  const ico = tipo === 'incluido' ? SVG_CHECK_MICRO : SVG_CROSS_MICRO;
+  return `<ul class="ed-alcance-list">
+    ${items
+      .map(
+        (item) => `<li class="ed-alcance-item">
+          <span class="ed-alcance-ico ${tipo}">${ico}</span>
+          <span class="ed-alcance-text">${esc(item)}</span>
+        </li>`,
+      )
+      .join('')}
+  </ul>`;
+};
+
 const generarObjetoOferta = (datos: DatosCotizacionPDF): string => {
-  const tieneAlcance = Boolean(datos.alcanceTrabajo?.trim());
-  const tieneExclusiones = Boolean(datos.exclusiones?.trim());
+  const alcanceItems = parseAlcanceLineas(datos.alcanceTrabajo);
+  const exclusionesItems = parseAlcanceLineas(datos.exclusiones);
+  const tieneAlcance = alcanceItems.length > 0;
+  const tieneExclusiones = exclusionesItems.length > 0;
 
   return `
   <div class="ed-objeto avoid-break">
@@ -1534,7 +1729,7 @@ const generarObjetoOferta = (datos: DatosCotizacionPDF): string => {
         tieneAlcance
           ? `<div class="ed-alcance-box incluido">
         <span class="ed-alcance-label" style="color: #065F46;">Alcance Técnico Incluido</span>
-        ${escMultiline(datos.alcanceTrabajo)}
+        ${generarListaAlcanceHtml(alcanceItems, 'incluido')}
       </div>`
           : ''
       }
@@ -1542,7 +1737,7 @@ const generarObjetoOferta = (datos: DatosCotizacionPDF): string => {
         tieneExclusiones
           ? `<div class="ed-alcance-box exclusiones">
         <span class="ed-alcance-label" style="color: #9F1239;">Exclusiones</span>
-        ${escMultiline(datos.exclusiones)}
+        ${generarListaAlcanceHtml(exclusionesItems, 'exclusiones')}
       </div>`
           : ''
       }
@@ -1597,7 +1792,12 @@ const generarTablaServicios = (
           .join('')}
         <tr class="ed-subtotal-row avoid-break">
           <td colspan="5" style="text-align: right;">Subtotal Servicios</td>
-          <td class="col-sub">${esc(formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand))}</td>
+          <td class="col-sub">${esc(
+            formatCurrencyOrg(
+              items.reduce((sum, i) => sum + i.subtotal, 0),
+              brand,
+            ),
+          )}</td>
         </tr>
       </tbody>
     </table>
@@ -1630,9 +1830,7 @@ const generarTablaComponentes = (
               item.garantiaMeses ? `Garantía: ${formatMeses(item.garantiaMeses)}` : null,
             ].filter(Boolean);
             const hasMeta =
-              Boolean(item.equipoEtiqueta) ||
-              metaParts.length > 0 ||
-              item.ivaAplicable === false;
+              Boolean(item.equipoEtiqueta) || metaParts.length > 0 || item.ivaAplicable === false;
             return `
         <tr>
           <td class="col-num">${item.orden}</td>
@@ -1657,7 +1855,12 @@ const generarTablaComponentes = (
           .join('')}
         <tr class="ed-subtotal-row avoid-break">
           <td colspan="5" style="text-align: right;">Subtotal Repuestos e Insumos</td>
-          <td class="col-sub">${esc(formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand))}</td>
+          <td class="col-sub">${esc(
+            formatCurrencyOrg(
+              items.reduce((sum, i) => sum + i.subtotal, 0),
+              brand,
+            ),
+          )}</td>
         </tr>
       </tbody>
     </table>
@@ -1709,7 +1912,12 @@ const generarTablaOtros = (
           .join('')}
         <tr class="ed-subtotal-row avoid-break">
           <td colspan="5" style="text-align: right;">Subtotal Logística y Otros</td>
-          <td class="col-sub">${esc(formatCurrencyOrg(items.reduce((sum, i) => sum + i.subtotal, 0), brand))}</td>
+          <td class="col-sub">${esc(
+            formatCurrencyOrg(
+              items.reduce((sum, i) => sum + i.subtotal, 0),
+              brand,
+            ),
+          )}</td>
         </tr>
       </tbody>
     </table>
@@ -1735,7 +1943,9 @@ const generarBloqueCierreBalanceado = (
     '4. Todo trabajo o repuesto adicional fuera del alcance descrito se cotizará y aprobará previamente.',
     ...(incluyeLogistica
       ? []
-      : ['5. Movilización, transporte o viáticos fuera del área estándar se cotizan de forma independiente cuando apliquen.']),
+      : [
+          '5. Movilización, transporte o viáticos fuera del área estándar se cotizan de forma independiente cuando apliquen.',
+        ]),
     `${incluyeLogistica ? '5' : '6'}. Precios y disponibilidad de repuestos sujetos a confirmación después del vencimiento de esta oferta.`,
   ].join('\n');
 
@@ -1856,10 +2066,7 @@ const generarBloqueCierreBalanceado = (
   </div>`;
 };
 
-const generarSeccionOpcionales = (
-  items: ItemOpcionalPDF[],
-  brand: OrgBrandingContext,
-): string => `
+const generarSeccionOpcionales = (items: ItemOpcionalPDF[], brand: OrgBrandingContext): string => `
   <div class="ed-opcionales-card avoid-break">
     <div class="ed-opcionales-title">Ítems Opcionales Recomendados (No incluidos en el total)</div>
     <p class="ed-opcionales-note">
@@ -2072,23 +2279,7 @@ const generarBandaTotalesSumaAlzada = (
   </div>`;
 };
 
-const generarCondicionesYTerminosAnchoCompleto = (
-  datos: DatosCotizacionPDF,
-  brand: OrgBrandingContext,
-  incluyeLogistica: boolean,
-): string => {
-  const terminosDefault = [
-    `1. Valores expresados en ${brand.codigoMoneda} con el tratamiento tributario de ${brand.etiquetaImpuesto} indicado.`,
-    '2. El plazo de ejecución inicia tras la aprobación escrita u Orden de Compra (PO) y el cumplimiento de la forma de pago.',
-    '3. La garantía cubre defectos de fabricación y mano de obra ejecutada; excluye operación indebida o alteraciones externas.',
-    '4. Todo trabajo o repuesto adicional fuera del alcance descrito se cotizará y aprobará previamente.',
-    ...(incluyeLogistica
-      ? []
-      : ['5. Movilización, transporte o viáticos fuera del área estándar se cotizan de forma independiente cuando apliquen.']),
-    `${incluyeLogistica ? '5' : '6'}. Precios y disponibilidad sujetos a confirmación posterior al vencimiento de esta oferta.`,
-  ].join('\n');
-
-  return `
+const generarCondicionesAnchoCompleto = (datos: DatosCotizacionPDF): string => `
   <div class="sa-cond-strip avoid-break">
     <div class="ed-card-kicker" style="margin-bottom: 5px; padding-bottom: 3px;">Condiciones Comerciales</div>
     <div class="sa-cond-row">
@@ -2111,13 +2302,32 @@ const generarCondicionesYTerminosAnchoCompleto = (
     </div>
     ${
       datos.observacionesGarantia?.trim()
-        ? `<div style="margin-top: 6px; padding-top: 5px; border-top: 1px dashed #CBD5E1; font-size: 7.8px; color: #334155;">
+        ? `<div style="margin-top: 5px; padding-top: 4px; border-top: 1px dashed #CBD5E1; font-size: 7.6px; color: #334155;">
       <strong>Observaciones de Garantía:</strong> ${escMultiline(datos.observacionesGarantia)}
     </div>`
         : ''
     }
-  </div>
+  </div>`;
 
+const generarTerminosAnchoCompleto = (
+  datos: DatosCotizacionPDF,
+  brand: OrgBrandingContext,
+  incluyeLogistica: boolean,
+): string => {
+  const terminosDefault = [
+    `1. Valores expresados en ${brand.codigoMoneda} con el tratamiento tributario de ${brand.etiquetaImpuesto} indicado.`,
+    '2. El plazo de ejecución inicia tras la aprobación escrita u Orden de Compra (PO) y el cumplimiento de la forma de pago.',
+    '3. La garantía cubre defectos de fabricación y mano de obra ejecutada; excluye operación indebida o alteraciones externas.',
+    '4. Todo trabajo o repuesto adicional fuera del alcance descrito se cotizará y aprobará previamente.',
+    ...(incluyeLogistica
+      ? []
+      : [
+          '5. Movilización, transporte o viáticos fuera del área estándar se cotizan de forma independiente cuando apliquen.',
+        ]),
+    `${incluyeLogistica ? '5' : '6'}. Precios y disponibilidad sujetos a confirmación posterior al vencimiento de esta oferta.`,
+  ].join('\n');
+
+  return `
   <div class="sa-terms-strip avoid-break">
     <div class="ed-card-kicker" style="margin-bottom: 4px; padding-bottom: 3px;">Términos y Condiciones</div>
     <div class="sa-terms-text">${escMultiline(datos.terminosCondiciones?.trim() || terminosDefault)}</div>
@@ -2162,22 +2372,36 @@ const generarSeccionOpcionalesSumaAlzada = (
     </table>
   </div>`;
 
-const generarFirmasSobrias = (
-  datos: DatosCotizacionPDF,
-  brand: OrgBrandingContext,
-): string => {
+const renderFirmaImgHtml = (dataUri?: string, alt = 'Firma digital'): string => {
+  const clean = dataUri?.trim();
+  if (!clean || !/^data:image\/[a-zA-Z0-9+.-]+;base64,[A-Za-z0-9+/=\s]+$/.test(clean)) {
+    return '';
+  }
+  return `<img class="ed-firma-img" src="${esc(clean)}" alt="${esc(alt)}" />`;
+};
+
+const generarFirmasSobrias = (datos: DatosCotizacionPDF, brand: OrgBrandingContext): string => {
   const atencionNombre = datos.atencionANombre?.trim() || '';
   const atencionCargo = datos.atencionACargo?.trim() || '';
+  const firmaAsesorHtml = renderFirmaImgHtml(datos.firmaAsesorDataUri, 'Firma del Asesor Emisor');
+  const firmaClienteHtml = renderFirmaImgHtml(
+    datos.firmaClienteDataUri,
+    'Firma de Aceptación del Cliente',
+  );
+  const anySignatureAttached = Boolean(firmaAsesorHtml || firmaClienteHtml);
+  const spaceClass = anySignatureAttached
+    ? 'ed-firma-space has-digital'
+    : 'ed-firma-space is-physical';
 
   return `
   <div class="ed-firmas avoid-break">
     <div class="ed-firma-col">
-      <div class="ed-firma-space"></div>
+      <div class="${spaceClass}">${firmaAsesorHtml}</div>
       <div class="ed-firma-name">${esc(datos.elaboradoPor)}</div>
       <div class="ed-firma-sub">${esc(datos.cargoElaborador || 'Asesor Comercial')} · ${esc(brand.nombreComercial)}</div>
     </div>
     <div class="ed-firma-col">
-      <div class="ed-firma-space"></div>
+      <div class="${spaceClass}">${firmaClienteHtml}</div>
       <div class="ed-firma-name">Aceptación y Firma del Cliente</div>
       ${
         atencionNombre

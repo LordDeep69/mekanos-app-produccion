@@ -31,13 +31,19 @@ export class CreateItemOtroDto {
   @MaxLength(40)
   categoria_rubro?: string;
 
-  @ApiProperty({ description: 'Descripción del rubro o gasto', example: 'Transporte técnico y movilización equipos ida y vuelta' })
+  @ApiProperty({
+    description: 'Descripción del rubro o gasto',
+    example: 'Transporte técnico y movilización equipos ida y vuelta',
+  })
   @IsNotEmpty()
   @IsString()
   @MaxLength(300)
   descripcion!: string;
 
-  @ApiPropertyOptional({ description: 'Detalle o fórmula de cálculo', example: '2 técnicos x 2 días' })
+  @ApiPropertyOptional({
+    description: 'Detalle o fórmula de cálculo',
+    example: '2 técnicos x 2 días',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(200)
@@ -55,13 +61,19 @@ export class CreateItemOtroDto {
   @MaxLength(30)
   unidad?: string;
 
-  @ApiPropertyOptional({ description: 'Costo unitario interno (para cálculo de margen)', default: 0 })
+  @ApiPropertyOptional({
+    description: 'Costo unitario interno (para cálculo de margen)',
+    default: 0,
+  })
   @IsOptional()
   @IsNumber()
   @Min(0)
   costo_unitario?: number;
 
-  @ApiPropertyOptional({ description: 'Precio unitario al cliente (0 si está absorbido o incluido)', default: 0 })
+  @ApiPropertyOptional({
+    description: 'Precio unitario al cliente (0 si está absorbido o incluido)',
+    default: 0,
+  })
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -75,7 +87,8 @@ export class CreateItemOtroDto {
   descuento_porcentaje?: number;
 
   @ApiPropertyOptional({
-    description: 'Si true, aparece en PDF y suma al total cliente. Si false, es costo indirecto absorbido (solo afecta rentabilidad).',
+    description:
+      'Si true, aparece en PDF y suma al total cliente. Si false, es costo indirecto absorbido (solo afecta rentabilidad).',
     default: true,
   })
   @IsOptional()
@@ -550,17 +563,25 @@ export class ConvertirCotizacionOrdenDto {
   @IsDateString()
   fecha_programada?: string;
 
-  @ApiPropertyOptional({ description: 'ID del técnico asignado (si se asigna pasa a estado ASIGNADA)' })
+  @ApiPropertyOptional({
+    description: 'ID del técnico asignado (si se asigna pasa a estado ASIGNADA)',
+  })
   @IsOptional()
   @IsInt()
   id_tecnico_asignado?: number;
 
-  @ApiPropertyOptional({ description: 'Prioridad de la orden (BAJA | NORMAL | ALTA | URGENTE)', default: 'NORMAL' })
+  @ApiPropertyOptional({
+    description: 'Prioridad de la orden (BAJA | NORMAL | ALTA | URGENTE)',
+    default: 'NORMAL',
+  })
   @IsOptional()
   @IsString()
   prioridad?: string;
 
-  @ApiPropertyOptional({ description: 'Equipos fallback si la cotización no tenía equipos vinculados', type: [Number] })
+  @ApiPropertyOptional({
+    description: 'Equipos fallback si la cotización no tenía equipos vinculados',
+    type: [Number],
+  })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
@@ -574,8 +595,43 @@ export class ConvertirCotizacionOrdenDto {
 
 export class ActualizarPresentacionPdfDto {
   @ApiProperty({
-    description: 'Desglosar precios unitarios y subtotales por rubro en PDF (false = Suma Alzada compacta)',
+    description:
+      'Desglosar precios unitarios y subtotales por rubro en PDF (false = Suma Alzada compacta)',
   })
   @IsBoolean()
   mostrar_desglose_precios: boolean;
+}
+
+export class GuardarFirmaCotizacionDto {
+  @ApiPropertyOptional({
+    description: 'Imagen de firma en base64 (con o sin prefijo data:image/...)',
+  })
+  @IsOptional()
+  @IsString()
+  firma_base64?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'ID de firma digital existente en firmas_digitales (para reutilizar firma estándar)',
+  })
+  @IsOptional()
+  @IsInt()
+  id_firma_digital?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Nombre del destinatario / firmante cliente (opcional al guardar firma de cliente)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  atencion_a_nombre?: string;
+
+  @ApiPropertyOptional({
+    description: 'Cargo del destinatario / firmante cliente (opcional al guardar firma de cliente)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  atencion_a_cargo?: string;
 }

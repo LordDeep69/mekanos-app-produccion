@@ -1,11 +1,11 @@
 /**
  * COTIZACION ENTITY - Domain Layer
- * 
+ *
  * Representa una cotización comercial generada para un cliente.
  * Incluye servicios y componentes con cálculo automático de totales.
- * 
+ *
  * Estados: BORRADOR → ENVIADA → APROBADA/RECHAZADA/VENCIDA
- * 
+ *
  * @module Cotizaciones
  * @domain Domain
  */
@@ -25,7 +25,7 @@ export class Cotizacion {
   fecha_cambio_estado?: Date;
   id_motivo_rechazo?: number;
   observaciones_rechazo?: string;
-  
+
   // Información comercial
   asunto!: string; // Título cotización
   tipo_cotizacion?: string;
@@ -68,25 +68,29 @@ export class Cotizacion {
   orden_compra_cliente?: string;
   modo_agrupacion_pdf?: string;
   mostrar_desglose_precios?: boolean;
-  
+
   // Condiciones comerciales
   forma_pago?: string; // ← NUEVO: CONTADO, CREDITO, ANTICIPADO
   terminos_condiciones?: string; // ← NUEVO: Texto legal
   meses_garantia?: number; // ← CORREGIDO: era garantia_meses
   observaciones_garantia?: string; // ← NUEVO
   tiempo_estimado_dias?: number; // ← NUEVO: Plazo ejecución
-  
+
   // Versionado
   version?: number; // ← NUEVO: Control versionado
   id_cotizacion_padre?: number; // ← NUEVO: Relación versionado
-  
+
   // Conversión a OS
   id_orden_servicio_generada?: number; // ← NUEVO: Si se aprobó y generó OS
   fecha_conversion_os?: Date; // ← NUEVO
-  
+
+  // Firmas Digitales Opcionales (FK a firmas_digitales)
+  id_firma_asesor?: number;
+  id_firma_cliente?: number;
+
   // Metadata
   metadata?: any; // ← NUEVO: JSON flexible
-  
+
   // Auditoría
   elaborada_por!: number; // id_empleado (NO id_usuario)
   fecha_creacion!: Date; // ← CORREGIDO: era creado_en
@@ -105,6 +109,8 @@ export class Cotizacion {
   items_componentes?: any[];
   items_otros?: any[];
   plantilla_origen?: any;
+  firma_asesor?: any;
+  firma_cliente?: any;
   aprobaciones?: any[];
   versiones?: any[];
   historial_envios?: any[];

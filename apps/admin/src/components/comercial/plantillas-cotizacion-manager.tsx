@@ -20,13 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import {
   getArquetiposEam,
   getModelosOemEam,
 } from '@/features/catalogos-eam/api/catalogos-eam.service';
 import {
   buildUnidadOptions,
+  CpqBulletListEditor,
   CpqCreatableCombobox,
   CpqMoneyInput,
   CpqSmartNumberInput,
@@ -313,8 +313,7 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
       items: itemsValidos.map((it, idx) => ({
         ...it,
         cantidad_base: Number(it.cantidad_base) || 1,
-        precio_unitario_fijo:
-          it.precio_unitario_fijo != null ? Number(it.precio_unitario_fijo) : 0,
+        precio_unitario_fijo: it.precio_unitario_fijo != null ? Number(it.precio_unitario_fijo) : 0,
         costo_unitario_fijo: it.costo_unitario_fijo != null ? Number(it.costo_unitario_fijo) : 0,
         orden_item: idx + 1,
       })),
@@ -375,7 +374,9 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
               No hay plantillas que coincidan con el filtro
             </p>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Crea plantillas estándar (ej. Suministro de Baterías, Preventivo Multi-Equipo, Correctivo con Viáticos) para cotizar en segundos con auto-escalado por equipos gemelos.
+              Crea plantillas estándar (ej. Suministro de Baterías, Preventivo Multi-Equipo,
+              Correctivo con Viáticos) para cotizar en segundos con auto-escalado por equipos
+              gemelos.
             </p>
             <Button size="sm" variant="outline" onClick={openNew} className="mt-2">
               <Plus className="h-4 w-4 mr-1" />
@@ -391,7 +392,10 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
             const countOtro = pl.items.filter((i) => i.tipo_linea === 'OTRO').length;
             const subtotalBase = pl.items
               .filter((i) => !i.es_opcional && i.visible_cliente !== false)
-              .reduce((acc, i) => acc + Number(i.cantidad_base) * Number(i.precio_unitario_fijo || 0), 0);
+              .reduce(
+                (acc, i) => acc + Number(i.cantidad_base) * Number(i.precio_unitario_fijo || 0),
+                0,
+              );
 
             return (
               <Card
@@ -438,7 +442,8 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
                     )}
                     {pl.usa_aiu && (
                       <Badge className="bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-50 text-[10px]">
-                        AIU {pl.aiu_admin_porcentaje}/{pl.aiu_imprevistos_porcentaje}/{pl.aiu_utilidad_porcentaje}%
+                        AIU {pl.aiu_admin_porcentaje}/{pl.aiu_imprevistos_porcentaje}/
+                        {pl.aiu_utilidad_porcentaje}%
                       </Badge>
                     )}
                   </div>
@@ -460,7 +465,10 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
 
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
                     <span>
-                      Base ref.: <strong className="font-mono text-slate-800">{formatCurrency(subtotalBase)}</strong>
+                      Base ref.:{' '}
+                      <strong className="font-mono text-slate-800">
+                        {formatCurrency(subtotalBase)}
+                      </strong>
                     </span>
                     <span>Usada {pl.veces_usada}x</span>
                   </div>
@@ -468,11 +476,21 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
 
                 <div className="px-5 py-3 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(pl)} title="Editar plantilla">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEdit(pl)}
+                      title="Editar plantilla"
+                    >
                       <Edit3 className="h-3.5 w-3.5 mr-1" />
                       Editar
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => openDuplicate(pl)} title="Duplicar">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openDuplicate(pl)}
+                      title="Duplicar"
+                    >
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                     <Button
@@ -504,10 +522,14 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Layers className="h-5 w-5 text-primary" />
-              {draft.id_plantilla ? 'Editar Plantilla Comercial CPQ' : 'Nueva Plantilla Comercial CPQ'}
+              {draft.id_plantilla
+                ? 'Editar Plantilla Comercial CPQ'
+                : 'Nueva Plantilla Comercial CPQ'}
             </DialogTitle>
             <DialogDescription>
-              Define la receta estándar reutilizable. Marca <strong>× Equipo</strong> en líneas que deban multiplicarse automáticamente al seleccionar equipos gemelos, y desmárcalo en rubros únicos como transporte o pólizas.
+              Define la receta estándar reutilizable. Marca <strong>× Equipo</strong> en líneas que
+              deban multiplicarse automáticamente al seleccionar equipos gemelos, y desmárcalo en
+              rubros únicos como transporte o pólizas.
             </DialogDescription>
           </DialogHeader>
 
@@ -662,21 +684,25 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label>Alcance Técnico Estándar</Label>
-                <Textarea
-                  rows={3}
+                <Label className="text-xs font-semibold text-emerald-800">
+                  Alcance Técnico Estándar
+                </Label>
+                <CpqBulletListEditor
+                  variant="incluido"
                   value={draft.alcance_trabajo}
-                  onChange={(e) => setDraft({ ...draft, alcance_trabajo: e.target.value })}
-                  placeholder="Actividades y entregables incluidos..."
+                  onChange={(nextVal) => setDraft({ ...draft, alcance_trabajo: nextVal })}
+                  placeholder="Actividad o entregable incluido (Enter para añadir)..."
+                  emptyMessage="Sin ítems de alcance estándar aún."
                 />
               </div>
               <div className="space-y-1">
-                <Label>Exclusiones Estándar</Label>
-                <Textarea
-                  rows={3}
+                <Label className="text-xs font-semibold text-rose-800">Exclusiones Estándar</Label>
+                <CpqBulletListEditor
+                  variant="exclusion"
                   value={draft.exclusiones}
-                  onChange={(e) => setDraft({ ...draft, exclusiones: e.target.value })}
-                  placeholder="Conceptos no contemplados en esta plantilla..."
+                  onChange={(nextVal) => setDraft({ ...draft, exclusiones: nextVal })}
+                  placeholder="Concepto excluido (Enter para añadir)..."
+                  emptyMessage="Sin exclusiones estándar aún."
                 />
               </div>
             </div>
@@ -742,7 +768,9 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
             {/* Constructor de líneas */}
             <div className="space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label className="text-sm font-bold">Líneas de la Plantilla ({draft.items.length})</Label>
+                <Label className="text-sm font-bold">
+                  Líneas de la Plantilla ({draft.items.length})
+                </Label>
                 <div className="flex flex-wrap gap-1.5">
                   <Button
                     type="button"
@@ -750,8 +778,7 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
                     variant="outline"
                     onClick={() => addDraftLine('SERVICIO')}
                   >
-                    <Wrench className="h-3.5 w-3.5 mr-1 text-blue-600" />
-                    + Servicio
+                    <Wrench className="h-3.5 w-3.5 mr-1 text-blue-600" />+ Servicio
                   </Button>
                   <Button
                     type="button"
@@ -759,8 +786,7 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
                     variant="outline"
                     onClick={() => addDraftLine('COMPONENTE')}
                   >
-                    <Package className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                    + Repuesto
+                    <Package className="h-3.5 w-3.5 mr-1 text-emerald-600" />+ Repuesto
                   </Button>
                   <Button
                     type="button"
@@ -768,15 +794,16 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote }: Props) {
                     variant="outline"
                     onClick={() => addDraftLine('OTRO')}
                   >
-                    <Truck className="h-3.5 w-3.5 mr-1 text-amber-600" />
-                    + Logística / Viático / Póliza
+                    <Truck className="h-3.5 w-3.5 mr-1 text-amber-600" />+ Logística / Viático /
+                    Póliza
                   </Button>
                 </div>
               </div>
 
               {draft.items.length === 0 ? (
                 <div className="p-6 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-                  Agrega servicios, repuestos o rubros de logística/viáticos usando los botones superiores.
+                  Agrega servicios, repuestos o rubros de logística/viáticos usando los botones
+                  superiores.
                 </div>
               ) : (
                 <div className="space-y-2">

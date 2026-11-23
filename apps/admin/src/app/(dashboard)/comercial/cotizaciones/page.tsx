@@ -80,8 +80,7 @@ export default function CotizacionesPage() {
   const workflow = useCotizacionWorkflowActions();
 
   const cotizaciones = useMemo(() => cotData?.cotizaciones || [], [cotData]);
-  const aprobacionesPendientes =
-    aprobacionesData?.aprobaciones || aprobacionesData?.data || [];
+  const aprobacionesPendientes = aprobacionesData?.aprobaciones || aprobacionesData?.data || [];
 
   const clientesMap = useMemo(() => {
     const m = new Map<number, string>();
@@ -194,7 +193,8 @@ export default function CotizacionesPage() {
             Hub Comercial de Cotizaciones (CPQ)
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Ofertas multi-equipo, plantillas estándar inteligentes, logística/viáticos/pólizas, rentabilidad y conversión directa a Orden de Servicio.
+            Ofertas multi-equipo, plantillas estándar inteligentes, logística/viáticos/pólizas,
+            rentabilidad y conversión directa a Orden de Servicio.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -393,7 +393,10 @@ export default function CotizacionesPage() {
                       const margen = Number(c.margen_bruto_porcentaje || 0);
 
                       return (
-                        <tr key={c.id_cotizacion} className="hover:bg-slate-50/70 transition-colors">
+                        <tr
+                          key={c.id_cotizacion}
+                          className="hover:bg-slate-50/70 transition-colors"
+                        >
                           <td className="py-3 px-3 whitespace-nowrap">
                             <Link
                               href={`/comercial/cotizaciones/${c.id_cotizacion}`}
@@ -500,7 +503,9 @@ export default function CotizacionesPage() {
                                 className="h-8 w-8 p-0"
                                 title="Duplicar cotización"
                                 onClick={async () => {
-                                  const copia = await workflow.duplicar.mutateAsync(c.id_cotizacion);
+                                  const copia = await workflow.duplicar.mutateAsync(
+                                    c.id_cotizacion,
+                                  );
                                   if (copia?.id_cotizacion) {
                                     router.push(`/comercial/cotizaciones/${copia.id_cotizacion}`);
                                   }
@@ -519,8 +524,10 @@ export default function CotizacionesPage() {
                                     numero: c.numero_cotizacion,
                                     version: c.version,
                                     estadoLabel: ESTADO_LABELS_COTIZACION[estCode] || estCode,
-                                    cacheKey: `${c.fecha_modificacion ?? ''}-${c.version ?? 1}-${c.total_cotizacion ?? 0}-${c.id_estado ?? 0}`,
-                                    mostrarDesglosePrecios: Boolean(c.mostrar_desglose_precios ?? false),
+                                    cacheKey: `${c.fecha_modificacion ?? ''}-${c.version ?? 1}-${c.total_cotizacion ?? 0}-${c.id_estado ?? 0}-fa:${c.id_firma_asesor ?? 0}-fc:${c.id_firma_cliente ?? 0}`,
+                                    mostrarDesglosePrecios: Boolean(
+                                      c.mostrar_desglose_precios ?? false,
+                                    ),
                                   })
                                 }
                               >

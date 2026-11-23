@@ -8,6 +8,7 @@
 
 'use client';
 
+import { SignatureCanvas } from '@/components/shared/digital-signature-modal';
 import { useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { cn } from '@/lib/utils';
@@ -16,7 +17,6 @@ import {
   Clipboard,
   Clock,
   Edit,
-  Eraser,
   ExternalLink,
   History,
   Loader2,
@@ -31,7 +31,7 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import Image from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFirmasHistorialTecnico, useUpdateFirmaOrden } from '../hooks/use-ordenes';
 import type { UpdateFirmaOrdenDto } from '../api/ordenes.service';
 
@@ -86,151 +86,7 @@ function getTipoFirmaConfig(tipo: string) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SIGNATURE DRAWING CANVAS (native HTML5 Canvas - zero dependencies)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function SignatureCanvas({
-  canvasRef,
-  hasDrawn,
-  setHasDrawn,
-}: {
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  hasDrawn: boolean;
-  setHasDrawn: (drawn: boolean) => void;
-}) {
-  const [isDrawing, setIsDrawing] = useState(false);
-
-  const getCtx = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    return ctx;
-  }, [canvasRef]);
-
-  const getPos = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return { x: 0, y: 0 };
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      if ('touches' in e) {
-        const touch = e.touches[0];
-        return {
-          x: (touch.clientX - rect.left) * scaleX,
-          y: (touch.clientY - rect.top) * scaleY,
-        };
-      }
-      return {
-        x: (e.clientX - rect.left) * scaleX,
-        y: (e.clientY - rect.top) * scaleY,
-      };
-    },
-    [canvasRef],
-  );
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.width = 600;
-    canvas.height = 200;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#1a1a2e';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-  }, [canvasRef]);
-
-  const startDraw = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
-      const ctx = getCtx();
-      if (!ctx) return;
-      const pos = getPos(e);
-      ctx.beginPath();
-      ctx.moveTo(pos.x, pos.y);
-      setIsDrawing(true);
-    },
-    [getCtx, getPos],
-  );
-
-  const draw = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
-      if (!isDrawing) return;
-      const ctx = getCtx();
-      if (!ctx) return;
-      const pos = getPos(e);
-      ctx.lineTo(pos.x, pos.y);
-      ctx.stroke();
-      setHasDrawn(true);
-    },
-    [isDrawing, getCtx, getPos, setHasDrawn],
-  );
-
-  const endDraw = useCallback(() => {
-    setIsDrawing(false);
-  }, []);
-
-  const clearCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#1a1a2e';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    setHasDrawn(false);
-  }, [canvasRef, setHasDrawn]);
-
-  return (
-    <div className="space-y-2">
-      <div className="relative border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-white shadow-inner">
-        <canvas
-          ref={canvasRef}
-          className="w-full cursor-crosshair touch-none"
-          style={{ height: '180px' }}
-          onMouseDown={startDraw}
-          onMouseMove={draw}
-          onMouseUp={endDraw}
-          onMouseLeave={endDraw}
-          onTouchStart={startDraw}
-          onTouchMove={draw}
-          onTouchEnd={endDraw}
-        />
-        {!hasDrawn && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-gray-300 text-sm font-medium select-none">Dibuje su firma aquí</p>
-          </div>
-        )}
-      </div>
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={clearCanvas}
-          className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1.5"
-        >
-          <Eraser className="h-3.5 w-3.5" /> Limpiar lienzo
-        </button>
-        {hasDrawn && (
-          <span className="text-xs font-medium text-emerald-600 flex items-center gap-1">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Nueva firma trazada
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// EDIT SIGNATURE MODAL
+// EDIT SIGNATURE MODAL (Reutiliza SignatureCanvas de @/components/shared/digital-signature-modal)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function EditFirmaModal({

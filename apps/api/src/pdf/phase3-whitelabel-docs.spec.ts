@@ -7,11 +7,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { EnviarCotizacionHandler } from '../cotizaciones/application/commands/enviar-cotizacion.handler';
 import { EmailTemplatesService } from '../email/email-templates.service';
 import { EmailService } from '../email/email.service';
-import {
-  OrgBrandingContext,
-  buildOrgBranding,
-  formatCurrencyOrg,
-} from './org-branding.types';
+import { OrgBrandingContext, buildOrgBranding, formatCurrencyOrg } from './org-branding.types';
 import { PdfAssemblerService } from './pdf-assembler.service';
 import { PdfController } from './pdf.controller';
 import { PdfService } from './pdf.service';
@@ -496,12 +492,7 @@ describe('Gate F3 — Motor Documental PDF & Emails 100% White-Label', () => {
 
   it('Templates de Email (EmailTemplatesService, EmailService, EnviarCotizacionHandler) renderizan branding dinámico y moneda real sin rastros legacy', async () => {
     const templatesSvc = new EmailTemplatesService();
-    const cotHandler = new EnviarCotizacionHandler(
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const cotHandler = new EnviarCotizacionHandler({} as any, {} as any, {} as any, {} as any);
 
     for (const brand of tenants) {
       const htmlInforme = templatesSvc.generateInformeMantenimientoTemplate({
@@ -684,7 +675,10 @@ describe('Gate F3 — Motor Documental PDF & Emails 100% White-Label', () => {
               valor_numerico: 42.5,
               unidad_medida: '°C',
               nivel_alerta: 'OK',
-              parametros_medicion: { nombre_parametro: 'Temperatura descarga', unidad_medida: '°C' },
+              parametros_medicion: {
+                nombre_parametro: 'Temperatura descarga',
+                unidad_medida: '°C',
+              },
             },
           ],
           evidencias_fotograficas: [],
@@ -741,11 +735,7 @@ describe('Gate F3 — Motor Documental PDF & Emails 100% White-Label', () => {
     };
 
     const pdfService = new PdfService(mockConfigOrg as any);
-    const assembler = new PdfAssemblerService(
-      mockPrisma as any,
-      pdfService,
-      mockConfigOrg as any,
-    );
+    const assembler = new PdfAssemblerService(mockPrisma as any, pdfService, mockConfigOrg as any);
 
     const assembledOrden = await assembler.assembleOrdenPdf(901);
     expect(assembledOrden.tipoInforme).toBe('UNIVERSAL_EAM');
@@ -773,9 +763,7 @@ describe('Gate F3 — Motor Documental PDF & Emails 100% White-Label', () => {
 
   it('PdfController exige JwtAuthGuard + RolesGuard + PermisosGuard y @Permisos granulares en todos los endpoints', () => {
     const classGuards = Reflect.getMetadata(GUARDS_METADATA, PdfController) || [];
-    expect(classGuards).toEqual(
-      expect.arrayContaining([JwtAuthGuard, RolesGuard, PermisosGuard]),
-    );
+    expect(classGuards).toEqual(expect.arrayContaining([JwtAuthGuard, RolesGuard, PermisosGuard]));
 
     const expectations: Record<keyof PdfController, string[]> = {
       generarPdfOrden: ['INFORMES_READ'],
@@ -791,5 +779,66 @@ describe('Gate F3 — Motor Documental PDF & Emails 100% White-Label', () => {
       const permisos = Reflect.getMetadata(PERMISOS_KEY, handler);
       expect(permisos).toEqual(expectedPermisos);
     }
+  });
+
+  it('Cotización PDF renderiza listas estructuradas de Alcance/Exclusiones y firmas digitales opcionales en ambos layouts', () => {
+    const pdfService = new PdfService();
+    const fakePng =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    const baseDatos: any = {
+      numeroCotizacion: 'COT-2026-9999',
+      fechaCotizacion: '23/11/2026',
+      fechaVencimiento: '23/12/2026',
+      diasValidez: 30,
+      version: 1,
+      asunto: 'Suministro de Banco de Baterías',
+      alcanceTrabajo:
+        '- Desmonte de baterías viejas\n• Suministro de nuevas baterías\n1. Pruebas de arranque',
+      exclusiones: '✕ Pruebas con carga\n- Obra civil',
+      cliente: { nombre: 'Cliente Prueba S.A.S.', direccion: 'Calle 10 # 20-30' },
+      itemsServicios: [],
+      itemsComponentes: [],
+      itemsOtros: [],
+      itemsOpcionales: [],
+      totales: {
+        subtotalServicios: 0,
+        subtotalComponentes: 0,
+        subtotalGeneral: 1000000,
+        descuentoPorcentaje: 0,
+        descuentoValor: 0,
+        subtotalConDescuento: 1000000,
+        ivaPorcentaje: 19,
+        ivaValor: 190000,
+        totalCotizacion: 1190000,
+      },
+      formaPago: 'CONTADO',
+      mesesGarantia: 3,
+      elaboradoPor: 'Asesor Comercial Prueba',
+      mostrarDesglosePrecios: false,
+      firmaAsesorDataUri: fakePng,
+    };
+
+    const htmlSumaAlzada = pdfService.obtenerHTML('COTIZACION', baseDatos);
+    expect(htmlSumaAlzada).toContain('ed-alcance-list');
+    expect(htmlSumaAlzada).toContain('closing-keep-together');
+    expect(htmlSumaAlzada).toContain('ed-firma-space has-digital');
+    expect(htmlSumaAlzada).toContain('Desmonte de baterías viejas');
+    expect(htmlSumaAlzada).toContain('Pruebas con carga');
+    expect(htmlSumaAlzada).not.toContain('- Desmonte');
+    expect(htmlSumaAlzada).toContain('class="ed-firma-img"');
+    expect(htmlSumaAlzada).toContain('Firma del Asesor Emisor');
+    expect(htmlSumaAlzada).not.toContain('Firma de Aceptación del Cliente');
+
+    const htmlDetalladoSinFirmas = pdfService.obtenerHTML('COTIZACION', {
+      ...baseDatos,
+      mostrarDesglosePrecios: true,
+      firmaAsesorDataUri: undefined,
+      firmaClienteDataUri: undefined,
+    });
+    expect(htmlDetalladoSinFirmas).toContain('ed-alcance-list');
+    expect(htmlDetalladoSinFirmas).toContain('closing-keep-together');
+    expect(htmlDetalladoSinFirmas).toContain('ed-firma-space is-physical');
+    expect(htmlDetalladoSinFirmas).not.toContain('class="ed-firma-img"');
   });
 });

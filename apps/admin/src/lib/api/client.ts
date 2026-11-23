@@ -182,11 +182,11 @@ apiClient.interceptors.response.use(
               isSigningOut = true;
               try {
                 console.warn('[API] Cerrando sesión y redirigiendo a /login...');
-                await signOut({ callbackUrl: '/login', redirect: true });
+                await signOut({ callbackUrl: '/login', redirect: false });
               } catch (signOutError) {
                 console.error('[API] Error al ejecutar signOut de NextAuth:', signOutError);
-                window.location.href = '/login';
               } finally {
+                window.location.replace('/login?error=SessionExpired');
                 setTimeout(() => {
                   isSigningOut = false;
                 }, 3000);
@@ -254,10 +254,7 @@ apiClient.interceptors.response.use(
           : 'Sin respuesta del servidor (corte transitorio, red dormida o backend apagado)';
 
       // Usar console.warn para no disparar overlays bloqueantes en Next.js durante reintentos automáticos de React Query
-      console.warn(
-        `[API] Red [${code}] ${method} ${fullUrl} — ${motivo}`,
-        error.message || '',
-      );
+      console.warn(`[API] Red [${code}] ${method} ${fullUrl} — ${motivo}`, error.message || '');
       error.message = `Error de red (${code}) en ${method} ${endpoint}: ${motivo}`;
     }
 

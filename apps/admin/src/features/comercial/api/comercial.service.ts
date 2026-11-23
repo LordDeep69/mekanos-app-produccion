@@ -125,12 +125,43 @@ export interface CotizacionVersionItem {
   total_version?: number | string | null;
 }
 
+export interface CotizacionFirmaDigital {
+  id_firma_digital: number;
+  id_persona?: number;
+  tipo_firma?: string;
+  firma_base64: string;
+  formato_firma?: string | null;
+  fecha_captura?: string | null;
+}
+
+export interface FirmaHistorialEmpleadoItem {
+  id_firma_digital: number;
+  firma_base64: string;
+  veces_usada: number;
+  fecha_captura?: string | null;
+  es_estandar: boolean;
+}
+
 export interface CotizacionRecord {
   id_cotizacion: number;
   numero_cotizacion: string;
   id_cliente: number;
   id_sede?: number | null;
   id_equipo?: number | null;
+  id_firma_asesor?: number | null;
+  id_firma_cliente?: number | null;
+  firma_asesor?: CotizacionFirmaDigital | null;
+  firma_cliente?: CotizacionFirmaDigital | null;
+  elaborador?: {
+    id_empleado?: number;
+    persona?: {
+      primer_nombre?: string;
+      segundo_nombre?: string;
+      primer_apellido?: string;
+      segundo_apellido?: string;
+      nombre_completo?: string;
+    } | null;
+  } | null;
   atencion_a_nombre?: string | null;
   atencion_a_cargo?: string | null;
   tipo_cotizacion?: string;
@@ -383,7 +414,12 @@ export interface PlantillaCotizacionRecord {
   veces_usada: number;
   activo: boolean;
   tipos_equipo?: { id_tipo_equipo: number; codigo_tipo: string; nombre_tipo: string } | null;
-  modelos_equipo?: { id_modelo_equipo: number; codigo_modelo: string; marca: string; modelo: string } | null;
+  modelos_equipo?: {
+    id_modelo_equipo: number;
+    codigo_modelo: string;
+    marca: string;
+    modelo: string;
+  } | null;
   modulos_tecnicos?: { id_modulo: number; codigo_modulo: string; nombre_modulo: string } | null;
   items: PlantillaCotizacionItem[];
 }
@@ -682,7 +718,9 @@ export async function getCotizacionDetalle(id: number): Promise<CotizacionRecord
   return res.data;
 }
 
-export async function createCotizacion(payload: CreateCotizacionPayload): Promise<CotizacionRecord> {
+export async function createCotizacion(
+  payload: CreateCotizacionPayload,
+): Promise<CotizacionRecord> {
   const res = await apiClient.post<CotizacionRecord>('/cotizaciones', payload);
   return res.data;
 }
@@ -860,7 +898,12 @@ export async function recalcularCotizacion(id: number): Promise<unknown> {
 export async function solicitarAprobacionCotizacion(
   id: number,
   observaciones_solicitante: string,
-): Promise<{ message: string; requiere_aprobacion: boolean; razon?: string; cotizacion?: CotizacionRecord }> {
+): Promise<{
+  message: string;
+  requiere_aprobacion: boolean;
+  razon?: string;
+  cotizacion?: CotizacionRecord;
+}> {
   const res = await apiClient.post(`/cotizaciones/${id}/solicitar-aprobacion`, {
     observaciones_solicitante,
   });
@@ -930,8 +973,14 @@ export async function actualizarPresentacionPdfCotizacion(
 }
 
 export async function fetchCotizacionPdfBlob(id: number, forceRefresh = false): Promise<Blob> {
+  const params: Record<string, string> = {
+    _ts: String(Date.now()),
+  };
+  if (forceRefresh) {
+    params.refresh = '1';
+  }
   const res = await apiClient.get<Blob>(`/cotizaciones/${id}/pdf`, {
-    params: forceRefresh ? { refresh: '1' } : undefined,
+    params,
     responseType: 'blob',
   });
   return new Blob([res.data], { type: 'application/pdf' });
@@ -947,6 +996,66 @@ export async function downloadCotizacionPdf(id: number, numeroCotizacion?: strin
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(blobUrl);
+}
+
+// ==================== FIRMAS DIGITALES OPCIONALES EN COTIZACIONES ====================
+
+export async function getFirmasHistorialEmpleado(
+  idEmpleado: number,
+  excludeFirmaId?: number,
+): Promise<FirmaHistorialEmpleadoItem[]> {
+  const res = await apiClient.get<{ success?: boolean; data?: FirmaHistorialEmpleadoItem[] }>(
+    `/cotizaciones/firmas-historial-empleado/${idEmpleado}`,
+    {
+      params: excludeFirmaId ? { excludeFirmaId } : undefined,
+    },
+  );
+  return res.data?.data || [];
+}
+
+export async function guardarFirmaCotizacion(
+  idCotizacion: number,
+  tipo: 'ASESOR' | 'CLIENTE',
+  payload: {
+    firma_base64?: string;
+    id_firma_digital?: number;
+    atencion_a_nombre?: string;
+    atencion_a_cargo?: string;
+  },
+): Promise<{
+  success: boolean;
+  message: string;
+  data: {
+    id_cotizacion: number;
+    tipo: 'ASESOR' | 'CLIENTE';
+    id_firma_asesor?: number | null;
+    id_firma_cliente?: number | null;
+    firma_asesor?: CotizacionFirmaDigital | null;
+    firma_cliente?: CotizacionFirmaDigital | null;
+    atencion_a_nombre?: string | null;
+    atencion_a_cargo?: string | null;
+    fecha_modificacion?: string;
+  };
+}> {
+  const res = await apiClient.put(`/cotizaciones/${idCotizacion}/firmas/${tipo}`, payload);
+  return res.data;
+}
+
+export async function eliminarFirmaCotizacion(
+  idCotizacion: number,
+  tipo: 'ASESOR' | 'CLIENTE',
+): Promise<{
+  success: boolean;
+  message: string;
+  data: {
+    id_cotizacion: number;
+    id_firma_asesor?: number | null;
+    id_firma_cliente?: number | null;
+    fecha_modificacion?: string;
+  };
+}> {
+  const res = await apiClient.delete(`/cotizaciones/${idCotizacion}/firmas/${tipo}`);
+  return res.data;
 }
 
 export async function getTiposComponente(): Promise<TipoComponenteItem[]> {

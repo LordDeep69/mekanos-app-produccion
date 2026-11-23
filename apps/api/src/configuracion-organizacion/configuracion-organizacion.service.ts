@@ -182,9 +182,10 @@ export class ConfiguracionOrganizacionService {
 
   /**
    * Obtiene el contexto completo cacheado para servicios internos (PDF, Email, Sync, Crons).
+   * Pase `forceFresh = true` para garantizar lectura directa desde BD (ej. ensamblaje PDF).
    */
-  async getContext(): Promise<ConfiguracionOrganizacionContext> {
-    if (this.cachedContext && this.cachedContext.expiresAt > Date.now()) {
+  async getContext(forceFresh = false): Promise<ConfiguracionOrganizacionContext> {
+    if (!forceFresh && this.cachedContext && this.cachedContext.expiresAt > Date.now()) {
       return this.cachedContext.data;
     }
 
@@ -258,25 +259,28 @@ export class ConfiguracionOrganizacionService {
       delete safeDto.storage_prefijo_raiz;
     }
 
+    const now = new Date();
     const updated = await this.prisma.configuracion_organizacion.upsert({
       where: { id_configuracion: 1 },
       create: {
         id_configuracion: 1,
         ...safeDto,
         modificado_por: userId ?? null,
+        fecha_modificacion: now,
       },
       update: {
         ...safeDto,
         modificado_por: userId ?? null,
+        fecha_modificacion: now,
       },
     });
 
+    this.clearCache();
     const normalized = this.normalizeRow(updated);
     this.cachedContext = {
       data: normalized,
       expiresAt: Date.now() + this.CACHE_TTL_MS,
     };
-    this.cachedLogoUri = null;
     return normalized;
   }
 

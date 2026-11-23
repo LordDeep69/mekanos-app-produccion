@@ -625,3 +625,10 @@ ALTER TABLE IF EXISTS public.cotizaciones
 ALTER TABLE IF EXISTS public.cotizaciones
   ADD COLUMN IF NOT EXISTS atencion_a_nombre VARCHAR(200),
   ADD COLUMN IF NOT EXISTS atencion_a_cargo  VARCHAR(120);
+
+-- =============================================================================
+-- Firmas Digitales Opcionales en Cotizaciones (reutiliza public.firmas_digitales)
+-- =============================================================================
+ALTER TABLE IF EXISTS public.cotizaciones
+  ADD COLUMN IF NOT EXISTS id_firma_asesor  INTEGER REFERENCES public.firmas_digitales(id_firma_digital) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS id_firma_cliente INTEGER REFERENCES public.firmas_digitales(id_firma_digital) ON DELETE SET NULL;

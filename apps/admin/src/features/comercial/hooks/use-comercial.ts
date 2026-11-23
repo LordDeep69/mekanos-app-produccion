@@ -16,17 +16,20 @@ import {
   deleteItemServicioCotizacion,
   deletePlantillaCotizacion,
   duplicarCotizacion,
+  eliminarFirmaCotizacion,
   enviarCotizacion,
   escalarPropuestaACotizacion,
   getAprobacionesPendientes,
   getCotizacionDetalle,
   getCotizaciones,
+  getFirmasHistorialEmpleado,
   getMotivosRechazo,
   getPlantillasCotizacion,
   getPropuestasPendientes,
   getSugerenciasCpq,
   getTiposComponente,
   guardarCotizacionComoPlantilla,
+  guardarFirmaCotizacion,
   guardarStudioCotizacion,
   importarBomACotizacion,
   procesarAprobacion,
@@ -442,6 +445,61 @@ export function useCotizacionWorkflowActions() {
     reabrirBorrador,
     convertirAOrden,
   };
+}
+
+export function useFirmasHistorialEmpleado(
+  idEmpleado?: number | null,
+  excludeFirmaId?: number | null,
+) {
+  return useQuery({
+    queryKey: ['cotizaciones', 'firmas-historial-empleado', idEmpleado ?? 0, excludeFirmaId ?? 0],
+    queryFn: () => getFirmasHistorialEmpleado(idEmpleado!, excludeFirmaId ?? undefined),
+    enabled: Boolean(idEmpleado && idEmpleado > 0),
+    staleTime: 60_000,
+  });
+}
+
+export function useCotizacionFirmaActions(idCotizacion: number | null) {
+  const qc = useQueryClient();
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.cotizaciones });
+    if (idCotizacion) {
+      qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.cotizacion(idCotizacion) });
+    }
+    qc.removeQueries({ queryKey: ['cotizacion-pdf-preview'] });
+  };
+
+  const guardarFirma = useMutation({
+    mutationFn: ({
+      tipo,
+      payload,
+    }: {
+      tipo: 'ASESOR' | 'CLIENTE';
+      payload: {
+        firma_base64?: string;
+        id_firma_digital?: number;
+        atencion_a_nombre?: string;
+        atencion_a_cargo?: string;
+      };
+    }) => guardarFirmaCotizacion(idCotizacion!, tipo, payload),
+    onSuccess: (res) => {
+      invalidate();
+      toast.success(res.message || 'Firma guardada');
+    },
+    onError: (e: unknown) => toast.error(getErr(e, 'No se pudo guardar la firma digital')),
+  });
+
+  const eliminarFirma = useMutation({
+    mutationFn: (tipo: 'ASESOR' | 'CLIENTE') => eliminarFirmaCotizacion(idCotizacion!, tipo),
+    onSuccess: (res) => {
+      invalidate();
+      toast.success(res.message || 'Firma eliminada');
+    },
+    onError: (e: unknown) => toast.error(getErr(e, 'No se pudo desvincular la firma digital')),
+  });
+
+  return { guardarFirma, eliminarFirma };
 }
 
 export function usePropuestasPendientes(params?: {

@@ -12,13 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiQuery,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AprobarCotizacionCommand } from './application/commands/aprobar-cotizacion.command';
@@ -41,6 +35,7 @@ import {
   ActualizarPresentacionPdfDto,
   ConvertirCotizacionOrdenDto,
   CreateItemOtroDto,
+  GuardarFirmaCotizacionDto,
   GuardarStudioCompletoDto,
   ReabrirBorradorDto,
   SyncEquiposCotizacionDto,
@@ -86,11 +81,33 @@ export class CotizacionesController {
 
   // ==================== RUTAS ESTÁTICAS (SIEMPRE ANTES DE :id) ====================
 
+  @Get('firmas-historial-empleado/:idEmpleado')
+  @ApiOperation({
+    summary:
+      'Firmas digitales estándares e históricas de un empleado/asesor (reutiliza firmas_digitales)',
+  })
+  @ApiQuery({ name: 'excludeFirmaId', required: false, type: Number })
+  async obtenerFirmasHistorialEmpleado(
+    @Param('idEmpleado', ParseIntPipe) idEmpleado: number,
+    @Query('excludeFirmaId') excludeFirmaIdRaw?: string,
+  ) {
+    const excludeFirmaId = excludeFirmaIdRaw ? parseInt(excludeFirmaIdRaw, 10) : undefined;
+    return this.cpqService.obtenerFirmasHistorialEmpleado(
+      idEmpleado,
+      Number.isInteger(excludeFirmaId) ? excludeFirmaId : undefined,
+    );
+  }
+
   @Get('sugerencias')
   @ApiOperation({
-    summary: 'Smart Match CPQ: detecta equipos gemelos OEM, plantillas sugeridas, BOM y recursos compatibles',
+    summary:
+      'Smart Match CPQ: detecta equipos gemelos OEM, plantillas sugeridas, BOM y recursos compatibles',
   })
-  @ApiQuery({ name: 'equiposIds', required: false, description: 'IDs separados por coma (ej. 12,13,14)' })
+  @ApiQuery({
+    name: 'equiposIds',
+    required: false,
+    description: 'IDs separados por coma (ej. 12,13,14)',
+  })
   @ApiQuery({ name: 'tipoCotizacion', required: false })
   async obtenerSugerencias(
     @Query('equiposIds') equiposIdsRaw?: string,
@@ -287,7 +304,8 @@ export class CotizacionesController {
 
   @Patch(':id/presentacion-pdf')
   @ApiOperation({
-    summary: 'Actualizar preferencia de presentación PDF (Suma Alzada compacta vs Detallado con precios unitarios)',
+    summary:
+      'Actualizar preferencia de presentación PDF (Suma Alzada compacta vs Detallado con precios unitarios)',
   })
   async actualizarPresentacionPdf(
     @Param('id', ParseIntPipe) id: number,
@@ -299,7 +317,8 @@ export class CotizacionesController {
 
   @Put(':id/studio')
   @ApiOperation({
-    summary: 'Guardado atómico completo del Studio CPQ (cabecera + equipos + servicios + repuestos + otros rubros + recálculo)',
+    summary:
+      'Guardado atómico completo del Studio CPQ (cabecera + equipos + servicios + repuestos + otros rubros + recálculo)',
   })
   async guardarStudio(
     @Param('id', ParseIntPipe) id: number,
@@ -311,15 +330,14 @@ export class CotizacionesController {
 
   @Put(':id/equipos')
   @ApiOperation({ summary: 'Sincronizar equipos N:M asociados a la cotización' })
-  async syncEquipos(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: SyncEquiposCotizacionDto,
-  ) {
+  async syncEquipos(@Param('id', ParseIntPipe) id: number, @Body() dto: SyncEquiposCotizacionDto) {
     return this.cpqService.syncEquipos(id, dto);
   }
 
   @Get(':id/otros')
-  @ApiOperation({ summary: 'Listar otros rubros (Transporte, Viáticos, Pólizas, Disposición, etc.)' })
+  @ApiOperation({
+    summary: 'Listar otros rubros (Transporte, Viáticos, Pólizas, Disposición, etc.)',
+  })
   async listarOtros(@Param('id', ParseIntPipe) id: number) {
     return this.cpqService.listarItemsOtros(id);
   }
@@ -356,7 +374,9 @@ export class CotizacionesController {
   // ==================== PLANTILLAS & BOM OEM EN COTIZACIÓN ====================
 
   @Post(':id/aplicar-plantilla/:idPlantilla')
-  @ApiOperation({ summary: 'Aplicar plantilla estándar CPQ con auto-escalado N equipos y precios vivos' })
+  @ApiOperation({
+    summary: 'Aplicar plantilla estándar CPQ con auto-escalado N equipos y precios vivos',
+  })
   async aplicarPlantilla(
     @Param('id', ParseIntPipe) id: number,
     @Param('idPlantilla', ParseIntPipe) idPlantilla: number,
@@ -367,7 +387,9 @@ export class CotizacionesController {
   }
 
   @Post(':id/importar-bom/:idModelo')
-  @ApiOperation({ summary: 'Importar Kit BOM OEM de un modelo de equipo multiplicado por equipos gemelos' })
+  @ApiOperation({
+    summary: 'Importar Kit BOM OEM de un modelo de equipo multiplicado por equipos gemelos',
+  })
   async importarBom(
     @Param('id', ParseIntPipe) id: number,
     @Param('idModelo', ParseIntPipe) idModelo: number,
@@ -378,7 +400,9 @@ export class CotizacionesController {
   }
 
   @Post(':id/guardar-como-plantilla')
-  @ApiOperation({ summary: 'Guardar esta cotización como una nueva plantilla estándar reutilizable' })
+  @ApiOperation({
+    summary: 'Guardar esta cotización como una nueva plantilla estándar reutilizable',
+  })
   async guardarComoPlantilla(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: GuardarComoPlantillaDto,
@@ -396,7 +420,9 @@ export class CotizacionesController {
   }
 
   @Post(':id/reabrir-borrador')
-  @ApiOperation({ summary: 'Archivar snapshot de versión y reabrir cotización a BORRADOR para renegociar' })
+  @ApiOperation({
+    summary: 'Archivar snapshot de versión y reabrir cotización a BORRADOR para renegociar',
+  })
   async reabrirBorrador(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReabrirBorradorDto,
@@ -406,22 +432,23 @@ export class CotizacionesController {
   }
 
   @Post(':id/solicitar-aprobacion')
-  @ApiOperation({ summary: 'Solicitar aprobación interna según políticas dinámicas (BORRADOR → EN_REVISION / APROBADA_INTERNA)' })
+  @ApiOperation({
+    summary:
+      'Solicitar aprobación interna según políticas dinámicas (BORRADOR → EN_REVISION / APROBADA_INTERNA)',
+  })
   async solicitarAprobacion(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SolicitarAprobacionDto,
     @CurrentUser() user: AuthUser,
   ) {
-    const command = new SolicitarAprobacionCommand(
-      id,
-      dto.observaciones_solicitante,
-      user.id,
-    );
+    const command = new SolicitarAprobacionCommand(id, dto.observaciones_solicitante, user.id);
     return await this.commandBus.execute(command);
   }
 
   @Put(':id/enviar')
-  @ApiOperation({ summary: 'Enviar cotización a cliente con PDF corporativo (APROBADA_INTERNA → ENVIADA)' })
+  @ApiOperation({
+    summary: 'Enviar cotización a cliente con PDF corporativo (APROBADA_INTERNA → ENVIADA)',
+  })
   async enviar(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: EnviarCotizacionDto,
@@ -438,7 +465,9 @@ export class CotizacionesController {
   }
 
   @Put(':id/aprobar')
-  @ApiOperation({ summary: 'Registrar aprobación del cliente y orden de compra PO (ENVIADA → APROBADA_CLIENTE)' })
+  @ApiOperation({
+    summary: 'Registrar aprobación del cliente y orden de compra PO (ENVIADA → APROBADA_CLIENTE)',
+  })
   async aprobar(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AprobarCotizacionDto,
@@ -471,7 +500,8 @@ export class CotizacionesController {
 
   @Post(':id/convertir-a-orden')
   @ApiOperation({
-    summary: 'Quote-to-Order: convertir cotización APROBADA_CLIENTE en Orden de Servicio multi-equipo con diagnóstico WMS',
+    summary:
+      'Quote-to-Order: convertir cotización APROBADA_CLIENTE en Orden de Servicio multi-equipo con diagnóstico WMS',
   })
   async convertirAOrden(
     @Param('id', ParseIntPipe) id: number,
@@ -488,11 +518,7 @@ export class CotizacionesController {
     @Body() dto: CreateVersionDto,
     @CurrentUser() user: AuthUser,
   ) {
-    const command = new CreateVersionCommand(
-      id,
-      dto.motivo_cambio,
-      user.id ?? dto.creada_por,
-    );
+    const command = new CreateVersionCommand(id, dto.motivo_cambio, user.id ?? dto.creada_por);
     return await this.commandBus.execute(command);
   }
 
@@ -508,6 +534,33 @@ export class CotizacionesController {
     return await this.queryBus.execute(
       new GetVersionesQuery(id, skip ? parseInt(skip, 10) : 0, take ? parseInt(take, 10) : 50),
     );
+  }
+
+  // ==================== FIRMAS DIGITALES OPCIONALES ====================
+
+  @Put(':id/firmas/:tipo')
+  @ApiOperation({
+    summary: 'Adjuntar o actualizar firma digital opcional (ASESOR o CLIENTE) en la cotización',
+  })
+  async guardarFirmaCotizacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('tipo') tipo: string,
+    @Body() dto: GuardarFirmaCotizacionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.cpqService.guardarFirmaCotizacion(id, tipo, dto, user.id);
+  }
+
+  @Delete(':id/firmas/:tipo')
+  @ApiOperation({
+    summary: 'Desvincular firma digital opcional (ASESOR o CLIENTE) de la cotización',
+  })
+  async eliminarFirmaCotizacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('tipo') tipo: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.cpqService.eliminarFirmaCotizacion(id, tipo, user.id);
   }
 
   // ==================== MOTOR FINANCIERO ====================
