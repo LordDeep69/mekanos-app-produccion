@@ -79,10 +79,12 @@ const TIPO_CONFIG: Record<
 
 function EvidenciaThumbnail({
   evidencia,
+  equipoLabel,
   onClick,
   onEdit,
 }: {
   evidencia: Evidencia;
+  equipoLabel?: string | null;
   onClick: () => void;
   onEdit?: () => void;
 }) {
@@ -108,6 +110,16 @@ function EvidenciaThumbnail({
       ) : (
         <div className="w-full h-full bg-gray-100 flex items-center justify-center">
           <ImageIcon className="h-8 w-8 text-gray-300" />
+        </div>
+      )}
+
+      {/* ✅ MULTI-EQUIPO: Badge visible del equipo al que pertenece la foto */}
+      {equipoLabel && (
+        <div
+          className="absolute top-1.5 left-1.5 z-10 max-w-[78%] px-2 py-0.5 rounded-md bg-indigo-900/85 text-white text-[10px] font-bold tracking-tight truncate shadow-sm backdrop-blur-xs pointer-events-none"
+          title={equipoLabel}
+        >
+          {equipoLabel}
         </div>
       )}
 
@@ -193,6 +205,40 @@ export function EvidenciasGallery({
     setEditDescripcion('');
   };
 
+  // ✅ MULTI-EQUIPO: Mapa de id_orden_equipo -> etiqueta legible para identificar cada foto sin ambigüedad
+  const equipoLabelMap = useMemo(() => {
+    interface OrdenEquipoEtiqueta {
+      id_orden_equipo: number;
+      orden_secuencia?: number | null;
+      nombre_sistema?: string | null;
+      equipo?: { nombre_equipo?: string | null; codigo_equipo?: string | null } | null;
+      equipos?: { nombre_equipo?: string | null; codigo_equipo?: string | null } | null;
+    }
+    const map = new Map<number, string>();
+    const lista = (orden as { ordenes_equipos?: OrdenEquipoEtiqueta[] } | undefined)
+      ?.ordenes_equipos;
+    if (!Array.isArray(lista) || lista.length <= 1) return map;
+    const ordenados = [...lista].sort(
+      (a, b) =>
+        (a.orden_secuencia || 0) - (b.orden_secuencia || 0) ||
+        (a.id_orden_equipo || 0) - (b.id_orden_equipo || 0),
+    );
+    ordenados.forEach((oe, idx) => {
+      const seq = oe.orden_secuencia || idx + 1;
+      const eq = oe.equipo || oe.equipos;
+      const nombre = oe.nombre_sistema || eq?.nombre_equipo || eq?.codigo_equipo || `Equipo ${seq}`;
+      map.set(oe.id_orden_equipo, `EQ${seq} · ${nombre}`);
+    });
+    return map;
+  }, [orden]);
+
+  const getEquipoLabelForEvidencia = (ev: Evidencia): string | null => {
+    if (equipoLabelMap.size === 0 || idOrdenEquipoFiltro != null) return null;
+    const idEq = ev.id_orden_equipo ?? ev.idOrdenEquipo ?? null;
+    if (idEq == null) return null;
+    return equipoLabelMap.get(idEq) || null;
+  };
+
   // GENERAL photos are managed separately in GaleriaFotosGenerales (CRUD)
   // ✅ MULTI-EQUIPO: Si hay filtro por equipo, aplicar antes de agrupar
   const evidenciasSinGeneral = useMemo(() => {
@@ -225,17 +271,21 @@ export function EvidenciasGallery({
         e.url_foto ||
         (e.foto_base64 ? `data:image/jpeg;base64,${e.foto_base64}` : '');
       const fotoUrl = cleanDirectImageUrl(rawUrl);
+      const idEq = e.id_orden_equipo ?? e.idOrdenEquipo ?? null;
+      const eqTag = idEq != null ? equipoLabelMap.get(idEq) : null;
+      const baseTitle =
+        e.actividad_asociada?.descripcion_actividad || `Evidencia #${e.id_evidencia}`;
       return {
         id: e.id_evidencia,
         url: fotoUrl,
-        title: e.actividad_asociada?.descripcion_actividad || `Evidencia #${e.id_evidencia}`,
+        title: eqTag ? `[${eqTag}] ${baseTitle}` : baseTitle,
         actividad: e.actividad_asociada?.descripcion_actividad,
         badge: e.tipo_evidencia,
         description: e.descripcion,
         date: e.fecha_captura,
       };
     });
-  }, [evidenciasSinGeneral]);
+  }, [evidenciasSinGeneral, equipoLabelMap]);
 
   const handleOpenLightbox = (evidencia: Evidencia) => {
     const index = evidenciasSinGeneral.findIndex(
@@ -366,6 +416,7 @@ export function EvidenciasGallery({
                           ) : (
                             <EvidenciaThumbnail
                               evidencia={foto}
+                              equipoLabel={getEquipoLabelForEvidencia(foto)}
                               onClick={() => handleOpenLightbox(foto)}
                               onEdit={() => handleEditClick(foto)}
                             />
@@ -427,6 +478,7 @@ export function EvidenciasGallery({
                         ) : (
                           <EvidenciaThumbnail
                             evidencia={foto}
+                            equipoLabel={getEquipoLabelForEvidencia(foto)}
                             onClick={() => handleOpenLightbox(foto)}
                             onEdit={() => handleEditClick(foto)}
                           />

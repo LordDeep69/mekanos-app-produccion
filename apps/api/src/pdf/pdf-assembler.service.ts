@@ -1272,6 +1272,12 @@ export class PdfAssemblerService {
   private agruparActividadesPorEquipo(orden: any, esMultiEquipo: boolean) {
     if (!esMultiEquipo || !orden.ordenes_equipos) return undefined;
 
+    const equiposOrdenados = [...orden.ordenes_equipos].sort(
+      (a: any, b: any) =>
+        (a.orden_secuencia || 0) - (b.orden_secuencia || 0) ||
+        (a.id_orden_equipo || 0) - (b.id_orden_equipo || 0),
+    );
+
     const conEquipo =
       orden.actividades_ejecutadas?.filter(
         (act: any) => act.id_orden_equipo != null && !act.excluido_pdf,
@@ -1281,31 +1287,54 @@ export class PdfAssemblerService {
         (act: any) => act.id_orden_equipo == null && !act.excluido_pdf,
       ) || [];
 
+    const distribuirHuerfanas = (lista: any[]): Map<number, Array<{ act: any; desc: string }>> => {
+      const map = new Map<number, Array<{ act: any; desc: string }>>();
+      if (lista.length === 0) return map;
+      const unicas = new Map<string, any[]>();
+      for (const act of lista) {
+        const key =
+          act.catalogo_actividades?.descripcion_actividad ||
+          act.descripcion_manual ||
+          act.descripcion ||
+          'N/A';
+        if (!unicas.has(key)) unicas.set(key, []);
+        unicas.get(key)!.push(act);
+      }
+      equiposOrdenados.forEach((oe: any, idx: number) => {
+        const extras: Array<{ act: any; desc: string }> = [];
+        for (const [desc, acts] of unicas.entries()) {
+          const sorted = [...acts].sort(
+            (a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0),
+          );
+          if (sorted[idx]) extras.push({ act: sorted[idx], desc });
+        }
+        if (extras.length > 0) map.set(oe.id_orden_equipo, extras);
+      });
+      return map;
+    };
+
     if (conEquipo.length > 0) {
-      return orden.ordenes_equipos.map((oe: any) => ({
+      const huerfanas = distribuirHuerfanas(sinEquipo);
+      return equiposOrdenados.map((oe: any) => ({
         equipo: this.buildEquipoOrdenDescriptor(oe),
-        actividades: conEquipo
-          .filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo)
-          .map((act: any) => this.mapActividadEjecutada(act)),
+        actividades: [
+          ...conEquipo
+            .filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo)
+            .map((act: any) => this.mapActividadEjecutada(act)),
+          ...(huerfanas.get(oe.id_orden_equipo) || []).map(({ act, desc }) =>
+            this.mapActividadEjecutada(act, desc),
+          ),
+        ],
       }));
     }
 
     if (sinEquipo.length > 0) {
-      const unicas = new Map<string, any[]>();
-      for (const act of sinEquipo) {
-        const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A';
-        if (!unicas.has(key)) unicas.set(key, []);
-        unicas.get(key)!.push(act);
-      }
-
-      return orden.ordenes_equipos.map((oe: any, idx: number) => ({
+      const distribuidas = distribuirHuerfanas(sinEquipo);
+      return equiposOrdenados.map((oe: any) => ({
         equipo: this.buildEquipoOrdenDescriptor(oe),
-        actividades: Array.from(unicas.entries()).map(([desc, acts]) => {
-          const sorted = [...acts].sort(
-            (a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0),
-          );
-          return this.mapActividadEjecutada(sorted[idx] || sorted[0], desc);
-        }),
+        actividades: (distribuidas.get(oe.id_orden_equipo) || []).map(({ act, desc }) =>
+          this.mapActividadEjecutada(act, desc),
+        ),
       }));
     }
 
@@ -1314,6 +1343,12 @@ export class PdfAssemblerService {
 
   private agruparMedicionesPorEquipo(orden: any, esMultiEquipo: boolean) {
     if (!esMultiEquipo || !orden.ordenes_equipos) return undefined;
+
+    const equiposOrdenados = [...orden.ordenes_equipos].sort(
+      (a: any, b: any) =>
+        (a.orden_secuencia || 0) - (b.orden_secuencia || 0) ||
+        (a.id_orden_equipo || 0) - (b.id_orden_equipo || 0),
+    );
 
     const conEquipo =
       orden.mediciones_servicio?.filter(
@@ -1324,36 +1359,50 @@ export class PdfAssemblerService {
         (med: any) => med.id_orden_equipo == null && !med.excluido_pdf,
       ) || [];
 
-    if (conEquipo.length > 0) {
-      return orden.ordenes_equipos.map((oe: any) => ({
-        equipo: this.buildEquipoOrdenDescriptor(oe),
-        mediciones: conEquipo
-          .filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo)
-          .map((med: any) => this.mapMedicionConOverride(med, orden, oe.id_orden_equipo)),
-      }));
-    }
-
-    if (sinEquipo.length > 0) {
+    const distribuirHuerfanas = (lista: any[]): Map<number, Array<{ med: any; param: string }>> => {
+      const map = new Map<number, Array<{ med: any; param: string }>>();
+      if (lista.length === 0) return map;
       const unicas = new Map<string, any[]>();
-      for (const med of sinEquipo) {
+      for (const med of lista) {
         const key = med.parametros_medicion?.nombre_parametro || 'N/A';
         if (!unicas.has(key)) unicas.set(key, []);
         unicas.get(key)!.push(med);
       }
-
-      return orden.ordenes_equipos.map((oe: any, idx: number) => ({
-        equipo: this.buildEquipoOrdenDescriptor(oe),
-        mediciones: Array.from(unicas.entries()).map(([param, meds]) => {
+      equiposOrdenados.forEach((oe: any, idx: number) => {
+        const extras: Array<{ med: any; param: string }> = [];
+        for (const [param, meds] of unicas.entries()) {
           const sorted = [...meds].sort(
             (a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0),
           );
-          return this.mapMedicionConOverride(
-            sorted[idx] || sorted[0],
-            orden,
-            oe.id_orden_equipo,
-            param,
-          );
-        }),
+          if (sorted[idx]) extras.push({ med: sorted[idx], param });
+        }
+        if (extras.length > 0) map.set(oe.id_orden_equipo, extras);
+      });
+      return map;
+    };
+
+    if (conEquipo.length > 0) {
+      const huerfanas = distribuirHuerfanas(sinEquipo);
+      return equiposOrdenados.map((oe: any) => ({
+        equipo: this.buildEquipoOrdenDescriptor(oe),
+        mediciones: [
+          ...conEquipo
+            .filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo)
+            .map((med: any) => this.mapMedicionConOverride(med, orden, oe.id_orden_equipo)),
+          ...(huerfanas.get(oe.id_orden_equipo) || []).map(({ med, param }) =>
+            this.mapMedicionConOverride(med, orden, oe.id_orden_equipo, param),
+          ),
+        ],
+      }));
+    }
+
+    if (sinEquipo.length > 0) {
+      const distribuidas = distribuirHuerfanas(sinEquipo);
+      return equiposOrdenados.map((oe: any) => ({
+        equipo: this.buildEquipoOrdenDescriptor(oe),
+        mediciones: (distribuidas.get(oe.id_orden_equipo) || []).map(({ med, param }) =>
+          this.mapMedicionConOverride(med, orden, oe.id_orden_equipo, param),
+        ),
       }));
     }
 

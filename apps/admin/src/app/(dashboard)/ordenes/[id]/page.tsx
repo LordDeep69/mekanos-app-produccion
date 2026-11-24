@@ -344,13 +344,9 @@ function TabGeneral({
   const { locale, formatDateTime } = useOrgFormatters();
   const fechaProgramada = formatDisplayDate(orden.fecha_programada, locale);
 
-  const fechaCreacion = orden.fecha_creacion
-    ? formatDateTime(orden.fecha_creacion)
-    : '-';
+  const fechaCreacion = orden.fecha_creacion ? formatDateTime(orden.fecha_creacion) : '-';
 
-  const fechaFinalizacion = orden.fecha_fin_real
-    ? formatDateTime(orden.fecha_fin_real)
-    : null;
+  const fechaFinalizacion = orden.fecha_fin_real ? formatDateTime(orden.fecha_fin_real) : null;
 
   // ✅ FIX: Solo mostrar banner si tiene fecha_fin_real (servicio realmente finalizado)
   // No mostrar para órdenes recién creadas o estados administrativos
@@ -623,7 +619,12 @@ function agruparActividadesPorEquipo(
   const conEquipo = actividades.filter((a) => a.id_orden_equipo != null);
   const sinEquipo = actividades.filter((a) => a.id_orden_equipo == null);
 
-  const mapEquipos = equipos.map(
+  const equiposOrdenados = [...equipos].sort(
+    (a, b) =>
+      (a.orden_secuencia || 0) - (b.orden_secuencia || 0) || a.id_orden_equipo - b.id_orden_equipo,
+  );
+
+  const mapEquipos = equiposOrdenados.map(
     (oe): EquipoGroup => ({
       idOrdenEquipo: oe.id_orden_equipo,
       idEquipo: oe.equipo?.id_equipo || oe.id_equipo,
@@ -634,33 +635,54 @@ function agruparActividadesPorEquipo(
     }),
   );
 
-  if (conEquipo.length > 0) {
-    // CASO IDEAL: actividades tienen id_orden_equipo asignado
-    return mapEquipos.map((eq) => ({
-      equipo: eq,
-      actividades: conEquipo.filter((a) => a.id_orden_equipo === eq.idOrdenEquipo),
-    }));
-  }
+  const distribuirSinEquipo = (
+    listaSinEquipo: ActividadEjecutadaOrden[],
+  ): Map<number, ActividadEjecutadaOrden[]> => {
+    const result = new Map<number, ActividadEjecutadaOrden[]>();
+    if (listaSinEquipo.length === 0) return result;
 
-  if (sinEquipo.length > 0) {
-    // FALLBACK: distribuir por descripción, ordenar por id para determinismo
     const actividadesUnicas = new Map<string, ActividadEjecutadaOrden[]>();
-    for (const act of sinEquipo) {
+    for (const act of listaSinEquipo) {
       const key =
         act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || 'N/A';
       if (!actividadesUnicas.has(key)) actividadesUnicas.set(key, []);
       actividadesUnicas.get(key)!.push(act);
     }
 
-    return mapEquipos.map((eq, equipoIndex) => ({
-      equipo: eq,
-      actividades: Array.from(actividadesUnicas.entries()).map(([, acts]) => {
+    mapEquipos.forEach((eq, equipoIndex) => {
+      const extras: ActividadEjecutadaOrden[] = [];
+      for (const [, acts] of actividadesUnicas.entries()) {
         const ordenados = [...acts].sort(
           (a, b) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0),
         );
-        const act = ordenados[equipoIndex] || ordenados[0];
-        return { ...act, id_orden_equipo: eq.idOrdenEquipo };
-      }),
+        const act = ordenados[equipoIndex];
+        if (act) {
+          extras.push({ ...act, id_orden_equipo: eq.idOrdenEquipo });
+        }
+      }
+      if (extras.length > 0) result.set(eq.idOrdenEquipo, extras);
+    });
+    return result;
+  };
+
+  if (conEquipo.length > 0) {
+    // CASO IDEAL: actividades tienen id_orden_equipo asignado (huérfanas se anexan sin clonar ni ocultar)
+    const huerfanasPorEquipo = distribuirSinEquipo(sinEquipo);
+    return mapEquipos.map((eq) => ({
+      equipo: eq,
+      actividades: [
+        ...conEquipo.filter((a) => a.id_orden_equipo === eq.idOrdenEquipo),
+        ...(huerfanasPorEquipo.get(eq.idOrdenEquipo) || []),
+      ],
+    }));
+  }
+
+  if (sinEquipo.length > 0) {
+    // FALLBACK HISTÓRICO: solo órdenes previas sin id_orden_equipo (sin clonar registros entre equipos)
+    const distribuidas = distribuirSinEquipo(sinEquipo);
+    return mapEquipos.map((eq) => ({
+      equipo: eq,
+      actividades: distribuidas.get(eq.idOrdenEquipo) || [],
     }));
   }
 
@@ -674,7 +696,12 @@ function agruparMedicionesPorEquipo(
   const conEquipo = mediciones.filter((m) => m.id_orden_equipo != null);
   const sinEquipo = mediciones.filter((m) => m.id_orden_equipo == null);
 
-  const mapEquipos = equipos.map(
+  const equiposOrdenados = [...equipos].sort(
+    (a, b) =>
+      (a.orden_secuencia || 0) - (b.orden_secuencia || 0) || a.id_orden_equipo - b.id_orden_equipo,
+  );
+
+  const mapEquipos = equiposOrdenados.map(
     (oe): EquipoGroup => ({
       idOrdenEquipo: oe.id_orden_equipo,
       idEquipo: oe.equipo?.id_equipo || oe.id_equipo,
@@ -685,30 +712,49 @@ function agruparMedicionesPorEquipo(
     }),
   );
 
-  if (conEquipo.length > 0) {
-    // CASO IDEAL: mediciones tienen id_orden_equipo asignado
-    return mapEquipos.map((eq) => ({
-      equipo: eq,
-      mediciones: conEquipo.filter((m) => m.id_orden_equipo === eq.idOrdenEquipo),
-    }));
-  }
+  const distribuirSinEquipo = (listaSinEquipo: MedicionOrden[]): Map<number, MedicionOrden[]> => {
+    const result = new Map<number, MedicionOrden[]>();
+    if (listaSinEquipo.length === 0) return result;
 
-  if (sinEquipo.length > 0) {
-    // FALLBACK: distribuir por nombre de parámetro, ordenar por id_medicion para determinismo
     const medicionesUnicas = new Map<string, MedicionOrden[]>();
-    for (const med of sinEquipo) {
+    for (const med of listaSinEquipo) {
       const key = med.parametros_medicion?.nombre_parametro || 'N/A';
       if (!medicionesUnicas.has(key)) medicionesUnicas.set(key, []);
       medicionesUnicas.get(key)!.push(med);
     }
 
-    return mapEquipos.map((eq, equipoIndex) => ({
-      equipo: eq,
-      mediciones: Array.from(medicionesUnicas.entries()).map(([, meds]) => {
+    mapEquipos.forEach((eq, equipoIndex) => {
+      const extras: MedicionOrden[] = [];
+      for (const [, meds] of medicionesUnicas.entries()) {
         const ordenados = [...meds].sort((a, b) => (a.id_medicion || 0) - (b.id_medicion || 0));
-        const med = ordenados[equipoIndex] || ordenados[0];
-        return { ...med, id_orden_equipo: eq.idOrdenEquipo };
-      }),
+        const med = ordenados[equipoIndex];
+        if (med) {
+          extras.push({ ...med, id_orden_equipo: eq.idOrdenEquipo });
+        }
+      }
+      if (extras.length > 0) result.set(eq.idOrdenEquipo, extras);
+    });
+    return result;
+  };
+
+  if (conEquipo.length > 0) {
+    // CASO IDEAL: mediciones tienen id_orden_equipo asignado (huérfanas se anexan sin clonar ni ocultar)
+    const huerfanasPorEquipo = distribuirSinEquipo(sinEquipo);
+    return mapEquipos.map((eq) => ({
+      equipo: eq,
+      mediciones: [
+        ...conEquipo.filter((m) => m.id_orden_equipo === eq.idOrdenEquipo),
+        ...(huerfanasPorEquipo.get(eq.idOrdenEquipo) || []),
+      ],
+    }));
+  }
+
+  if (sinEquipo.length > 0) {
+    // FALLBACK HISTÓRICO: solo órdenes previas sin id_orden_equipo (sin clonar valores entre equipos)
+    const distribuidas = distribuirSinEquipo(sinEquipo);
+    return mapEquipos.map((eq) => ({
+      equipo: eq,
+      mediciones: distribuidas.get(eq.idOrdenEquipo) || [],
     }));
   }
 
@@ -845,9 +891,17 @@ function TabEjecucion({
   const mediciones = useMemo(() => medicionesData?.data || [], [medicionesData?.data]);
   const parametrosSinMedir = medicionesData?.parametros_sin_medir || [];
 
-  // ✅ MULTI-EQUIPO: Detectar y agrupar
-  const esMultiEquipo = (orden.ordenes_equipos?.length || 0) > 1;
-  const equipos = useMemo(() => orden.ordenes_equipos || [], [orden.ordenes_equipos]);
+  // ✅ MULTI-EQUIPO: Detectar y agrupar (siempre ordenados canónicamente por orden_secuencia)
+  const equipos = useMemo(
+    () =>
+      [...(orden.ordenes_equipos || [])].sort(
+        (a, b) =>
+          (a.orden_secuencia || 0) - (b.orden_secuencia || 0) ||
+          a.id_orden_equipo - b.id_orden_equipo,
+      ),
+    [orden.ordenes_equipos],
+  );
+  const esMultiEquipo = equipos.length > 1;
   const [equipoFiltro, setEquipoFiltro] = useState<number | 'todos'>('todos');
 
   const actividadesPorEquipo = useMemo(() => {
@@ -897,6 +951,13 @@ function TabEjecucion({
 
   const handleCrearMedicion = async (idParametro: number) => {
     if (!nuevoValor && !nuevaObs) return;
+    const idOrdenEquipoTarget = esMultiEquipo
+      ? equipoFiltro !== 'todos'
+        ? equipoFiltro
+        : undefined
+      : equipos.length === 1
+        ? equipos[0].id_orden_equipo
+        : undefined;
     try {
       await createMedicion.mutateAsync({
         idOrden: orden.id_orden_servicio,
@@ -904,6 +965,7 @@ function TabEjecucion({
           id_parametro_medicion: idParametro,
           valor_numerico: nuevoValor ? parseFloat(nuevoValor) : undefined,
           observaciones: nuevaObs || undefined,
+          ...(idOrdenEquipoTarget ? { id_orden_equipo: idOrdenEquipoTarget } : {}),
         },
       });
       setCreandoParam(null);
@@ -935,7 +997,7 @@ function TabEjecucion({
         const metricaProps = resolveMetricaActividad(act.id_orden_equipo);
         return (
           <ActividadCardAdvanced
-            key={act.id_actividad_ejecutada}
+            key={`${act.id_orden_equipo ?? 'sin'}-${act.id_actividad_ejecutada}`}
             actividad={act}
             idOrdenServicio={orden.id_orden_servicio}
             unidadUso={metricaProps.unidadUso}
@@ -959,7 +1021,7 @@ function TabEjecucion({
     <div className="space-y-2">
       {meds.map((med) => (
         <MedicionCardAdvanced
-          key={med.id_medicion}
+          key={`${med.id_orden_equipo ?? 'sin'}-${med.id_medicion}`}
           medicion={med}
           idOrdenServicio={orden.id_orden_servicio}
         />
@@ -1450,9 +1512,7 @@ function TabFinanciero({ orden }: { orden: Orden }) {
           <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1">
             Servicios
           </p>
-          <p className="text-2xl font-bold text-blue-900">
-            {formatCurrency(totalServiciosVivo)}
-          </p>
+          <p className="text-2xl font-bold text-blue-900">{formatCurrency(totalServiciosVivo)}</p>
         </div>
         <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 shadow-sm">
           <div className="flex items-center justify-between mb-1">
@@ -1469,17 +1529,13 @@ function TabFinanciero({ orden }: { orden: Orden }) {
         </div>
         <div className="bg-orange-50 rounded-xl p-4 border border-orange-100 shadow-sm">
           <p className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-1">Gastos</p>
-          <p className="text-2xl font-bold text-orange-900">
-            {formatCurrency(totalGastosVivo)}
-          </p>
+          <p className="text-2xl font-bold text-orange-900">{formatCurrency(totalGastosVivo)}</p>
         </div>
         <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 shadow-sm ring-2 ring-purple-200">
           <p className="text-xs font-bold text-purple-600 uppercase tracking-widest mb-1">
             Total General
           </p>
-          <p className="text-2xl font-bold text-purple-900">
-            {formatCurrency(totalGeneralVivo)}
-          </p>
+          <p className="text-2xl font-bold text-purple-900">{formatCurrency(totalGeneralVivo)}</p>
         </div>
       </div>
 
@@ -1666,7 +1722,9 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                       </td>
                       <td className="px-4 py-3.5 text-right text-sm font-mono text-slate-700">
                         {esCliente ? (
-                          <span className="text-xs text-violet-700 font-semibold">{formatCurrency(0)}</span>
+                          <span className="text-xs text-violet-700 font-semibold">
+                            {formatCurrency(0)}
+                          </span>
                         ) : (
                           formatCurrency(c.costo_unitario || 0)
                         )}
@@ -1973,15 +2031,13 @@ function ModalConfirmarReintegro({
                   Esta operación ejecutará un{' '}
                   <strong>contra-asiento inmutable de ENTRADA por DEVOLUCIÓN en el Kardex</strong>,
                   incrementará el saldo físico del almacén/lote y descontará{' '}
-                  <strong>{formatCurrency(costoTotal)}</strong> del costo acumulado de
-                  la orden.
+                  <strong>{formatCurrency(costoTotal)}</strong> del costo acumulado de la orden.
                 </>
               ) : (
                 <>
                   Esta operación retirará el registro de la orden (
                   <strong>sin afectar el inventario físico de bodega ni el Kardex</strong>) y
-                  ajustará <strong>{formatCurrency(costoTotal)}</strong> en el balance
-                  de la orden.
+                  ajustará <strong>{formatCurrency(costoTotal)}</strong> en el balance de la orden.
                 </>
               )}
             </div>
@@ -2736,9 +2792,7 @@ function ModalDespacharRepuestoOrden({
                       componenteSeleccionado.precio_compra > 0 && (
                         <span className="text-slate-500 text-[11px]">
                           • Costo catálogo:{' '}
-                          <strong>
-                            {formatCurrency(componenteSeleccionado.precio_compra)}
-                          </strong>
+                          <strong>{formatCurrency(componenteSeleccionado.precio_compra)}</strong>
                         </span>
                       )}
                   </div>
@@ -3071,9 +3125,7 @@ function ModalDespacharRepuestoOrden({
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                    {origen === 'CLIENTE'
-                      ? 'Costo Imputado'
-                      : 'Costo Unitario Imputado *'}
+                    {origen === 'CLIENTE' ? 'Costo Imputado' : 'Costo Unitario Imputado *'}
                   </label>
                   {origen === 'CLIENTE' ? (
                     <div className="w-full px-3.5 py-2.5 bg-violet-50/70 border border-violet-200 rounded-xl text-xs font-bold font-mono text-violet-800">
@@ -3281,9 +3333,7 @@ function ModalAddServicio({ onClose, idOrden }: { onClose: () => void; idOrden: 
                 setPrecioCustom(item.precio_base?.toString() || '');
               }}
               getLabel={(s) => s.nombre_servicio}
-              getSubtitle={(s) =>
-                `${formatCurrency(s.precio_base || 0)} • ${s.codigo_servicio}`
-              }
+              getSubtitle={(s) => `${formatCurrency(s.precio_base || 0)} • ${s.codigo_servicio}`}
               renderIcon={() => <Tag className="h-5 w-5" />}
               getId={(s) => s.id_servicio}
               isLoading={isLoadingCat}

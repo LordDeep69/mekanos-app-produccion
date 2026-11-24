@@ -1625,6 +1625,9 @@ export class EquiposGestionService {
           estado_equipo: eq.estado_equipo,
           criticidad: eq.criticidad,
           ubicacion_texto: eq.ubicacion_texto,
+          oculto_en_ordenes: Boolean(
+            (eq.metadata as Record<string, any> | null)?.oculto_en_ordenes === true,
+          ),
           cliente: {
             id_cliente: eq.id_cliente,
             nombre: nombreCliente || 'Sin nombre',
@@ -1848,6 +1851,7 @@ export class EquiposGestionService {
         nombre_equipo: true,
         numero_serie_equipo: true,
         id_tipo_equipo: true,
+        metadata: true,
         tipos_equipo: {
           select: {
             id_tipo_equipo: true,
@@ -1860,11 +1864,16 @@ export class EquiposGestionService {
           },
         },
       },
-      take: limit,
+      // Sin recorte prematuro cuando se filtra por cliente para que los equipos ocultos no reduzcan el cupo visible
+      take: clienteId ? undefined : Math.min(limit * 3, 200),
       orderBy: { codigo_equipo: 'asc' },
     });
 
-    return equipos.map((e) => ({
+    const equiposVisibles = equipos
+      .filter((e) => (e.metadata as Record<string, any> | null)?.oculto_en_ordenes !== true)
+      .slice(0, limit);
+
+    return equiposVisibles.map((e) => ({
       id_equipo: e.id_equipo,
       codigo_equipo: e.codigo_equipo,
       nombre: e.nombre_equipo || e.codigo_equipo,
@@ -1873,6 +1882,51 @@ export class EquiposGestionService {
       tipo: e.tipos_equipo?.nombre_tipo || e.tipos_equipo?.codigo_tipo,
       tipos_equipo: e.tipos_equipo,
     }));
+  }
+
+  /**
+   * Alterna la visibilidad de un equipo en la creación de órdenes de servicio.
+   * Persiste en equipos.metadata.oculto_en_ordenes preservando el resto de metadatos
+   * (sin migración de esquema y 100% compatible con activos universales).
+   */
+  async toggleVisibilidadOrdenes(idEquipo: number, ocultoEnOrdenes: boolean, userId: number) {
+    const equipo = await this.prisma.equipos.findUnique({
+      where: { id_equipo: idEquipo },
+      select: {
+        id_equipo: true,
+        codigo_equipo: true,
+        nombre_equipo: true,
+        metadata: true,
+      },
+    });
+
+    if (!equipo) {
+      throw new NotFoundException(`Equipo con ID ${idEquipo} no encontrado`);
+    }
+
+    const metadataActual =
+      equipo.metadata && typeof equipo.metadata === 'object' && !Array.isArray(equipo.metadata)
+        ? { ...(equipo.metadata as Record<string, any>) }
+        : {};
+
+    const nuevoValor = Boolean(ocultoEnOrdenes);
+    metadataActual.oculto_en_ordenes = nuevoValor;
+
+    await this.prisma.equipos.update({
+      where: { id_equipo: idEquipo },
+      data: {
+        metadata: metadataActual,
+        modificado_por: userId || 1,
+        fecha_modificacion: new Date(),
+      },
+    });
+
+    return {
+      id_equipo: equipo.id_equipo,
+      codigo_equipo: equipo.codigo_equipo,
+      nombre_equipo: equipo.nombre_equipo,
+      oculto_en_ordenes: nuevoValor,
+    };
   }
 
   /**

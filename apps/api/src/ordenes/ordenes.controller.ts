@@ -574,7 +574,7 @@ export class OrdenesController {
         include: {
           parametros_medicion: true,
         },
-        orderBy: { fecha_medicion: 'desc' },
+        orderBy: [{ id_orden_equipo: 'asc' }, { id_medicion: 'asc' }],
       }),
     ]);
 
@@ -654,11 +654,11 @@ export class OrdenesController {
       `[MEDICIONES-COMPLETAS] Orden #${id}: id_tipo_servicio=${orden.id_tipo_servicio}, id_tipo_equipo=${orden.equipos?.id_tipo_equipo}, plan_items=${orden.ordenes_actividades_plan?.length}, ordenes_equipos=${orden.ordenes_equipos?.length}`,
     );
 
-    // 2. Obtener mediciones ya registradas
+    // 2. Obtener mediciones ya registradas (orden determinista por equipo y registro)
     const mediciones = await this.prisma.mediciones_servicio.findMany({
       where: { id_orden_servicio: id },
       include: { parametros_medicion: true },
-      orderBy: { fecha_medicion: 'desc' },
+      orderBy: [{ id_orden_equipo: 'asc' }, { id_medicion: 'asc' }],
     });
 
     const idsMedidos = new Set(mediciones.map((m) => m.id_parametro_medicion));
@@ -1423,6 +1423,7 @@ export class OrdenesController {
                 nombre_equipo: true,
                 id_sede: true,
                 id_tipo_equipo: true,
+                metadata: true,
                 tipos_equipo: {
                   select: { id_tipo_equipo: true, nombre_tipo: true, codigo_tipo: true },
                 },
@@ -1433,20 +1434,27 @@ export class OrdenesController {
       },
     });
 
-    const data = ordenes.map((o) => ({
-      id_orden_servicio: o.id_orden_servicio,
-      numero_orden: o.numero_orden,
-      fecha_creacion: o.fecha_creacion,
-      tipo_servicio: o.tipos_servicio,
-      equipos: o.ordenes_equipos.map((oe) => ({
-        id_equipo: oe.equipos.id_equipo,
-        codigo_equipo: oe.equipos.codigo_equipo || '',
-        nombre_equipo: oe.equipos.nombre_equipo,
-        id_sede: oe.equipos.id_sede,
-        id_tipo_equipo: oe.equipos.id_tipo_equipo,
-        tipos_equipo: oe.equipos.tipos_equipo,
-      })),
-    }));
+    const data = ordenes
+      .map((o) => ({
+        id_orden_servicio: o.id_orden_servicio,
+        numero_orden: o.numero_orden,
+        fecha_creacion: o.fecha_creacion,
+        tipo_servicio: o.tipos_servicio,
+        equipos: o.ordenes_equipos
+          .filter(
+            (oe) =>
+              (oe.equipos?.metadata as Record<string, any> | null)?.oculto_en_ordenes !== true,
+          )
+          .map((oe) => ({
+            id_equipo: oe.equipos.id_equipo,
+            codigo_equipo: oe.equipos.codigo_equipo || '',
+            nombre_equipo: oe.equipos.nombre_equipo,
+            id_sede: oe.equipos.id_sede,
+            id_tipo_equipo: oe.equipos.id_tipo_equipo,
+            tipos_equipo: oe.equipos.tipos_equipo,
+          })),
+      }))
+      .filter((item) => item.equipos.length > 0);
 
     return { success: true, data };
   }
@@ -1743,10 +1751,7 @@ export class OrdenesController {
 
     return {
       email:
-        process.env.EMAIL_FROM ||
-        process.env.EMAIL_FROM_ADDRESS ||
-        orgCtx?.email_contacto ||
-        '',
+        process.env.EMAIL_FROM || process.env.EMAIL_FROM_ADDRESS || orgCtx?.email_contacto || '',
       nombre: nombreOrgDefecto,
       origen: 'DEFAULT_ENV',
     };
@@ -4060,11 +4065,14 @@ export class OrdenesController {
           ? `, respuestaJson=${JSON.stringify(act.respuestaJson).substring(0, 80)}`
           : '';
       console.log(
-        `   [${i}] sistema="${act.sistema}", idCat=${act.idActividadCatalogo ?? 'NULL'}, resultado="${act.resultado}"${respSummary}`,
+        `   [${i}] idOrdenEquipo=${act.idOrdenEquipo ?? 'NULL'}, sistema="${act.sistema}", idCat=${act.idActividadCatalogo ?? 'NULL'}, resultado="${act.resultado}"${respSummary}`,
       );
     });
     console.log('');
     console.log('📏 MEDICIONES:', dto.mediciones?.length || 0);
+    console.log(
+      `🔧 MULTI-EQUIPO: flag=${dto.esMultiEquipo ?? false}, actPorEquipo=${dto.actividadesPorEquipo?.length || 0}, medPorEquipo=${dto.medicionesPorEquipo?.length || 0}`,
+    );
     console.log(`⏰ HORA ENTRADA: "${dto.horaEntrada}"`);
     console.log(`⏰ HORA SALIDA: "${dto.horaSalida}"`);
     console.log(`📝 OBSERVACIONES: "${dto.observaciones?.substring(0, 50)}..."`);
@@ -4131,8 +4139,38 @@ export class OrdenesController {
         unidad: m.unidad,
         nivelAlerta: m.nivelAlerta as 'OK' | 'WARNING' | 'CRITICAL' | undefined,
         idOrdenEquipo: m.idOrdenEquipo,
+        observaciones: m.observaciones,
       })),
+      // ✅ MULTI-EQUIPOS: Preservar agrupación explícita por equipo desde Mobile (con soporte Fase 6)
+      actividadesPorEquipo: dto.actividadesPorEquipo?.map((g) => ({
+        idOrdenEquipo: g.idOrdenEquipo,
+        nombreEquipo: g.nombreEquipo,
+        codigoEquipo: g.codigoEquipo,
+        actividades: (g.actividades || []).map((a) => ({
+          sistema: a.sistema,
+          descripcion: a.descripcion,
+          resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
+          observaciones: a.observaciones,
+          idOrdenEquipo: a.idOrdenEquipo ?? g.idOrdenEquipo,
+          idActividadCatalogo: a.idActividadCatalogo,
+          respuestaJson: a.respuestaJson,
+        })),
+      })),
+      medicionesPorEquipo: dto.medicionesPorEquipo?.map((g) => ({
+        idOrdenEquipo: g.idOrdenEquipo,
+        nombreEquipo: g.nombreEquipo,
+        mediciones: (g.mediciones || []).map((m) => ({
+          parametro: m.parametro,
+          valor: m.valor,
+          unidad: m.unidad,
+          nivelAlerta: m.nivelAlerta as 'OK' | 'WARNING' | 'CRITICAL' | undefined,
+          idOrdenEquipo: m.idOrdenEquipo ?? g.idOrdenEquipo,
+          observaciones: m.observaciones,
+        })),
+      })),
+      esMultiEquipo: dto.esMultiEquipo,
       observaciones: dto.observaciones,
+      razonFalla: dto.razonFalla,
       datosModulo: dto.datosModulo,
       horaEntrada: dto.horaEntrada,
       horaSalida: dto.horaSalida,
@@ -4297,10 +4335,6 @@ export class OrdenesController {
     @Body() body: TransferirDatosOrdenDto,
     @UserId() userId: number,
   ) {
-    return this.transferenciaService.ejecutarTransferencia(
-      idDestino,
-      body,
-      userId,
-    );
+    return this.transferenciaService.ejecutarTransferencia(idDestino, body, userId);
   }
 }

@@ -69,3 +69,10 @@ uploads/
 scratch/
 *.apk
 *.sha1
+
+# Database backups & dumps (NEVER commit database dumps to Git)
+*.dump
+*.dump.enc
+*.sql.gz
+*.bak
+backups/

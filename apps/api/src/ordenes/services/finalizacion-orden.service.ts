@@ -137,6 +137,8 @@ export interface MedicionInput {
   nivelAlerta?: 'OK' | 'WARNING' | 'CRITICAL';
   /** ID del orden-equipo (para multi-equipos, opcional para backward compatibility) */
   idOrdenEquipo?: number;
+  /** Observaciones específicas de la medición */
+  observaciones?: string;
 }
 
 /**
@@ -506,9 +508,7 @@ export class FinalizacionOrdenService {
       }
 
       // Resolver posible reasignación en memoria (se audita y persiste dentro de la transacción atómica)
-      let reasignacionTecnico:
-        | { tecnicoOriginalId: number; tecnicoEjecutorId: number }
-        | undefined;
+      let reasignacionTecnico: { tecnicoOriginalId: number; tecnicoEjecutorId: number } | undefined;
       if (
         user &&
         !user.esAdmin &&
@@ -585,12 +585,7 @@ export class FinalizacionOrdenService {
         tipo: ev.tipoFinal,
         url: ev.url,
       }));
-      emitProgress(
-        'evidencias',
-        'completed',
-        `${evidenciasSubidas.length} evidencias subidas`,
-        35,
-      );
+      emitProgress('evidencias', 'completed', `${evidenciasSubidas.length} evidencias subidas`, 35);
 
       // Mapear mediciones del array a datosModulo para cálculo de PDF + contador
       const datosModuloMapeado = this.mapearMedicionesADatosModulo(dto.mediciones || []);
@@ -686,19 +681,22 @@ export class FinalizacionOrdenService {
             },
           });
 
-          // 4. Actividades ejecutadas
+          // 4. Actividades ejecutadas (con trazabilidad multi-equipo 1:1 verificada)
+          const actividadesNormalizadas = this.resolverActividadesParaPersistir(orden, dto);
           await this.persistirActividades(
             orden.id_orden_servicio,
-            dto.actividades,
+            actividadesNormalizadas,
             idEmpleadoTecnico || dto.usuarioId,
             tx,
+            orden.id_tipo_servicio,
           );
 
-          // 5. Mediciones
-          if (dto.mediciones && dto.mediciones.length > 0) {
+          // 5. Mediciones (con trazabilidad multi-equipo 1:1 verificada)
+          const medicionesNormalizadas = this.resolverMedicionesParaPersistir(orden, dto);
+          if (medicionesNormalizadas.length > 0) {
             await this.persistirMediciones(
               orden.id_orden_servicio,
-              dto.mediciones,
+              medicionesNormalizadas,
               idEmpleadoTecnico || dto.usuarioId,
               tx,
             );
@@ -1028,9 +1026,7 @@ export class FinalizacionOrdenService {
         },
       });
       for (const firmaId of [firmaResidualTecnico, firmaResidualCliente].filter(Boolean)) {
-        await tx.firmas_digitales
-          .delete({ where: { id_firma_digital: firmaId! } })
-          .catch(() => {});
+        await tx.firmas_digitales.delete({ where: { id_firma_digital: firmaId! } }).catch(() => {});
       }
     }
 
@@ -1073,10 +1069,7 @@ export class FinalizacionOrdenService {
         const valorRestaurado = ultimaRestante
           ? Number(ultimaRestante.horas_lectura)
           : borradaEq?.horas_transcurridas != null
-            ? Math.max(
-                0,
-                Number(borradaEq.horas_lectura) - Number(borradaEq.horas_transcurridas),
-              )
+            ? Math.max(0, Number(borradaEq.horas_lectura) - Number(borradaEq.horas_transcurridas))
             : null;
         if (valorRestaurado != null && Number.isFinite(valorRestaurado)) {
           const eqActualizado = await tx.equipos.update({
@@ -2621,11 +2614,108 @@ export class FinalizacionOrdenService {
     });
   }
 
+  /**
+   * Resuelve y normaliza las actividades con su `idOrdenEquipo` verificado contra `orden.ordenes_equipos`.
+   * Prioriza `dto.actividadesPorEquipo` (agrupación explícita del cliente) para garantizar
+   * trazabilidad 1:1 en órdenes multi-equipo sin depender del orden de inserción en SQLite.
+   */
+  private resolverActividadesParaPersistir(orden: any, dto: FinalizarOrdenDto): ActividadInput[] {
+    const ordenEquipos: any[] = Array.isArray(orden.ordenes_equipos) ? orden.ordenes_equipos : [];
+    const validIds = new Set<number>(ordenEquipos.map((oe) => oe.id_orden_equipo));
+    const secuenciaPorId = new Map<number, number>(
+      ordenEquipos.map((oe, idx) => [oe.id_orden_equipo, oe.orden_secuencia ?? idx + 1]),
+    );
+    const unicoEquipoId = ordenEquipos.length === 1 ? ordenEquipos[0].id_orden_equipo : undefined;
+
+    const validarId = (id?: number | null): number | undefined => {
+      if (id != null && validIds.has(id)) return id;
+      return unicoEquipoId;
+    };
+
+    if (dto.actividadesPorEquipo && dto.actividadesPorEquipo.length > 0) {
+      const gruposOrdenados = [...dto.actividadesPorEquipo].sort(
+        (a, b) =>
+          (secuenciaPorId.get(a.idOrdenEquipo) ?? 9999) -
+          (secuenciaPorId.get(b.idOrdenEquipo) ?? 9999),
+      );
+      const resultado: ActividadInput[] = [];
+      for (const grupo of gruposOrdenados) {
+        const idEqGrupo = validarId(grupo.idOrdenEquipo);
+        for (const act of grupo.actividades || []) {
+          resultado.push({
+            ...act,
+            idOrdenEquipo: validarId(act.idOrdenEquipo) ?? idEqGrupo,
+          });
+        }
+      }
+      if (resultado.length > 0) {
+        return resultado;
+      }
+    }
+
+    return (dto.actividades || []).map((act) => ({
+      ...act,
+      idOrdenEquipo: validarId(act.idOrdenEquipo),
+    }));
+  }
+
+  /**
+   * Resuelve y normaliza las mediciones con su `idOrdenEquipo` verificado contra `orden.ordenes_equipos`.
+   * Agnóstico al tipo de activo y al tipo de parámetro medido (horómetro, presión, temperatura, UoM universal, etc.).
+   */
+  private resolverMedicionesParaPersistir(orden: any, dto: FinalizarOrdenDto): MedicionInput[] {
+    const ordenEquipos: any[] = Array.isArray(orden.ordenes_equipos) ? orden.ordenes_equipos : [];
+    const validIds = new Set<number>(ordenEquipos.map((oe) => oe.id_orden_equipo));
+    const secuenciaPorId = new Map<number, number>(
+      ordenEquipos.map((oe, idx) => [oe.id_orden_equipo, oe.orden_secuencia ?? idx + 1]),
+    );
+    const unicoEquipoId = ordenEquipos.length === 1 ? ordenEquipos[0].id_orden_equipo : undefined;
+
+    const validarId = (id?: number | null): number | undefined => {
+      if (id != null && validIds.has(id)) return id;
+      return unicoEquipoId;
+    };
+
+    if (dto.medicionesPorEquipo && dto.medicionesPorEquipo.length > 0) {
+      const gruposOrdenados = [...dto.medicionesPorEquipo].sort(
+        (a, b) =>
+          (secuenciaPorId.get(a.idOrdenEquipo) ?? 9999) -
+          (secuenciaPorId.get(b.idOrdenEquipo) ?? 9999),
+      );
+      const resultado: MedicionInput[] = [];
+      for (const grupo of gruposOrdenados) {
+        const idEqGrupo = validarId(grupo.idOrdenEquipo);
+        for (const med of grupo.mediciones || []) {
+          resultado.push({
+            ...med,
+            idOrdenEquipo: validarId(med.idOrdenEquipo) ?? idEqGrupo,
+          });
+        }
+      }
+      if (resultado.length > 0) {
+        return resultado;
+      }
+    }
+
+    return (dto.mediciones || []).map((med) => ({
+      ...med,
+      idOrdenEquipo: validarId(med.idOrdenEquipo),
+    }));
+  }
+
+  private mapNivelAlertaMedicion(nivel?: string): 'OK' | 'ADVERTENCIA' | 'CRITICO' {
+    const norm = (nivel || 'OK').toUpperCase().trim();
+    if (norm === 'CRITICAL' || norm === 'CRITICO') return 'CRITICO';
+    if (norm === 'WARNING' || norm === 'ADVERTENCIA') return 'ADVERTENCIA';
+    return 'OK';
+  }
+
   private async persistirActividades(
     idOrden: number,
     actividades: ActividadInput[],
     usuarioId: number,
     tx: Prisma.TransactionClient = this.prisma,
+    idTipoServicio?: number | null,
   ): Promise<number> {
     if (actividades.length === 0) return 0;
 
@@ -2641,23 +2731,37 @@ export class FinalizacionOrdenService {
       return 0; // No insertar duplicados
     }
 
-    // PASO 1: Precargar TODO el catálogo en UNA sola query
+    // PASO 1: Precargar catálogo en UNA sola query (priorizando el tipo de servicio de la orden)
     const catalogoCompleto = await tx.catalogo_actividades.findMany({
-      select: { id_actividad_catalogo: true, descripcion_actividad: true },
+      select: {
+        id_actividad_catalogo: true,
+        descripcion_actividad: true,
+        id_tipo_servicio: true,
+      },
     });
 
-    // Crear mapa para búsqueda O(1) (solo fallback legacy para payloads offline antiguos)
-    const catalogoMap = new Map<string, number>();
+    // Crear mapas para búsqueda O(1) (solo fallback legacy cuando no viene idActividadCatalogo Fase 6)
     const idsCatalogoValidos = new Set<number>();
+    const catalogoServicioExacto = new Map<string, number>();
+    const catalogoServicioPrefijo = new Map<string, number>();
+    const catalogoGlobalExacto = new Map<string, number>();
+    const catalogoGlobalPrefijo = new Map<string, number>();
+
     for (const cat of catalogoCompleto) {
       idsCatalogoValidos.add(cat.id_actividad_catalogo);
-      // Indexar por los primeros 50 chars en minúsculas para matching
-      const key = cat.descripcion_actividad.substring(0, 50).toLowerCase();
-      catalogoMap.set(key, cat.id_actividad_catalogo);
+      const exactKey = cat.descripcion_actividad.trim().toLowerCase();
+      const prefixKey = exactKey.substring(0, 50);
+      catalogoGlobalExacto.set(exactKey, cat.id_actividad_catalogo);
+      catalogoGlobalPrefijo.set(prefixKey, cat.id_actividad_catalogo);
+      if (idTipoServicio && cat.id_tipo_servicio === idTipoServicio) {
+        catalogoServicioExacto.set(exactKey, cat.id_actividad_catalogo);
+        catalogoServicioPrefijo.set(prefixKey, cat.id_actividad_catalogo);
+      }
     }
 
-    // PASO 2: Preparar datos para batch insert
+    // PASO 2: Preparar datos para batch insert con orden_secuencia independiente por equipo
     const ahora = new Date();
+    const secuenciaPorEquipo = new Map<string, number>();
     const datosParaInsertar = actividades.map((act) => {
       // Fase 6: trazabilidad exacta por idActividadCatalogo; fallback legacy por descripción
       let idCatalogo: number | null = null;
@@ -2667,8 +2771,14 @@ export class FinalizacionOrdenService {
       ) {
         idCatalogo = Number(act.idActividadCatalogo);
       } else {
-        const keyBusqueda = act.descripcion.substring(0, 50).toLowerCase();
-        idCatalogo = catalogoMap.get(keyBusqueda) || null;
+        const exactKey = act.descripcion.trim().toLowerCase();
+        const prefixKey = exactKey.substring(0, 50);
+        idCatalogo =
+          catalogoServicioExacto.get(exactKey) ||
+          catalogoServicioPrefijo.get(prefixKey) ||
+          catalogoGlobalExacto.get(exactKey) ||
+          catalogoGlobalPrefijo.get(prefixKey) ||
+          null;
       }
 
       let respuestaJson: any = undefined;
@@ -2684,12 +2794,17 @@ export class FinalizacionOrdenService {
         }
       }
 
+      const equipoKey = act.idOrdenEquipo != null ? String(act.idOrdenEquipo) : 'NONE';
+      const nextSeq = (secuenciaPorEquipo.get(equipoKey) || 0) + 1;
+      secuenciaPorEquipo.set(equipoKey, nextSeq);
+
       return {
         id_orden_servicio: idOrden,
-        id_orden_equipo: act.idOrdenEquipo || null, // Multi-equipos: opcional
+        id_orden_equipo: act.idOrdenEquipo ?? null,
         id_actividad_catalogo: idCatalogo,
         descripcion_manual: idCatalogo ? null : act.descripcion,
         sistema: act.sistema || 'GENERAL',
+        orden_secuencia: nextSeq,
         estado: this.mapResultadoAEstado(act.resultado),
         ejecutada: true,
         fecha_ejecucion: ahora,
@@ -2736,18 +2851,20 @@ export class FinalizacionOrdenService {
     // PASO 1: Precargar TODOS los parámetros y contexto de equipo de la orden
     const [parametrosCompletos, ordenContext] = await Promise.all([
       tx.parametros_medicion.findMany(),
-      tx.ordenes_servicio.findUnique({
-        where: { id_orden_servicio: idOrden },
-        select: {
-          equipos: { select: { config_parametros: true, plantillas_parametros: true } },
-          ordenes_equipos: {
+      tx.ordenes_servicio?.findUnique
+        ? tx.ordenes_servicio.findUnique({
+            where: { id_orden_servicio: idOrden },
             select: {
-              id_orden_equipo: true,
               equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+              ordenes_equipos: {
+                select: {
+                  id_orden_equipo: true,
+                  equipos: { select: { config_parametros: true, plantillas_parametros: true } },
+                },
+              },
             },
-          },
-        },
-      }),
+          })
+        : Promise.resolve(null),
     ]);
 
     // Crear mapas para búsqueda O(1) - exacta y parcial
@@ -2755,7 +2872,7 @@ export class FinalizacionOrdenService {
     const parametroMapParcial = new Map<string, any>();
 
     for (const p of parametrosCompletos) {
-      const nombreLower = p.nombre_parametro.toLowerCase();
+      const nombreLower = p.nombre_parametro.trim().toLowerCase();
       parametroMapExacto.set(nombreLower, p);
       // También indexar primeros 20 chars para matching parcial
       const nombreCorto = nombreLower.substring(0, 20);
@@ -2773,12 +2890,13 @@ export class FinalizacionOrdenService {
       fuera_de_rango: boolean;
       nivel_alerta: any;
       mensaje_alerta: string;
+      observaciones: string | null;
       fecha_medicion: Date;
       medido_por: number;
     }> = [];
 
     for (const med of mediciones) {
-      const nombreLower = med.parametro.toLowerCase();
+      const nombreLower = med.parametro.trim().toLowerCase();
       const nombreCorto = nombreLower.substring(0, 20);
 
       // Buscar primero exacto, luego parcial
@@ -2798,16 +2916,28 @@ export class FinalizacionOrdenService {
         ? resolved.unidadMedida
         : med.unidad || resolved.unidadMedida || parametro.unidad_medida;
       const ev = evaluarValorContraRangos(Number(med.valor), resolved, unidadFinal, 'OK');
+      const tieneRangoConfigurado =
+        resolved.minNormal !== undefined ||
+        resolved.maxNormal !== undefined ||
+        resolved.minCritico !== undefined ||
+        resolved.maxCritico !== undefined;
+      const nivelAlertaFinal =
+        !tieneRangoConfigurado && med.nivelAlerta
+          ? this.mapNivelAlertaMedicion(med.nivelAlerta)
+          : ev.nivelAlerta;
+      const fueraDeRangoFinal =
+        !tieneRangoConfigurado && med.nivelAlerta ? nivelAlertaFinal !== 'OK' : ev.fueraDeRango;
 
       datosParaInsertar.push({
         id_orden_servicio: idOrden,
-        id_orden_equipo: med.idOrdenEquipo || null, // Multi-equipos: opcional
+        id_orden_equipo: med.idOrdenEquipo ?? null,
         id_parametro_medicion: parametro.id_parametro_medicion,
         valor_numerico: med.valor,
         unidad_medida: unidadFinal,
-        fuera_de_rango: ev.fueraDeRango,
-        nivel_alerta: ev.nivelAlerta,
+        fuera_de_rango: fueraDeRangoFinal,
+        nivel_alerta: nivelAlertaFinal,
         mensaje_alerta: ev.mensajeAlerta,
+        observaciones: med.observaciones?.trim() ? med.observaciones.trim() : null,
         fecha_medicion: ahora,
         medido_por: usuarioId,
       });
@@ -2977,10 +3107,7 @@ export class FinalizacionOrdenService {
     return this.extraerHorasDeObservacion(act.observaciones, true);
   }
 
-  private extraerHorasDeObservacion(
-    obs?: string,
-    permitirCualquierPrefijo = false,
-  ): number | null {
+  private extraerHorasDeObservacion(obs?: string, permitirCualquierPrefijo = false): number | null {
     if (!obs) return null;
     const regex = permitirCualquierPrefijo
       ? /(?:[A-ZÁÉÍÓÚÑ0-9_]{2,25}|Lectura registrada)\s*:\s*([\d.,]+)/i

@@ -88,6 +88,7 @@ export interface EquipoListItem {
   estado_equipo: EstadoEquipo;
   criticidad: Criticidad;
   ubicacion_texto: string;
+  oculto_en_ordenes?: boolean;
   cliente: {
     id_cliente: number;
     nombre: string;
