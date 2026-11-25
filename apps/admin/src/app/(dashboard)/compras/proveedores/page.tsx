@@ -9,8 +9,9 @@
  * tabla balanceada sin scroll horizontal, condiciones comerciales horizontales elegantes y micro-portales activos.
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import { readPersistedFilterParams, writePersistedFilterParams } from '@/lib/navigation-filter-memory';
 import {
   Building2,
   CheckCircle2,
@@ -199,6 +200,24 @@ export default function ProveedoresPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState<string>('TODOS');
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    const params = readPersistedFilterParams('/compras/proveedores');
+    const q = params.get('q') || '';
+    const cat = params.get('cat') || '';
+    if (q) setSearch(q);
+    if (cat) setFiltroCategoria(cat);
+    hydratedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const params = new URLSearchParams();
+    if (search) params.set('q', search);
+    if (filtroCategoria !== 'TODOS') params.set('cat', filtroCategoria);
+    writePersistedFilterParams('/compras/proveedores', '/compras/proveedores', params);
+  }, [search, filtroCategoria]);
 
   // Modal Unificado (Crear / Editar)
   const [modalOpen, setModalOpen] = useState(false);

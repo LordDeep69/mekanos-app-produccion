@@ -83,8 +83,9 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { readPersistedFilterParams, writePersistedFilterParams } from '@/lib/navigation-filter-memory';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getClientes } from '../api/clientes.service';
 import { useClientes, useDeleteCliente, useRefreshClientes } from '../hooks/use-clientes';
 import { EquiposClienteTable } from './equipos-cliente-table';
@@ -114,16 +115,66 @@ export function ClientesTable() {
 
   const refreshClientes = useRefreshClientes();
   const deleteMutation = useDeleteCliente();
+  const hydratedRef = useRef(false);
 
-  // Debounce optimizado a 300ms para búsqueda ágil
+  // Restaurar filtros, búsqueda, orden y página al regresar desde /clientes/[id] o recargar
   useEffect(() => {
+    const params = readPersistedFilterParams('/clientes');
+    const q = params.get('q') || '';
+    const tipo = params.get('tipo') as TipoClienteEnum | 'TODOS' | null;
+    const equipo = params.get('equipo') as 'TODOS' | 'PLANTAS' | 'BOMBAS' | 'AMBOS' | 'SIN_EQUIPOS' | null;
+    const est = params.get('est') as 'TODOS' | 'PRINCIPALES' | 'SEDES' | 'INDEPENDIENTES' | null;
+    const pageParam = Number(params.get('page'));
+    const sort = params.get('sort') as SortField | null;
+    const dir = params.get('dir') as 'asc' | 'desc' | null;
+
+    if (q) {
+      setSearchInput(q);
+      setSearch(q);
+    }
+    if (tipo) setTipoFilter(tipo);
+    if (equipo && ['TODOS', 'PLANTAS', 'BOMBAS', 'AMBOS', 'SIN_EQUIPOS'].includes(equipo)) {
+      setTipoEquipoFilter(equipo);
+    }
+    if (est && ['TODOS', 'PRINCIPALES', 'SEDES', 'INDEPENDIENTES'].includes(est)) {
+      setEstructuraFilter(est);
+    }
+    if (Number.isInteger(pageParam) && pageParam > 0) {
+      setPage(pageParam);
+    }
+    if (sort && ['codigo', 'nombre', 'nit', 'tipo', 'estado'].includes(sort)) {
+      setSortField(sort);
+    }
+    if (dir && (dir === 'asc' || dir === 'desc')) {
+      setSortOrder(dir);
+    }
+    hydratedRef.current = true;
+  }, []);
+
+  // Debounce optimizado a 300ms para búsqueda ágil (sin pisar la página restaurada en el montaje)
+  useEffect(() => {
+    if (searchInput === search) return;
     const timer = setTimeout(() => {
       setSearch(searchInput);
       setPage(0);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, search]);
+
+  // Persistir filtros activos en URL y sessionStorage
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const params = new URLSearchParams();
+    if (search) params.set('q', search);
+    if (tipoFilter !== 'TODOS') params.set('tipo', tipoFilter);
+    if (tipoEquipoFilter !== 'TODOS') params.set('equipo', tipoEquipoFilter);
+    if (estructuraFilter !== 'TODOS') params.set('est', estructuraFilter);
+    if (page > 0) params.set('page', String(page));
+    if (sortField !== 'nombre') params.set('sort', sortField);
+    if (sortOrder !== 'asc') params.set('dir', sortOrder);
+    writePersistedFilterParams('/clientes', '/clientes', params);
+  }, [search, tipoFilter, tipoEquipoFilter, estructuraFilter, page, sortField, sortOrder]);
 
   // Query con filtros
   const { data, isLoading, isFetching, isError, error } = useClientes({

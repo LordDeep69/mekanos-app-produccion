@@ -7,8 +7,9 @@
 
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { readPersistedFilterParams, writePersistedFilterParams } from '@/lib/navigation-filter-memory';
 import { useSession } from 'next-auth/react';
 import {
   AlertCircle,
@@ -124,6 +125,31 @@ export default function OrdenesCompraPage() {
   const [filtroEstado, setFiltroEstado] = useState<string>('TODOS');
   const [filtroProveedor, setFiltroProveedor] = useState<string>('TODOS');
   const [paginaActual, setPaginaActual] = useState(1);
+  const [hydrated, setHydrated] = useState(false);
+  const prevFiltersKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const params = readPersistedFilterParams('/compras/ordenes');
+    const q = params.get('q') || '';
+    const estado = params.get('estado') || '';
+    const prov = params.get('prov') || '';
+    const pageParam = Number(params.get('page'));
+    if (q) setBusqueda(q);
+    if (estado) setFiltroEstado(estado);
+    if (prov) setFiltroProveedor(prov);
+    if (Number.isInteger(pageParam) && pageParam >= 1) setPaginaActual(pageParam);
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const params = new URLSearchParams();
+    if (busqueda) params.set('q', busqueda);
+    if (filtroEstado !== 'TODOS') params.set('estado', filtroEstado);
+    if (filtroProveedor !== 'TODOS') params.set('prov', filtroProveedor);
+    if (paginaActual > 1) params.set('page', String(paginaActual));
+    writePersistedFilterParams('/compras/ordenes', '/compras/ordenes', params);
+  }, [hydrated, busqueda, filtroEstado, filtroProveedor, paginaActual]);
 
   // Estados de modales (Ciclo 4.A y 4.B)
   const [ordenDetalle, setOrdenDetalle] = useState<OrdenCompra | null>(null);
@@ -246,9 +272,17 @@ export default function OrdenesCompraPage() {
   };
 
   useEffect(() => {
-    cargarDatos(1);
-    setPaginaActual(1);
-  }, [busqueda, filtroEstado, filtroProveedor]);
+    if (!hydrated) return;
+    const key = `${busqueda}|${filtroEstado}|${filtroProveedor}`;
+    const filtersChanged = prevFiltersKeyRef.current !== null && prevFiltersKeyRef.current !== key;
+    prevFiltersKeyRef.current = key;
+    if (filtersChanged) {
+      setPaginaActual(1);
+      cargarDatos(1);
+    } else {
+      cargarDatos(paginaActual);
+    }
+  }, [hydrated, busqueda, filtroEstado, filtroProveedor]);
 
   const cambiarPagina = (nuevaPagina: number) => {
     if (nuevaPagina < 1 || nuevaPagina > meta.totalPages) return;

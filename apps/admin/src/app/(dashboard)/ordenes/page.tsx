@@ -29,6 +29,7 @@ import {
 } from '@/features/ordenes';
 import { ProgresoRegistroBadge } from '@/features/ordenes/components/progreso-registro-badge';
 import { useTiposServicio, useTecnicosSelector } from '@/features/ordenes/hooks/use-catalogos';
+import { readPersistedFilterParams, writePersistedFilterParams } from '@/lib/navigation-filter-memory';
 import { cn, formatDateSafe } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
 import {
@@ -434,20 +435,76 @@ function OrdenesPageContent() {
 
     // ✅ DEBOUNCE: Esperar 400ms después de que el usuario deje de escribir
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
-    const isInitialMount = useRef(true);
+    const isHydratedRef = useRef(false);
+
+    // ✅ MEMORIA DE NAVEGACIÓN: si el usuario vuelve con botón interno (/ordenes sin query params),
+    // restaurar desde sessionStorage (sin pisar query params explícitos de la URL)
     useEffect(() => {
+        if (typeof window !== 'undefined' && (!window.location.search || window.location.search.length <= 1)) {
+            const saved = readPersistedFilterParams('/ordenes');
+            if (saved.toString()) {
+                const pageParam = Number(saved.get('page'));
+                const q = saved.get('busqueda') || '';
+                const estado = saved.get('estado') || '';
+                const prioridad = saved.get('prioridad') || '';
+                const tecnico = saved.get('tecnico') || '';
+                const fDesde = saved.get('fechaDesde') || '';
+                const fHasta = saved.get('fechaHasta') || '';
+                const sortByParam = saved.get('sortBy') as 'fecha_creacion' | 'fecha_programada' | 'numero_orden' | null;
+                const sortOrderParam = saved.get('sortOrder') as 'asc' | 'desc' | null;
+                const tipoServ = saved.get('tipoServicio') || '';
+                const servEsp = saved.get('servicio') || saved.get('idServicio') || '';
+                const servTxt = saved.get('servicioTexto') || '';
+                const adv = saved.get('advanced') === 'true' || Boolean(servEsp) || Boolean(servTxt);
+
+                if (Number.isInteger(pageParam) && pageParam >= 1) setPage(pageParam);
+                if (q) {
+                    setBusqueda(q);
+                    setBusquedaDebounced(q);
+                }
+                if (estado) setFiltroEstado(estado);
+                if (prioridad) setFiltroPrioridad(prioridad);
+                if (tecnico) setFiltroTecnico(tecnico);
+                if (fDesde) setFechaDesde(fDesde);
+                if (fHasta) setFechaHasta(fHasta);
+
+                const savedCaract: FiltrosCaracteristicas = {};
+                for (const c of CARACTERISTICAS_ORDEN_REGISTRY) {
+                    const val = saved.get(`caract_${c.id}`);
+                    if (val === 'CON' || val === 'SIN') {
+                        savedCaract[c.id] = val;
+                    }
+                }
+                if (Object.keys(savedCaract).length > 0) setFiltrosCaracteristicas(savedCaract);
+
+                if (sortByParam && ['fecha_creacion', 'fecha_programada', 'numero_orden'].includes(sortByParam)) {
+                    setSortBy(sortByParam);
+                }
+                if (sortOrderParam && (sortOrderParam === 'asc' || sortOrderParam === 'desc')) {
+                    setSortOrder(sortOrderParam);
+                }
+                if (tipoServ) setFiltroTipoServicio(tipoServ);
+                if (servEsp) setFiltroServicioEspecifico(servEsp);
+                if (servTxt) setFiltroServicioTexto(servTxt);
+                if (adv) setShowAdvancedFilters(true);
+            }
+        }
+        isHydratedRef.current = true;
+    }, []);
+
+    useEffect(() => {
+        if (busqueda.trim() === busquedaDebounced) return;
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
             setBusquedaDebounced(busqueda.trim());
             setPage(1);
         }, 400);
         return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-    }, [busqueda]);
+    }, [busqueda, busquedaDebounced]);
 
-    // ✅ PERSISTENCIA: Actualizar URL cuando cambian los filtros (evitar en el primer mount)
+    // ✅ PERSISTENCIA: Actualizar URL + sessionStorage cuando cambian los filtros
     useEffect(() => {
-        if (isInitialMount.current) {
-            isInitialMount.current = false;
+        if (!isHydratedRef.current) {
             return;
         }
 
@@ -469,13 +526,7 @@ function OrdenesPageContent() {
         if (filtroServicioTexto) params.set('servicioTexto', filtroServicioTexto);
         if (showAdvancedFilters) params.set('advanced', 'true');
 
-        const queryString = params.toString();
-        const newPath = queryString ? `/ordenes?${queryString}` : '/ordenes';
-        // ⚡ 04-NOV-2026: actualizar la URL SIN navegación RSC.
-        // `router.replace()` generaba un round-trip al servidor de Next en cada
-        // cambio de filtros/búsqueda. Con replaceState la URL se actualiza igual
-        // (compartir/recargar) pero sin re-render de servidor.
-        window.history.replaceState(null, '', newPath);
+        writePersistedFilterParams('/ordenes', '/ordenes', params);
     }, [page, busquedaDebounced, filtroEstado, filtroPrioridad, filtroTecnico, fechaDesde, fechaHasta, filtrosCaracteristicas, sortBy, sortOrder, filtroTipoServicio, filtroServicioEspecifico, filtroServicioTexto, showAdvancedFilters]);
 
     const pageSize = 12;

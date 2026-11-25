@@ -13,6 +13,7 @@
 
 import type { EquipoListItem, TipoEquipo } from '@/features/equipos';
 import { EquipoForm, useEliminarEquipoCompletamente, useEquipos, useFacetasEquipos } from '@/features/equipos';
+import { readPersistedFilterParams, writePersistedFilterParams } from '@/lib/navigation-filter-memory';
 import { cn } from '@/lib/utils';
 import {
   Activity,
@@ -558,21 +559,86 @@ export default function EquiposPage() {
   const [filtroValorExacto, setFiltroValorExacto] = useState<string>('');
   const [filtroValorTabla, setFiltroValorTabla] = useState<string>('');
 
-  // Debounce para valor de marca
+  // Debounce para valor de marca (sin resetear página durante hidratación)
   const [debouncedMarcaValor, setDebouncedMarcaValor] = useState('');
+  const hydratedRef = useRef(false);
+
+  // Restaurar filtros, vista, orden y página al regresar desde /equipos/[id]
   useEffect(() => {
+    const params = readPersistedFilterParams('/equipos');
+    const q = params.get('q') || '';
+    const tipo = params.get('tipo') || '';
+    const estado = params.get('estado') || '';
+    const pageParam = Number(params.get('page'));
+    const sort = params.get('sort') as SortBy | null;
+    const dir = params.get('dir') as SortOrder | null;
+    const view = params.get('view') as 'grid' | 'list' | null;
+    const adv = params.get('adv') === '1';
+    const mc = params.get('mc') || '';
+    const mv = params.get('mv') || '';
+    const mt = params.get('mt') || '';
+    const vc = params.get('vc') || '';
+    const vminRaw = params.get('vmin');
+    const vmaxRaw = params.get('vmax');
+    const vex = params.get('vex') || '';
+    const vt = params.get('vt') || '';
+
+    if (q) {
+      setSearchInput(q);
+      setDebouncedSearch(q);
+    }
+    if (tipo) setTipoFiltro(tipo);
+    if (estado) setEstadoFiltro(estado);
+    if (Number.isInteger(pageParam) && pageParam >= 1) setPage(pageParam);
+    if (sort && ['codigo', 'nombre', 'fecha'].includes(sort)) setSortBy(sort);
+    if (dir && (dir === 'asc' || dir === 'desc')) setSortOrder(dir);
+    if (view && (view === 'grid' || view === 'list')) setViewMode(view);
+    if (adv || mc || vc) setShowAdvancedFilters(true);
+    if (mc) setFiltroMarcaCampo(mc);
+    if (mv) {
+      setFiltroMarcaValor(mv);
+      setDebouncedMarcaValor(mv);
+    }
+    if (mt) setFiltroMarcaTabla(mt);
+    if (vc) setFiltroValorCampo(vc);
+    if (vminRaw !== null && vminRaw !== '' && !Number.isNaN(Number(vminRaw))) {
+      setFiltroValorMin(Number(vminRaw));
+      setDebouncedValorMin(Number(vminRaw));
+    }
+    if (vmaxRaw !== null && vmaxRaw !== '' && !Number.isNaN(Number(vmaxRaw))) {
+      setFiltroValorMax(Number(vmaxRaw));
+      setDebouncedValorMax(Number(vmaxRaw));
+    }
+    if (vex) {
+      setFiltroValorExacto(vex);
+      setDebouncedValorExacto(vex);
+    }
+    if (vt) setFiltroValorTabla(vt);
+
+    hydratedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (filtroMarcaValor === debouncedMarcaValor) return;
     const timer = setTimeout(() => {
       setDebouncedMarcaValor(filtroMarcaValor);
       setPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [filtroMarcaValor]);
+  }, [filtroMarcaValor, debouncedMarcaValor]);
 
   // Debounce para valores de trabajo
   const [debouncedValorMin, setDebouncedValorMin] = useState<number | ''>('');
   const [debouncedValorMax, setDebouncedValorMax] = useState<number | ''>('');
   const [debouncedValorExacto, setDebouncedValorExacto] = useState<string>('');
   useEffect(() => {
+    if (
+      filtroValorMin === debouncedValorMin &&
+      filtroValorMax === debouncedValorMax &&
+      filtroValorExacto === debouncedValorExacto
+    ) {
+      return;
+    }
     const timer = setTimeout(() => {
       setDebouncedValorMin(filtroValorMin);
       setDebouncedValorMax(filtroValorMax);
@@ -580,7 +646,14 @@ export default function EquiposPage() {
       setPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [filtroValorMin, filtroValorMax, filtroValorExacto]);
+  }, [
+    filtroValorMin,
+    filtroValorMax,
+    filtroValorExacto,
+    debouncedValorMin,
+    debouncedValorMax,
+    debouncedValorExacto,
+  ]);
 
   // Carga reactiva de facetas técnicas según el tipo de equipo activo
   const { data: facetasData } = useFacetasEquipos(tipoFiltro);
@@ -647,12 +720,53 @@ export default function EquiposPage() {
   }, []);
 
   useEffect(() => {
+    if (searchInput === debouncedSearch) return;
     const timer = setTimeout(() => {
       setDebouncedSearch(searchInput);
       setPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, debouncedSearch]);
+
+  // Persistir filtros activos en URL y sessionStorage
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set('q', debouncedSearch);
+    if (tipoFiltro) params.set('tipo', tipoFiltro);
+    if (estadoFiltro) params.set('estado', estadoFiltro);
+    if (page > 1) params.set('page', String(page));
+    if (sortBy !== 'codigo') params.set('sort', sortBy);
+    if (sortOrder !== 'asc') params.set('dir', sortOrder);
+    if (viewMode !== 'grid') params.set('view', viewMode);
+    if (showAdvancedFilters) params.set('adv', '1');
+    if (filtroMarcaCampo) params.set('mc', filtroMarcaCampo);
+    if (debouncedMarcaValor) params.set('mv', debouncedMarcaValor);
+    if (filtroMarcaTabla) params.set('mt', filtroMarcaTabla);
+    if (filtroValorCampo) params.set('vc', filtroValorCampo);
+    if (debouncedValorMin !== '') params.set('vmin', String(debouncedValorMin));
+    if (debouncedValorMax !== '') params.set('vmax', String(debouncedValorMax));
+    if (debouncedValorExacto) params.set('vex', debouncedValorExacto);
+    if (filtroValorTabla) params.set('vt', filtroValorTabla);
+    writePersistedFilterParams('/equipos', '/equipos', params);
+  }, [
+    debouncedSearch,
+    tipoFiltro,
+    estadoFiltro,
+    page,
+    sortBy,
+    sortOrder,
+    viewMode,
+    showAdvancedFilters,
+    filtroMarcaCampo,
+    debouncedMarcaValor,
+    filtroMarcaTabla,
+    filtroValorCampo,
+    debouncedValorMin,
+    debouncedValorMax,
+    debouncedValorExacto,
+    filtroValorTabla,
+  ]);
 
   const { data, isLoading, isError, refetch, isFetching } = useEquipos({
     page,

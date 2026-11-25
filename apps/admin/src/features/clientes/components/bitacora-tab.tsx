@@ -41,6 +41,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  AlertTriangle,
   BookOpen,
   Building2,
   Calendar,
@@ -48,19 +49,24 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   Eye,
   FileText,
+  Filter,
   Info,
   Loader2,
   Mail,
+  MailCheck,
   Pencil,
   Plus,
   Send,
   Trash2,
+  X,
   XCircle
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import type { InformePreview, SedeGroup } from '../api/bitacoras.service';
+import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { BitacoraHistorial, InformeHistorialBitacora, InformePreview, SedeGroup } from '../api/bitacoras.service';
 import { useBitacoraHistorial, useBitacoraPreview, useEnviarBitacora, useMesesDisponibles } from '../hooks/use-bitacoras';
 import { apiClient } from '@/lib/api';
 import { previsualizarInformeAutenticado } from '@/lib/pdf-naming';
@@ -86,7 +92,6 @@ const MESES = [
 ];
 
 const CATEGORIAS = [
-  { value: '', label: 'Todas las categorías' },
   { value: 'ENERGIA', label: 'Plantas Eléctricas' },
   { value: 'HIDRAULICA', label: 'Bombas' },
   { value: 'CLIMATIZACION', label: 'Climatización' },
@@ -94,7 +99,6 @@ const CATEGORIAS = [
 ];
 
 const TIPOS_SERVICIO = [
-  { value: '', label: 'Todos los tipos' },
   { value: 'GEN_PREV_A', label: 'Preventivo Tipo A - Generador' },
   { value: 'GEN_PREV_B', label: 'Preventivo Tipo B - Generador' },
   { value: 'BOM_PREV_A', label: 'Preventivo Tipo A - Bomba' },
@@ -107,16 +111,141 @@ const TIPOS_SERVICIO = [
   { value: 'INSPECCION', label: 'Visita de Inspección' },
 ];
 
+interface MultiCheckOption {
+  value: string;
+  label: string;
+}
+
+function MultiCheckDropdown({
+  options,
+  selected,
+  onChange,
+  allLabel,
+  placeholder,
+}: {
+  options: MultiCheckOption[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  allLabel: string;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [open]);
+
+  const toggleValue = (val: string) => {
+    if (selected.includes(val)) {
+      onChange(selected.filter((v) => v !== val));
+    } else {
+      onChange([...selected, val]);
+    }
+  };
+
+  const summaryText = useMemo(() => {
+    if (selected.length === 0) return allLabel;
+    if (selected.length === 1) {
+      return options.find((o) => o.value === selected[0])?.label || selected[0];
+    }
+    if (selected.length === 2) {
+      return selected
+        .map((v) => options.find((o) => o.value === v)?.label || v)
+        .join(', ');
+    }
+    return `${selected.length} seleccionados`;
+  }, [selected, options, allLabel]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex h-10 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        title={summaryText}
+      >
+        <span className="truncate text-left flex-1">
+          {summaryText || placeholder}
+        </span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {selected.length > 0 && (
+            <span className="inline-flex items-center justify-center rounded-full bg-blue-100 text-blue-700 px-1.5 py-0.5 text-[10px] font-bold leading-none">
+              {selected.length}
+            </span>
+          )}
+          <ChevronDown className={`h-4 w-4 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-50 mt-1.5 rounded-lg border bg-popover text-popover-foreground shadow-lg p-1.5 min-w-[230px]">
+          <div className="flex items-center justify-between px-2 py-1.5 border-b mb-1">
+            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer flex-1">
+              <Checkbox
+                checked={selected.length === 0}
+                onCheckedChange={() => onChange([])}
+              />
+              <span>{allLabel}</span>
+            </label>
+            {selected.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-[11px] text-blue-600 hover:underline font-medium flex items-center gap-0.5"
+              >
+                <X className="h-3 w-3" />
+                Limpiar
+              </button>
+            )}
+          </div>
+          <div className="max-h-60 overflow-y-auto space-y-0.5">
+            {options.map((opt) => {
+              const checked = selected.includes(opt.value);
+              return (
+                <label
+                  key={opt.value}
+                  className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md text-xs cursor-pointer transition-colors ${
+                    checked ? 'bg-blue-50 text-blue-900 font-medium' : 'hover:bg-accent'
+                  }`}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => toggleValue(opt.value)}
+                  />
+                  <span className="truncate flex-1">{opt.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   const now = new Date();
   const [mes, setMes] = useState(now.getMonth() + 1);
   const [anio, setAnio] = useState(now.getFullYear());
-  const [categoria, setCategoria] = useState('ENERGIA');
-  const [tipoServicio, setTipoServicio] = useState('');
+  const [categorias, setCategorias] = useState<string[]>(['ENERGIA']);
+  const [tiposServicio, setTiposServicio] = useState<string[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [nombresCustom, setNombresCustom] = useState<Record<number, string>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedSedes, setExpandedSedes] = useState<Set<number>>(new Set());
+  const [expandedHistorial, setExpandedHistorial] = useState<Set<number>>(new Set());
+  const [previewingDocId, setPreviewingDocId] = useState<number | null>(null);
+
+  const categoriaQuery = useMemo(() => (categorias.length > 0 ? categorias.join(',') : undefined), [categorias]);
+  const tipoServicioQuery = useMemo(() => (tiposServicio.length > 0 ? tiposServicio.join(',') : undefined), [tiposServicio]);
 
   // ✅ NUEVO: Modo rango de fechas
   const [modoRango, setModoRango] = useState(false);
@@ -146,17 +275,17 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
     error: previewError,
     refetch: refetchPreview,
   } = useBitacoraPreview(
-    clienteId, mes, anio, categoria || undefined,
+    clienteId, mes, anio, categoriaQuery,
     { enabled: showPreview },
     modoRango ? fechaInicio : undefined,
     modoRango ? fechaFin : undefined,
-    tipoServicio || undefined,
+    tipoServicioQuery,
   );
 
   const { data: historial, isLoading: loadingHistorial } = useBitacoraHistorial(clienteId);
 
   const { data: mesesData, isLoading: loadingMeses } = useMesesDisponibles(
-    clienteId, categoria || undefined, undefined, tipoServicio || undefined,
+    clienteId, categoriaQuery, undefined, tipoServicioQuery,
   );
 
   const enviarMutation = useEnviarBitacora();
@@ -222,12 +351,53 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
     });
   };
 
+  const documentosYaEnviados = useMemo(
+    () => documentosDisponibles.filter((d) => Boolean(d.ya_enviado)),
+    [documentosDisponibles],
+  );
+
+  const documentosPendientesEnvio = useMemo(
+    () => documentosDisponibles.filter((d) => !d.ya_enviado),
+    [documentosDisponibles],
+  );
+
   const seleccionarTodos = () => {
     setDocumentosSeleccionados(new Set(documentosDisponibles.map(d => d.id_documento)));
   };
 
+  const seleccionarSoloPendientes = () => {
+    setDocumentosSeleccionados(new Set(documentosPendientesEnvio.map(d => d.id_documento)));
+  };
+
   const deseleccionarTodos = () => {
     setDocumentosSeleccionados(new Set());
+  };
+
+  const toggleHistorialItem = (idBitacora: number) => {
+    setExpandedHistorial((prev) => {
+      const next = new Set(prev);
+      if (next.has(idBitacora)) next.delete(idBitacora);
+      else next.add(idBitacora);
+      return next;
+    });
+  };
+
+  const handleVerPdfHistorial = async (inf: InformeHistorialBitacora) => {
+    if (inf.id_documento) {
+      setPreviewingDocId(inf.id_documento);
+      try {
+        await previsualizarInformeAutenticado(apiClient, inf.id_documento);
+      } catch (error) {
+        console.error('[Bitácora Historial] Error visualizando informe:', error);
+        if (inf.pdf_url) window.open(inf.pdf_url, '_blank', 'noopener,noreferrer');
+      } finally {
+        setPreviewingDocId(null);
+      }
+      return;
+    }
+    if (inf.pdf_url) {
+      window.open(inf.pdf_url, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const seleccionarSede = (sede: SedeGroup, seleccionar: boolean) => {
@@ -315,7 +485,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         id_cliente_principal: clienteId,
         mes,
         anio,
-        categoria: categoria || 'TODAS',
+        categoria: categoriaQuery || 'TODAS',
         // ✅ NUEVO: Solo enviar documentos seleccionados
         documentos_ids: Array.from(documentosSeleccionados),
         nombres_pdf: Object.keys(nombresCustom).length > 0 ? nombresCustom : undefined,
@@ -354,8 +524,15 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   };
 
   const mesLabel = MESES.find(m => m.value === mes)?.label || '';
-  const catLabel = CATEGORIAS.find(c => c.value === categoria)?.label || 'Todas';
-  const tipoServicioLabel = TIPOS_SERVICIO.find(t => t.value === tipoServicio)?.label || 'Todos';
+  const catLabel =
+    categorias.length === 0
+      ? 'Todas las categorías'
+      : categorias.map((c) => CATEGORIAS.find((item) => item.value === c)?.label || c).join(', ');
+  const tipoServicioLabel =
+    tiposServicio.length === 0
+      ? 'Todos los tipos'
+      : tiposServicio.map((t) => TIPOS_SERVICIO.find((item) => item.value === t)?.label || t).join(', ');
+  const periodoResumen = modoRango && fechaInicio && fechaFin ? `${fechaInicio} a ${fechaFin}` : `${mesLabel} ${anio}`;
 
   // Años disponibles
   const anios = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
@@ -415,30 +592,24 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
               <div className="space-y-2">
                 <Label>Tipo de Equipo</Label>
-                <Select value={categoria} onValueChange={v => setCategoria(v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIAS.map(c => (
-                      <SelectItem key={c.value} value={c.value || '_all'}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiCheckDropdown
+                  options={CATEGORIAS}
+                  selected={categorias}
+                  onChange={setCategorias}
+                  allLabel="Todas las categorías"
+                  placeholder="Seleccionar equipos..."
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>Tipo de Servicio</Label>
-                <Select value={tipoServicio || '_all'} onValueChange={v => setTipoServicio(v === '_all' ? '' : v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_SERVICIO.map(t => (
-                      <SelectItem key={t.value} value={t.value || '_all'}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiCheckDropdown
+                  options={TIPOS_SERVICIO}
+                  selected={tiposServicio}
+                  onChange={setTiposServicio}
+                  allLabel="Todos los tipos"
+                  placeholder="Seleccionar servicios..."
+                />
               </div>
 
               <Button onClick={handleBuscar} disabled={loadingPreview || !fechaInicio || !fechaFin}>
@@ -482,30 +653,24 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
               <div className="space-y-2">
                 <Label>Tipo de Equipo</Label>
-                <Select value={categoria} onValueChange={v => setCategoria(v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIAS.map(c => (
-                      <SelectItem key={c.value} value={c.value || '_all'}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiCheckDropdown
+                  options={CATEGORIAS}
+                  selected={categorias}
+                  onChange={setCategorias}
+                  allLabel="Todas las categorías"
+                  placeholder="Seleccionar equipos..."
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>Tipo de Servicio</Label>
-                <Select value={tipoServicio || '_all'} onValueChange={v => setTipoServicio(v === '_all' ? '' : v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_SERVICIO.map(t => (
-                      <SelectItem key={t.value} value={t.value || '_all'}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiCheckDropdown
+                  options={TIPOS_SERVICIO}
+                  selected={tiposServicio}
+                  onChange={setTiposServicio}
+                  allLabel="Todos los tipos"
+                  placeholder="Seleccionar servicios..."
+                />
               </div>
 
               <Button onClick={handleBuscar} disabled={loadingPreview}>
@@ -529,7 +694,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
               <Info className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
               <div>
                 <p className="text-sm font-medium text-amber-900">
-                  Meses con informes disponibles ({catLabel})
+                  Meses con informes disponibles ({catLabel}{tiposServicio.length > 0 ? ` · ${tipoServicioLabel}` : ''})
                 </p>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {mesesData.meses.map(m => {
@@ -560,8 +725,9 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
             <div className="flex items-center gap-2">
               <Info className="h-4 w-4 text-orange-500" />
               <p className="text-sm text-orange-800">
-                No hay informes generados para <strong>{catLabel}</strong> en este cliente.
-                {categoria && ' Pruebe con otra categoría o "Todas las categorías".'}
+                No hay informes generados para <strong>{catLabel}</strong>
+                {tiposServicio.length > 0 && <> ({tipoServicioLabel})</>} en este cliente.
+                {(categorias.length > 0 || tiposServicio.length > 0) && ' Pruebe ampliando los filtros seleccionados.'}
               </p>
             </div>
           </CardContent>
@@ -607,27 +773,77 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
       {/* Preview de informes */}
       {preview && showPreview && !loadingPreview && (
         <>
-          {/* Resumen con controles de selección */}
+          {/* Resumen con controles de selección y alerta proactiva de informes ya enviados */}
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <CardTitle className="text-lg">
-                  {catLabel} - {mesLabel} {anio}
+                  {catLabel} - {periodoResumen}
                 </CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{preview.total_informes} informes</Badge>
                   <Badge variant={preview.total_con_pdf === preview.total_informes ? 'default' : 'destructive'}>
                     {preview.total_con_pdf} con PDF
                   </Badge>
+                  {documentosYaEnviados.length > 0 && (
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300">
+                      <MailCheck className="h-3 w-3 mr-1" />
+                      {documentosYaEnviados.length} ya enviado(s)
+                    </Badge>
+                  )}
+                  {documentosPendientesEnvio.length > 0 && documentosYaEnviados.length > 0 && (
+                    <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">
+                      {documentosPendientesEnvio.length} pendiente(s)
+                    </Badge>
+                  )}
                   {preview.total_sin_pdf > 0 && (
                     <Badge variant="destructive">{preview.total_sin_pdf} sin PDF</Badge>
                   )}
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* ✅ NUEVO: Controles de selección masiva */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <CardContent className="space-y-3">
+              {/* ✅ Banner proactivo cuando existen informes ya enviados en bitácora u orden */}
+              {documentosYaEnviados.length > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50/80">
+                  <div className="flex items-start gap-2.5 text-xs text-amber-900">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold">
+                        {documentosYaEnviados.length} de {documentosDisponibles.length} informe(s) ya fueron enviados anteriormente
+                      </p>
+                      <p className="text-amber-800 mt-0.5">
+                        Cada fila muestra si el informe ya salió en otra bitácora o tiene el envío registrado en su orden (✉️). Puede excluirlos en un clic para evitar duplicados.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={seleccionarSoloPendientes}
+                      disabled={documentosPendientesEnvio.length === 0}
+                      className="h-8 text-xs bg-white border-amber-300 text-amber-900 hover:bg-amber-100"
+                    >
+                      <Filter className="h-3.5 w-3.5 mr-1.5" />
+                      Solo pendientes ({documentosPendientesEnvio.length})
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={seleccionarTodos}
+                      className="h-8 text-xs text-amber-900 hover:bg-amber-100"
+                    >
+                      Todos ({documentosDisponibles.length})
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Controles de selección masiva */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <Checkbox
@@ -741,12 +957,19 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         </>
       )}
 
-      {/* Historial */}
+      {/* Historial de Bitácoras con desglose expandible de informes enviados */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Calendar className="h-4 w-4" />
-            Historial de Bitácoras
+          <CardTitle className="flex items-center justify-between gap-2 text-base">
+            <span className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Historial de Bitácoras
+            </span>
+            {historial && historial.length > 0 && (
+              <Badge variant="outline" className="text-[11px] font-normal">
+                {historial.length} envío(s) registrados · clic para ver informes
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -757,33 +980,165 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
               No hay bitácoras enviadas anteriormente
             </p>
           ) : (
-            <div className="space-y-2">
-              {historial.map(b => (
-                <div
-                  key={b.id_bitacora}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">{b.numero_bitacora}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {MESES.find(m => m.value === b.mes)?.label} {b.anio} - {b.cantidad_informes} informes
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={b.estado_bitacora === 'ENVIADA' ? 'default' : b.estado_bitacora === 'APROBADA' ? 'default' : 'secondary'}>
-                      {b.estado_bitacora}
-                    </Badge>
-                    {b.enviada_cliente_fecha && (
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(b.enviada_cliente_fecha).toLocaleDateString('es-CO')}
-                      </span>
+            <div className="space-y-2.5">
+              {historial.map((b: BitacoraHistorial) => {
+                const isExpanded = expandedHistorial.has(b.id_bitacora);
+                const informesLista = b.informes_enviados || [];
+                const fechaEnvioTexto = b.enviada_cliente_fecha
+                  ? new Date(b.enviada_cliente_fecha).toLocaleString('es-CO', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : null;
+
+                return (
+                  <div
+                    key={b.id_bitacora}
+                    className="rounded-lg border bg-card overflow-hidden transition-colors"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleHistorialItem(b.id_bitacora)}
+                      className="w-full flex items-center justify-between gap-3 p-3 text-left hover:bg-accent/40 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        )}
+                        <FileText className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold font-mono">{b.numero_bitacora}</p>
+                            <Badge variant="outline" className="text-[10px]">
+                              {b.cantidad_informes} informe(s)
+                            </Badge>
+                            {informesLista.length > 0 && (
+                              <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+                                {informesLista.length} con trazabilidad
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            {MESES.find(m => m.value === b.mes)?.label} {b.anio}
+                            {b.observaciones ? ` · ${b.observaciones}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Badge
+                          variant={b.estado_bitacora === 'ENVIADA' || b.estado_bitacora === 'APROBADA' ? 'default' : 'secondary'}
+                          className={b.estado_bitacora === 'ENVIADA' ? 'bg-emerald-600' : ''}
+                        >
+                          {b.estado_bitacora}
+                        </Badge>
+                        {fechaEnvioTexto && (
+                          <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
+                            {fechaEnvioTexto}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t bg-slate-50/70 px-4 py-3 space-y-2">
+                        {informesLista.length > 0 ? (
+                          <>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              Informes enviados en {b.numero_bitacora} ({informesLista.length})
+                            </p>
+                            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                              {informesLista.map((inf) => (
+                                <div
+                                  key={`${b.id_bitacora}-${inf.id_informe}`}
+                                  className="flex items-center justify-between gap-2 p-2 rounded-md border bg-white text-xs"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                    <span className="text-[10px] font-mono text-slate-400 w-5 text-right flex-shrink-0">
+                                      #{inf.orden_bitacora}
+                                    </span>
+                                    <Link
+                                      href={`/ordenes/${inf.id_orden_servicio}`}
+                                      className="font-mono font-semibold text-blue-700 hover:underline inline-flex items-center gap-1 flex-shrink-0"
+                                      title="Abrir orden de servicio"
+                                    >
+                                      {inf.numero_orden}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </Link>
+                                    <span className="text-slate-300">|</span>
+                                    <span className="font-medium text-slate-800 truncate" title={inf.equipo_nombre}>
+                                      {inf.equipo_nombre}
+                                    </span>
+                                    {inf.nombre_sede && (
+                                      <>
+                                        <span className="text-slate-300 hidden md:inline">|</span>
+                                        <span className="text-slate-500 truncate hidden md:inline">
+                                          {inf.nombre_sede}
+                                        </span>
+                                      </>
+                                    )}
+                                    {inf.tipo_servicio && (
+                                      <>
+                                        <span className="text-slate-300 hidden lg:inline">|</span>
+                                        <span className="text-slate-500 truncate hidden lg:inline">
+                                          {inf.tipo_servicio}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    {inf.fecha_servicio && (
+                                      <span className="text-[11px] text-slate-500 whitespace-nowrap">
+                                        {new Date(inf.fecha_servicio).toLocaleDateString('es-CO', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric',
+                                        })}
+                                      </span>
+                                    )}
+                                    {(inf.id_documento || inf.pdf_url) && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleVerPdfHistorial(inf)}
+                                        disabled={previewingDocId === inf.id_documento}
+                                        className="h-6 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                        title="Ver PDF enviado"
+                                      >
+                                        {previewingDocId === inf.id_documento ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <>
+                                            <Eye className="h-3 w-3 mr-1" />
+                                            <span className="text-[10px]">PDF</span>
+                                          </>
+                                        )}
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs text-slate-500 py-1">
+                            <Info className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                            <span>
+                              Bitácora histórica anterior al registro detallado de informes por envío
+                              {fechaEnvioTexto ? ` · Enviada el ${fechaEnvioTexto}` : ''}.
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -1044,6 +1399,7 @@ function SedeCard({
   // Verificar si todos los documentos de esta sede están seleccionados
   const todosSeleccionados = sede.informes.every(i => documentosSeleccionados.has(i.id_documento));
   const algunoSeleccionado = sede.informes.some(i => documentosSeleccionados.has(i.id_documento));
+  const totalEnviadosSede = sede.informes.filter(i => Boolean(i.ya_enviado)).length;
 
   return (
     <Card>
@@ -1051,7 +1407,7 @@ function SedeCard({
         onClick={onToggle}
         className="w-full flex items-center justify-between p-4 hover:bg-accent/50 transition-colors rounded-t-lg cursor-pointer"
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           <Checkbox
             checked={todosSeleccionados}
@@ -1066,6 +1422,12 @@ function SedeCard({
           <Badge variant="outline" className="text-[10px]">
             {sede.informes.filter(i => documentosSeleccionados.has(i.id_documento)).length} / {sede.informes.length} seleccionados
           </Badge>
+          {totalEnviadosSede > 0 && (
+            <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+              <MailCheck className="h-3 w-3 mr-1" />
+              {totalEnviadosSede} ya enviado(s)
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline">{sede.informes.length} informe(s)</Badge>
@@ -1159,8 +1521,31 @@ function InformeRow({
   // Determina si hay PDF disponible
   const tienePdf = Boolean(informe.pdf_url) || Boolean(informe.id_documento);
 
+  const bitacorasPrevias = informe.bitacoras_previas || [];
+  const totalEmailsOrden = informe.total_emails_enviados || 0;
+  const yaEnviadoBitacora = Boolean(informe.ya_enviado_en_bitacora && bitacorasPrevias.length > 0);
+  const yaEnviadoOrden = Boolean(informe.ya_enviado_en_orden || totalEmailsOrden > 0);
+  const yaEnviado = Boolean(informe.ya_enviado || yaEnviadoBitacora || yaEnviadoOrden);
+
+  const tooltipBitacoras = bitacorasPrevias
+    .map((b) => {
+      const f = b.fecha_envio ? new Date(b.fecha_envio).toLocaleDateString('es-CO') : `${b.mes}/${b.anio}`;
+      return `${b.numero_bitacora} (${f})`;
+    })
+    .join(', ');
+
   return (
-    <div className={`flex items-center gap-3 p-2.5 rounded-lg border bg-white transition-colors ${isSelected ? 'border-blue-300 bg-blue-50/30' : ''}`}>
+    <div
+      className={`flex items-center gap-3 p-2.5 rounded-lg border bg-white transition-colors ${
+        isSelected
+          ? yaEnviado
+            ? 'border-amber-300 bg-amber-50/30'
+            : 'border-blue-300 bg-blue-50/30'
+          : yaEnviado
+            ? 'border-emerald-200/80 bg-emerald-50/20'
+            : ''
+      }`}
+    >
       {/* ✅ NUEVO: Checkbox de selección */}
       <Checkbox
         checked={isSelected}
@@ -1168,7 +1553,7 @@ function InformeRow({
         className="flex-shrink-0"
       />
 
-      <FileText className="h-4 w-4 flex-shrink-0 text-green-600" />
+      <FileText className={`h-4 w-4 flex-shrink-0 ${yaEnviado ? 'text-emerald-600' : 'text-green-600'}`} />
 
       <div className="flex-1 min-w-0">
         {isEditing ? (
@@ -1197,14 +1582,52 @@ function InformeRow({
             </button>
           </div>
         )}
-        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-          <span>{informe.numero_orden}</span>
+        <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground">
+          <Link
+            href={`/ordenes/${informe.id_orden_servicio}`}
+            onClick={(e) => e.stopPropagation()}
+            className="font-mono font-semibold text-blue-700 hover:underline inline-flex items-center gap-0.5"
+            title="Ver orden de servicio"
+          >
+            {informe.numero_orden}
+            <ExternalLink className="h-2.5 w-2.5" />
+          </Link>
           <span>|</span>
           <span>{informe.equipo_nombre}</span>
           <span>|</span>
           <span>{informe.tipo_servicio || 'N/A'}</span>
           <span>|</span>
           <span>{fechaStr}</span>
+
+          {/* ✅ Badges proactivos de envío previo */}
+          {yaEnviadoBitacora && (
+            <span
+              title={`Enviado previamente en bitácora(s): ${tooltipBitacoras}`}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+            >
+              <BookOpen className="h-2.5 w-2.5" />
+              {bitacorasPrevias[0].numero_bitacora}
+              {bitacorasPrevias.length > 1 ? ` +${bitacorasPrevias.length - 1}` : ''}
+            </span>
+          )}
+          {yaEnviadoOrden && (
+            <span
+              title={
+                informe.ultimo_envio_fecha
+                  ? `Último envío registrado en la orden: ${new Date(informe.ultimo_envio_fecha).toLocaleString('es-CO')}`
+                  : 'Orden con envío de informe registrado'
+              }
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
+            >
+              <Mail className="h-2.5 w-2.5" />
+              Enviado ({totalEmailsOrden})
+            </span>
+          )}
+          {!yaEnviado && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+              Sin enviar
+            </span>
+          )}
         </div>
       </div>
 

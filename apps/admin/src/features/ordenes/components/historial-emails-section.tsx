@@ -70,6 +70,7 @@ export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps)
             'MANUAL': 'Envío Manual',
             'REENVIO': 'Reenvío',
             'SISTEMA': 'Sistema Automático',
+            'BITACORA': 'Envío por Bitácora Mensual',
         };
         return origenes[origen] || origen;
     };

@@ -26,6 +26,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { readPersistedFilterParams, writePersistedFilterParams } from '@/lib/navigation-filter-memory';
 import { formatDateSafe } from '@/lib/utils';
 import {
   PERIODICIDAD_LABELS,
@@ -68,7 +69,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useCliente } from '../hooks/use-clientes';
 import { BitacoraTab } from './bitacora-tab';
@@ -83,7 +84,26 @@ interface ClienteDetailProps {
 export function ClienteDetail({ clienteId }: ClienteDetailProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'general' | 'trazabilidad' | 'bitacora'>('general');
+  const tabHydratedRef = useRef(false);
   const { data: cliente, isLoading, isError, error } = useCliente(clienteId);
+
+  useEffect(() => {
+    const routeKey = `/clientes/${clienteId}`;
+    const params = readPersistedFilterParams(routeKey);
+    const savedTab = params.get('tab');
+    if (savedTab === 'general' || savedTab === 'trazabilidad' || savedTab === 'bitacora') {
+      setActiveTab(savedTab);
+    }
+    tabHydratedRef.current = true;
+  }, [clienteId]);
+
+  useEffect(() => {
+    if (!tabHydratedRef.current) return;
+    const routeKey = `/clientes/${clienteId}`;
+    const params = new URLSearchParams();
+    if (activeTab !== 'general') params.set('tab', activeTab);
+    writePersistedFilterParams(routeKey, routeKey, params);
+  }, [clienteId, activeTab]);
 
   // Loading
   if (isLoading) {

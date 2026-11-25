@@ -24,6 +24,7 @@ import {
 } from '@/features/inventario/api/inventario-motor.service';
 import { BodegaModal } from '@/features/inventario/components/BodegaModal';
 import { MovimientoModal, TipoOperacionInventario } from '@/features/inventario/components/MovimientoModal';
+import { readPersistedFilterParams, writePersistedFilterParams } from '@/lib/navigation-filter-memory';
 import { cn } from '@/lib/utils';
 import {
     AlertCircle,
@@ -53,7 +54,7 @@ import {
     Wrench,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTES AUXILIARES
@@ -136,6 +137,71 @@ export default function InventarioPage() {
     const [lotesBusqueda, setLotesBusqueda] = useState('');
     const [lotesEstado, setLotesEstado] = useState<string>('');
     const lotesPageSize = 15;
+
+    const hydratedRef = useRef(false);
+
+    useEffect(() => {
+        const params = readPersistedFilterParams('/inventario');
+        const tab = params.get('tab');
+        if (tab === 'stock' || tab === 'kardex' || tab === 'lotes' || tab === 'bodegas') {
+            setTabActiva(tab);
+        }
+        const sq = params.get('sq') || '';
+        const sest = params.get('sest');
+        const sbod = params.get('sbod') || '';
+        const sp = Number(params.get('sp'));
+        if (sq) setStockBusqueda(sq);
+        if (sest === 'TODOS' || sest === 'EN_STOCK' || sest === 'BAJO' || sest === 'AGOTADO') {
+            setEstadoStockFiltro(sest);
+        }
+        if (sbod) setBodegaFiltro(sbod);
+        if (Number.isInteger(sp) && sp >= 1) setStockPage(sp);
+
+        const kq = params.get('kq') || '';
+        const kt = params.get('kt') || '';
+        const kp = Number(params.get('kp'));
+        if (kq) setKardexBusqueda(kq);
+        if (kt) setKardexTipo(kt);
+        if (Number.isInteger(kp) && kp >= 1) setKardexPage(kp);
+
+        const lq = params.get('lq') || '';
+        const lest = params.get('lest') || '';
+        const lp = Number(params.get('lp'));
+        if (lq) setLotesBusqueda(lq);
+        if (lest) setLotesEstado(lest);
+        if (Number.isInteger(lp) && lp >= 1) setLotesPage(lp);
+
+        hydratedRef.current = true;
+    }, []);
+
+    useEffect(() => {
+        if (!hydratedRef.current) return;
+        const params = new URLSearchParams();
+        if (tabActiva !== 'stock') params.set('tab', tabActiva);
+        if (stockBusqueda) params.set('sq', stockBusqueda);
+        if (estadoStockFiltro !== 'TODOS') params.set('sest', estadoStockFiltro);
+        if (bodegaFiltro !== 'TODAS') params.set('sbod', bodegaFiltro);
+        if (stockPage > 1) params.set('sp', String(stockPage));
+        if (kardexBusqueda) params.set('kq', kardexBusqueda);
+        if (kardexTipo) params.set('kt', kardexTipo);
+        if (kardexPage > 1) params.set('kp', String(kardexPage));
+        if (lotesBusqueda) params.set('lq', lotesBusqueda);
+        if (lotesEstado) params.set('lest', lotesEstado);
+        if (lotesPage > 1) params.set('lp', String(lotesPage));
+        writePersistedFilterParams('/inventario', '/inventario', params);
+    }, [
+        tabActiva,
+        stockBusqueda,
+        estadoStockFiltro,
+        bodegaFiltro,
+        stockPage,
+        kardexBusqueda,
+        kardexTipo,
+        kardexPage,
+        lotesBusqueda,
+        lotesEstado,
+        lotesPage,
+    ]);
 
     // Queries
     const { data: dashboardData, isLoading: loadingKPIs, refetch: refetchKPIs } = useDashboardKPIs();

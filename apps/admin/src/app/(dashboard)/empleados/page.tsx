@@ -13,6 +13,7 @@
 'use client';
 
 import { getNombreCompleto, useEmpleados } from '@/features/empleados';
+import { readPersistedFilterParams, writePersistedFilterParams } from '@/lib/navigation-filter-memory';
 import { cn } from '@/lib/utils';
 import type { EmpleadoConPersona } from '@/types/empleados';
 import {
@@ -32,7 +33,7 @@ import {
     Wrench
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTES AUXILIARES
@@ -98,6 +99,30 @@ export default function EmpleadosPage() {
     const [busqueda, setBusqueda] = useState('');
     const [filtroTecnico, setFiltroTecnico] = useState<string>('');
     const [filtroActivo, setFiltroActivo] = useState<string>('');
+    const hydratedRef = useRef(false);
+
+    useEffect(() => {
+        const params = readPersistedFilterParams('/empleados');
+        const q = params.get('q') || '';
+        const tecnico = params.get('tecnico') || '';
+        const activo = params.get('activo') || '';
+        const pageParam = Number(params.get('page'));
+        if (q) setBusqueda(q);
+        if (tecnico) setFiltroTecnico(tecnico);
+        if (activo) setFiltroActivo(activo);
+        if (Number.isInteger(pageParam) && pageParam >= 1) setPage(pageParam);
+        hydratedRef.current = true;
+    }, []);
+
+    useEffect(() => {
+        if (!hydratedRef.current) return;
+        const params = new URLSearchParams();
+        if (busqueda) params.set('q', busqueda);
+        if (filtroTecnico) params.set('tecnico', filtroTecnico);
+        if (filtroActivo) params.set('activo', filtroActivo);
+        if (page > 1) params.set('page', String(page));
+        writePersistedFilterParams('/empleados', '/empleados', params);
+    }, [busqueda, filtroTecnico, filtroActivo, page]);
 
     const pageSize = 12;
 

@@ -1,4 +1,5 @@
 import { PrismaService } from '@mekanos/database';
+import { Prisma } from '@prisma/client';
 import {
   BadRequestException,
   Injectable,
@@ -13,6 +14,14 @@ import { UpdateBitacorasDto } from './dto/update-bitacoras.dto';
 // ═══════════════════════════════════════════════════════════════
 // TIPOS para el módulo Bitácora
 // ═══════════════════════════════════════════════════════════════
+
+export interface BitacoraEnvioPrevio {
+  id_bitacora: number;
+  numero_bitacora: string;
+  fecha_envio: string | null;
+  mes: number;
+  anio: number;
+}
 
 export interface InformePreview {
   id_documento: number;
@@ -31,6 +40,14 @@ export interface InformePreview {
   nombre_sugerido: string;
   nombre_sede: string | null;
   ciudad_sede: string | null;
+  // ✅ Trazabilidad proactiva de envíos previos (Bitácora y/u Orden)
+  ya_enviado: boolean;
+  ya_enviado_en_bitacora: boolean;
+  ya_enviado_en_orden: boolean;
+  total_emails_enviados: number;
+  ultimo_envio_fecha: string | null;
+  ultimo_origen_envio: string | null;
+  bitacoras_previas: BitacoraEnvioPrevio[];
 }
 
 export interface SedeGroup {
@@ -48,15 +65,66 @@ export interface BitacoraPreviewResult {
   mes: number;
   anio: number;
   categoria_filtro: string;
+  categorias_filtro: string[];
+  tipos_servicio_filtro: string[];
   sedes: SedeGroup[];
   total_informes: number;
   total_con_pdf: number;
   total_sin_pdf: number;
+  total_ya_enviados: number;
+  total_pendientes_envio: number;
   emails_destinatarios: string[];
   id_cuenta_email_remitente: number | null;
   // ✅ Rango de fechas (cuando se usa modo rango)
   fecha_inicio?: string;
   fecha_fin?: string;
+}
+
+export interface InformeHistorialBitacora {
+  id_informe: number;
+  id_documento: number | null;
+  id_orden_servicio: number;
+  numero_orden: string;
+  equipo_nombre: string;
+  equipo_codigo: string | null;
+  tipo_servicio: string | null;
+  nombre_sede: string | null;
+  fecha_servicio: string | null;
+  pdf_url: string | null;
+  orden_bitacora: number;
+}
+
+const CATEGORIA_LABELS: Record<string, string> = {
+  ENERGIA: 'Plantas Eléctricas',
+  HIDRAULICA: 'Bombas',
+  CLIMATIZACION: 'Climatización',
+  COMPRESION: 'Compresión',
+  ELECTRICO: 'Eléctrico',
+  MECANICO: 'Mecánico',
+  OTRO: 'Otros Equipos',
+};
+
+function parseCsvFilter(raw?: string): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const part of raw.split(',')) {
+    const clean = part.trim();
+    const upper = clean.toUpperCase();
+    if (!clean || upper === 'TODAS' || upper === 'TODOS' || upper === '_ALL') {
+      continue;
+    }
+    if (!seen.has(clean)) {
+      seen.add(clean);
+      result.push(clean);
+    }
+  }
+  return result;
+}
+
+function formatCategoriasLabel(categorias: string[]): string {
+  if (categorias.length === 0) return 'Todas las categorías';
+  return categorias.map((c) => CATEGORIA_LABELS[c.toUpperCase()] || c).join(', ');
 }
 
 export interface EnviarBitacoraDto {
@@ -268,30 +336,24 @@ export class BitacorasService {
       fechaFin = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
     }
 
-    // 4. Query SQL directo: documentos_generados → ordenes_servicio → equipos → clientes
-    const conditions: string[] = [
-      `dg.tipo_documento = 'INFORME_SERVICIO'`,
-      `os.fecha_programada >= '${fechaInicio}'::date`,
-      `os.fecha_programada <= '${fechaFin}'::date`,
-    ];
+    const categoriasList = parseCsvFilter(categoria);
+    const tiposServicioList = parseCsvFilter(tipoServicio);
 
-    // Filtro por cliente IDs (placeholders)
-    const placeholders = clienteIds.map((_, i) => `$${i + 1}`).join(',');
-    conditions.push(`os.id_cliente IN (${placeholders})`);
+    // 4. Query SQL parametrizado con soporte multi-selección de categorías y tipos de servicio
+    const categoriaSql =
+      categoriasList.length > 0
+        ? Prisma.sql`AND te.categoria::text IN (${Prisma.join(categoriasList)})`
+        : Prisma.empty;
 
-    // Filtro por categoría de equipo
-    if (categoria) {
-      conditions.push(`te.categoria = '${categoria}'::categoria_equipo_enum`);
-    }
+    const tipoServicioSql =
+      tiposServicioList.length > 0
+        ? Prisma.sql`AND ts.codigo_tipo IN (${Prisma.join(tiposServicioList)})`
+        : Prisma.empty;
 
-    // Filtro por tipo de servicio
-    if (tipoServicio) {
-      conditions.push(`ts.codigo_tipo = '${tipoServicio}'`);
-    }
-
-    const whereClause = conditions.join(' AND ');
-
-    const sql = `
+    const rows: any[] =
+      clienteIds.length === 0
+        ? []
+        : await this.prisma.$queryRaw`
       SELECT
         dg.id_documento,
         dg.numero_documento,
@@ -322,17 +384,129 @@ export class BitacorasService {
       LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
       LEFT JOIN tipos_servicio ts ON ts.id_tipo_servicio = os.id_tipo_servicio
       LEFT JOIN sedes_cliente sc ON sc.id_sede = os.id_sede
-      WHERE ${whereClause}
+      WHERE dg.tipo_documento = 'INFORME_SERVICIO'
+        AND os.fecha_programada >= ${fechaInicio}::date
+        AND os.fecha_programada <= ${fechaFin}::date
+        AND os.id_cliente IN (${Prisma.join(clienteIds)})
+        ${categoriaSql}
+        ${tipoServicioSql}
       ORDER BY os.id_cliente ASC, os.fecha_programada ASC
     `;
 
-    const rows: any[] = await this.prisma.$queryRawUnsafe(sql, ...clienteIds);
-
     this.logger.log(`[BITACORA PREVIEW] Encontrados ${rows.length} documentos/informes PDF`);
+
+    // 4b. Trazabilidad proactiva de envíos previos:
+    //     (a) historial_emails_enviados por orden (badge ✉️ N en órdenes)
+    //     (b) bitacoras_informes enviadas previamente
+    const ordenIds = Array.from(new Set(rows.map((r) => Number(r.id_orden_servicio)).filter(Boolean)));
+    const docIds = Array.from(new Set(rows.map((r) => Number(r.id_documento)).filter(Boolean)));
+
+    const emailsPorOrden = new Map<
+      number,
+      { total: number; ultimoFecha: string | null; ultimoOrigen: string | null }
+    >();
+    const bitacorasPorOrden = new Map<number, BitacoraEnvioPrevio[]>();
+    const bitacorasPorDoc = new Map<number, BitacoraEnvioPrevio[]>();
+
+    if (ordenIds.length > 0) {
+      const [historialEmails, bitacorasPreviasRows] = await Promise.all([
+        this.prisma.historial_emails_enviados.findMany({
+          where: {
+            id_orden_servicio: { in: ordenIds },
+            estado_envio: 'EXITOSO',
+          },
+          select: {
+            id_orden_servicio: true,
+            fecha_envio: true,
+            origen_envio: true,
+          },
+          orderBy: { fecha_envio: 'desc' },
+        }),
+        this.prisma.bitacoras_informes.findMany({
+          where: {
+            bitacoras: {
+              estado_bitacora: { in: ['ENVIADA', 'APROBADA'] },
+            },
+            informes: {
+              OR: [
+                { id_orden_servicio: { in: ordenIds } },
+                ...(docIds.length > 0 ? [{ id_documento_pdf: { in: docIds } }] : []),
+              ],
+            },
+          },
+          include: {
+            bitacoras: {
+              select: {
+                id_bitacora: true,
+                numero_bitacora: true,
+                enviada_cliente_fecha: true,
+                fecha_generacion: true,
+                mes: true,
+                anio: true,
+              },
+            },
+            informes: {
+              select: {
+                id_orden_servicio: true,
+                id_documento_pdf: true,
+              },
+            },
+          },
+          orderBy: { id_bitacora_informe: 'desc' },
+        }),
+      ]);
+
+      for (const em of historialEmails) {
+        const prev = emailsPorOrden.get(em.id_orden_servicio);
+        const fechaIso = em.fecha_envio ? new Date(em.fecha_envio).toISOString() : null;
+        if (!prev) {
+          emailsPorOrden.set(em.id_orden_servicio, {
+            total: 1,
+            ultimoFecha: fechaIso,
+            ultimoOrigen: em.origen_envio || null,
+          });
+        } else {
+          prev.total += 1;
+        }
+      }
+
+      for (const bi of bitacorasPreviasRows) {
+        if (!bi.bitacoras || !bi.informes) continue;
+        const entry: BitacoraEnvioPrevio = {
+          id_bitacora: bi.bitacoras.id_bitacora,
+          numero_bitacora: bi.bitacoras.numero_bitacora,
+          fecha_envio: bi.bitacoras.enviada_cliente_fecha
+            ? new Date(bi.bitacoras.enviada_cliente_fecha).toISOString()
+            : bi.bitacoras.fecha_generacion
+              ? new Date(bi.bitacoras.fecha_generacion).toISOString()
+              : null,
+          mes: bi.bitacoras.mes,
+          anio: bi.bitacoras.anio,
+        };
+
+        const idOs = bi.informes.id_orden_servicio;
+        if (idOs) {
+          const arr = bitacorasPorOrden.get(idOs) || [];
+          if (!arr.some((x) => x.id_bitacora === entry.id_bitacora)) {
+            arr.push(entry);
+            bitacorasPorOrden.set(idOs, arr);
+          }
+        }
+        const idDoc = bi.informes.id_documento_pdf;
+        if (idDoc) {
+          const arr = bitacorasPorDoc.get(idDoc) || [];
+          if (!arr.some((x) => x.id_bitacora === entry.id_bitacora)) {
+            arr.push(entry);
+            bitacorasPorDoc.set(idDoc, arr);
+          }
+        }
+      }
+    }
 
     // 5. Agrupar por sede (id_cliente)
     const sedesMap = new Map<number, SedeGroup>();
     const clienteCorto = nombrePrincipal.substring(0, 20).toUpperCase().replace(/\s+/g, '_');
+    let totalYaEnviados = 0;
 
     for (const row of rows) {
       const clienteId = row.id_cliente;
@@ -353,6 +527,25 @@ export class BitacorasService {
       const equipoNombreLimpio = (row.nombre_equipo || 'EQUIPO').substring(0, 20).toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
       const nombreSugerido = `${clienteCorto}_${sedeCorto}_${row.numero_orden}_${tipoServicioCorto}_(${equipoNombreLimpio}).pdf`;
 
+      // Combinar bitácoras previas por documento y por orden sin duplicar
+      const bitsMap = new Map<number, BitacoraEnvioPrevio>();
+      for (const b of bitacorasPorDoc.get(Number(row.id_documento)) || []) {
+        bitsMap.set(b.id_bitacora, b);
+      }
+      for (const b of bitacorasPorOrden.get(Number(row.id_orden_servicio)) || []) {
+        bitsMap.set(b.id_bitacora, b);
+      }
+      const bitacorasPrevias = Array.from(bitsMap.values());
+      const emailInfo = emailsPorOrden.get(Number(row.id_orden_servicio));
+      const totalEmailsEnviados = emailInfo?.total || 0;
+      const yaEnviadoEnBitacora = bitacorasPrevias.length > 0;
+      const yaEnviadoEnOrden = totalEmailsEnviados > 0;
+      const yaEnviado = yaEnviadoEnBitacora || yaEnviadoEnOrden;
+      if (yaEnviado) totalYaEnviados++;
+
+      const ultimoEnvioFecha =
+        emailInfo?.ultimoFecha || bitacorasPrevias[0]?.fecha_envio || null;
+
       const informePreview: InformePreview = {
         id_documento: row.id_documento,
         numero_documento: row.numero_documento || row.numero_orden,
@@ -370,6 +563,13 @@ export class BitacorasService {
         nombre_sugerido: nombreSugerido,
         nombre_sede: row.sede_nombre || null,
         ciudad_sede: row.ciudad_sede || null,
+        ya_enviado: yaEnviado,
+        ya_enviado_en_bitacora: yaEnviadoEnBitacora,
+        ya_enviado_en_orden: yaEnviadoEnOrden,
+        total_emails_enviados: totalEmailsEnviados,
+        ultimo_envio_fecha: ultimoEnvioFecha,
+        ultimo_origen_envio: emailInfo?.ultimoOrigen || (yaEnviadoEnBitacora ? 'BITACORA' : null),
+        bitacoras_previas: bitacorasPrevias,
       };
 
       if (!sedesMap.has(clienteId)) {
@@ -442,11 +642,15 @@ export class BitacorasService {
       nombre_cliente_principal: nombrePrincipal,
       mes,
       anio,
-      categoria_filtro: categoria || 'TODAS',
+      categoria_filtro: categoriasList.length > 0 ? categoriasList.join(',') : 'TODAS',
+      categorias_filtro: categoriasList,
+      tipos_servicio_filtro: tiposServicioList,
       sedes,
       total_informes: totalInformes,
       total_con_pdf: totalInformes, // All docs from documentos_generados have a PDF
       total_sin_pdf: 0,
+      total_ya_enviados: totalYaEnviados,
+      total_pendientes_envio: Math.max(0, totalInformes - totalYaEnviados),
       emails_destinatarios: Array.from(emailsSet),
       id_cuenta_email_remitente: principal.id_cuenta_email_remitente,
       ...(modoRango ? { fecha_inicio: fechaInicio, fecha_fin: fechaFin } : {}),
@@ -487,9 +691,11 @@ export class BitacorasService {
       throw new BadRequestException('Cliente principal inválido');
     }
 
-    // 2. Obtener documentos con sus datos (SQL directo por coherencia)
-    const docPlaceholders = documentos_ids.map((_, i) => `$${i + 1}`).join(',');
-    const docsSql = `
+    // 2. Obtener documentos con sus datos (SQL parametrizado, cero interpolación)
+    const docs: any[] =
+      !documentos_ids || documentos_ids.length === 0
+        ? []
+        : await this.prisma.$queryRaw`
       SELECT
         dg.id_documento,
         dg.numero_documento,
@@ -507,15 +713,19 @@ export class BitacorasService {
       LEFT JOIN equipos e ON e.id_equipo = os.id_equipo
       LEFT JOIN tipos_servicio ts ON ts.id_tipo_servicio = os.id_tipo_servicio
       LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
-      WHERE dg.id_documento IN (${docPlaceholders})
+      WHERE dg.id_documento IN (${Prisma.join(documentos_ids)})
         AND dg.tipo_documento = 'INFORME_SERVICIO'
     `;
-
-    const docs: any[] = await this.prisma.$queryRawUnsafe(docsSql, ...documentos_ids);
     this.logger.log(`[BITACORA ENVIAR] ${docs.length} documentos encontrados de ${documentos_ids.length} solicitados`);
 
-    // 3. Descargar PDFs
-    const attachments: { filename: string; content: Buffer; contentType: string }[] = [];
+    // 3. Descargar PDFs conservando vínculo exacto con su documento/orden
+    interface BitacoraAttachmentItem {
+      filename: string;
+      content: Buffer;
+      contentType: string;
+      doc: any;
+    }
+    const attachments: BitacoraAttachmentItem[] = [];
     let informesFallidos = 0;
 
     for (const doc of docs) {
@@ -567,6 +777,7 @@ export class BitacorasService {
           filename,
           content: buffer,
           contentType: 'application/pdf',
+          doc,
         });
       } catch (error) {
         informesFallidos++;
@@ -655,12 +866,22 @@ export class BitacorasService {
       }];
     }
 
-    // 4. Crear registro de bitácora
-    // ✅ Modo rango: usar fecha_inicio para generar número de bitácora
+    // 4. Crear registro de bitácora con número único si ya existen envíos previos en el periodo
     const esRangoFechas = !!(dto.fecha_inicio && dto.fecha_fin);
     const bitMes = esRangoFechas ? new Date(dto.fecha_inicio!).getMonth() + 1 : mes;
     const bitAnio = esRangoFechas ? new Date(dto.fecha_inicio!).getFullYear() : anio;
-    const numeroBitacora = `BIT-${bitAnio}${String(bitMes).padStart(2, '0')}-${id_cliente_principal}`;
+    const baseNumeroBitacora = `BIT-${bitAnio}${String(bitMes).padStart(2, '0')}-${id_cliente_principal}`;
+    const existentesPeriodo = await this.prisma.bitacoras.count({
+      where: {
+        id_cliente: id_cliente_principal,
+        numero_bitacora: { startsWith: baseNumeroBitacora },
+      },
+    });
+    const numeroBitacora =
+      existentesPeriodo > 0 ? `${baseNumeroBitacora}-${existentesPeriodo + 1}` : baseNumeroBitacora;
+
+    const categoriasEnviar = parseCsvFilter(categoria);
+    const categoriaLabel = formatCategoriasLabel(categoriasEnviar);
 
     const bitacora = await this.prisma.bitacoras.create({
       data: {
@@ -672,8 +893,8 @@ export class BitacorasService {
         estado_bitacora: 'BORRADOR',
         cantidad_informes: attachments.length,
         observaciones: esRangoFechas
-          ? `Bitácora ${categoria} - ${attachments.length} informes (Rango: ${dto.fecha_inicio} a ${dto.fecha_fin})${emailBatches.length > 1 ? ` (enviada en ${emailBatches.length} partes)` : ''}`
-          : `Bitácora ${categoria} - ${attachments.length} informes${emailBatches.length > 1 ? ` (enviada en ${emailBatches.length} partes)` : ''}`,
+          ? `Bitácora ${categoriaLabel} - ${attachments.length} informes (Rango: ${dto.fecha_inicio} a ${dto.fecha_fin})${emailBatches.length > 1 ? ` (enviada en ${emailBatches.length} partes)` : ''}`
+          : `Bitácora ${categoriaLabel} - ${attachments.length} informes${emailBatches.length > 1 ? ` (enviada en ${emailBatches.length} partes)` : ''}`,
       },
     });
 
@@ -681,32 +902,38 @@ export class BitacorasService {
     const nombreCliente = principal.persona?.nombre_comercial || principal.persona?.razon_social || 'Cliente';
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const mesNombre = meses[mes - 1] || `Mes ${mes}`;
-    const categoriaLabel = categoria === 'ENERGIA' ? 'Plantas Eléctricas' : categoria === 'HIDRAULICA' ? 'Bombas' : categoria || 'Equipos';
 
     // ✅ Periodo label: rango de fechas o mes/año
     const periodoLabel = esRangoFechas
       ? `del ${dto.fecha_inicio} al ${dto.fecha_fin}`
       : `${mesNombre} ${anio}`;
 
-    // Recopilar destinatarios
+    // Recopilar destinatarios (respetando la lista editada explícitamente cuando dto.email_destino viene informado)
     const destinatarios: string[] = [];
-    const emailPrincipal = dto.email_destino || principal.persona?.email_principal;
-    if (emailPrincipal) destinatarios.push(emailPrincipal);
+    const addDestinatario = (raw?: string | null) => {
+      if (!raw) return;
+      for (const part of raw.split(/[,;]+/)) {
+        const clean = part.trim();
+        if (clean.includes('@') && !destinatarios.includes(clean)) {
+          destinatarios.push(clean);
+        }
+      }
+    };
 
-    if (principal.emails_notificacion) {
-      const extras = principal.emails_notificacion.split(';;')
-        .map(e => e.trim())
-        .filter(e => e.length > 0 && e.includes('@'));
-      for (const extra of extras) {
-        if (!destinatarios.includes(extra)) destinatarios.push(extra);
+    if (dto.email_destino && dto.email_destino.trim()) {
+      addDestinatario(dto.email_destino);
+    } else {
+      addDestinatario(principal.persona?.email_principal);
+      if (principal.emails_notificacion) {
+        principal.emails_notificacion
+          .split(';;')
+          .forEach((extra) => addDestinatario(extra));
       }
     }
 
     if (dto.emails_cc) {
       for (const cc of dto.emails_cc) {
-        if (cc.includes('@') && !destinatarios.includes(cc)) {
-          destinatarios.push(cc);
-        }
+        addDestinatario(cc);
       }
     }
 
@@ -741,10 +968,15 @@ export class BitacorasService {
       sedesResumen.push(`<tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;">${sede}</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">${items.length} informe(s)</td></tr>`);
     }
 
-    // 6. Enviar emails (uno o múltiples batches)
+    // 6. Enviar emails (uno o múltiples batches) rastreando qué informes salieron en cada batch exitoso
     let emailsEnviadosExitosamente = 0;
     let emailsFallidos = 0;
     const erroresEmails: string[] = [];
+    const docsEnviadosExitosamente: Array<{
+      doc: any;
+      asuntoBatch: string;
+      messageId: string | null;
+    }> = [];
 
     for (const batch of emailBatches) {
       const { attachments: batchAttachments, batchNumber, totalBatches } = batch;
@@ -799,12 +1031,23 @@ export class BitacorasService {
           to: destinatarios[0],
           subject: asuntoBatch,
           html: htmlBatch,
-          attachments: batchAttachments,
+          attachments: batchAttachments.map(({ filename, content, contentType }) => ({
+            filename,
+            content,
+            contentType,
+          })),
           ...(destinatarios.length > 1 ? { cc: destinatarios.slice(1) } : {}),
         }, principal.id_cuenta_email_remitente ?? undefined);
 
         if (emailResult.success) {
           emailsEnviadosExitosamente++;
+          for (const item of batchAttachments) {
+            docsEnviadosExitosamente.push({
+              doc: item.doc,
+              asuntoBatch,
+              messageId: emailResult.messageId || null,
+            });
+          }
           this.logger.log(`[BITACORA BATCH ${batchNumber}/${totalBatches}] ✅ Enviado exitosamente`);
         } else {
           emailsFallidos++;
@@ -819,18 +1062,130 @@ export class BitacorasService {
       }
     }
 
-    // 7. Actualizar bitácora
+    // 7. Actualizar bitácora, persistir bitacoras_informes y marcar órdenes como ENVIADAS en historial_emails_enviados
     const envioExitoso = emailsEnviadosExitosamente > 0;
     if (envioExitoso) {
+      const fechaEnvioAhora = new Date();
+
       await this.prisma.bitacoras.update({
         where: { id_bitacora: bitacora.id_bitacora },
         data: {
           estado_bitacora: 'ENVIADA',
-          enviada_cliente_fecha: new Date(),
+          cantidad_informes: docsEnviadosExitosamente.length,
+          enviada_cliente_fecha: fechaEnvioAhora,
           metodo_envio: 'EMAIL',
-          observaciones: `Bitácora ${categoria} - ${attachments.length} informes enviados en ${emailBatches.length} email(s)`,
+          observaciones: esRangoFechas
+            ? `Bitácora ${categoriaLabel} - ${docsEnviadosExitosamente.length} informes enviados (Rango: ${dto.fecha_inicio} a ${dto.fecha_fin}) en ${emailBatches.length} email(s)`
+            : `Bitácora ${categoriaLabel} - ${docsEnviadosExitosamente.length} informes enviados en ${emailBatches.length} email(s)`,
         },
       });
+
+      // 7a. Vincular cada informe enviado en bitacoras_informes (creando el registro en `informes` si aún no existía)
+      try {
+        const sentDocIds = Array.from(
+          new Set(docsEnviadosExitosamente.map((x) => Number(x.doc.id_documento)).filter(Boolean)),
+        );
+        const sentOrdenIds = Array.from(
+          new Set(docsEnviadosExitosamente.map((x) => Number(x.doc.id_orden_servicio)).filter(Boolean)),
+        );
+
+        const informesExistentes = await this.prisma.informes.findMany({
+          where: {
+            OR: [
+              ...(sentDocIds.length > 0 ? [{ id_documento_pdf: { in: sentDocIds } }] : []),
+              ...(sentOrdenIds.length > 0 ? [{ id_orden_servicio: { in: sentOrdenIds } }] : []),
+            ],
+          },
+          orderBy: { id_informe: 'desc' },
+        });
+
+        const informePorDoc = new Map<number, any>();
+        const informePorOrden = new Map<number, any>();
+        for (const inf of informesExistentes) {
+          if (inf.id_documento_pdf && !informePorDoc.has(inf.id_documento_pdf)) {
+            informePorDoc.set(inf.id_documento_pdf, inf);
+          }
+          if (inf.id_orden_servicio && !informePorOrden.has(inf.id_orden_servicio)) {
+            informePorOrden.set(inf.id_orden_servicio, inf);
+          }
+        }
+
+        const informesVinculadosSet = new Set<number>();
+        let ordenBitacora = 0;
+
+        for (const item of docsEnviadosExitosamente) {
+          const doc = item.doc;
+          const idDoc = Number(doc.id_documento);
+          const idOs = Number(doc.id_orden_servicio);
+
+          let informe = informePorDoc.get(idDoc) || informePorOrden.get(idOs);
+          if (!informe) {
+            informe = await this.prisma.informes.create({
+              data: {
+                numero_informe: String(doc.numero_documento || `INF-${doc.numero_orden || idDoc}`).slice(0, 50),
+                id_orden_servicio: idOs,
+                id_documento_pdf: idDoc,
+                generado_por: usuario_id,
+                estado_informe: 'APROBADO',
+                observaciones: `Registrado automáticamente desde bitácora ${bitacora.numero_bitacora}`,
+              },
+            });
+            informePorDoc.set(idDoc, informe);
+            informePorOrden.set(idOs, informe);
+          } else if (!informe.id_documento_pdf) {
+            await this.prisma.informes.update({
+              where: { id_informe: informe.id_informe },
+              data: { id_documento_pdf: idDoc },
+            });
+          }
+
+          if (!informesVinculadosSet.has(informe.id_informe)) {
+            informesVinculadosSet.add(informe.id_informe);
+            ordenBitacora += 1;
+            await this.prisma.bitacoras_informes.create({
+              data: {
+                id_bitacora: bitacora.id_bitacora,
+                id_informe: informe.id_informe,
+                orden_bitacora: ordenBitacora,
+              },
+            });
+          }
+        }
+        this.logger.log(`[BITACORA] Vinculados ${ordenBitacora} informes en bitacoras_informes para ${bitacora.numero_bitacora}`);
+      } catch (errLink) {
+        this.logger.error(`[BITACORA] Error registrando bitacoras_informes: ${(errLink as Error).message}`);
+      }
+
+      // 7b. Registrar envío en historial_emails_enviados de CADA orden para activar el check/badge "ENVIADO" (✉️ N)
+      try {
+        const ordenesRegistradas = new Set<number>();
+        const ccStr = destinatarios.length > 1 ? destinatarios.slice(1).join(', ').slice(0, 500) : null;
+        const toStr = destinatarios[0].slice(0, 300);
+
+        for (const item of docsEnviadosExitosamente) {
+          const idOs = Number(item.doc.id_orden_servicio);
+          if (!idOs || ordenesRegistradas.has(idOs)) continue;
+          ordenesRegistradas.add(idOs);
+
+          await this.prisma.historial_emails_enviados.create({
+            data: {
+              id_orden_servicio: idOs,
+              destinatario_to: toStr,
+              destinatarios_cc: ccStr,
+              asunto: `[${bitacora.numero_bitacora}] ${item.asuntoBatch}`.slice(0, 500),
+              estado_envio: 'EXITOSO',
+              message_id: item.messageId ? String(item.messageId).slice(0, 300) : null,
+              url_pdf_enviado: item.doc.ruta_archivo ? String(item.doc.ruta_archivo).slice(0, 500) : null,
+              origen_envio: 'BITACORA',
+              fecha_envio: fechaEnvioAhora,
+              enviado_por: usuario_id,
+            },
+          });
+        }
+        this.logger.log(`[BITACORA] ${ordenesRegistradas.size} orden(es) marcadas como ENVIADAS en historial_emails_enviados`);
+      } catch (errHist) {
+        this.logger.error(`[BITACORA] Error registrando historial_emails_enviados: ${(errHist as Error).message}`);
+      }
 
       this.logger.log(`[BITACORA] Enviada exitosamente: ${bitacora.numero_bitacora} (${emailsEnviadosExitosamente}/${emailBatches.length} emails)`);
     }
@@ -838,7 +1193,7 @@ export class BitacorasService {
     return {
       success: envioExitoso,
       id_bitacora: bitacora.id_bitacora,
-      informes_enviados: attachments.length,
+      informes_enviados: envioExitoso ? docsEnviadosExitosamente.length : 0,
       informes_fallidos: informesFallidos,
       emails_enviados: emailsEnviadosExitosamente,
       emails_fallidos: emailsFallidos,
@@ -850,19 +1205,98 @@ export class BitacorasService {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // HISTORIAL: Bitácoras anteriores de un cliente
+  // HISTORIAL: Bitácoras anteriores de un cliente (con detalle de informes enviados)
   // ═══════════════════════════════════════════════════════════════
 
   async historialPorCliente(idCliente: number) {
-    return this.prisma.bitacoras.findMany({
+    const bitacoras = await this.prisma.bitacoras.findMany({
       where: { id_cliente: idCliente },
       include: {
         bitacoras_informes: {
-          select: { id_informe: true },
+          orderBy: { orden_bitacora: 'asc' },
+          include: {
+            informes: {
+              include: {
+                documentos_generados: {
+                  select: {
+                    id_documento: true,
+                    ruta_archivo: true,
+                    numero_documento: true,
+                  },
+                },
+                ordenes_servicio: {
+                  select: {
+                    id_orden_servicio: true,
+                    numero_orden: true,
+                    fecha_programada: true,
+                    fecha_inicio_real: true,
+                    equipos: {
+                      select: {
+                        nombre_equipo: true,
+                        codigo_equipo: true,
+                      },
+                    },
+                    tipos_servicio: {
+                      select: {
+                        nombre_tipo: true,
+                      },
+                    },
+                    clientes: {
+                      select: {
+                        nombre_sede: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
-      orderBy: [{ anio: 'desc' }, { mes: 'desc' }],
-      take: 24,
+      orderBy: [{ fecha_generacion: 'desc' }, { id_bitacora: 'desc' }],
+      take: 30,
+    });
+
+    return bitacoras.map((b) => {
+      const informes_enviados: InformeHistorialBitacora[] = (b.bitacoras_informes || [])
+        .filter((bi) => Boolean(bi.informes))
+        .map((bi) => {
+          const inf = bi.informes;
+          const os = inf.ordenes_servicio;
+          const dg = inf.documentos_generados;
+          return {
+            id_informe: inf.id_informe,
+            id_documento: dg?.id_documento ?? inf.id_documento_pdf ?? null,
+            id_orden_servicio: inf.id_orden_servicio ?? os?.id_orden_servicio,
+            numero_orden: os?.numero_orden || inf.numero_informe,
+            equipo_nombre: os?.equipos?.nombre_equipo || 'N/A',
+            equipo_codigo: os?.equipos?.codigo_equipo || null,
+            tipo_servicio: os?.tipos_servicio?.nombre_tipo || null,
+            nombre_sede: os?.clientes?.nombre_sede || null,
+            fecha_servicio: os?.fecha_inicio_real
+              ? new Date(os.fecha_inicio_real).toISOString()
+              : os?.fecha_programada
+                ? new Date(os.fecha_programada).toISOString()
+                : null,
+            pdf_url: dg?.ruta_archivo || null,
+            orden_bitacora: bi.orden_bitacora,
+          };
+        });
+
+      return {
+        id_bitacora: b.id_bitacora,
+        numero_bitacora: b.numero_bitacora,
+        mes: b.mes,
+        anio: b.anio,
+        estado_bitacora: b.estado_bitacora,
+        cantidad_informes: b.cantidad_informes,
+        fecha_generacion: b.fecha_generacion,
+        enviada_cliente_fecha: b.enviada_cliente_fecha,
+        metodo_envio: b.metodo_envio,
+        observaciones: b.observaciones,
+        bitacoras_informes: b.bitacoras_informes.map((bi) => ({ id_informe: bi.id_informe })),
+        informes_enviados,
+      };
     });
   }
 
@@ -891,29 +1325,25 @@ export class BitacorasService {
       ...principal.sedes.map(s => s.id_cliente),
     ];
 
-    this.logger.log(`[BITACORA MESES] Principal=${idClientePrincipal} | Sedes=${principal.sedes.length} | Cat: ${categoria || 'TODAS'}`);
+    const categoriasList = parseCsvFilter(categoria);
+    const tiposServicioList = parseCsvFilter(tipoServicio);
 
-    // 2. Query SQL directo: documentos_generados → ordenes_servicio, agrupado por mes/año
-    const conditions: string[] = [
-      `dg.tipo_documento = 'INFORME_SERVICIO'`,
-      `os.fecha_programada IS NOT NULL`,
-    ];
+    this.logger.log(`[BITACORA MESES] Principal=${idClientePrincipal} | Sedes=${principal.sedes.length} | Cat: ${categoriasList.join(',') || 'TODAS'}`);
 
-    const placeholders = clienteIds.map((_, i) => `$${i + 1}`).join(',');
-    conditions.push(`os.id_cliente IN (${placeholders})`);
+    const categoriaSql =
+      categoriasList.length > 0
+        ? Prisma.sql`AND te.categoria::text IN (${Prisma.join(categoriasList)})`
+        : Prisma.empty;
 
-    if (categoria) {
-      conditions.push(`te.categoria = '${categoria}'::categoria_equipo_enum`);
-    }
+    const tipoServicioSql =
+      tiposServicioList.length > 0
+        ? Prisma.sql`AND ts.codigo_tipo IN (${Prisma.join(tiposServicioList)})`
+        : Prisma.empty;
 
-    // Filtro por tipo de servicio
-    if (tipoServicio) {
-      conditions.push(`ts.codigo_tipo = '${tipoServicio}'`);
-    }
-
-    const whereClause = conditions.join(' AND ');
-
-    const sql = `
+    const meses: any[] =
+      clienteIds.length === 0
+        ? []
+        : await this.prisma.$queryRaw`
       SELECT
         EXTRACT(MONTH FROM os.fecha_programada)::int AS mes,
         EXTRACT(YEAR FROM os.fecha_programada)::int AS anio,
@@ -923,19 +1353,21 @@ export class BitacorasService {
       LEFT JOIN equipos e ON e.id_equipo = os.id_equipo
       LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
       LEFT JOIN tipos_servicio ts ON ts.id_tipo_servicio = os.id_tipo_servicio
-      WHERE ${whereClause}
+      WHERE dg.tipo_documento = 'INFORME_SERVICIO'
+        AND os.fecha_programada IS NOT NULL
+        AND os.id_cliente IN (${Prisma.join(clienteIds)})
+        ${categoriaSql}
+        ${tipoServicioSql}
       GROUP BY anio, mes
       ORDER BY anio DESC, mes DESC
     `;
-
-    const meses: any[] = await this.prisma.$queryRawUnsafe(sql, ...clienteIds);
 
     const totalDocs = meses.reduce((sum, m) => sum + m.count, 0);
     this.logger.log(`[BITACORA MESES] Meses con datos=${meses.length} | Total docs=${totalDocs}`);
 
     return {
       id_cliente: idClientePrincipal,
-      categoria: categoria || 'TODAS',
+      categoria: categoriasList.length > 0 ? categoriasList.join(',') : 'TODAS',
       total_ordenes_con_informes: totalDocs,
       meses,
     };

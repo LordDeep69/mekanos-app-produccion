@@ -11,6 +11,14 @@ import { apiClient } from '@/lib/api/client';
 // TIPOS
 // ═══════════════════════════════════════════════════════════════
 
+export interface BitacoraEnvioPrevio {
+  id_bitacora: number;
+  numero_bitacora: string;
+  fecha_envio: string | null;
+  mes: number;
+  anio: number;
+}
+
 export interface InformePreview {
   id_documento: number;
   numero_documento: string;
@@ -28,6 +36,13 @@ export interface InformePreview {
   nombre_sugerido: string;
   nombre_sede: string | null;
   ciudad_sede: string | null;
+  ya_enviado?: boolean;
+  ya_enviado_en_bitacora?: boolean;
+  ya_enviado_en_orden?: boolean;
+  total_emails_enviados?: number;
+  ultimo_envio_fecha?: string | null;
+  ultimo_origen_envio?: string | null;
+  bitacoras_previas?: BitacoraEnvioPrevio[];
 }
 
 export interface SedeGroup {
@@ -45,14 +60,32 @@ export interface BitacoraPreviewResult {
   mes: number;
   anio: number;
   categoria_filtro: string;
+  categorias_filtro?: string[];
+  tipos_servicio_filtro?: string[];
   sedes: SedeGroup[];
   total_informes: number;
   total_con_pdf: number;
   total_sin_pdf: number;
+  total_ya_enviados?: number;
+  total_pendientes_envio?: number;
   emails_destinatarios: string[];
   id_cuenta_email_remitente: number | null;
   fecha_inicio?: string;
   fecha_fin?: string;
+}
+
+export interface InformeHistorialBitacora {
+  id_informe: number;
+  id_documento: number | null;
+  id_orden_servicio: number;
+  numero_orden: string;
+  equipo_nombre: string;
+  equipo_codigo: string | null;
+  tipo_servicio: string | null;
+  nombre_sede: string | null;
+  fecha_servicio: string | null;
+  pdf_url: string | null;
+  orden_bitacora: number;
 }
 
 export interface EnviarBitacoraRequest {
@@ -87,10 +120,12 @@ export interface BitacoraHistorial {
   anio: number;
   estado_bitacora: string;
   cantidad_informes: number;
+  fecha_generacion?: string | null;
   enviada_cliente_fecha: string | null;
   metodo_envio: string | null;
   observaciones: string | null;
   bitacoras_informes: { id_informe: number }[];
+  informes_enviados?: InformeHistorialBitacora[];
 }
 
 // ═══════════════════════════════════════════════════════════════

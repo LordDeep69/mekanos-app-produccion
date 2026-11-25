@@ -61,6 +61,12 @@ export function useEnviarBitacora() {
       queryClient.invalidateQueries({
         queryKey: bitacorasKeys.historial(variables.id_cliente_principal),
       });
+      queryClient.invalidateQueries({
+        queryKey: bitacorasKeys.all,
+      });
+      // Sincronizar badges ✉️ ENVIADO en el módulo de órdenes e historial de emails
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      queryClient.invalidateQueries({ queryKey: ['historial-emails'] });
     },
   });
 }
