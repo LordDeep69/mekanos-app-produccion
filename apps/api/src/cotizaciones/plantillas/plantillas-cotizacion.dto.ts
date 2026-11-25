@@ -30,7 +30,10 @@ export class PlantillaCotizacionItemDto {
   @IsInt()
   id_componente?: number | null;
 
-  @ApiPropertyOptional({ description: 'Para tipo_linea = OTRO (TRANSPORTE, VIATICOS, POLIZA, DISPOSICION_AMBIENTAL, etc.)' })
+  @ApiPropertyOptional({
+    description:
+      'Para tipo_linea = OTRO (TRANSPORTE, VIATICOS, POLIZA, DISPOSICION_AMBIENTAL, etc.)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(40)
@@ -61,7 +64,8 @@ export class PlantillaCotizacionItemDto {
   cantidad_base?: number;
 
   @ApiPropertyOptional({
-    description: 'Si true, escala cantidad x N equipos al aplicar plantilla. Si false, queda fijo (ej. transporte o póliza).',
+    description:
+      'Si true, escala cantidad x N equipos al aplicar plantilla. Si false, queda fijo (ej. transporte o póliza).',
     default: true,
   })
   @IsOptional()
@@ -69,7 +73,8 @@ export class PlantillaCotizacionItemDto {
   es_por_equipo?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Si true y tiene id_servicio/id_componente, toma el precio vigente de catálogo al aplicar.',
+    description:
+      'Si true y tiene id_servicio/id_componente, toma el precio vigente de catálogo al aplicar.',
     default: true,
   })
   @IsOptional()
@@ -145,12 +150,16 @@ export class CreatePlantillaCotizacionDto {
   @MaxLength(40)
   tipo_cotizacion?: string;
 
-  @ApiPropertyOptional({ description: 'Opcional: tipo de equipo al que aplica preferentemente (null = universal)' })
+  @ApiPropertyOptional({
+    description: 'Opcional: tipo de equipo al que aplica preferentemente (null = universal)',
+  })
   @IsOptional()
   @IsInt()
   id_tipo_equipo?: number | null;
 
-  @ApiPropertyOptional({ description: 'Opcional: modelo OEM exacto al que aplica (null = cualquier modelo)' })
+  @ApiPropertyOptional({
+    description: 'Opcional: modelo OEM exacto al que aplica (null = cualquier modelo)',
+  })
   @IsOptional()
   @IsInt()
   id_modelo_equipo?: number | null;
@@ -235,6 +244,14 @@ export class CreatePlantillaCotizacionDto {
   @IsBoolean()
   iva_sobre_utilidad_aiu?: boolean;
 
+  @ApiPropertyOptional({
+    description:
+      'Preferencia de presentación PDF sugerida (null = heredar default de empresa, false = Suma Alzada, true = Detallado)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  mostrar_desglose_precios?: boolean | null;
+
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
@@ -260,7 +277,8 @@ export class AplicarPlantillaDto {
   reemplazar_items?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Si true, sobrescribe asunto/alcance/exclusiones/términos/AIU desde la plantilla cuando estén vacíos o forzados',
+    description:
+      'Si true, sobrescribe asunto/alcance/exclusiones/términos/AIU desde la plantilla cuando estén vacíos o forzados',
     default: true,
   })
   @IsOptional()
@@ -268,7 +286,8 @@ export class AplicarPlantillaDto {
   aplicar_textos_comerciales?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Multiplicador manual de equipos (si se omite, usa la cantidad de equipos vinculados a la cotización, mín. 1)',
+    description:
+      'Multiplicador manual de equipos (si se omite, usa la cantidad de equipos vinculados a la cotización, mín. 1)',
   })
   @IsOptional()
   @IsInt()
@@ -278,7 +297,8 @@ export class AplicarPlantillaDto {
 
 export class ImportarBomModeloDto {
   @ApiPropertyOptional({
-    description: 'Multiplicador de equipos (si se omite, cuenta cuántos equipos de este modelo están vinculados a la cotización, mín. 1)',
+    description:
+      'Multiplicador de equipos (si se omite, cuenta cuántos equipos de este modelo están vinculados a la cotización, mín. 1)',
   })
   @IsOptional()
   @IsInt()
@@ -312,17 +332,24 @@ export class GuardarComoPlantillaDto {
   @IsString()
   descripcion?: string;
 
-  @ApiPropertyOptional({ description: 'Si se omite, hereda el tipo de equipo del primer activo de la cotización' })
+  @ApiPropertyOptional({
+    description: 'Si se omite, hereda el tipo de equipo del primer activo de la cotización',
+  })
   @IsOptional()
   @IsInt()
   id_tipo_equipo?: number | null;
 
-  @ApiPropertyOptional({ description: 'Si se omite, hereda el modelo OEM si todos los activos comparten modelo' })
+  @ApiPropertyOptional({
+    description: 'Si se omite, hereda el modelo OEM si todos los activos comparten modelo',
+  })
   @IsOptional()
   @IsInt()
   id_modelo_equipo?: number | null;
 
-  @ApiPropertyOptional({ description: 'Normalizar cantidades dividiendo por número de equipos vinculados', default: true })
+  @ApiPropertyOptional({
+    description: 'Normalizar cantidades dividiendo por número de equipos vinculados',
+    default: true,
+  })
   @IsOptional()
   @IsBoolean()
   normalizar_por_equipo?: boolean;

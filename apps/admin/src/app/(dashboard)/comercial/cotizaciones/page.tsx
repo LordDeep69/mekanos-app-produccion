@@ -2,6 +2,7 @@
 
 import { CotizacionPdfPreviewModal } from '@/components/comercial/cotizacion-pdf-preview-modal';
 import { PlantillasCotizacionManager } from '@/components/comercial/plantillas-cotizacion-manager';
+import { resolveTipoOfertaLabel } from '@/components/comercial/tipos-oferta-manager-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -24,6 +25,7 @@ import {
   useCotizaciones,
   useCotizacionWorkflowActions,
   usePlantillasCotizacion,
+  useTiposOfertaCotizacion,
 } from '@/features/comercial/hooks/use-comercial';
 import { useClientesSelector } from '@/features/ordenes/hooks/use-catalogos';
 import { useOrgFormatters } from '@/hooks/use-org-formatters';
@@ -76,6 +78,7 @@ export default function CotizacionesPage() {
   const { data: cotData, isLoading, refetch } = useCotizaciones({ take: 150 });
   const { data: aprobacionesData } = useAprobacionesPendientes();
   const { data: plantillas = [] } = usePlantillasCotizacion();
+  const { data: tiposOfertaCatalogo = [] } = useTiposOfertaCotizacion();
   const { data: clientes = [] } = useClientesSelector();
   const workflow = useCotizacionWorkflowActions();
 
@@ -112,16 +115,22 @@ export default function CotizacionesPage() {
 
   const tiposFiltroOpciones = useMemo(() => {
     const map = new Map<string, string>();
-    for (const preset of TIPO_COTIZACION_PRESETS) {
-      map.set(preset.value, preset.label);
+    if (tiposOfertaCatalogo.length > 0) {
+      for (const t of tiposOfertaCatalogo) {
+        map.set(t.codigo, t.nombre);
+      }
+    } else {
+      for (const preset of TIPO_COTIZACION_PRESETS) {
+        map.set(preset.value, preset.label);
+      }
     }
     for (const c of cotizaciones) {
       if (c.tipo_cotizacion && !map.has(c.tipo_cotizacion)) {
-        map.set(c.tipo_cotizacion, c.tipo_cotizacion.replace(/_/g, ' '));
+        map.set(c.tipo_cotizacion, resolveTipoOfertaLabel(c.tipo_cotizacion, tiposOfertaCatalogo));
       }
     }
     return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
-  }, [cotizaciones]);
+  }, [cotizaciones, tiposOfertaCatalogo]);
 
   const filtradas = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -405,8 +414,8 @@ export default function CotizacionesPage() {
                               {c.numero_cotizacion}
                             </Link>
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[10px] font-semibold text-slate-500 uppercase">
-                                {(c.tipo_cotizacion || 'SERVICIO_TECNICO').replace(/_/g, ' ')}
+                              <span className="text-[10px] font-semibold text-slate-500">
+                                {resolveTipoOfertaLabel(c.tipo_cotizacion, tiposOfertaCatalogo)}
                               </span>
                               {c.usa_aiu && (
                                 <span className="px-1 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold">

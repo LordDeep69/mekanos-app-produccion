@@ -46,8 +46,12 @@ import {
   FORMA_PAGO_COMBOBOX_OPTIONS,
   matchesAllTokens,
   RUBRO_OTRO_COMBOBOX_OPTIONS,
-  TIPO_OFERTA_COMBOBOX_OPTIONS,
 } from './cpq-premium-controls';
+import {
+  buildTipoOfertaComboboxOptions,
+  normalizeTipoOfertaCodigo,
+  TiposOfertaManagerModal,
+} from './tipos-oferta-manager-modal';
 import {
   useCotizacionDetalle,
   useCotizacionFirmaActions,
@@ -59,6 +63,8 @@ import {
   useMotivosRechazo,
   usePlantillasCotizacion,
   useSugerenciasCpq,
+  useTiposOfertaActions,
+  useTiposOfertaCotizacion,
 } from '@/features/comercial/hooks/use-comercial';
 import {
   getConfiguracionEmpresa,
@@ -107,6 +113,7 @@ import {
   Save,
   Search,
   Send,
+  Settings2,
   Shield,
   ShieldCheck,
   Sparkles,
@@ -143,6 +150,9 @@ interface ServicioRow {
   es_opcional: boolean;
   iva_aplicable: boolean;
   observaciones?: string;
+  tpl_es_por_equipo?: boolean;
+  tpl_cantidad_base?: number;
+  tpl_cantidad_manual?: boolean;
 }
 
 interface ComponenteRow {
@@ -162,6 +172,9 @@ interface ComponenteRow {
   iva_aplicable: boolean;
   garantia_meses?: number;
   stock_actual?: number | null;
+  tpl_es_por_equipo?: boolean;
+  tpl_cantidad_base?: number;
+  tpl_cantidad_manual?: boolean;
 }
 
 interface OtroRow {
@@ -178,6 +191,9 @@ interface OtroRow {
   visible_cliente: boolean;
   es_opcional: boolean;
   iva_aplicable: boolean;
+  tpl_es_por_equipo?: boolean;
+  tpl_cantidad_base?: number;
+  tpl_cantidad_manual?: boolean;
 }
 
 const ESTADO_BADGE: Record<string, string> = {
@@ -210,7 +226,7 @@ export function CotizacionStudio({
   initialPlantillaId?: number;
 }) {
   const { data: detalle, isLoading: loadingCot } = useCotizacionDetalle(cotizacionId ?? null);
-  const { data: plantillas = [] } = usePlantillasCotizacion();
+  const { data: plantillas = [], isLoading: loadingPlantillas } = usePlantillasCotizacion();
   const { data: orgConfig } = useQuery<ConfiguracionEmpresa>({
     queryKey: ['config-org-empresa-cpq'],
     queryFn: () => getConfiguracionEmpresa(),
@@ -218,7 +234,10 @@ export function CotizacionStudio({
     refetchOnMount: 'always',
   });
 
-  if (cotizacionId && (loadingCot || !detalle)) {
+  if (
+    (cotizacionId && (loadingCot || !detalle)) ||
+    (!cotizacionId && initialPlantillaId && loadingPlantillas)
+  ) {
     return (
       <div className="py-24 flex flex-col items-center justify-center gap-3 text-slate-500">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -285,6 +304,13 @@ function CotizacionStudioEditor({
   );
   const [tipoCotizacion, setTipoCotizacion] = useState<string>(
     cotizacion?.tipo_cotizacion || initialPlantilla?.tipo_cotizacion || 'SERVICIO_TECNICO',
+  );
+  const { data: tiposOfertaCatalogo = [] } = useTiposOfertaCotizacion();
+  const tiposOfertaActions = useTiposOfertaActions();
+  const [tiposModalOpen, setTiposModalOpen] = useState(false);
+  const tipoOfertaOptions = useMemo(
+    () => buildTipoOfertaComboboxOptions(tiposOfertaCatalogo),
+    [tiposOfertaCatalogo],
   );
   const [plantillaOrigenId, setPlantillaOrigenId] = useState<number | null>(
     cotizacion?.id_plantilla_origen ?? initialPlantilla?.id_plantilla ?? null,
@@ -370,7 +396,10 @@ function CotizacionStudioEditor({
   );
   const [mostrarDesglosePrecios, setMostrarDesglosePrecios] = useState<boolean>(
     Boolean(
-      cotizacion?.mostrar_desglose_precios ?? orgConfig?.cot_mostrar_desglose_precios ?? false,
+      cotizacion?.mostrar_desglose_precios ??
+        initialPlantilla?.mostrar_desglose_precios ??
+        orgConfig?.cot_mostrar_desglose_precios ??
+        false,
     ),
   );
 
@@ -407,19 +436,28 @@ function CotizacionStudioEditor({
     if (initialPlantilla) {
       return initialPlantilla.items
         .filter((i) => i.tipo_linea === 'SERVICIO')
-        .map((i) => ({
-          uid: nextUid('srv'),
-          id_servicio: i.id_servicio ?? null,
-          descripcion: i.descripcion,
-          cantidad: Number(i.cantidad_base) || 1,
-          unidad: i.unidad || 'servicio',
-          costo_unitario: Number(i.costo_unitario_fijo || 0),
-          precio_unitario: Number(i.precio_unitario_fijo || 0),
-          descuento_porcentaje: 0,
-          es_opcional: Boolean(i.es_opcional),
-          iva_aplicable: i.iva_aplicable !== false,
-          observaciones: i.observaciones || '',
-        }));
+        .map((i) => {
+          const cantBase = Number(i.cantidad_base) || 1;
+          const puVivo =
+            i.usar_precio_catalogo && i.catalogo_servicios?.precio_base != null
+              ? Number(i.catalogo_servicios.precio_base)
+              : Number(i.precio_unitario_fijo || 0);
+          return {
+            uid: nextUid('srv'),
+            id_servicio: i.id_servicio ?? null,
+            descripcion: i.descripcion,
+            cantidad: cantBase,
+            unidad: i.unidad || 'servicio',
+            costo_unitario: Number(i.costo_unitario_fijo || 0),
+            precio_unitario: puVivo,
+            descuento_porcentaje: 0,
+            es_opcional: Boolean(i.es_opcional),
+            iva_aplicable: i.iva_aplicable !== false,
+            observaciones: i.observaciones || '',
+            tpl_es_por_equipo: Boolean(i.es_por_equipo),
+            tpl_cantidad_base: cantBase,
+          };
+        });
     }
     return [];
   });
@@ -449,19 +487,38 @@ function CotizacionStudioEditor({
     if (initialPlantilla) {
       return initialPlantilla.items
         .filter((i) => i.tipo_linea === 'COMPONENTE')
-        .map((i) => ({
-          uid: nextUid('cmp'),
-          id_componente: i.id_componente ?? null,
-          descripcion: i.descripcion,
-          cantidad: Number(i.cantidad_base) || 1,
-          unidad: i.unidad || 'unidad',
-          costo_unitario: Number(i.costo_unitario_fijo || 0),
-          precio_unitario: Number(i.precio_unitario_fijo || 0),
-          descuento_porcentaje: 0,
-          es_opcional: Boolean(i.es_opcional),
-          iva_aplicable: i.iva_aplicable !== false,
-          garantia_meses: i.garantia_meses ?? undefined,
-        }));
+        .map((i) => {
+          const cantBase = Number(i.cantidad_base) || 1;
+          const cmpCat = i.catalogo_componentes;
+          const puVivo =
+            i.usar_precio_catalogo && cmpCat?.precio_venta != null
+              ? Number(cmpCat.precio_venta)
+              : Number(i.precio_unitario_fijo || 0);
+          const cuVivo =
+            i.usar_precio_catalogo && cmpCat?.precio_compra != null
+              ? Number(cmpCat.precio_compra)
+              : Number(i.costo_unitario_fijo || 0);
+          return {
+            uid: nextUid('cmp'),
+            id_componente: i.id_componente ?? null,
+            id_tipo_componente: cmpCat?.id_tipo_componente ?? null,
+            descripcion: i.descripcion,
+            referencia_manual: cmpCat?.referencia_fabricante || cmpCat?.codigo_interno || '',
+            marca_manual: cmpCat?.marca || '',
+            cantidad: cantBase,
+            unidad: i.unidad || cmpCat?.unidad_medida || 'unidad',
+            costo_unitario: cuVivo,
+            precio_unitario: puVivo,
+            descuento_porcentaje: 0,
+            es_opcional: Boolean(i.es_opcional),
+            iva_aplicable: i.iva_aplicable !== false,
+            garantia_meses: i.garantia_meses ?? undefined,
+            stock_actual:
+              cmpCat && cmpCat.es_inventariable !== false ? Number(cmpCat.stock_actual ?? 0) : null,
+            tpl_es_por_equipo: Boolean(i.es_por_equipo),
+            tpl_cantidad_base: cantBase,
+          };
+        });
     }
     return [];
   });
@@ -487,20 +544,25 @@ function CotizacionStudioEditor({
     if (initialPlantilla) {
       return initialPlantilla.items
         .filter((i) => i.tipo_linea === 'OTRO')
-        .map((i) => ({
-          uid: nextUid('otr'),
-          categoria_rubro: i.categoria_rubro || 'OTRO',
-          descripcion: i.descripcion,
-          detalle_calculo: i.detalle_calculo || '',
-          cantidad: Number(i.cantidad_base) || 1,
-          unidad: i.unidad || 'global',
-          costo_unitario: Number(i.costo_unitario_fijo || 0),
-          precio_unitario: Number(i.precio_unitario_fijo || 0),
-          descuento_porcentaje: 0,
-          visible_cliente: i.visible_cliente !== false,
-          es_opcional: Boolean(i.es_opcional),
-          iva_aplicable: i.iva_aplicable !== false,
-        }));
+        .map((i) => {
+          const cantBase = Number(i.cantidad_base) || 1;
+          return {
+            uid: nextUid('otr'),
+            categoria_rubro: i.categoria_rubro || 'OTRO',
+            descripcion: i.descripcion,
+            detalle_calculo: i.detalle_calculo || '',
+            cantidad: cantBase,
+            unidad: i.unidad || 'global',
+            costo_unitario: Number(i.costo_unitario_fijo || 0),
+            precio_unitario: Number(i.precio_unitario_fijo || 0),
+            descuento_porcentaje: 0,
+            visible_cliente: i.visible_cliente !== false,
+            es_opcional: Boolean(i.es_opcional),
+            iva_aplicable: i.iva_aplicable !== false,
+            tpl_es_por_equipo: Boolean(i.es_por_equipo),
+            tpl_cantidad_base: cantBase,
+          };
+        });
     }
     return [];
   });
@@ -1014,8 +1076,63 @@ function CotizacionStudioEditor({
   // ACCIONES DE CONSTRUCCIÓN DE LÍNEAS Y PLANTILLAS EN MEMORIA
   // ═══════════════════════════════════════════════════════════════════════════
 
+  const applyEquiposIdsChange = (nextIds: number[]) => {
+    const prevMult = Math.max(1, equiposIds.length);
+    const nextMult = Math.max(1, nextIds.length);
+    setEquiposIds(nextIds);
+
+    if (prevMult === nextMult) return;
+
+    const escalablesSrv = serviciosRows.filter(
+      (r) => r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null,
+    ).length;
+    const escalablesCmp = componentesRows.filter(
+      (r) => r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null,
+    ).length;
+    const escalablesOtr = otrosRows.filter(
+      (r) => r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null,
+    ).length;
+    const totalEscalables = escalablesSrv + escalablesCmp + escalablesOtr;
+    if (totalEscalables === 0) return;
+
+    if (escalablesSrv > 0) {
+      setServiciosRows((prev) =>
+        prev.map((r) =>
+          r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null
+            ? { ...r, cantidad: Math.round(r.tpl_cantidad_base * nextMult * 100) / 100 }
+            : r,
+        ),
+      );
+    }
+    if (escalablesCmp > 0) {
+      setComponentesRows((prev) =>
+        prev.map((r) =>
+          r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null
+            ? { ...r, cantidad: Math.round(r.tpl_cantidad_base * nextMult * 100) / 100 }
+            : r,
+        ),
+      );
+    }
+    if (escalablesOtr > 0) {
+      setOtrosRows((prev) =>
+        prev.map((r) =>
+          r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null
+            ? { ...r, cantidad: Math.round(r.tpl_cantidad_base * nextMult * 100) / 100 }
+            : r,
+        ),
+      );
+    }
+
+    toast.info(
+      `Auto-escalado CPQ: ${totalEscalables} línea(s) × Equipo ajustadas a ×${nextMult} equipo${nextMult > 1 ? 's' : ''}`,
+    );
+  };
+
   const toggleEquipo = (id: number) => {
-    setEquiposIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    const nextIds = equiposIds.includes(id)
+      ? equiposIds.filter((x) => x !== id)
+      : [...equiposIds, id];
+    applyEquiposIdsChange(nextIds);
   };
 
   const applyPlantillaLocal = (pl: PlantillaCotizacionRecord, reemplazar = false) => {
@@ -1025,12 +1142,13 @@ function CotizacionStudioEditor({
     const nuevosOtros: OtroRow[] = [];
 
     for (const it of pl.items || []) {
-      const cant =
-        Math.round(Number(it.cantidad_base || 1) * (it.es_por_equipo ? mult : 1) * 100) / 100;
+      const cantBase = Number(it.cantidad_base || 1);
+      const cant = Math.round(cantBase * (it.es_por_equipo ? mult : 1) * 100) / 100;
       if (it.tipo_linea === 'SERVICIO') {
         const srvCat = it.id_servicio
           ? serviciosCatalogo.find((s) => s.id_servicio === it.id_servicio)
           : undefined;
+        const precioVivoSrv = srvCat?.precio_base ?? it.catalogo_servicios?.precio_base ?? null;
         nuevosServ.push({
           uid: nextUid('srv'),
           id_servicio: it.id_servicio ?? null,
@@ -1039,42 +1157,61 @@ function CotizacionStudioEditor({
           unidad: it.unidad || 'servicio',
           costo_unitario: Number(it.costo_unitario_fijo ?? 0),
           precio_unitario:
-            it.usar_precio_catalogo && srvCat?.precio_base != null
-              ? Number(srvCat.precio_base)
+            it.usar_precio_catalogo && precioVivoSrv != null
+              ? Number(precioVivoSrv)
               : Number(it.precio_unitario_fijo ?? 0),
           descuento_porcentaje: 0,
           es_opcional: Boolean(it.es_opcional),
           iva_aplicable: it.iva_aplicable !== false,
           observaciones: it.observaciones || '',
+          tpl_es_por_equipo: Boolean(it.es_por_equipo),
+          tpl_cantidad_base: cantBase,
         });
       } else if (it.tipo_linea === 'COMPONENTE') {
         const cmpCat = it.id_componente
           ? articulosMaestro.find((c) => c.id_componente === it.id_componente)
           : undefined;
+        const cmpBackend = it.catalogo_componentes;
+        const precioVentaVivo = cmpCat?.precio_venta ?? cmpBackend?.precio_venta ?? null;
+        const precioCompraVivo = cmpCat?.precio_compra ?? cmpBackend?.precio_compra ?? null;
+        const esInv = cmpCat
+          ? cmpCat.es_inventariable !== false
+          : cmpBackend?.es_inventariable !== false;
+        const stockVivo = cmpCat?.stock_actual ?? cmpBackend?.stock_actual ?? null;
         nuevosComp.push({
           uid: nextUid('cmp'),
           id_componente: it.id_componente ?? null,
-          id_tipo_componente: cmpCat?.id_tipo_componente ?? null,
+          id_tipo_componente: cmpCat?.id_tipo_componente ?? cmpBackend?.id_tipo_componente ?? null,
           descripcion: it.descripcion,
-          referencia_manual: cmpCat?.referencia_fabricante || cmpCat?.codigo_interno || '',
-          marca_manual: cmpCat?.marcas?.nombre || cmpCat?.marca || '',
+          referencia_manual:
+            cmpCat?.referencia_fabricante ||
+            cmpCat?.codigo_interno ||
+            cmpBackend?.referencia_fabricante ||
+            cmpBackend?.codigo_interno ||
+            '',
+          marca_manual: cmpCat?.marcas?.nombre || cmpCat?.marca || cmpBackend?.marca || '',
           cantidad: cant,
           unidad:
-            it.unidad || cmpCat?.unidades_medida?.simbolo || cmpCat?.unidad_medida || 'unidad',
+            it.unidad ||
+            cmpCat?.unidades_medida?.simbolo ||
+            cmpCat?.unidad_medida ||
+            cmpBackend?.unidad_medida ||
+            'unidad',
           costo_unitario:
-            it.usar_precio_catalogo && cmpCat?.precio_compra != null
-              ? Number(cmpCat.precio_compra)
+            it.usar_precio_catalogo && precioCompraVivo != null
+              ? Number(precioCompraVivo)
               : Number(it.costo_unitario_fijo ?? 0),
           precio_unitario:
-            it.usar_precio_catalogo && cmpCat?.precio_venta != null
-              ? Number(cmpCat.precio_venta)
+            it.usar_precio_catalogo && precioVentaVivo != null
+              ? Number(precioVentaVivo)
               : Number(it.precio_unitario_fijo ?? 0),
           descuento_porcentaje: 0,
           es_opcional: Boolean(it.es_opcional),
           iva_aplicable: it.iva_aplicable !== false,
           garantia_meses: it.garantia_meses ?? undefined,
-          stock_actual:
-            cmpCat && cmpCat.es_inventariable !== false ? Number(cmpCat.stock_actual ?? 0) : null,
+          stock_actual: (cmpCat || cmpBackend) && esInv ? Number(stockVivo ?? 0) : null,
+          tpl_es_por_equipo: Boolean(it.es_por_equipo),
+          tpl_cantidad_base: cantBase,
         });
       } else {
         nuevosOtros.push({
@@ -1090,6 +1227,8 @@ function CotizacionStudioEditor({
           visible_cliente: it.visible_cliente !== false,
           es_opcional: Boolean(it.es_opcional),
           iva_aplicable: it.iva_aplicable !== false,
+          tpl_es_por_equipo: Boolean(it.es_por_equipo),
+          tpl_cantidad_base: cantBase,
         });
       }
     }
@@ -1122,6 +1261,9 @@ function CotizacionStudioEditor({
       setAiuImprevPct(pl.aiu_imprevistos_porcentaje);
       setAiuUtilPct(pl.aiu_utilidad_porcentaje);
       setIvaSobreUtilidadAiu(pl.iva_sobre_utilidad_aiu);
+    }
+    if (pl.mostrar_desglose_precios !== null && pl.mostrar_desglose_precios !== undefined) {
+      setMostrarDesglosePrecios(Boolean(pl.mostrar_desglose_precios));
     }
 
     toast.success(
@@ -1772,7 +1914,7 @@ function CotizacionStudioEditor({
                                   const repCargo = c.cargo_contacto?.trim() || '';
                                   setClienteId(String(c.id_cliente));
                                   setSedeId('NONE');
-                                  setEquiposIds([]);
+                                  applyEquiposIdsChange([]);
                                   setClienteDropdownOpen(false);
                                   setClienteSearch('');
                                   setAtencionANombre(repNombre);
@@ -1874,25 +2016,38 @@ function CotizacionStudioEditor({
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-slate-700">Tipo de Oferta</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs font-semibold text-slate-700">Tipo de Oferta</Label>
+                    {isEditable && (
+                      <button
+                        type="button"
+                        onClick={() => setTiposModalOpen(true)}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-primary transition-colors"
+                        title="Crear, renombrar o limpiar tipos de oferta del catálogo CPQ"
+                      >
+                        <Settings2 className="h-3 w-3" />
+                        Gestionar
+                      </button>
+                    )}
+                  </div>
                   <CpqCreatableCombobox
                     disabled={!isEditable}
                     value={tipoCotizacion}
                     onChange={setTipoCotizacion}
-                    options={TIPO_OFERTA_COMBOBOX_OPTIONS}
+                    options={tipoOfertaOptions}
                     placeholder="Seleccionar tipo de oferta..."
-                    searchPlaceholder="Buscar o escribir tipo personalizado..."
-                    customLabel="Crear tipo de oferta"
-                    normalizeCustom={(raw) =>
-                      raw
-                        .normalize('NFD')
-                        .replace(/[\u0300-\u036f]/g, '')
-                        .toUpperCase()
-                        .replace(/[^A-Z0-9]+/g, '_')
-                        .replace(/^_+|_+$/g, '')
-                        .slice(0, 40)
-                    }
-                    minDropdownWidth={290}
+                    searchPlaceholder="Buscar o escribir tipo nuevo (ej. Overhaul Turbo Especial)..."
+                    customLabel="Crear nuevo tipo"
+                    normalizeCustom={normalizeTipoOfertaCodigo}
+                    showNormalizedPreview
+                    onCreateCustom={async (rawLabel, normalizedCode) => {
+                      const created = await tiposOfertaActions.crear.mutateAsync({
+                        nombre: rawLabel,
+                        codigo: normalizedCode,
+                      });
+                      return created.codigo;
+                    }}
+                    minDropdownWidth={310}
                   />
                 </div>
 
@@ -1956,7 +2111,7 @@ function CotizacionStudioEditor({
                         size="sm"
                         className="h-7 text-xs"
                         onClick={() =>
-                          setEquiposIds(
+                          applyEquiposIdsChange(
                             equiposIds.length === equiposCliente.length
                               ? []
                               : equiposCliente.map((e) => e.id_equipo),
@@ -2556,7 +2711,11 @@ function CotizacionStudioEditor({
                               value={row.cantidad}
                               onChange={(val) =>
                                 setServiciosRows((prev) =>
-                                  prev.map((r, i) => (i === idx ? { ...r, cantidad: val } : r)),
+                                  prev.map((r, i) =>
+                                    i === idx
+                                      ? { ...r, cantidad: val, tpl_cantidad_manual: true }
+                                      : r,
+                                  ),
                                 )
                               }
                               title="Cantidad"
@@ -3002,7 +3161,11 @@ function CotizacionStudioEditor({
                               value={row.cantidad}
                               onChange={(val) =>
                                 setComponentesRows((prev) =>
-                                  prev.map((r, i) => (i === idx ? { ...r, cantidad: val } : r)),
+                                  prev.map((r, i) =>
+                                    i === idx
+                                      ? { ...r, cantidad: val, tpl_cantidad_manual: true }
+                                      : r,
+                                  ),
                                 )
                               }
                               title="Cantidad"
@@ -3352,7 +3515,11 @@ function CotizacionStudioEditor({
                               value={row.cantidad}
                               onChange={(val) =>
                                 setOtrosRows((prev) =>
-                                  prev.map((r, i) => (i === idx ? { ...r, cantidad: val } : r)),
+                                  prev.map((r, i) =>
+                                    i === idx
+                                      ? { ...r, cantidad: val, tpl_cantidad_manual: true }
+                                      : r,
+                                  ),
                                 )
                               }
                             />
@@ -4900,6 +5067,14 @@ function CotizacionStudioEditor({
         ].join('-')}
         mostrarDesglosePrecios={mostrarDesglosePrecios}
         onDesgloseChange={setMostrarDesglosePrecios}
+      />
+
+      <TiposOfertaManagerModal
+        open={tiposModalOpen}
+        onOpenChange={setTiposModalOpen}
+        onSelectTipo={(codigo) => {
+          if (isEditable) setTipoCotizacion(codigo);
+        }}
       />
     </div>
   );

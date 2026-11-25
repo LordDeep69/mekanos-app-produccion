@@ -387,6 +387,37 @@ export interface PlantillaCotizacionItem {
   garantia_meses?: number | null;
   orden_item?: number;
   observaciones?: string | null;
+  catalogo_servicios?: {
+    id_servicio: number;
+    codigo_servicio?: string | null;
+    nombre_servicio?: string | null;
+    precio_base?: number | string | null;
+  } | null;
+  catalogo_componentes?: {
+    id_componente: number;
+    id_tipo_componente?: number | null;
+    codigo_interno?: string | null;
+    referencia_fabricante?: string | null;
+    marca?: string | null;
+    descripcion_corta?: string | null;
+    precio_venta?: number | string | null;
+    precio_compra?: number | string | null;
+    stock_actual?: number | string | null;
+    es_inventariable?: boolean | null;
+    unidad_medida?: string | null;
+  } | null;
+}
+
+export interface TipoOfertaCatalogoRecord {
+  codigo: string;
+  nombre: string;
+  descripcion?: string | null;
+  badge: string;
+  es_sistema: boolean;
+  orden: number;
+  uso_plantillas: number;
+  uso_cotizaciones: number;
+  uso_total: number;
 }
 
 export interface PlantillaCotizacionRecord {
@@ -411,6 +442,7 @@ export interface PlantillaCotizacionRecord {
   aiu_imprevistos_porcentaje: number;
   aiu_utilidad_porcentaje: number;
   iva_sobre_utilidad_aiu: boolean;
+  mostrar_desglose_precios?: boolean | null;
   veces_usada: number;
   activo: boolean;
   tipos_equipo?: { id_tipo_equipo: number; codigo_tipo: string; nombre_tipo: string } | null;
@@ -779,15 +811,58 @@ export async function convertirCotizacionAOrden(
   return res.data;
 }
 
+// ==================== CATÁLOGO UNIFICADO TIPOS DE OFERTA ====================
+
+export async function getTiposOfertaCotizacion(): Promise<TipoOfertaCatalogoRecord[]> {
+  const res = await apiClient.get<TipoOfertaCatalogoRecord[]>('/cotizaciones/tipos-oferta');
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function createTipoOfertaCotizacion(payload: {
+  nombre: string;
+  codigo?: string;
+  descripcion?: string;
+  badge?: string;
+}): Promise<TipoOfertaCatalogoRecord> {
+  const res = await apiClient.post<TipoOfertaCatalogoRecord>('/cotizaciones/tipos-oferta', payload);
+  return res.data;
+}
+
+export async function updateTipoOfertaCotizacion(
+  codigo: string,
+  payload: {
+    nombre?: string;
+    descripcion?: string | null;
+    badge?: string;
+  },
+): Promise<TipoOfertaCatalogoRecord> {
+  const res = await apiClient.put<TipoOfertaCatalogoRecord>(
+    `/cotizaciones/tipos-oferta/${encodeURIComponent(codigo)}`,
+    payload,
+  );
+  return res.data;
+}
+
+export async function deleteTipoOfertaCotizacion(codigo: string): Promise<void> {
+  await apiClient.delete(`/cotizaciones/tipos-oferta/${encodeURIComponent(codigo)}`);
+}
+
 // ==================== PLANTILLAS CPQ ====================
 
 export async function getPlantillasCotizacion(params?: {
   search?: string;
   tipo_cotizacion?: string;
   id_tipo_equipo?: number;
+  incluir_inactivas?: boolean;
 }): Promise<PlantillaCotizacionRecord[]> {
+  const queryParams = params
+    ? {
+        ...params,
+        incluir_inactivas: params.incluir_inactivas ? 'true' : undefined,
+      }
+    : undefined;
   const res = await apiClient.get<PlantillaCotizacionRecord[]>('/cotizaciones/plantillas', {
-    params,
+    params: queryParams,
   });
   return Array.isArray(res.data) ? res.data : [];
 }

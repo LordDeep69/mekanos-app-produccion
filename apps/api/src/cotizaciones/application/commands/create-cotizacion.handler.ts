@@ -57,10 +57,9 @@ export class CreateCotizacionHandler implements ICommandHandler<CreateCotizacion
     // Equipos normalizados (N:M + principal legacy)
     const equiposIds = Array.from(
       new Set<number>(
-        [
-          ...(extras.equipos_ids || []),
-          ...(command.id_equipo ? [command.id_equipo] : []),
-        ].filter((id) => Number.isInteger(id) && id > 0),
+        [...(extras.equipos_ids || []), ...(command.id_equipo ? [command.id_equipo] : [])].filter(
+          (id) => Number.isInteger(id) && id > 0,
+        ),
       ),
     );
     const idEquipoPrincipal = equiposIds.length > 0 ? equiposIds[0] : command.id_equipo;
@@ -147,6 +146,16 @@ export class CreateCotizacionHandler implements ICommandHandler<CreateCotizacion
           }),
         ),
       );
+    }
+
+    // Incrementar contador de uso si la cotización nació desde una plantilla CPQ
+    if (extras.id_plantilla_origen) {
+      await this.prisma.plantillas_cotizacion
+        .update({
+          where: { id_plantilla: extras.id_plantilla_origen },
+          data: { veces_usada: { increment: 1 } },
+        })
+        .catch(() => undefined);
     }
 
     return (

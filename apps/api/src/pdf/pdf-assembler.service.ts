@@ -669,10 +669,25 @@ export class PdfAssemblerService {
       return `data:image/${mime};base64,${raw}`;
     };
 
+    let tipoCotizacionLabel: string | undefined = cot.tipo_cotizacion || undefined;
+    if (cot.tipo_cotizacion) {
+      try {
+        const tipoCatalogo = await this.prisma.tipos_oferta_cotizacion.findUnique({
+          where: { codigo: String(cot.tipo_cotizacion).trim().toUpperCase() },
+          select: { nombre: true },
+        });
+        if (tipoCatalogo?.nombre) {
+          tipoCotizacionLabel = tipoCatalogo.nombre;
+        }
+      } catch {
+        // Fallback silencioso al código crudo
+      }
+    }
+
     const datosCotizacion: DatosCotizacionPDF = {
       branding: brand,
       numeroCotizacion: cot.numero_cotizacion || `COT-${idRef ?? ''}`,
-      tipoCotizacion: cot.tipo_cotizacion || undefined,
+      tipoCotizacion: tipoCotizacionLabel,
       moneda: cot.moneda || brand.codigoMoneda,
       fechaCotizacion: formatCalendarDateOrg(cot.fecha_cotizacion ?? fechaBase, brand),
       fechaVencimiento: formatCalendarDateOrg(cot.fecha_vencimiento ?? fechaVencBase, brand),

@@ -2,9 +2,10 @@ import { DatabaseModule } from '@mekanos/database';
 import { Module, forwardRef } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 
-// Controllers (PlantillasController ANTES de CotizacionesController para prioridad de ruta estática)
+// Controllers (sub-rutas estáticas ANTES de CotizacionesController para prioridad de ruta)
 import { CotizacionesController } from './cotizaciones.controller';
 import { PlantillasCotizacionController } from './plantillas/plantillas-cotizacion.controller';
+import { TiposOfertaCotizacionController } from './tipos-oferta/tipos-oferta-cotizacion.controller';
 
 // Repository
 import { PrismaCotizacionesRepository } from './infrastructure/prisma-cotizaciones.repository';
@@ -13,6 +14,7 @@ import { PrismaCotizacionesRepository } from './infrastructure/prisma-cotizacion
 import { PlantillasCotizacionService } from './plantillas/plantillas-cotizacion.service';
 import { CotizacionCalculoService } from './services/cotizacion-calculo.service';
 import { CotizacionesCpqService } from './services/cotizaciones-cpq.service';
+import { TiposOfertaCotizacionService } from './tipos-oferta/tipos-oferta-cotizacion.service';
 
 // Módulos externos necesarios para envío de cotización
 import { EmailModule } from '../email/email.module';
@@ -57,17 +59,17 @@ const QueryHandlers = [
 ];
 
 @Module({
-  imports: [
-    CqrsModule,
-    DatabaseModule,
-    forwardRef(() => PdfModule),
-    forwardRef(() => EmailModule),
+  imports: [CqrsModule, DatabaseModule, forwardRef(() => PdfModule), forwardRef(() => EmailModule)],
+  controllers: [
+    TiposOfertaCotizacionController,
+    PlantillasCotizacionController,
+    CotizacionesController,
   ],
-  controllers: [PlantillasCotizacionController, CotizacionesController],
   providers: [
     CotizacionCalculoService,
     CotizacionesCpqService,
     PlantillasCotizacionService,
+    TiposOfertaCotizacionService,
     {
       provide: 'CotizacionesRepository',
       useClass: PrismaCotizacionesRepository,
@@ -80,6 +82,7 @@ const QueryHandlers = [
     CotizacionCalculoService,
     CotizacionesCpqService,
     PlantillasCotizacionService,
+    TiposOfertaCotizacionService,
   ],
 })
 export class CotizacionesModule {}

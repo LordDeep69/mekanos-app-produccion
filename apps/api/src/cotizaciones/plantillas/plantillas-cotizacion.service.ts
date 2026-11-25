@@ -35,15 +35,71 @@ export class PlantillasCotizacionService {
   ) {}
 
   private buildCodigoPlantilla(nombre: string, custom?: string): string {
-    const raw = (custom && custom.trim()) || `TPL-${nombre}`;
-    const normalized = raw
+    if (custom && custom.trim()) {
+      const normalized = custom
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60);
+      return normalized || `TPL-${Date.now()}`;
+    }
+
+    const STOPWORDS = new Set([
+      'DE',
+      'DEL',
+      'LA',
+      'LAS',
+      'EL',
+      'LOS',
+      'Y',
+      'E',
+      'O',
+      'U',
+      'EN',
+      'PARA',
+      'CON',
+      'POR',
+      'A',
+      'AL',
+      'UN',
+      'UNA',
+      'UNOS',
+      'UNAS',
+      'SU',
+      'SUS',
+      'SIN',
+      'SOBRE',
+      'ENTRE',
+    ]);
+
+    const allTokens = nombre
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 52);
-    return normalized || `TPL-${Date.now()}`;
+      .split(/[^A-Z0-9]+/)
+      .filter(Boolean);
+
+    const meaningful = allTokens.filter((t) => !STOPWORDS.has(t));
+    const source = meaningful.length > 0 ? meaningful : allTokens;
+
+    const chosen: string[] = [];
+    let current = 'TPL';
+    for (const tok of source) {
+      if (chosen.length >= 3) break;
+      const next = `${current}-${tok}`;
+      if (chosen.length === 0) {
+        chosen.push(tok.slice(0, 22));
+        current = `TPL-${chosen[0]}`;
+      } else if (next.length <= 28) {
+        chosen.push(tok);
+        current = next;
+      }
+    }
+
+    return chosen.length > 0 ? current : `TPL-${Date.now().toString().slice(-6)}`;
   }
 
   private mapPlantilla(pl: any) {
@@ -101,17 +157,25 @@ export class PlantillasCotizacionService {
           orderBy: [{ orden_item: 'asc' }, { id_plantilla_item: 'asc' }],
           include: {
             catalogo_servicios: {
-              select: { id_servicio: true, codigo_servicio: true, nombre_servicio: true, precio_base: true },
+              select: {
+                id_servicio: true,
+                codigo_servicio: true,
+                nombre_servicio: true,
+                precio_base: true,
+              },
             },
             catalogo_componentes: {
               select: {
                 id_componente: true,
+                id_tipo_componente: true,
                 codigo_interno: true,
                 referencia_fabricante: true,
+                marca: true,
                 descripcion_corta: true,
                 precio_venta: true,
                 precio_compra: true,
                 stock_actual: true,
+                es_inventariable: true,
                 unidad_medida: true,
               },
             },
@@ -137,17 +201,25 @@ export class PlantillasCotizacionService {
           orderBy: [{ orden_item: 'asc' }, { id_plantilla_item: 'asc' }],
           include: {
             catalogo_servicios: {
-              select: { id_servicio: true, codigo_servicio: true, nombre_servicio: true, precio_base: true },
+              select: {
+                id_servicio: true,
+                codigo_servicio: true,
+                nombre_servicio: true,
+                precio_base: true,
+              },
             },
             catalogo_componentes: {
               select: {
                 id_componente: true,
+                id_tipo_componente: true,
                 codigo_interno: true,
                 referencia_fabricante: true,
+                marca: true,
                 descripcion_corta: true,
                 precio_venta: true,
                 precio_compra: true,
                 stock_actual: true,
+                es_inventariable: true,
                 unidad_medida: true,
               },
             },
@@ -198,6 +270,8 @@ export class PlantillasCotizacionService {
           aiu_imprevistos_porcentaje: dto.aiu_imprevistos_porcentaje ?? 0,
           aiu_utilidad_porcentaje: dto.aiu_utilidad_porcentaje ?? 0,
           iva_sobre_utilidad_aiu: Boolean(dto.iva_sobre_utilidad_aiu),
+          mostrar_desglose_precios:
+            dto.mostrar_desglose_precios !== undefined ? dto.mostrar_desglose_precios : null,
           activo: dto.activo !== false,
           creado_por: userId ?? null,
         },
@@ -211,12 +285,16 @@ export class PlantillasCotizacionService {
             id_servicio: it.tipo_linea === 'SERVICIO' ? (it.id_servicio ?? null) : null,
             id_componente: it.tipo_linea === 'COMPONENTE' ? (it.id_componente ?? null) : null,
             categoria_rubro:
-              it.tipo_linea === 'OTRO'
-                ? (it.categoria_rubro || 'OTRO').toUpperCase()
-                : null,
+              it.tipo_linea === 'OTRO' ? (it.categoria_rubro || 'OTRO').toUpperCase() : null,
             descripcion: it.descripcion.trim(),
             detalle_calculo: it.detalle_calculo ?? null,
-            unidad: it.unidad || (it.tipo_linea === 'SERVICIO' ? 'servicio' : it.tipo_linea === 'OTRO' ? 'global' : 'unidad'),
+            unidad:
+              it.unidad ||
+              (it.tipo_linea === 'SERVICIO'
+                ? 'servicio'
+                : it.tipo_linea === 'OTRO'
+                  ? 'global'
+                  : 'unidad'),
             cantidad_base: it.cantidad_base ?? 1,
             es_por_equipo: it.es_por_equipo !== false,
             usar_precio_catalogo: it.usar_precio_catalogo !== false,
@@ -239,13 +317,28 @@ export class PlantillasCotizacionService {
   }
 
   async actualizar(idPlantilla: number, dto: UpdatePlantillaCotizacionDto) {
-    await this.obtenerPorId(idPlantilla);
+    const actual = await this.obtenerPorId(idPlantilla);
+
+    if (dto.codigo_plantilla && dto.codigo_plantilla.trim()) {
+      const nuevoCodigo = dto.codigo_plantilla.trim().toUpperCase();
+      if (nuevoCodigo !== actual.codigo_plantilla) {
+        const duplicada = await this.prisma.plantillas_cotizacion.findUnique({
+          where: { codigo_plantilla: nuevoCodigo },
+          select: { id_plantilla: true },
+        });
+        if (duplicada && duplicada.id_plantilla !== idPlantilla) {
+          throw new ConflictException(`Ya existe una plantilla con el código ${nuevoCodigo}`);
+        }
+      }
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.plantillas_cotizacion.update({
         where: { id_plantilla: idPlantilla },
         data: {
-          ...(dto.codigo_plantilla ? { codigo_plantilla: dto.codigo_plantilla.trim().toUpperCase() } : {}),
+          ...(dto.codigo_plantilla
+            ? { codigo_plantilla: dto.codigo_plantilla.trim().toUpperCase() }
+            : {}),
           ...(dto.nombre !== undefined ? { nombre: dto.nombre.trim() } : {}),
           ...(dto.descripcion !== undefined ? { descripcion: dto.descripcion } : {}),
           ...(dto.tipo_cotizacion !== undefined ? { tipo_cotizacion: dto.tipo_cotizacion } : {}),
@@ -279,6 +372,9 @@ export class PlantillasCotizacionService {
           ...(dto.iva_sobre_utilidad_aiu !== undefined
             ? { iva_sobre_utilidad_aiu: dto.iva_sobre_utilidad_aiu }
             : {}),
+          ...(dto.mostrar_desglose_precios !== undefined
+            ? { mostrar_desglose_precios: dto.mostrar_desglose_precios }
+            : {}),
           ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
           fecha_modificacion: new Date(),
         },
@@ -296,12 +392,16 @@ export class PlantillasCotizacionService {
               id_servicio: it.tipo_linea === 'SERVICIO' ? (it.id_servicio ?? null) : null,
               id_componente: it.tipo_linea === 'COMPONENTE' ? (it.id_componente ?? null) : null,
               categoria_rubro:
-                it.tipo_linea === 'OTRO'
-                  ? (it.categoria_rubro || 'OTRO').toUpperCase()
-                  : null,
+                it.tipo_linea === 'OTRO' ? (it.categoria_rubro || 'OTRO').toUpperCase() : null,
               descripcion: it.descripcion.trim(),
               detalle_calculo: it.detalle_calculo ?? null,
-              unidad: it.unidad || (it.tipo_linea === 'SERVICIO' ? 'servicio' : it.tipo_linea === 'OTRO' ? 'global' : 'unidad'),
+              unidad:
+                it.unidad ||
+                (it.tipo_linea === 'SERVICIO'
+                  ? 'servicio'
+                  : it.tipo_linea === 'OTRO'
+                    ? 'global'
+                    : 'unidad'),
               cantidad_base: it.cantidad_base ?? 1,
               es_por_equipo: it.es_por_equipo !== false,
               usar_precio_catalogo: it.usar_precio_catalogo !== false,
@@ -347,7 +447,9 @@ export class PlantillasCotizacionService {
       throw new NotFoundException(`Cotización ${idCotizacion} no encontrada`);
     }
     if (cotizacion.id_estado !== 1) {
-      throw new BadRequestException('Solo se puede aplicar una plantilla a cotizaciones en BORRADOR');
+      throw new BadRequestException(
+        'Solo se puede aplicar una plantilla a cotizaciones en BORRADOR',
+      );
     }
 
     const plantilla = await this.prisma.plantillas_cotizacion.findUnique({
@@ -366,7 +468,8 @@ export class PlantillasCotizacionService {
       throw new NotFoundException(`Plantilla ${idPlantilla} no encontrada`);
     }
 
-    const equiposVinculadosCount = cotizacion.cotizaciones_equipos.length || (cotizacion.id_equipo ? 1 : 1);
+    const equiposVinculadosCount =
+      cotizacion.cotizaciones_equipos.length || (cotizacion.id_equipo ? 1 : 1);
     const multiplicador = Math.max(1, dto.multiplicador_equipos ?? equiposVinculadosCount);
     const reemplazar = Boolean(dto.reemplazar_items);
     const aplicarTextos = dto.aplicar_textos_comerciales !== false;
@@ -378,7 +481,9 @@ export class PlantillasCotizacionService {
     await this.prisma.$transaction(async (tx) => {
       if (reemplazar) {
         await tx.items_cotizacion_servicios.deleteMany({ where: { id_cotizacion: idCotizacion } });
-        await tx.items_cotizacion_componentes.deleteMany({ where: { id_cotizacion: idCotizacion } });
+        await tx.items_cotizacion_componentes.deleteMany({
+          where: { id_cotizacion: idCotizacion },
+        });
         await tx.items_cotizacion_otros.deleteMany({ where: { id_cotizacion: idCotizacion } });
       }
 
@@ -428,11 +533,15 @@ export class PlantillasCotizacionService {
           ordC += 1;
           const comp = it.catalogo_componentes;
           const pu =
-            it.usar_precio_catalogo && comp?.precio_venta !== null && comp?.precio_venta !== undefined
+            it.usar_precio_catalogo &&
+            comp?.precio_venta !== null &&
+            comp?.precio_venta !== undefined
               ? Number(comp.precio_venta)
               : Number(it.precio_unitario_fijo ?? 0);
           const cu =
-            it.usar_precio_catalogo && comp?.precio_compra !== null && comp?.precio_compra !== undefined
+            it.usar_precio_catalogo &&
+            comp?.precio_compra !== null &&
+            comp?.precio_compra !== undefined
               ? Number(comp.precio_compra)
               : Number(it.costo_unitario_fijo ?? 0);
           await tx.items_cotizacion_componentes.create({
@@ -513,7 +622,10 @@ export class PlantillasCotizacionService {
         if (plantilla.meses_garantia !== null && plantilla.meses_garantia !== undefined) {
           headerUpdate.meses_garantia = plantilla.meses_garantia;
         }
-        if (plantilla.tiempo_estimado_dias !== null && plantilla.tiempo_estimado_dias !== undefined) {
+        if (
+          plantilla.tiempo_estimado_dias !== null &&
+          plantilla.tiempo_estimado_dias !== undefined
+        ) {
           headerUpdate.tiempo_estimado_dias = plantilla.tiempo_estimado_dias;
         }
         if (plantilla.usa_aiu) {
@@ -522,6 +634,12 @@ export class PlantillasCotizacionService {
           headerUpdate.aiu_imprevistos_porcentaje = plantilla.aiu_imprevistos_porcentaje;
           headerUpdate.aiu_utilidad_porcentaje = plantilla.aiu_utilidad_porcentaje;
           headerUpdate.iva_sobre_utilidad_aiu = plantilla.iva_sobre_utilidad_aiu;
+        }
+        if (
+          plantilla.mostrar_desglose_precios !== null &&
+          plantilla.mostrar_desglose_precios !== undefined
+        ) {
+          headerUpdate.mostrar_desglose_precios = plantilla.mostrar_desglose_precios;
         }
       }
 
@@ -669,11 +787,18 @@ export class PlantillasCotizacionService {
     const cot = await this.prisma.cotizaciones.findUnique({
       where: { id_cotizacion: idCotizacion },
       include: {
+        equipos: { select: { id_tipo_equipo: true, id_modelo_equipo: true } },
         cotizaciones_equipos: {
           include: { equipos: { select: { id_tipo_equipo: true, id_modelo_equipo: true } } },
         },
-        items_cotizacion_servicios: { orderBy: { orden_item: 'asc' }, include: { catalogo_servicios: true } },
-        items_cotizacion_componentes: { orderBy: { orden_item: 'asc' } },
+        items_cotizacion_servicios: {
+          orderBy: { orden_item: 'asc' },
+          include: { catalogo_servicios: true },
+        },
+        items_cotizacion_componentes: {
+          orderBy: { orden_item: 'asc' },
+          include: { catalogo_componentes: true },
+        },
         items_cotizacion_otros: { orderBy: { orden_item: 'asc' } },
       },
     });
@@ -684,14 +809,18 @@ export class PlantillasCotizacionService {
     const numEquipos = Math.max(1, cot.cotizaciones_equipos.length || 1);
     const divisor = dto.normalizar_por_equipo !== false ? numEquipos : 1;
 
-    // Inferir tipo_equipo / modelo_equipo si todos los equipos coinciden
-    const tiposUnicos = Array.from(
-      new Set(cot.cotizaciones_equipos.map((e) => e.equipos.id_tipo_equipo)),
-    );
+    // Inferir tipo_equipo / modelo_equipo si todos los equipos coinciden (con fallback al equipo legacy)
+    const equiposFuente =
+      cot.cotizaciones_equipos.length > 0
+        ? cot.cotizaciones_equipos.map((e) => e.equipos)
+        : cot.equipos
+          ? [cot.equipos]
+          : [];
+    const tiposUnicos = Array.from(new Set(equiposFuente.map((e) => e.id_tipo_equipo)));
     const modelosUnicos = Array.from(
       new Set(
-        cot.cotizaciones_equipos
-          .map((e) => e.equipos.id_modelo_equipo)
+        equiposFuente
+          .map((e) => e.id_modelo_equipo)
           .filter((id): id is number => typeof id === 'number'),
       ),
     );
@@ -715,16 +844,26 @@ export class PlantillasCotizacionService {
     for (const s of cot.items_cotizacion_servicios) {
       ord += 1;
       const cantNorm = Math.max(0.01, Math.round((Number(s.cantidad) / divisor) * 100) / 100);
+      const precioLinea = Number(s.precio_unitario);
+      const precioCat =
+        s.catalogo_servicios?.precio_base !== null &&
+        s.catalogo_servicios?.precio_base !== undefined
+          ? Number(s.catalogo_servicios.precio_base)
+          : null;
+      const usaPrecioVivo =
+        Boolean(s.id_servicio) && (precioCat === null || Math.abs(precioLinea - precioCat) < 0.01);
       items.push({
         tipo_linea: 'SERVICIO',
         id_servicio: s.id_servicio ?? null,
         descripcion:
-          s.descripcion_personalizada || s.catalogo_servicios?.nombre_servicio || 'Servicio Técnico',
+          s.descripcion_personalizada ||
+          s.catalogo_servicios?.nombre_servicio ||
+          'Servicio Técnico',
         unidad: s.unidad || 'servicio',
         cantidad_base: cantNorm,
         es_por_equipo: true,
-        usar_precio_catalogo: Boolean(s.id_servicio),
-        precio_unitario_fijo: Number(s.precio_unitario),
+        usar_precio_catalogo: usaPrecioVivo,
+        precio_unitario_fijo: precioLinea,
         costo_unitario_fijo: Number(s.costo_unitario || 0),
         visible_cliente: true,
         es_opcional: s.es_opcional,
@@ -737,6 +876,15 @@ export class PlantillasCotizacionService {
     for (const c of cot.items_cotizacion_componentes) {
       ord += 1;
       const cantNorm = Math.max(0.01, Math.round((Number(c.cantidad) / divisor) * 100) / 100);
+      const precioLinea = Number(c.precio_unitario);
+      const precioCat =
+        c.catalogo_componentes?.precio_venta !== null &&
+        c.catalogo_componentes?.precio_venta !== undefined
+          ? Number(c.catalogo_componentes.precio_venta)
+          : null;
+      const usaPrecioVivo =
+        Boolean(c.id_componente) &&
+        (precioCat === null || Math.abs(precioLinea - precioCat) < 0.01);
       items.push({
         tipo_linea: 'COMPONENTE',
         id_componente: c.id_componente ?? null,
@@ -744,8 +892,8 @@ export class PlantillasCotizacionService {
         unidad: c.unidad || 'unidad',
         cantidad_base: cantNorm,
         es_por_equipo: true,
-        usar_precio_catalogo: Boolean(c.id_componente),
-        precio_unitario_fijo: Number(c.precio_unitario),
+        usar_precio_catalogo: usaPrecioVivo,
+        precio_unitario_fijo: precioLinea,
         costo_unitario_fijo: Number(c.costo_unitario || 0),
         visible_cliente: true,
         es_opcional: c.es_opcional,
@@ -799,6 +947,7 @@ export class PlantillasCotizacionService {
         aiu_imprevistos_porcentaje: Number(cot.aiu_imprevistos_porcentaje || 0),
         aiu_utilidad_porcentaje: Number(cot.aiu_utilidad_porcentaje || 0),
         iva_sobre_utilidad_aiu: cot.iva_sobre_utilidad_aiu,
+        mostrar_desglose_precios: cot.mostrar_desglose_precios,
         items,
       },
       userId,

@@ -208,11 +208,17 @@ const TIPO_COT_LABELS: Record<string, string> = {
 
 const formatTipoLabel = (raw?: string): string | null => {
   if (!raw) return null;
-  if (TIPO_COT_LABELS[raw]) return TIPO_COT_LABELS[raw];
-  return raw
-    .replace(/_/g, ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (TIPO_COT_LABELS[trimmed]) return TIPO_COT_LABELS[trimmed];
+  if (/^[A-Z0-9_]+$/.test(trimmed)) {
+    return trimmed
+      .split('_')
+      .filter(Boolean)
+      .map((w) => w[0] + w.slice(1).toLowerCase())
+      .join(' ');
+  }
+  return trimmed;
 };
 
 export const generarCotizacionHTML = (datos: DatosCotizacionPDF): string => {

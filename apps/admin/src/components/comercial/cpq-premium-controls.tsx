@@ -56,6 +56,11 @@ export interface CpqCreatableComboboxProps {
   allowCustom?: boolean;
   customLabel?: string;
   normalizeCustom?: (raw: string) => string;
+  showNormalizedPreview?: boolean;
+  onCreateCustom?: (
+    rawLabel: string,
+    normalizedValue: string,
+  ) => void | string | Promise<void | string>;
   className?: string;
   minDropdownWidth?: number;
   maxVisibleOptions?: number;
@@ -73,6 +78,8 @@ export function CpqCreatableCombobox({
   allowCustom = true,
   customLabel = 'Usar personalizado',
   normalizeCustom,
+  showNormalizedPreview = false,
+  onCreateCustom,
   className,
   minDropdownWidth = 240,
   maxVisibleOptions = 40,
@@ -80,6 +87,7 @@ export function CpqCreatableCombobox({
 }: CpqCreatableComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [creatingCustom, setCreatingCustom] = useState(false);
   const mounted = useSyncExternalStore(subscribeNoop, getClientMounted, getServerMounted);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -134,11 +142,43 @@ export function CpqCreatableCombobox({
   }, [filtered]);
 
   const trimmedQuery = query.trim();
+  const normalizedPreview = useMemo(() => {
+    if (!trimmedQuery) return '';
+    return normalizeCustom ? normalizeCustom(trimmedQuery) : trimmedQuery;
+  }, [trimmedQuery, normalizeCustom]);
+
+  const readableCustomLabel = useMemo(() => {
+    if (!trimmedQuery) return '';
+    if (
+      /^[A-Z0-9_]+$/.test(trimmedQuery) &&
+      (trimmedQuery.includes('_') || trimmedQuery.length > 4)
+    ) {
+      return trimmedQuery
+        .split('_')
+        .filter(Boolean)
+        .map((w) => w[0] + w.slice(1).toLowerCase())
+        .join(' ');
+    }
+    return trimmedQuery;
+  }, [trimmedQuery]);
+
+  // Comparación anti-duplicados insensible a tildes, mayúsculas, espacios y guiones
+  const canonicalMatchKey = (s: string) => normalizeSearchText(s).replace(/[^a-z0-9]+/g, '');
+
   const hasExactMatch = useMemo(() => {
     if (!trimmedQuery) return true;
-    const lower = trimmedQuery.toLowerCase();
-    return options.some((o) => o.value.toLowerCase() === lower || o.label.toLowerCase() === lower);
-  }, [options, trimmedQuery]);
+    const queryCanon = canonicalMatchKey(trimmedQuery);
+    const normCanon = canonicalMatchKey(normalizedPreview);
+    return options.some((o) => {
+      const valCanon = canonicalMatchKey(o.value);
+      const lblCanon = canonicalMatchKey(o.label);
+      return (
+        valCanon === queryCanon ||
+        lblCanon === queryCanon ||
+        (Boolean(normCanon) && (valCanon === normCanon || lblCanon === normCanon))
+      );
+    });
+  }, [options, trimmedQuery, normalizedPreview]);
 
   const updatePosition = () => {
     if (!triggerRef.current) return;
@@ -190,6 +230,27 @@ export function CpqCreatableCombobox({
     onChange(nextVal);
     setOpen(false);
     setQuery('');
+  };
+
+  const handleCreateCustom = async () => {
+    if (!trimmedQuery || creatingCustom) return;
+    let nextVal = normalizedPreview || trimmedQuery;
+    if (!nextVal) return;
+    if (onCreateCustom) {
+      try {
+        setCreatingCustom(true);
+        const createdVal = await onCreateCustom(readableCustomLabel || trimmedQuery, nextVal);
+        if (typeof createdVal === 'string' && createdVal.trim()) {
+          nextVal = createdVal.trim();
+        }
+      } catch {
+        // Error ya notificado por el callback/mutación; no seleccionar valor fallido
+        return;
+      } finally {
+        setCreatingCustom(false);
+      }
+    }
+    selectValue(nextVal);
   };
 
   const sizeClasses =
@@ -262,17 +323,16 @@ export function CpqCreatableCombobox({
                       if (filtered.length > 0 && !allowCustom) {
                         selectValue(filtered[0].value);
                       } else if (trimmedQuery) {
+                        const queryCanon = canonicalMatchKey(trimmedQuery);
                         const exact = filtered.find(
                           (o) =>
-                            o.label.toLowerCase() === trimmedQuery.toLowerCase() ||
-                            o.value.toLowerCase() === trimmedQuery.toLowerCase(),
+                            canonicalMatchKey(o.label) === queryCanon ||
+                            canonicalMatchKey(o.value) === queryCanon,
                         );
                         if (exact) {
                           selectValue(exact.value);
-                        } else if (allowCustom) {
-                          selectValue(
-                            normalizeCustom ? normalizeCustom(trimmedQuery) : trimmedQuery,
-                          );
+                        } else if (allowCustom && !hasExactMatch) {
+                          void handleCreateCustom();
                         }
                       }
                     }
@@ -343,17 +403,29 @@ export function CpqCreatableCombobox({
                 <p className="py-4 text-center text-xs text-slate-400">Sin resultados</p>
               )}
 
-              {allowCustom && trimmedQuery && !hasExactMatch && (
+              {allowCustom && !trimmedQuery && showNormalizedPreview && (
+                <div className="px-2.5 py-1.5 text-[10px] text-slate-400 border-t border-slate-100 mt-1">
+                  Escribe cualquier nombre arriba para crear un nuevo tipo al instante.
+                </div>
+              )}
+
+              {allowCustom && trimmedQuery && !hasExactMatch && Boolean(normalizedPreview) && (
                 <button
                   type="button"
-                  onClick={() =>
-                    selectValue(normalizeCustom ? normalizeCustom(trimmedQuery) : trimmedQuery)
-                  }
-                  className="w-full px-2.5 py-2 rounded-lg text-left text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 flex items-center gap-1.5 transition-colors"
+                  disabled={creatingCustom}
+                  onClick={() => void handleCreateCustom()}
+                  className="w-full mt-1 px-2.5 py-2 rounded-lg text-left text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/25 flex items-start gap-2 transition-colors disabled:opacity-60"
                 >
-                  <Plus className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">
-                    {customLabel}: &ldquo;{trimmedQuery}&rdquo;
+                  <Plus className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">
+                      {customLabel}: &ldquo;{readableCustomLabel}&rdquo;
+                    </span>
+                    {showNormalizedPreview && (
+                      <span className="block text-[10px] font-mono font-normal text-slate-500 mt-0.5 truncate">
+                        Código: {normalizedPreview}
+                      </span>
+                    )}
                   </span>
                 </button>
               )}

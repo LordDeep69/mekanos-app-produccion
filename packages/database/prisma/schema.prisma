@@ -3655,6 +3655,7 @@ model plantillas_cotizacion {
   aiu_imprevistos_porcentaje Decimal                       @default(0) @db.Decimal(5, 2)
   aiu_utilidad_porcentaje    Decimal                       @default(0) @db.Decimal(5, 2)
   iva_sobre_utilidad_aiu     Boolean                       @default(false)
+  mostrar_desglose_precios   Boolean?
   veces_usada                Int                           @default(0)
   activo                     Boolean                       @default(true)
   creado_por                 Int?
@@ -3699,4 +3700,18 @@ model plantillas_cotizacion_items {
 
   @@index([id_plantilla, orden_item], map: "idx_plantillas_cot_items_pl")
   @@map("plantillas_cotizacion_items")
+}
+
+model tipos_oferta_cotizacion {
+  codigo             String   @id @db.VarChar(40)
+  nombre             String   @db.VarChar(120)
+  descripcion        String?  @db.VarChar(250)
+  badge              String?  @db.VarChar(10)
+  es_sistema         Boolean  @default(false)
+  activo             Boolean  @default(true)
+  orden              Int      @default(100)
+  fecha_creacion     DateTime @default(now()) @db.Timestamp(6)
+  fecha_modificacion DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@map("tipos_oferta_cotizacion")
 }

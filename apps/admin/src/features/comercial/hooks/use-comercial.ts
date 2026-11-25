@@ -12,9 +12,11 @@ import {
   createCotizacion,
   createPlantillaCotizacion,
   createPropuestaCorrectivo,
+  createTipoOfertaCotizacion,
   deleteItemComponenteCotizacion,
   deleteItemServicioCotizacion,
   deletePlantillaCotizacion,
+  deleteTipoOfertaCotizacion,
   duplicarCotizacion,
   eliminarFirmaCotizacion,
   enviarCotizacion,
@@ -28,6 +30,7 @@ import {
   getPropuestasPendientes,
   getSugerenciasCpq,
   getTiposComponente,
+  getTiposOfertaCotizacion,
   guardarCotizacionComoPlantilla,
   guardarFirmaCotizacion,
   guardarStudioCotizacion,
@@ -38,6 +41,7 @@ import {
   rechazarCotizacionCliente,
   solicitarAprobacionCotizacion,
   updatePlantillaCotizacion,
+  updateTipoOfertaCotizacion,
   type AddItemComponentePayload,
   type AddItemServicioPayload,
   type CreateCotizacionPayload,
@@ -51,6 +55,7 @@ export const COMERCIAL_KEYS = {
   cotizacion: (id: number) => ['comercial', 'cotizacion', id] as const,
   aprobaciones: ['comercial', 'aprobaciones'] as const,
   plantillas: ['comercial', 'plantillas'] as const,
+  tiposOferta: ['comercial', 'tipos-oferta'] as const,
   sugerencias: (equiposIds: number[], tipo?: string) =>
     ['comercial', 'sugerencias', equiposIds.join(','), tipo || ''] as const,
   propuestas: ['comercial', 'propuestas'] as const,
@@ -95,11 +100,69 @@ export function usePlantillasCotizacion(params?: {
   search?: string;
   tipo_cotizacion?: string;
   id_tipo_equipo?: number;
+  incluir_inactivas?: boolean;
 }) {
   return useQuery({
     queryKey: [...COMERCIAL_KEYS.plantillas, params],
     queryFn: () => getPlantillasCotizacion(params),
   });
+}
+
+export function useTiposOfertaCotizacion() {
+  return useQuery({
+    queryKey: COMERCIAL_KEYS.tiposOferta,
+    queryFn: getTiposOfertaCotizacion,
+    staleTime: 60_000,
+  });
+}
+
+export function useTiposOfertaActions() {
+  const qc = useQueryClient();
+  const invAll = () => {
+    qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.tiposOferta });
+    qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.plantillas });
+    qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.cotizaciones });
+  };
+
+  const crear = useMutation({
+    mutationFn: (payload: {
+      nombre: string;
+      codigo?: string;
+      descripcion?: string;
+      badge?: string;
+    }) => createTipoOfertaCotizacion(payload),
+    onSuccess: (created) => {
+      invAll();
+      toast.success(`Tipo de oferta "${created.nombre}" agregado al catálogo`);
+    },
+    onError: (e: unknown) => toast.error(getErr(e, 'No se pudo crear el tipo de oferta')),
+  });
+
+  const actualizar = useMutation({
+    mutationFn: ({
+      codigo,
+      payload,
+    }: {
+      codigo: string;
+      payload: { nombre?: string; descripcion?: string | null; badge?: string };
+    }) => updateTipoOfertaCotizacion(codigo, payload),
+    onSuccess: (updated) => {
+      invAll();
+      toast.success(`Tipo de oferta "${updated.nombre}" actualizado`);
+    },
+    onError: (e: unknown) => toast.error(getErr(e, 'No se pudo actualizar el tipo de oferta')),
+  });
+
+  const eliminar = useMutation({
+    mutationFn: (codigo: string) => deleteTipoOfertaCotizacion(codigo),
+    onSuccess: () => {
+      invAll();
+      toast.success('Tipo de oferta eliminado del catálogo');
+    },
+    onError: (e: unknown) => toast.error(getErr(e, 'No se pudo eliminar el tipo de oferta')),
+  });
+
+  return { crear, actualizar, eliminar };
 }
 
 export function useSugerenciasCpq(equiposIds: number[], tipoCotizacion?: string, enabled = true) {
@@ -131,8 +194,12 @@ export function useCreateCotizacion() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreateCotizacionPayload) => createCotizacion(payload),
-    onSuccess: () => {
+    onSuccess: (_created, vars) => {
       qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.cotizaciones });
+      qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.tiposOferta });
+      if (vars.id_plantilla_origen) {
+        qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.plantillas });
+      }
       toast.success('Cotización creada en BORRADOR');
     },
     onError: (e: unknown) => toast.error(getErr(e, 'Error al crear cotización')),
@@ -143,8 +210,12 @@ export function useGuardarStudioCotizacion(idCotizacion: number | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: GuardarStudioPayload) => guardarStudioCotizacion(idCotizacion!, payload),
-    onSuccess: (updated) => {
+    onSuccess: (updated, vars) => {
       qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.cotizaciones });
+      qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.tiposOferta });
+      if (vars.id_plantilla_origen) {
+        qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.plantillas });
+      }
       if (idCotizacion) {
         qc.setQueryData(COMERCIAL_KEYS.cotizacion(idCotizacion), updated);
       }
@@ -156,7 +227,10 @@ export function useGuardarStudioCotizacion(idCotizacion: number | null) {
 
 export function usePlantillasActions() {
   const qc = useQueryClient();
-  const inv = () => qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.plantillas });
+  const inv = () => {
+    qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.plantillas });
+    qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.tiposOferta });
+  };
 
   const crear = useMutation({
     mutationFn: (payload: Partial<PlantillaCotizacionRecord>) => createPlantillaCotizacion(payload),
