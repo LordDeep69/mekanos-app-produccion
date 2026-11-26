@@ -1025,8 +1025,32 @@ export class FinalizacionOrdenService {
           id_firma_cliente: null,
         },
       });
-      for (const firmaId of [firmaResidualTecnico, firmaResidualCliente].filter(Boolean)) {
-        await tx.firmas_digitales.delete({ where: { id_firma_digital: firmaId! } }).catch(() => {});
+      const residuales = Array.from(
+        new Set([firmaResidualTecnico, firmaResidualCliente].filter(Boolean) as number[]),
+      );
+      for (const firmaId of residuales) {
+        const [otrasOrdenesRef, cotizacionesRef] = await Promise.all([
+          typeof tx.ordenes_servicio?.count === 'function'
+            ? tx.ordenes_servicio.count({
+                where: {
+                  id_orden_servicio: { not: idOrden },
+                  OR: [{ id_firma_tecnico: firmaId }, { id_firma_cliente: firmaId }],
+                },
+              })
+            : Promise.resolve(0),
+          typeof tx.cotizaciones?.count === 'function'
+            ? tx.cotizaciones.count({
+                where: {
+                  OR: [{ id_firma_asesor: firmaId }, { id_firma_cliente: firmaId }],
+                },
+              })
+            : Promise.resolve(0),
+        ]);
+        if (otrasOrdenesRef === 0 && cotizacionesRef === 0) {
+          await tx.firmas_digitales
+            .delete({ where: { id_firma_digital: firmaId } })
+            .catch(() => {});
+        }
       }
     }
 

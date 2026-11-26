@@ -3,6 +3,7 @@ import { TransferenciaOrdenService } from './transferencia-orden.service';
 function createMockPrisma(
   ordenes: Record<number, any>,
   lotes: Record<number, any[]> = {},
+  firmas: Record<number, any> = {},
 ) {
   const created = {
     ordenes_equipos: [] as any[],
@@ -14,6 +15,7 @@ function createMockPrisma(
     ordenes_actividades_plan: [] as any[],
     ordenes_pendientes: [] as any[],
     historial_estados_orden: [] as any[],
+    firmas_digitales: [] as any[],
   };
   const updated = {
     ordenes_servicio: [] as any[],
@@ -23,6 +25,14 @@ function createMockPrisma(
   let nextId = 50000;
 
   const tx: any = {
+    firmas_digitales: {
+      findUnique: jest.fn(async (args: any) => firmas[args.where.id_firma_digital] ?? null),
+      create: jest.fn(async (args: any) => {
+        const row = { id_firma_digital: ++nextId, ...args.data };
+        created.firmas_digitales.push(row);
+        return row;
+      }),
+    },
     ordenes_servicio: {
       update: jest.fn(async (args: any) => {
         updated.ordenes_servicio.push(args);
@@ -201,7 +211,11 @@ describe('TransferenciaOrdenService - Transferencia Inteligente v2 y PDF Multi-E
       observaciones_cierre: 'Servicio finalizado',
       id_firma_cliente: 88,
       id_firma_tecnico: 89,
-      estados_orden: { codigo_estado: 'COMPLETADA', nombre_estado: 'Completada', es_estado_final: true },
+      estados_orden: {
+        codigo_estado: 'COMPLETADA',
+        nombre_estado: 'Completada',
+        es_estado_final: true,
+      },
       clientes: { id_cliente: 50, persona: { razon_social: 'TAKURIKA' } },
       tipos_servicio: { id_tipo_servicio: 3, nombre_tipo: 'Preventivo A - Bombas' },
       equipos: srcEquipos[0].equipos,
@@ -224,7 +238,11 @@ describe('TransferenciaOrdenService - Transferencia Inteligente v2 y PDF Multi-E
         unidad_medida: 'A',
         id_orden_equipo: legacyNullFks ? null : oe.id_orden_equipo,
         excluido_pdf: false,
-        parametros_medicion: { id_parametro_medicion: 10, nombre_parametro: 'Amperaje', id_tipo_equipo: null },
+        parametros_medicion: {
+          id_parametro_medicion: 10,
+          nombre_parametro: 'Amperaje',
+          id_tipo_equipo: null,
+        },
       })),
       evidencias_fotograficas: [
         ...srcEquipos.map((oe, i) => ({
@@ -276,7 +294,11 @@ describe('TransferenciaOrdenService - Transferencia Inteligente v2 y PDF Multi-E
       id_estado_actual: 1,
       descripcion_inicial: 'Orden destino 6 bombas',
       metadata: { clave_destino: 'KEEP' },
-      estados_orden: { codigo_estado: 'ASIGNADA', nombre_estado: 'Asignada', es_estado_final: false },
+      estados_orden: {
+        codigo_estado: 'ASIGNADA',
+        nombre_estado: 'Asignada',
+        es_estado_final: false,
+      },
       clientes: { id_cliente: 50, persona: { razon_social: 'TAKURIKA' } },
       tipos_servicio: { id_tipo_servicio: 3, nombre_tipo: 'Preventivo A - Bombas' },
       equipos: dstEquipos[0].equipos,
@@ -300,7 +322,10 @@ describe('TransferenciaOrdenService - Transferencia Inteligente v2 y PDF Multi-E
 
   it('empareja 1:1 por id_equipo (9→6 desordenado), descarta excedentes, preserva FKs, lotes y WMS', async () => {
     const { ordenOrigen, ordenDestino, lotes } = buildScenario9to6(false);
-    const { prisma, created, updated } = createMockPrisma({ 78: ordenOrigen, 94: ordenDestino }, lotes);
+    const { prisma, created, updated } = createMockPrisma(
+      { 78: ordenOrigen, 94: ordenDestino },
+      lotes,
+    );
     const svc = new TransferenciaOrdenService(prisma);
 
     const preview = await svc.previsualizarTransferencia(94, 78);
@@ -354,7 +379,11 @@ describe('TransferenciaOrdenService - Transferencia Inteligente v2 y PDF Multi-E
       fecha_inicio_real: new Date(),
       fecha_fin_real: new Date(),
       observaciones_cierre: 'OK',
-      estados_orden: { codigo_estado: 'COMPLETADA', nombre_estado: 'Completada', es_estado_final: true },
+      estados_orden: {
+        codigo_estado: 'COMPLETADA',
+        nombre_estado: 'Completada',
+        es_estado_final: true,
+      },
       clientes: { id_cliente: 50, persona: { razon_social: 'X' } },
       tipos_servicio: { id_tipo_servicio: 1, nombre_tipo: 'Tipo A Generador' },
       equipos: srcGen.equipos,
@@ -389,7 +418,11 @@ describe('TransferenciaOrdenService - Transferencia Inteligente v2 y PDF Multi-E
       id_tipo_servicio: 3,
       id_tecnico_asignado: 10,
       id_estado_actual: 1,
-      estados_orden: { codigo_estado: 'ASIGNADA', nombre_estado: 'Asignada', es_estado_final: false },
+      estados_orden: {
+        codigo_estado: 'ASIGNADA',
+        nombre_estado: 'Asignada',
+        es_estado_final: false,
+      },
       clientes: { id_cliente: 50, persona: { razon_social: 'X' } },
       tipos_servicio: { id_tipo_servicio: 3, nombre_tipo: 'Tipo A Bomba' },
       equipos: dstBom.equipos,
@@ -430,7 +463,11 @@ describe('TransferenciaOrdenService - Transferencia Inteligente v2 y PDF Multi-E
     const preview = await svc.previsualizarTransferencia(94, 78);
     const mapeoCustom = preview.mapeoSugerido.map((m) =>
       m.origen.idOrdenEquipo === 1009
-        ? { idOrdenEquipoOrigen: 1009, accion: 'AGREGAR_A_DESTINO' as const, idOrdenEquipoDestino: null }
+        ? {
+            idOrdenEquipoOrigen: 1009,
+            accion: 'AGREGAR_A_DESTINO' as const,
+            idOrdenEquipoDestino: null,
+          }
         : {
             idOrdenEquipoOrigen: m.origen.idOrdenEquipo,
             accion: m.accionSugerida,
@@ -486,5 +523,53 @@ describe('TransferenciaOrdenService - Transferencia Inteligente v2 y PDF Multi-E
     const prev = await svc.previsualizarTransferencia(94, 78);
     expect(prev.puedeTransferir).toBe(false);
     expect(prev.bloqueos.length).toBeGreaterThan(0);
+  });
+
+  it('clona firmas del origen en filas independientes (sin compartir FK) y nunca borra con NULL una firma ya existente en destino', async () => {
+    const { ordenOrigen, ordenDestino, lotes } = buildScenario9to6(false);
+    // Origen solo tiene firma técnico (89), NO tiene firma cliente (null).
+    // Destino YA tenía una firma cliente subida manualmente (777).
+    ordenOrigen.id_firma_tecnico = 89;
+    ordenOrigen.id_firma_cliente = null as any;
+    (ordenDestino as any).id_firma_cliente = 777;
+    (ordenDestino as any).id_firma_tecnico = null;
+    (ordenDestino as any).nombre_quien_recibe = 'Cliente Existente';
+
+    const firmasDb = {
+      89: {
+        id_firma_digital: 89,
+        id_persona: 10,
+        tipo_firma: 'TECNICO',
+        firma_base64: 'BASE64_TEC_ORIG',
+        formato_firma: 'PNG',
+        hash_firma: 'HASH_TEC',
+        fecha_captura: new Date('2026-11-20T10:00:00Z'),
+      },
+    };
+
+    const { prisma, created, updated } = createMockPrisma(
+      { 78: ordenOrigen, 94: ordenDestino },
+      lotes,
+      firmasDb,
+    );
+    const svc = new TransferenciaOrdenService(prisma);
+
+    await svc.ejecutarTransferencia(
+      94,
+      { idOrdenOrigen: 78, opciones: { incluirFirmas: true } },
+      1,
+    );
+
+    // Debe haberse clonado la firma del técnico en un ID nuevo distinto a 89
+    expect(created.firmas_digitales).toHaveLength(1);
+    const firmaClonada = created.firmas_digitales[0];
+    expect(firmaClonada.id_firma_digital).not.toBe(89);
+    expect(firmaClonada.firma_base64).toBe('BASE64_TEC_ORIG');
+
+    // La actualización en destino debe asignar la firma clonada y CONSERVAR la firma cliente 777
+    const updateOrden = updated.ordenes_servicio[0];
+    expect(updateOrden.data.id_firma_tecnico).toBe(firmaClonada.id_firma_digital);
+    expect(updateOrden.data.id_firma_cliente).toBe(777);
+    expect(updateOrden.data.nombre_quien_recibe).toBe('Cliente Existente');
   });
 });

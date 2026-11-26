@@ -8,7 +8,11 @@
 
 'use client';
 
-import { SignatureCanvas } from '@/components/shared/digital-signature-modal';
+import {
+  SignatureCanvas,
+  trimSignatureCanvasToBase64,
+  trimUploadedSignatureDataUrl,
+} from '@/components/shared/digital-signature-modal';
 import { useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import { cn } from '@/lib/utils';
@@ -138,15 +142,21 @@ function EditFirmaModal({
   const [nombreFirmante, setNombreFirmante] = useState(initialNombre);
   const [cargoFirmante, setCargoFirmante] = useState(initialCargo);
 
-  // Soporte drag-drop y paste para firma
+  // Soporte drag-drop y paste para firma (auto-cambia a pestaña 'upload' y normaliza a PNG recortado)
   const handleImageFiles = (files: File[]) => {
     const file = files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const result = reader.result as string;
-      const base64 = result.split(',')[1];
-      setPreviewBase64(base64);
+      const fallbackBase64 = result.includes(',') ? result.split(',')[1] : result;
+      try {
+        const trimmed = await trimUploadedSignatureDataUrl(result);
+        setPreviewBase64(trimmed || fallbackBase64);
+      } catch {
+        setPreviewBase64(fallbackBase64);
+      }
+      setMode('upload');
     };
     reader.readAsDataURL(file);
   };
@@ -164,6 +174,8 @@ function EditFirmaModal({
   const hasNewSignature = (mode === 'draw' && hasDrawn) || (mode === 'upload' && !!previewBase64);
   const hasClientData =
     tipo === 'CLIENTE' && (nombreFirmante.trim().length > 0 || cargoFirmante.trim().length > 0);
+  const isSavingOnlyClientMetadata =
+    tipo === 'CLIENTE' && !hasExistingSignature && !hasNewSignature && hasClientData;
   const canSave =
     !updateFirma.isPending && (hasExistingSignature || hasNewSignature || hasClientData);
 
@@ -175,7 +187,8 @@ function EditFirmaModal({
     // 1. Firma (solo si el usuario trazó o subió una nueva firma)
     if (mode === 'draw' && hasDrawn && canvasRef.current) {
       const canvas = canvasRef.current;
-      const base64 = canvas.toDataURL('image/png').split(',')[1];
+      const base64 =
+        trimSignatureCanvasToBase64(canvas) || canvas.toDataURL('image/png').split(',')[1];
       data.firma_base64 = base64;
     } else if (mode === 'upload' && previewBase64) {
       data.firma_base64 = previewBase64;
@@ -534,7 +547,7 @@ function EditFirmaModal({
             ) : (
               <>
                 <Save className="h-4 w-4" />
-                Guardar Cambios
+                {isSavingOnlyClientMetadata ? 'Guardar solo nombre y cargo' : 'Guardar Cambios'}
               </>
             )}
           </button>

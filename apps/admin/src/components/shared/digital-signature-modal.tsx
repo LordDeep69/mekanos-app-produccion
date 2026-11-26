@@ -308,7 +308,7 @@ export function trimSignatureCanvasToBase64(
 /**
  * Aplica el mismo auto-trim a una imagen de firma subida/pegada (sin afectar firmas históricas).
  */
-async function trimUploadedSignatureDataUrl(dataUrl: string): Promise<string> {
+export async function trimUploadedSignatureDataUrl(dataUrl: string): Promise<string> {
   return new Promise((resolve) => {
     const fallbackBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
     const img = new window.Image();

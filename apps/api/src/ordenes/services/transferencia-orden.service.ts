@@ -89,8 +89,7 @@ export class TransferenciaOrdenService {
 
     const coincidenciasExactas = mapeoSugerido.filter(
       (m) =>
-        m.tipoCoincidencia === 'EXACTA_ID_EQUIPO' ||
-        m.tipoCoincidencia === 'EXACTA_CODIGO_SERIE',
+        m.tipoCoincidencia === 'EXACTA_ID_EQUIPO' || m.tipoCoincidencia === 'EXACTA_CODIGO_SERIE',
     ).length;
 
     const coincidenciasSugeridas = mapeoSugerido.filter(
@@ -139,18 +138,15 @@ export class TransferenciaOrdenService {
       soloMedicionesCompatibles: hayCruceDeTipos,
       incluirEvidenciasEquipo: ctx.atribucion.totalEvidenciasEquipo > 0,
       incluirFotosGenerales:
-        ctx.atribucion.totalFotosGenerales +
-          ctx.atribucion.totalFotosHuerfanasComoGenerales >
-          0 || ctx.lotesGaleriaOrigen.length > 0,
+        ctx.atribucion.totalFotosGenerales + ctx.atribucion.totalFotosHuerfanasComoGenerales > 0 ||
+        ctx.lotesGaleriaOrigen.length > 0,
       incluirObservaciones: true,
       incluirFirmas: ctx.mismoCliente && (tieneFirmaTecnico || tieneFirmaCliente),
       incluirComponentes: totalComponentes > 0,
       copiarPlanActividades:
         ctx.mismoTipoServicio && todosMismoTipoEquipo && totalPlanActividades > 0,
       incluirPendientes: ctx.mismoCliente && totalPendientes > 0,
-      conservarDescripcionDestino: Boolean(
-        ctx.ordenDestino.descripcion_inicial?.trim(),
-      ),
+      conservarDescripcionDestino: Boolean(ctx.ordenDestino.descripcion_inicial?.trim()),
     };
 
     const advertencias = this.construirAdvertencias(
@@ -174,8 +170,7 @@ export class TransferenciaOrdenService {
         idCliente: ctx.ordenOrigen.id_cliente,
         nombreCliente: this.obtenerNombreCliente(ctx.ordenOrigen.clientes),
         idTipoServicio: ctx.ordenOrigen.id_tipo_servicio ?? null,
-        nombreTipoServicio:
-          ctx.ordenOrigen.tipos_servicio?.nombre_tipo || 'Sin tipo de servicio',
+        nombreTipoServicio: ctx.ordenOrigen.tipos_servicio?.nombre_tipo || 'Sin tipo de servicio',
         totalEquipos: ctx.equiposOrigen.length,
         esMultiEquipo: ctx.equiposOrigen.length > 1,
         tieneDatosLegacySinFk: ctx.atribucion.tieneDatosLegacySinFk,
@@ -190,8 +185,7 @@ export class TransferenciaOrdenService {
         idCliente: ctx.ordenDestino.id_cliente,
         nombreCliente: this.obtenerNombreCliente(ctx.ordenDestino.clientes),
         idTipoServicio: ctx.ordenDestino.id_tipo_servicio ?? null,
-        nombreTipoServicio:
-          ctx.ordenDestino.tipos_servicio?.nombre_tipo || 'Sin tipo de servicio',
+        nombreTipoServicio: ctx.ordenDestino.tipos_servicio?.nombre_tipo || 'Sin tipo de servicio',
         tieneDescripcionInicial: Boolean(ctx.ordenDestino.descripcion_inicial?.trim()),
         totalEquipos: ctx.equiposDestino.length,
         esMultiEquipo: ctx.equiposDestino.length > 1,
@@ -222,8 +216,7 @@ export class TransferenciaOrdenService {
         medicionesIncompatiblesEstimadas,
         totalEvidenciasEquipo: ctx.atribucion.totalEvidenciasEquipo,
         totalFotosGenerales: ctx.atribucion.totalFotosGenerales,
-        totalFotosHuerfanasComoGenerales:
-          ctx.atribucion.totalFotosHuerfanasComoGenerales,
+        totalFotosHuerfanasComoGenerales: ctx.atribucion.totalFotosHuerfanasComoGenerales,
         totalLotesGaleria: ctx.lotesGaleriaOrigen.length,
         totalComponentes,
         totalPlanActividades,
@@ -265,11 +258,7 @@ export class TransferenciaOrdenService {
       ctx.mismoCliente,
     );
 
-    const mapeoEfectivo = this.validarYResolverMapeo(
-      dto.mapeoEquipos,
-      mapeoSugerido,
-      ctx,
-    );
+    const mapeoEfectivo = this.validarYResolverMapeo(dto.mapeoEquipos, mapeoSugerido, ctx);
 
     // Determinar si hay cruce de tipos con el mapeo realmente seleccionado
     const dstById = new Map<number, EquipoNormalizadoInternal>(
@@ -286,26 +275,27 @@ export class TransferenciaOrdenService {
       const src = srcById.get(m.idOrdenEquipoOrigen);
       const dst = dstById.get(m.idOrdenEquipoDestino);
       return Boolean(
-        src?.idTipoEquipo &&
-          dst?.idTipoEquipo &&
-          src.idTipoEquipo !== dst.idTipoEquipo,
+        src?.idTipoEquipo && dst?.idTipoEquipo && src.idTipoEquipo !== dst.idTipoEquipo,
       );
     });
+
+    const tieneFirmaTecnicoOrigen = Boolean(ctx.ordenOrigen.id_firma_tecnico);
+    const tieneFirmaClienteOrigen = Boolean(ctx.ordenOrigen.id_firma_cliente);
 
     // 2. Resolver opciones granulares con defaults seguros
     const opciones: Required<OpcionesTransferenciaDto> = {
       incluirActividades: dto.opciones?.incluirActividades ?? true,
       incluirMediciones: dto.opciones?.incluirMediciones ?? true,
-      soloMedicionesCompatibles:
-        dto.opciones?.soloMedicionesCompatibles ?? hayCruceTiposEfectivo,
+      soloMedicionesCompatibles: dto.opciones?.soloMedicionesCompatibles ?? hayCruceTiposEfectivo,
       incluirEvidenciasEquipo: dto.opciones?.incluirEvidenciasEquipo ?? true,
       incluirFotosGenerales: dto.opciones?.incluirFotosGenerales ?? true,
       incluirObservaciones: dto.opciones?.incluirObservaciones ?? true,
-      incluirFirmas: dto.opciones?.incluirFirmas ?? ctx.mismoCliente,
+      incluirFirmas:
+        dto.opciones?.incluirFirmas ??
+        (ctx.mismoCliente && (tieneFirmaTecnicoOrigen || tieneFirmaClienteOrigen)),
       incluirComponentes: dto.opciones?.incluirComponentes ?? true,
       copiarPlanActividades:
-        dto.opciones?.copiarPlanActividades ??
-        (ctx.mismoTipoServicio && !hayCruceTiposEfectivo),
+        dto.opciones?.copiarPlanActividades ?? (ctx.mismoTipoServicio && !hayCruceTiposEfectivo),
       incluirPendientes: dto.opciones?.incluirPendientes ?? false,
       conservarDescripcionDestino:
         dto.opciones?.conservarDescripcionDestino ??
@@ -379,9 +369,7 @@ export class TransferenciaOrdenService {
 
         const destinoTieneSoloVirtual =
           ctx.equiposDestino.length === 1 && ctx.equiposDestino[0].esVirtual;
-        const hayExtrasAAgregar = mapeoEfectivo.some(
-          (m) => m.accion === 'AGREGAR_A_DESTINO',
-        );
+        const hayExtrasAAgregar = mapeoEfectivo.some((m) => m.accion === 'AGREGAR_A_DESTINO');
 
         let idOrdenEquipoVirtualMaterializado: number | null = null;
         let maxSeqDestino = ctx.equiposDestino
@@ -454,8 +442,7 @@ export class TransferenciaOrdenService {
             stats.equiposMapeados++;
 
             if (realDstOeId != null) {
-              const estadoAdoptado =
-                (src.rawOrdenEquipo?.estado as any) || estadoEquipoDefault;
+              const estadoAdoptado = (src.rawOrdenEquipo?.estado as any) || estadoEquipoDefault;
               await tx.ordenes_equipos.update({
                 where: { id_orden_equipo: realDstOeId },
                 data: {
@@ -466,9 +453,7 @@ export class TransferenciaOrdenService {
                     ctx.ordenOrigen.fecha_inicio_real ??
                     undefined,
                   fecha_fin:
-                    src.rawOrdenEquipo?.fecha_fin ??
-                    ctx.ordenOrigen.fecha_fin_real ??
-                    undefined,
+                    src.rawOrdenEquipo?.fecha_fin ?? ctx.ordenOrigen.fecha_fin_real ?? undefined,
                   observaciones: opciones.incluirObservaciones
                     ? (src.rawOrdenEquipo?.observaciones ?? undefined)
                     : undefined,
@@ -483,16 +468,14 @@ export class TransferenciaOrdenService {
               equipoOrigenNombre: srcLabel,
               accion: 'MAPEAR_A_DESTINO',
               idOrdenEquipoDestino: realDstOeId,
-              equipoDestinoNombre:
-                dst.nombreSistema || dst.nombreEquipo || dst.codigoEquipo,
+              equipoDestinoNombre: dst.nombreSistema || dst.nombreEquipo || dst.codigoEquipo,
             });
             continue;
           }
 
           if (m.accion === 'AGREGAR_A_DESTINO') {
             maxSeqDestino += 1;
-            const estadoAdoptado =
-              (src.rawOrdenEquipo?.estado as any) || estadoEquipoDefault;
+            const estadoAdoptado = (src.rawOrdenEquipo?.estado as any) || estadoEquipoDefault;
 
             const nuevoOe = await tx.ordenes_equipos.create({
               data: {
@@ -502,13 +485,8 @@ export class TransferenciaOrdenService {
                 nombre_sistema: src.nombreSistema || src.nombreEquipo,
                 estado: estadoAdoptado,
                 fecha_inicio:
-                  src.rawOrdenEquipo?.fecha_inicio ??
-                  ctx.ordenOrigen.fecha_inicio_real ??
-                  null,
-                fecha_fin:
-                  src.rawOrdenEquipo?.fecha_fin ??
-                  ctx.ordenOrigen.fecha_fin_real ??
-                  null,
+                  src.rawOrdenEquipo?.fecha_inicio ?? ctx.ordenOrigen.fecha_inicio_real ?? null,
+                fecha_fin: src.rawOrdenEquipo?.fecha_fin ?? ctx.ordenOrigen.fecha_fin_real ?? null,
                 observaciones: opciones.incluirObservaciones
                   ? (src.rawOrdenEquipo?.observaciones ?? null)
                   : null,
@@ -559,11 +537,9 @@ export class TransferenciaOrdenService {
         };
 
         const descripcionInicialFinal =
-          opciones.conservarDescripcionDestino &&
-          ctx.ordenDestino.descripcion_inicial?.trim()
+          opciones.conservarDescripcionDestino && ctx.ordenDestino.descripcion_inicial?.trim()
             ? ctx.ordenDestino.descripcion_inicial
-            : (ctx.ordenOrigen.descripcion_inicial ??
-              ctx.ordenDestino.descripcion_inicial);
+            : (ctx.ordenOrigen.descripcion_inicial ?? ctx.ordenDestino.descripcion_inicial);
 
         const observacionCierreFinal = opciones.incluirObservaciones
           ? ctx.ordenOrigen.observaciones_cierre
@@ -571,6 +547,70 @@ export class TransferenciaOrdenService {
             (ctx.estadoSeAdopta && ctx.estadoOrigen === 'COMPLETADA'
               ? `Servicio completado por transferencia desde ${ctx.ordenOrigen.numero_orden}`
               : ctx.ordenDestino.observaciones_cierre);
+
+        // ✅ FIX ROOT-CAUSE 26-NOV-2026 (Aislamiento y no-borrado de firmas al transferir):
+        // 1) Nunca compartir el mismo id_firma_digital por referencia entre origen y destino:
+        //    clonamos cada firma existente en origen dentro de la transacción.
+        // 2) Nunca sobrescribir con NULL una firma ya registrada en destino si origen carece de ella.
+        const clonarFirmaSiExiste = async (
+          idFirmaOrigen: number | null | undefined,
+          tipoSlot: 'TECNICO' | 'CLIENTE',
+        ): Promise<number | null> => {
+          if (!idFirmaOrigen) return null;
+          if (
+            typeof tx.firmas_digitales?.findUnique !== 'function' ||
+            typeof tx.firmas_digitales?.create !== 'function'
+          ) {
+            return idFirmaOrigen;
+          }
+          const firmaOrig = await tx.firmas_digitales.findUnique({
+            where: { id_firma_digital: idFirmaOrigen },
+          });
+          if (!firmaOrig) return null;
+
+          const clon = await tx.firmas_digitales.create({
+            data: {
+              id_persona: firmaOrig.id_persona,
+              tipo_firma: firmaOrig.tipo_firma ?? (tipoSlot as any),
+              firma_base64: firmaOrig.firma_base64,
+              formato_firma: firmaOrig.formato_firma ?? 'PNG',
+              hash_firma: firmaOrig.hash_firma,
+              es_firma_principal: false,
+              activa: true,
+              registrada_por: userId || firmaOrig.registrada_por || 1,
+              fecha_captura: firmaOrig.fecha_captura ?? new Date(),
+              fecha_registro: new Date(),
+              observaciones: `Clonada por transferencia (${ctx.ordenOrigen.numero_orden} → ${ctx.ordenDestino.numero_orden})`,
+            },
+          });
+          return clon.id_firma_digital;
+        };
+
+        const idFirmaClienteFinal = opciones.incluirFirmas
+          ? ((await clonarFirmaSiExiste(ctx.ordenOrigen.id_firma_cliente, 'CLIENTE')) ??
+            ctx.ordenDestino.id_firma_cliente)
+          : ctx.ordenDestino.id_firma_cliente;
+
+        const idFirmaTecnicoFinal = opciones.incluirFirmas
+          ? ((await clonarFirmaSiExiste(ctx.ordenOrigen.id_firma_tecnico, 'TECNICO')) ??
+            ctx.ordenDestino.id_firma_tecnico)
+          : ctx.ordenDestino.id_firma_tecnico;
+
+        const nombreQuienRecibeFinal = opciones.incluirFirmas
+          ? (ctx.ordenOrigen.nombre_quien_recibe ?? ctx.ordenDestino.nombre_quien_recibe)
+          : ctx.ordenDestino.nombre_quien_recibe;
+
+        const cargoQuienRecibeFinal = opciones.incluirFirmas
+          ? (ctx.ordenOrigen.cargo_quien_recibe ?? ctx.ordenDestino.cargo_quien_recibe)
+          : ctx.ordenDestino.cargo_quien_recibe;
+
+        const clienteConformeFinal = opciones.incluirFirmas
+          ? (ctx.ordenOrigen.cliente_conforme ?? ctx.ordenDestino.cliente_conforme)
+          : ctx.ordenDestino.cliente_conforme;
+
+        const calificacionClienteFinal = opciones.incluirFirmas
+          ? (ctx.ordenOrigen.calificacion_cliente ?? ctx.ordenDestino.calificacion_cliente)
+          : ctx.ordenDestino.calificacion_cliente;
 
         await tx.ordenes_servicio.update({
           where: { id_orden_servicio: idDestino },
@@ -594,24 +634,12 @@ export class TransferenciaOrdenService {
             fecha_inicio_real: ctx.ordenOrigen.fecha_inicio_real,
             fecha_fin_real: ctx.ordenOrigen.fecha_fin_real,
             duracion_minutos: ctx.ordenOrigen.duracion_minutos,
-            nombre_quien_recibe: opciones.incluirFirmas
-              ? ctx.ordenOrigen.nombre_quien_recibe
-              : ctx.ordenDestino.nombre_quien_recibe,
-            cargo_quien_recibe: opciones.incluirFirmas
-              ? ctx.ordenOrigen.cargo_quien_recibe
-              : ctx.ordenDestino.cargo_quien_recibe,
-            cliente_conforme: opciones.incluirFirmas
-              ? ctx.ordenOrigen.cliente_conforme
-              : ctx.ordenDestino.cliente_conforme,
-            calificacion_cliente: opciones.incluirFirmas
-              ? ctx.ordenOrigen.calificacion_cliente
-              : ctx.ordenDestino.calificacion_cliente,
-            id_firma_cliente: opciones.incluirFirmas
-              ? ctx.ordenOrigen.id_firma_cliente
-              : ctx.ordenDestino.id_firma_cliente,
-            id_firma_tecnico: opciones.incluirFirmas
-              ? ctx.ordenOrigen.id_firma_tecnico
-              : ctx.ordenDestino.id_firma_tecnico,
+            nombre_quien_recibe: nombreQuienRecibeFinal,
+            cargo_quien_recibe: cargoQuienRecibeFinal,
+            cliente_conforme: clienteConformeFinal,
+            calificacion_cliente: calificacionClienteFinal,
+            id_firma_cliente: idFirmaClienteFinal,
+            id_firma_tecnico: idFirmaTecnicoFinal,
             tiene_garantia: opciones.incluirObservaciones
               ? ctx.ordenOrigen.tiene_garantia
               : ctx.ordenDestino.tiene_garantia,
@@ -643,9 +671,7 @@ export class TransferenciaOrdenService {
 
         if (opciones.incluirActividades) {
           for (const act of actividadesOrigen) {
-            const srcOeId =
-              ctx.atribucion.actividadAEquipo.get(act.id_actividad_ejecutada) ??
-              null;
+            const srcOeId = ctx.atribucion.actividadAEquipo.get(act.id_actividad_ejecutada) ?? null;
 
             if (srcOeId !== null && !mapSrcOeToDstOe.has(srcOeId)) {
               stats.actividadesDescartadas++;
@@ -678,10 +704,7 @@ export class TransferenciaOrdenService {
                   : {}),
               },
             });
-            mapActividades.set(
-              act.id_actividad_ejecutada,
-              nuevaAct.id_actividad_ejecutada,
-            );
+            mapActividades.set(act.id_actividad_ejecutada, nuevaAct.id_actividad_ejecutada);
             stats.actividadesEjecutadas++;
           }
         } else {
@@ -709,9 +732,7 @@ export class TransferenciaOrdenService {
         for (const ev of evidenciasOrigen) {
           const clasif = ctx.atribucion.evidenciaClasificacion.get(ev.id_evidencia);
           const esGeneral =
-            !clasif ||
-            clasif.categoria === 'GENERAL' ||
-            clasif.categoria === 'HUERFANA_GENERAL';
+            !clasif || clasif.categoria === 'GENERAL' || clasif.categoria === 'HUERFANA_GENERAL';
 
           if (esGeneral) {
             if (!opciones.incluirFotosGenerales) {
@@ -812,8 +833,7 @@ export class TransferenciaOrdenService {
         const medicionesOrigen = ctx.ordenOrigen.mediciones_servicio || [];
         if (opciones.incluirMediciones) {
           for (const med of medicionesOrigen) {
-            const srcOeId =
-              ctx.atribucion.medicionAEquipo.get(med.id_medicion) ?? null;
+            const srcOeId = ctx.atribucion.medicionAEquipo.get(med.id_medicion) ?? null;
 
             if (srcOeId !== null && !mapSrcOeToDstOe.has(srcOeId)) {
               stats.medicionesDescartadas++;
@@ -825,8 +845,7 @@ export class TransferenciaOrdenService {
 
             // Protección anti-contaminación cross-type en parámetros técnicos
             if (opciones.soloMedicionesCompatibles) {
-              const paramTipoEquipoId =
-                med.parametros_medicion?.id_tipo_equipo ?? null;
+              const paramTipoEquipoId = med.parametros_medicion?.id_tipo_equipo ?? null;
               const dstTipoEquipoId =
                 nuevoIdOrdenEquipo != null
                   ? (mapDstOeMeta.get(nuevoIdOrdenEquipo)?.idTipoEquipo ??
@@ -934,20 +953,16 @@ export class TransferenciaOrdenService {
         if (opciones.incluirPendientes) {
           const pendientesOrigen = ctx.ordenOrigen.ordenes_pendientes || [];
           for (const pend of pendientesOrigen) {
-            const srcOeId =
-              ctx.atribucion.pendienteAEquipo.get(pend.id_orden_pendiente) ??
-              null;
+            const srcOeId = ctx.atribucion.pendienteAEquipo.get(pend.id_orden_pendiente) ?? null;
 
             if (srcOeId !== null && !mapSrcOeToDstOe.has(srcOeId)) {
               continue; // Pendiente de un equipo descartado
             }
 
-            const dstOeId =
-              srcOeId !== null ? (mapSrcOeToDstOe.get(srcOeId) ?? null) : null;
+            const dstOeId = srcOeId !== null ? (mapSrcOeToDstOe.get(srcOeId) ?? null) : null;
             const dstEquipoId =
               dstOeId !== null
-                ? (mapDstOeMeta.get(dstOeId)?.idEquipo ??
-                  ctx.ordenDestino.id_equipo)
+                ? (mapDstOeMeta.get(dstOeId)?.idEquipo ?? ctx.ordenDestino.id_equipo)
                 : pend.alcance === 'EQUIPO'
                   ? ctx.ordenDestino.id_equipo
                   : null;
@@ -995,8 +1010,7 @@ export class TransferenciaOrdenService {
           opciones_aplicadas: opciones,
           mapeo_equipos_aplicado: mapeoAplicado,
           estadisticas: stats,
-          observacion_cierre_anterior:
-            ctx.ordenDestino.observaciones_cierre ?? null,
+          observacion_cierre_anterior: ctx.ordenDestino.observaciones_cierre ?? null,
           observacion_cierre_nueva: observacionCierreFinal ?? null,
           sobrescrito_en_destino: {
             componentes_usados: delComponentes.count,
@@ -1068,89 +1082,78 @@ export class TransferenciaOrdenService {
       throw new BadRequestException('Debe proporcionar idOrdenOrigen (numérico)');
     }
     if (idOrdenOrigen === idDestino) {
-      throw new BadRequestException(
-        'La orden origen y destino no pueden ser la misma',
-      );
+      throw new BadRequestException('La orden origen y destino no pueden ser la misma');
     }
 
-    const [
-      ordenOrigen,
-      ordenDestino,
-      lotesGaleriaOrigen,
-      lotesGaleriaDestinoCount,
-    ] = await Promise.all([
-      this.prisma.ordenes_servicio.findUnique({
-        where: { id_orden_servicio: idOrdenOrigen },
-        include: {
-          estados_orden: true,
-          clientes: { include: { persona: true } },
-          tipos_servicio: true,
-          equipos: { include: { tipos_equipo: true } },
-          ordenes_equipos: {
-            include: { equipos: { include: { tipos_equipo: true } } },
-            orderBy: [{ orden_secuencia: 'asc' }, { id_orden_equipo: 'asc' }],
-          },
-          actividades_ejecutadas: {
-            include: { catalogo_actividades: true },
-            orderBy: [
-              { orden_secuencia: 'asc' },
-              { id_actividad_ejecutada: 'asc' },
-            ],
-          },
-          mediciones_servicio: {
-            include: { parametros_medicion: true },
-            orderBy: { id_medicion: 'asc' },
-          },
-          evidencias_fotograficas: {
-            orderBy: [{ orden_visualizacion: 'asc' }, { id_evidencia: 'asc' }],
-          },
-          componentes_usados: {
-            orderBy: { id_componente_usado: 'asc' },
-          },
-          ordenes_actividades_plan: {
-            orderBy: { orden_secuencia: 'asc' },
-          },
-          ordenes_pendientes: {
-            orderBy: { id_orden_pendiente: 'asc' },
-          },
-        },
-      }),
-      this.prisma.ordenes_servicio.findUnique({
-        where: { id_orden_servicio: idDestino },
-        include: {
-          estados_orden: true,
-          clientes: { include: { persona: true } },
-          tipos_servicio: true,
-          equipos: { include: { tipos_equipo: true } },
-          ordenes_equipos: {
-            include: { equipos: { include: { tipos_equipo: true } } },
-            orderBy: [{ orden_secuencia: 'asc' }, { id_orden_equipo: 'asc' }],
-          },
-          _count: {
-            select: {
-              actividades_ejecutadas: true,
-              mediciones_servicio: true,
-              evidencias_fotograficas: true,
-              componentes_usados: true,
-              ordenes_actividades_plan: true,
-              ordenes_pendientes: true,
+    const [ordenOrigen, ordenDestino, lotesGaleriaOrigen, lotesGaleriaDestinoCount] =
+      await Promise.all([
+        this.prisma.ordenes_servicio.findUnique({
+          where: { id_orden_servicio: idOrdenOrigen },
+          include: {
+            estados_orden: true,
+            clientes: { include: { persona: true } },
+            tipos_servicio: true,
+            equipos: { include: { tipos_equipo: true } },
+            ordenes_equipos: {
+              include: { equipos: { include: { tipos_equipo: true } } },
+              orderBy: [{ orden_secuencia: 'asc' }, { id_orden_equipo: 'asc' }],
+            },
+            actividades_ejecutadas: {
+              include: { catalogo_actividades: true },
+              orderBy: [{ orden_secuencia: 'asc' }, { id_actividad_ejecutada: 'asc' }],
+            },
+            mediciones_servicio: {
+              include: { parametros_medicion: true },
+              orderBy: { id_medicion: 'asc' },
+            },
+            evidencias_fotograficas: {
+              orderBy: [{ orden_visualizacion: 'asc' }, { id_evidencia: 'asc' }],
+            },
+            componentes_usados: {
+              orderBy: { id_componente_usado: 'asc' },
+            },
+            ordenes_actividades_plan: {
+              orderBy: { orden_secuencia: 'asc' },
+            },
+            ordenes_pendientes: {
+              orderBy: { id_orden_pendiente: 'asc' },
             },
           },
-        },
-      }),
-      this.prisma.lotes_galeria.findMany({
-        where: { id_orden_servicio: idOrdenOrigen },
-        orderBy: [{ orden_lote: 'asc' }, { id_lote_galeria: 'asc' }],
-      }),
-      this.prisma.lotes_galeria.count({
-        where: { id_orden_servicio: idDestino },
-      }),
-    ]);
+        }),
+        this.prisma.ordenes_servicio.findUnique({
+          where: { id_orden_servicio: idDestino },
+          include: {
+            estados_orden: true,
+            clientes: { include: { persona: true } },
+            tipos_servicio: true,
+            equipos: { include: { tipos_equipo: true } },
+            ordenes_equipos: {
+              include: { equipos: { include: { tipos_equipo: true } } },
+              orderBy: [{ orden_secuencia: 'asc' }, { id_orden_equipo: 'asc' }],
+            },
+            _count: {
+              select: {
+                actividades_ejecutadas: true,
+                mediciones_servicio: true,
+                evidencias_fotograficas: true,
+                componentes_usados: true,
+                ordenes_actividades_plan: true,
+                ordenes_pendientes: true,
+              },
+            },
+          },
+        }),
+        this.prisma.lotes_galeria.findMany({
+          where: { id_orden_servicio: idOrdenOrigen },
+          orderBy: [{ orden_lote: 'asc' }, { id_lote_galeria: 'asc' }],
+        }),
+        this.prisma.lotes_galeria.count({
+          where: { id_orden_servicio: idDestino },
+        }),
+      ]);
 
     if (!ordenOrigen) {
-      throw new NotFoundException(
-        `Orden origen #${idOrdenOrigen} no encontrada`,
-      );
+      throw new NotFoundException(`Orden origen #${idOrdenOrigen} no encontrada`);
     }
     if (!ordenDestino) {
       throw new NotFoundException(`Orden destino #${idDestino} no encontrada`);
@@ -1158,8 +1161,7 @@ export class TransferenciaOrdenService {
 
     const estadoDestinoRow = ordenDestino.estados_orden;
     const estadoDestino = estadoDestinoRow?.codigo_estado?.toUpperCase() ?? null;
-    const estadoOrigen =
-      ordenOrigen.estados_orden?.codigo_estado?.toUpperCase() ?? null;
+    const estadoOrigen = ordenOrigen.estados_orden?.codigo_estado?.toUpperCase() ?? null;
 
     if (!estadoDestinoRow || !estadoDestino) {
       throw new InternalServerErrorException(
@@ -1175,9 +1177,7 @@ export class TransferenciaOrdenService {
       );
     }
 
-    const estadoSeAdopta = Boolean(
-      estadoOrigen && estadoOrigen !== estadoDestino,
-    );
+    const estadoSeAdopta = Boolean(estadoOrigen && estadoOrigen !== estadoDestino);
 
     if (estadoSeAdopta) {
       if (estadoOrigen === 'CANCELADA') {
@@ -1186,24 +1186,18 @@ export class TransferenciaOrdenService {
         );
       }
 
-      if (
-        ESTADOS_QUE_EXIGEN_TECNICO.includes(estadoOrigen!) &&
-        !ordenDestino.id_tecnico_asignado
-      ) {
+      if (ESTADOS_QUE_EXIGEN_TECNICO.includes(estadoOrigen!) && !ordenDestino.id_tecnico_asignado) {
         bloqueos.push(
           `La orden destino ${ordenDestino.numero_orden} no tiene técnico asignado, pero el estado de la orden origen es "${estadoOrigen}". Asigne un técnico a la orden destino antes de transferir.`,
         );
       }
 
-      const camposRequeridos =
-        VALIDACIONES_POR_ESTADO[estadoOrigen!]?.campos_requeridos ?? [];
+      const camposRequeridos = VALIDACIONES_POR_ESTADO[estadoOrigen!]?.campos_requeridos ?? [];
       const datosTrasLaCopia: Record<string, unknown> = {
         ...ordenOrigen,
         id_tecnico_asignado: ordenDestino.id_tecnico_asignado,
       };
-      const faltantes = camposRequeridos.filter(
-        (campo) => !datosTrasLaCopia[campo],
-      );
+      const faltantes = camposRequeridos.filter((campo) => !datosTrasLaCopia[campo]);
       if (faltantes.length > 0) {
         bloqueos.push(
           `No se puede adoptar el estado "${estadoOrigen}" en ${ordenDestino.numero_orden}: la orden origen ${ordenOrigen.numero_orden} no tiene ${faltantes.join(', ')}.`,
@@ -1213,10 +1207,7 @@ export class TransferenciaOrdenService {
 
     const equiposOrigen = this.normalizarEquiposOrden(ordenOrigen);
     const equiposDestino = this.normalizarEquiposOrden(ordenDestino);
-    const atribucion = this.reconstruirAtribucionOrigen(
-      ordenOrigen,
-      equiposOrigen,
-    );
+    const atribucion = this.reconstruirAtribucionOrigen(ordenOrigen, equiposOrigen);
 
     return {
       ordenOrigen,
@@ -1227,8 +1218,7 @@ export class TransferenciaOrdenService {
       equiposDestino,
       atribucion,
       mismoCliente: ordenOrigen.id_cliente === ordenDestino.id_cliente,
-      mismoTipoServicio:
-        ordenOrigen.id_tipo_servicio === ordenDestino.id_tipo_servicio,
+      mismoTipoServicio: ordenOrigen.id_tipo_servicio === ordenDestino.id_tipo_servicio,
       estadoOrigen,
       estadoDestino,
       estadoSeAdopta,
@@ -1241,9 +1231,7 @@ export class TransferenciaOrdenService {
   // ═══════════════════════════════════════════════════════════════════════════
 
   private normalizarEquiposOrden(orden: any): EquipoNormalizadoInternal[] {
-    const rawList: any[] = Array.isArray(orden.ordenes_equipos)
-      ? [...orden.ordenes_equipos]
-      : [];
+    const rawList: any[] = Array.isArray(orden.ordenes_equipos) ? [...orden.ordenes_equipos] : [];
 
     if (rawList.length > 0) {
       rawList.sort((a, b) => {
@@ -1254,27 +1242,19 @@ export class TransferenciaOrdenService {
 
       const todasSecuenciasIguales =
         rawList.length > 1 &&
-        rawList.every(
-          (oe) => (oe.orden_secuencia || 1) === (rawList[0].orden_secuencia || 1),
-        );
+        rawList.every((oe) => (oe.orden_secuencia || 1) === (rawList[0].orden_secuencia || 1));
 
       return rawList.map((oe, idx) => ({
         idOrdenEquipo: oe.id_orden_equipo,
         esVirtual: false,
-        ordenSecuencia: todasSecuenciasIguales
-          ? idx + 1
-          : oe.orden_secuencia || idx + 1,
+        ordenSecuencia: todasSecuenciasIguales ? idx + 1 : oe.orden_secuencia || idx + 1,
         idEquipo: oe.id_equipo,
         codigoEquipo: oe.equipos?.codigo_equipo || `EQ-${oe.id_equipo}`,
-        nombreEquipo:
-          oe.equipos?.nombre_equipo ||
-          oe.nombre_sistema ||
-          `Equipo #${oe.id_equipo}`,
+        nombreEquipo: oe.equipos?.nombre_equipo || oe.nombre_sistema || `Equipo #${oe.id_equipo}`,
         nombreSistema: oe.nombre_sistema || null,
         numeroSerie: oe.equipos?.numero_serie_equipo || null,
         idTipoEquipo: oe.equipos?.id_tipo_equipo ?? null,
-        nombreTipoEquipo:
-          oe.equipos?.tipos_equipo?.nombre_tipo || 'Sin tipo definido',
+        nombreTipoEquipo: oe.equipos?.tipos_equipo?.nombre_tipo || 'Sin tipo definido',
         estado: oe.estado || null,
         rawOrdenEquipo: oe,
       }));
@@ -1315,8 +1295,7 @@ export class TransferenciaOrdenService {
     const validSrcOeIds = new Set<number>(
       equiposOrigen.filter((e) => !e.esVirtual).map((e) => e.idOrdenEquipo),
     );
-    const unicoEquipoId =
-      equiposOrigen.length === 1 ? equiposOrigen[0].idOrdenEquipo : null;
+    const unicoEquipoId = equiposOrigen.length === 1 ? equiposOrigen[0].idOrdenEquipo : null;
 
     let tieneDatosLegacySinFk = false;
     const conteosPorEquipo = new Map<number, ConteosEquipoOrigen>();
@@ -1339,10 +1318,7 @@ export class TransferenciaOrdenService {
         validSrcOeIds.has(ev.id_orden_equipo) &&
         !actividadIdDesdeEvidencia.has(ev.id_actividad_ejecutada)
       ) {
-        actividadIdDesdeEvidencia.set(
-          ev.id_actividad_ejecutada,
-          ev.id_orden_equipo,
-        );
+        actividadIdDesdeEvidencia.set(ev.id_actividad_ejecutada, ev.id_orden_equipo);
       }
     }
 
@@ -1355,7 +1331,9 @@ export class TransferenciaOrdenService {
     const getActKey = (act: any): string =>
       act.id_actividad_catalogo != null
         ? `CAT:${act.id_actividad_catalogo}`
-        : `TXT:${String(act.descripcion_manual || 'N/A').trim().toLowerCase()}`;
+        : `TXT:${String(act.descripcion_manual || 'N/A')
+            .trim()
+            .toLowerCase()}`;
 
     const registrarActKey = (key: string, oeId: number) => {
       if (!actKeysPorEquipo.has(key)) actKeysPorEquipo.set(key, new Set());
@@ -1370,9 +1348,7 @@ export class TransferenciaOrdenService {
         actividadAEquipo.set(act.id_actividad_ejecutada, unicoEquipoId);
         registrarActKey(getActKey(act), unicoEquipoId);
       } else if (actividadIdDesdeEvidencia.has(act.id_actividad_ejecutada)) {
-        const inferido = actividadIdDesdeEvidencia.get(
-          act.id_actividad_ejecutada,
-        )!;
+        const inferido = actividadIdDesdeEvidencia.get(act.id_actividad_ejecutada)!;
         tieneDatosLegacySinFk = true;
         actividadAEquipo.set(act.id_actividad_ejecutada, inferido);
         registrarActKey(getActKey(act), inferido);
@@ -1395,17 +1371,12 @@ export class TransferenciaOrdenService {
           (a, b) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0),
         );
         const yaUsados = actKeysPorEquipo.get(key) || new Set<number>();
-        const candidatos = equiposOrigen.filter(
-          (eq) => !yaUsados.has(eq.idOrdenEquipo),
-        );
+        const candidatos = equiposOrigen.filter((eq) => !yaUsados.has(eq.idOrdenEquipo));
         const pool = candidatos.length >= ordenadas.length ? candidatos : equiposOrigen;
 
         ordenadas.forEach((act, idx) => {
           const destino = pool[idx];
-          actividadAEquipo.set(
-            act.id_actividad_ejecutada,
-            destino ? destino.idOrdenEquipo : null,
-          );
+          actividadAEquipo.set(act.id_actividad_ejecutada, destino ? destino.idOrdenEquipo : null);
         });
       }
     }
@@ -1448,21 +1419,14 @@ export class TransferenciaOrdenService {
       }
 
       for (const [paramId, lista] of gruposParam.entries()) {
-        const ordenadas = [...lista].sort(
-          (a, b) => (a.id_medicion || 0) - (b.id_medicion || 0),
-        );
+        const ordenadas = [...lista].sort((a, b) => (a.id_medicion || 0) - (b.id_medicion || 0));
         const yaUsados = paramEquiposUsados.get(paramId) || new Set<number>();
-        const candidatos = equiposOrigen.filter(
-          (eq) => !yaUsados.has(eq.idOrdenEquipo),
-        );
+        const candidatos = equiposOrigen.filter((eq) => !yaUsados.has(eq.idOrdenEquipo));
         const pool = candidatos.length >= ordenadas.length ? candidatos : equiposOrigen;
 
         ordenadas.forEach((med, idx) => {
           const destino = pool[idx];
-          medicionAEquipo.set(
-            med.id_medicion,
-            destino ? destino.idOrdenEquipo : null,
-          );
+          medicionAEquipo.set(med.id_medicion, destino ? destino.idOrdenEquipo : null);
         });
       }
     }
@@ -1475,8 +1439,7 @@ export class TransferenciaOrdenService {
     }
 
     // Paso 3: Evidencias fotográficas (distinguiendo EQUIPO vs GENERAL vs HUERFANA_GENERAL)
-    const evidenciaClasificacion: AtribucionOrigen['evidenciaClasificacion'] =
-      new Map();
+    const evidenciaClasificacion: AtribucionOrigen['evidenciaClasificacion'] = new Map();
     let totalFotosGenerales = 0;
     let totalFotosHuerfanasComoGenerales = 0;
     let totalEvidenciasEquipo = 0;
@@ -1534,10 +1497,7 @@ export class TransferenciaOrdenService {
 
     for (const pend of pendientes) {
       let oeId: number | null = null;
-      if (
-        pend.id_orden_equipo != null &&
-        validSrcOeIds.has(pend.id_orden_equipo)
-      ) {
+      if (pend.id_orden_equipo != null && validSrcOeIds.has(pend.id_orden_equipo)) {
         oeId = pend.id_orden_equipo;
       } else if (pend.id_equipo != null && eqIdToOeId.has(pend.id_equipo)) {
         oeId = eqIdToOeId.get(pend.id_equipo)!;
@@ -1586,15 +1546,12 @@ export class TransferenciaOrdenService {
       }
     >();
     const dstUsados = new Set<number>();
-    const dstEquipoIdsSet = new Set<number>(
-      equiposDestino.map((e) => e.idEquipo),
-    );
+    const dstEquipoIdsSet = new Set<number>(equiposDestino.map((e) => e.idEquipo));
 
     // PASADA 1: Coincidencia física exacta 1:1 por id_equipo (independiente del orden de creación)
     for (const src of equiposOrigen) {
       const matchDst = equiposDestino.find(
-        (dst) =>
-          !dstUsados.has(dst.idOrdenEquipo) && dst.idEquipo === src.idEquipo,
+        (dst) => !dstUsados.has(dst.idOrdenEquipo) && dst.idEquipo === src.idEquipo,
       );
       if (matchDst) {
         dstUsados.add(matchDst.idOrdenEquipo);
@@ -1608,8 +1565,7 @@ export class TransferenciaOrdenService {
 
     // PASADA 2 (solo mismo cliente): Coincidencia por código o serie física normalizada
     if (mismoCliente) {
-      const norm = (v?: string | null) =>
-        (v || '').trim().toUpperCase().replace(/\s+/g, '');
+      const norm = (v?: string | null) => (v || '').trim().toUpperCase().replace(/\s+/g, '');
 
       for (const src of equiposOrigen) {
         if (asignacionPorSrc.has(src.idOrdenEquipo)) continue;
@@ -1621,8 +1577,7 @@ export class TransferenciaOrdenService {
           const dstCod = norm(dst.codigoEquipo);
           const dstSer = norm(dst.numeroSerie);
           return (
-            (srcCod.length >= 4 && srcCod === dstCod) ||
-            (srcSer.length >= 4 && srcSer === dstSer)
+            (srcCod.length >= 4 && srcCod === dstCod) || (srcSer.length >= 4 && srcSer === dstSer)
           );
         });
 
@@ -1643,9 +1598,7 @@ export class TransferenciaOrdenService {
       if (src.idTipoEquipo == null) continue;
 
       const matchDst = equiposDestino.find(
-        (dst) =>
-          !dstUsados.has(dst.idOrdenEquipo) &&
-          dst.idTipoEquipo === src.idTipoEquipo,
+        (dst) => !dstUsados.has(dst.idOrdenEquipo) && dst.idTipoEquipo === src.idTipoEquipo,
       );
       if (matchDst) {
         dstUsados.add(matchDst.idOrdenEquipo);
@@ -1663,9 +1616,7 @@ export class TransferenciaOrdenService {
     for (const src of equiposOrigen) {
       if (asignacionPorSrc.has(src.idOrdenEquipo)) continue;
 
-      const matchDst = equiposDestino.find(
-        (dst) => !dstUsados.has(dst.idOrdenEquipo),
-      );
+      const matchDst = equiposDestino.find((dst) => !dstUsados.has(dst.idOrdenEquipo));
       if (matchDst) {
         dstUsados.add(matchDst.idOrdenEquipo);
         asignacionPorSrc.set(src.idOrdenEquipo, {
@@ -1767,9 +1718,7 @@ export class TransferenciaOrdenService {
     const dstById = new Map<number, EquipoNormalizadoInternal>(
       ctx.equiposDestino.map((e) => [e.idOrdenEquipo, e]),
     );
-    const dstEquipoIds = new Set<number>(
-      ctx.equiposDestino.map((e) => e.idEquipo),
-    );
+    const dstEquipoIds = new Set<number>(ctx.equiposDestino.map((e) => e.idEquipo));
 
     const srcVistos = new Set<number>();
     const dstUsados = new Set<number>();
@@ -1791,10 +1740,7 @@ export class TransferenciaOrdenService {
       srcVistos.add(item.idOrdenEquipoOrigen);
 
       if (item.accion === 'MAPEAR_A_DESTINO') {
-        if (
-          item.idOrdenEquipoDestino === undefined ||
-          item.idOrdenEquipoDestino === null
-        ) {
+        if (item.idOrdenEquipoDestino === undefined || item.idOrdenEquipoDestino === null) {
           throw new BadRequestException(
             `El equipo origen "${src.nombreEquipo}" tiene acción MAPEAR_A_DESTINO pero no especifica idOrdenEquipoDestino.`,
           );
@@ -1868,12 +1814,8 @@ export class TransferenciaOrdenService {
     equiposOrigen: EquipoNormalizadoInternal[],
     equiposDestino: EquipoNormalizadoInternal[],
   ): boolean {
-    const tiposSrc = new Set(
-      equiposOrigen.map((e) => e.idTipoEquipo).filter((t) => t != null),
-    );
-    const tiposDst = new Set(
-      equiposDestino.map((e) => e.idTipoEquipo).filter((t) => t != null),
-    );
+    const tiposSrc = new Set(equiposOrigen.map((e) => e.idTipoEquipo).filter((t) => t != null));
+    const tiposDst = new Set(equiposDestino.map((e) => e.idTipoEquipo).filter((t) => t != null));
     if (tiposSrc.size === 0 || tiposDst.size === 0) return false;
     for (const t of tiposSrc) {
       if (!tiposDst.has(t)) return true;
@@ -1942,9 +1884,7 @@ export class TransferenciaOrdenService {
       });
     }
 
-    const excedentes = mapeoSugerido.filter(
-      (m) => m.tipoCoincidencia === 'SIN_DESTINO',
-    ).length;
+    const excedentes = mapeoSugerido.filter((m) => m.tipoCoincidencia === 'SIN_DESTINO').length;
     if (excedentes > 0) {
       adv.push({
         nivel: 'info',
@@ -1996,9 +1936,7 @@ export class TransferenciaOrdenService {
     return cliente.nombre_sede ? `${base} - ${cliente.nombre_sede}` : base;
   }
 
-  private stripInternalEquipo(
-    eq: EquipoNormalizadoInternal,
-  ): EquipoTransferenciaInfo {
+  private stripInternalEquipo(eq: EquipoNormalizadoInternal): EquipoTransferenciaInfo {
     const { rawOrdenEquipo: _raw, ...rest } = eq;
     return rest;
   }

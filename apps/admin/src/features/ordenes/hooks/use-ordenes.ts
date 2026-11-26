@@ -125,6 +125,8 @@ export function useUpdateFirmaOrden() {
       queryClient.invalidateQueries({ queryKey: [...FIRMAS_ORDEN_KEY, idOrden] });
       queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
       queryClient.invalidateQueries({ queryKey: ['orden', idOrden] });
+      queryClient.invalidateQueries({ queryKey: ['orden-pdf-url', idOrden] });
+      queryClient.invalidateQueries({ queryKey: PROGRESO_REGISTRO_KEY });
       queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
       const msg =
         res?.message ||
