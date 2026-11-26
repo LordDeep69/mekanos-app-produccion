@@ -543,12 +543,26 @@ export class FinalizacionOrdenService {
                             },
                         });
 
-                        for (const firmaId of [firmaResidualTecnico, firmaResidualCliente].filter(Boolean)) {
-                            await this.prisma.firmas_digitales.delete({
-                                where: { id_firma_digital: firmaId! },
-                            }).catch(() => {
-                                // Ignorar si ya fue eliminada
-                            });
+                        const residuales = Array.from(
+                            new Set([firmaResidualTecnico, firmaResidualCliente].filter(Boolean) as number[]),
+                        );
+                        for (const firmaId of residuales) {
+                            const otrasOrdenesRef =
+                                typeof this.prisma.ordenes_servicio?.count === 'function'
+                                    ? await this.prisma.ordenes_servicio.count({
+                                        where: {
+                                            id_orden_servicio: { not: orden.id_orden_servicio },
+                                            OR: [{ id_firma_tecnico: firmaId }, { id_firma_cliente: firmaId }],
+                                        },
+                                    })
+                                    : 0;
+                            if (otrasOrdenesRef === 0) {
+                                await this.prisma.firmas_digitales.delete({
+                                    where: { id_firma_digital: firmaId },
+                                }).catch(() => {
+                                    // Ignorar si ya fue eliminada
+                                });
+                            }
                         }
                         this.logger.log(`   ✅ Firmas residuales limpiadas`);
                     }

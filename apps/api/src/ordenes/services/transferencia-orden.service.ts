@@ -292,6 +292,9 @@ export class TransferenciaOrdenService {
       );
     });
 
+    const tieneFirmaTecnicoOrigen = Boolean(ctx.ordenOrigen.id_firma_tecnico);
+    const tieneFirmaClienteOrigen = Boolean(ctx.ordenOrigen.id_firma_cliente);
+
     // 2. Resolver opciones granulares con defaults seguros
     const opciones: Required<OpcionesTransferenciaDto> = {
       incluirActividades: dto.opciones?.incluirActividades ?? true,
@@ -301,7 +304,9 @@ export class TransferenciaOrdenService {
       incluirEvidenciasEquipo: dto.opciones?.incluirEvidenciasEquipo ?? true,
       incluirFotosGenerales: dto.opciones?.incluirFotosGenerales ?? true,
       incluirObservaciones: dto.opciones?.incluirObservaciones ?? true,
-      incluirFirmas: dto.opciones?.incluirFirmas ?? ctx.mismoCliente,
+      incluirFirmas:
+        dto.opciones?.incluirFirmas ??
+        (ctx.mismoCliente && (tieneFirmaTecnicoOrigen || tieneFirmaClienteOrigen)),
       incluirComponentes: dto.opciones?.incluirComponentes ?? true,
       copiarPlanActividades:
         dto.opciones?.copiarPlanActividades ??
@@ -572,6 +577,70 @@ export class TransferenciaOrdenService {
               ? `Servicio completado por transferencia desde ${ctx.ordenOrigen.numero_orden}`
               : ctx.ordenDestino.observaciones_cierre);
 
+        // ✅ FIX ROOT-CAUSE 26-NOV-2026 (Aislamiento y no-borrado de firmas al transferir):
+        // 1) Nunca compartir el mismo id_firma_digital por referencia entre origen y destino:
+        //    clonamos cada firma existente en origen dentro de la transacción.
+        // 2) Nunca sobrescribir con NULL una firma ya registrada en destino si origen carece de ella.
+        const clonarFirmaSiExiste = async (
+          idFirmaOrigen: number | null | undefined,
+          tipoSlot: 'TECNICO' | 'CLIENTE',
+        ): Promise<number | null> => {
+          if (!idFirmaOrigen) return null;
+          if (
+            typeof tx.firmas_digitales?.findUnique !== 'function' ||
+            typeof tx.firmas_digitales?.create !== 'function'
+          ) {
+            return idFirmaOrigen;
+          }
+          const firmaOrig = await tx.firmas_digitales.findUnique({
+            where: { id_firma_digital: idFirmaOrigen },
+          });
+          if (!firmaOrig) return null;
+
+          const clon = await tx.firmas_digitales.create({
+            data: {
+              id_persona: firmaOrig.id_persona,
+              tipo_firma: firmaOrig.tipo_firma ?? (tipoSlot as any),
+              firma_base64: firmaOrig.firma_base64,
+              formato_firma: firmaOrig.formato_firma ?? 'PNG',
+              hash_firma: firmaOrig.hash_firma,
+              es_firma_principal: false,
+              activa: true,
+              registrada_por: userId || firmaOrig.registrada_por || 1,
+              fecha_captura: firmaOrig.fecha_captura ?? new Date(),
+              fecha_registro: new Date(),
+              observaciones: `Clonada por transferencia (${ctx.ordenOrigen.numero_orden} → ${ctx.ordenDestino.numero_orden})`,
+            },
+          });
+          return clon.id_firma_digital;
+        };
+
+        const idFirmaClienteFinal = opciones.incluirFirmas
+          ? ((await clonarFirmaSiExiste(ctx.ordenOrigen.id_firma_cliente, 'CLIENTE')) ??
+            ctx.ordenDestino.id_firma_cliente)
+          : ctx.ordenDestino.id_firma_cliente;
+
+        const idFirmaTecnicoFinal = opciones.incluirFirmas
+          ? ((await clonarFirmaSiExiste(ctx.ordenOrigen.id_firma_tecnico, 'TECNICO')) ??
+            ctx.ordenDestino.id_firma_tecnico)
+          : ctx.ordenDestino.id_firma_tecnico;
+
+        const nombreQuienRecibeFinal = opciones.incluirFirmas
+          ? (ctx.ordenOrigen.nombre_quien_recibe ?? ctx.ordenDestino.nombre_quien_recibe)
+          : ctx.ordenDestino.nombre_quien_recibe;
+
+        const cargoQuienRecibeFinal = opciones.incluirFirmas
+          ? (ctx.ordenOrigen.cargo_quien_recibe ?? ctx.ordenDestino.cargo_quien_recibe)
+          : ctx.ordenDestino.cargo_quien_recibe;
+
+        const clienteConformeFinal = opciones.incluirFirmas
+          ? (ctx.ordenOrigen.cliente_conforme ?? ctx.ordenDestino.cliente_conforme)
+          : ctx.ordenDestino.cliente_conforme;
+
+        const calificacionClienteFinal = opciones.incluirFirmas
+          ? (ctx.ordenOrigen.calificacion_cliente ?? ctx.ordenDestino.calificacion_cliente)
+          : ctx.ordenDestino.calificacion_cliente;
+
         await tx.ordenes_servicio.update({
           where: { id_orden_servicio: idDestino },
           data: {
@@ -594,24 +663,12 @@ export class TransferenciaOrdenService {
             fecha_inicio_real: ctx.ordenOrigen.fecha_inicio_real,
             fecha_fin_real: ctx.ordenOrigen.fecha_fin_real,
             duracion_minutos: ctx.ordenOrigen.duracion_minutos,
-            nombre_quien_recibe: opciones.incluirFirmas
-              ? ctx.ordenOrigen.nombre_quien_recibe
-              : ctx.ordenDestino.nombre_quien_recibe,
-            cargo_quien_recibe: opciones.incluirFirmas
-              ? ctx.ordenOrigen.cargo_quien_recibe
-              : ctx.ordenDestino.cargo_quien_recibe,
-            cliente_conforme: opciones.incluirFirmas
-              ? ctx.ordenOrigen.cliente_conforme
-              : ctx.ordenDestino.cliente_conforme,
-            calificacion_cliente: opciones.incluirFirmas
-              ? ctx.ordenOrigen.calificacion_cliente
-              : ctx.ordenDestino.calificacion_cliente,
-            id_firma_cliente: opciones.incluirFirmas
-              ? ctx.ordenOrigen.id_firma_cliente
-              : ctx.ordenDestino.id_firma_cliente,
-            id_firma_tecnico: opciones.incluirFirmas
-              ? ctx.ordenOrigen.id_firma_tecnico
-              : ctx.ordenDestino.id_firma_tecnico,
+            nombre_quien_recibe: nombreQuienRecibeFinal,
+            cargo_quien_recibe: cargoQuienRecibeFinal,
+            cliente_conforme: clienteConformeFinal,
+            calificacion_cliente: calificacionClienteFinal,
+            id_firma_cliente: idFirmaClienteFinal,
+            id_firma_tecnico: idFirmaTecnicoFinal,
             tiene_garantia: opciones.incluirObservaciones
               ? ctx.ordenOrigen.tiene_garantia
               : ctx.ordenDestino.tiene_garantia,

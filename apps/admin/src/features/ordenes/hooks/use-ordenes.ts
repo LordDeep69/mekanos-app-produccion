@@ -122,14 +122,17 @@ export function useUpdateFirmaOrden() {
             queryClient.invalidateQueries({ queryKey: [...FIRMAS_ORDEN_KEY, idOrden] });
             queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
             queryClient.invalidateQueries({ queryKey: ['orden', idOrden] });
+            queryClient.invalidateQueries({ queryKey: ['orden-pdf-url', idOrden] });
+            queryClient.invalidateQueries({ queryKey: PROGRESO_REGISTRO_KEY });
             queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
             const msg = res?.message || (tipo === 'CLIENTE' && !data?.firma_base64
                 ? 'Datos del firmante actualizados exitosamente'
                 : 'Firma actualizada exitosamente');
             toast.success(msg);
         },
-        onError: (error: any) => {
-            toast.error(error?.response?.data?.message || 'Error al actualizar la firma');
+        onError: (error: unknown) => {
+            const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+            toast.error(msg || 'Error al actualizar la firma');
         },
     });
 }
@@ -262,8 +265,9 @@ export function useAddComponenteOrden() {
             queryClient.invalidateQueries({ queryKey: ['equipos'] });
             toast.success(res?.mensaje || 'Repuesto despachado e imputado a la orden');
         },
-        onError: (error: any) => {
-            toast.error(error?.response?.data?.message || 'Error al despachar repuesto a la orden');
+        onError: (error: unknown) => {
+            const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+            toast.error(msg || 'Error al despachar repuesto a la orden');
         },
     });
 }
@@ -284,8 +288,9 @@ export function useRemoveComponenteOrden() {
             queryClient.invalidateQueries({ queryKey: ['equipos'] });
             toast.success(res?.mensaje || 'Repuesto reintegrado al almacén exitosamente');
         },
-        onError: (error: any) => {
-            toast.error(error?.response?.data?.message || 'Error al reintegrar repuesto');
+        onError: (error: unknown) => {
+            const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+            toast.error(msg || 'Error al reintegrar repuesto');
         },
     });
 }
@@ -657,7 +662,7 @@ export function useSendHeartbeat() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ idOrden, data }: { idOrden: number; data: any }) =>
+        mutationFn: ({ idOrden, data }: { idOrden: number; data: Parameters<typeof sendHeartbeat>[1] }) =>
             sendHeartbeat(idOrden, data),
         onSuccess: (_result, { idOrden }) => {
             queryClient.invalidateQueries({ queryKey: [...PROGRESO_REGISTRO_KEY, idOrden] });

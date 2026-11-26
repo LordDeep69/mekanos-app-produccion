@@ -31,10 +31,13 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { useQueryClient } from '@tanstack/react-query';
 import { useFirmasHistorialTecnico, useUpdateFirmaOrden } from '../hooks/use-ordenes';
 import type { UpdateFirmaOrdenDto } from '../api/ordenes.service';
+
+interface OrdenFirmaMeta {
+    nombre_quien_recibe?: string | null;
+    cargo_quien_recibe?: string | null;
+}
 
 interface Firma {
     id_firma: number;
@@ -54,7 +57,7 @@ interface FirmasSectionProps {
     firmas: Firma[];
     isLoading?: boolean;
     idOrdenServicio: number;
-    orden?: any;
+    orden?: OrdenFirmaMeta | null;
 }
 
 function getTipoFirmaConfig(tipo: string) {
@@ -242,7 +245,7 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose, orden }: {
     idOrdenServicio: number;
     firma?: Firma | null;
     onClose: () => void;
-    orden?: any;
+    orden?: OrdenFirmaMeta | null;
 }) {
     const config = getTipoFirmaConfig(tipo);
     const Icon = config.icon;
@@ -274,18 +277,19 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose, orden }: {
     const [nombreFirmante, setNombreFirmante] = useState(initialNombre);
     const [cargoFirmante, setCargoFirmante] = useState(initialCargo);
 
-    // Soporte drag-drop y paste para firma
-    const handleImageFiles = useCallback((files: File[]) => {
+    // Soporte drag-drop y paste para firma (auto-cambia a pestaña 'upload' para no perder la imagen)
+    const handleImageFiles = (files: File[]) => {
         const file = files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = () => {
             const result = reader.result as string;
-            const base64 = result.split(',')[1];
+            const base64 = result.includes(',') ? result.split(',')[1] : result;
             setPreviewBase64(base64);
+            setMode('upload');
         };
         reader.readAsDataURL(file);
-    }, []);
+    };
 
     const { setDropZoneRef, inputProps, openFilePicker, isDragging } = useImageDropPaste({
         onFiles: handleImageFiles,
@@ -299,6 +303,7 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose, orden }: {
     // - Si no hay firma existente, puede guardar si trazó una firma, subió imagen, o ingresó datos del cliente.
     const hasNewSignature = (mode === 'draw' && hasDrawn) || (mode === 'upload' && !!previewBase64);
     const hasClientData = tipo === 'CLIENTE' && (nombreFirmante.trim().length > 0 || cargoFirmante.trim().length > 0);
+    const isSavingOnlyClientMetadata = tipo === 'CLIENTE' && !hasExistingSignature && !hasNewSignature && hasClientData;
     const canSave = !updateFirma.isPending && (hasExistingSignature || hasNewSignature || hasClientData);
 
     const handleSave = async () => {
@@ -652,7 +657,7 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose, orden }: {
                         ) : (
                             <>
                                 <Save className="h-4 w-4" />
-                                Guardar Cambios
+                                {isSavingOnlyClientMetadata ? 'Guardar solo nombre y cargo' : 'Guardar Cambios'}
                             </>
                         )}
                     </button>

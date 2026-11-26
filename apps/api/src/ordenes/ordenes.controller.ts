@@ -1064,11 +1064,11 @@ export class OrdenesController {
   @Get(':id/firmas')
   @UseGuards(JwtAuthGuard)
   async getFirmas(@Param('id', ParseIntPipe) id: number) {
-    // ✅ FIX 05-ENE-2026: Obtener firmas ESPECÍFICAS de esta orden
-    // Antes: Buscaba "la última firma del técnico" mezclando firmas entre órdenes
-    // Ahora: Usa id_firma_tecnico e id_firma_cliente vinculados a cada orden
-
-    // Usar $queryRaw para acceder a id_firma_tecnico (campo nuevo no en Prisma Client aún)
+    // ✅ FIX ROOT-CAUSE 26-NOV-2026:
+    // Resolver ESTRICTAMENTE las firmas vinculadas a ESTA orden (id_firma_tecnico e id_firma_cliente).
+    // Se elimina el fallback fantasma previo que, cuando ambas FKs eran NULL, devolvía la última firma
+    // histórica del técnico de OTRA orden — causando que al subir la firma del cliente la firma del
+    // técnico "desapareciera" súbitamente y desalineando la UI contra PostgreSQL y el PDF real.
     const ordenData = await this.prisma.$queryRaw<any[]>`
       SELECT id_firma_cliente, id_firma_tecnico, nombre_quien_recibe, cargo_quien_recibe 
       FROM ordenes_servicio WHERE id_orden_servicio = ${id}
@@ -1079,56 +1079,41 @@ export class OrdenesController {
     }
     const orden = ordenData[0];
 
-    // Recolectar IDs de firmas vinculadas a ESTA orden específica
     const idsFirmas: number[] = [];
     if (orden.id_firma_tecnico) idsFirmas.push(orden.id_firma_tecnico);
-    if (orden.id_firma_cliente) idsFirmas.push(orden.id_firma_cliente);
-
-    let firmasOrden: any[] = [];
-
-    if (idsFirmas.length > 0) {
-      // ✅ Órdenes NUEVAS: Usar FKs vinculadas
-      firmasOrden = await this.prisma.firmas_digitales.findMany({
-        where: { id_firma_digital: { in: idsFirmas } },
-        include: { persona: true },
-      });
-    } else {
-      // ✅ FALLBACK para órdenes ANTIGUAS (sin FK vinculada)
-      // Buscar firmas por id_persona del técnico asignado + última firma del cliente
-      const ordenCompleta = await this.prisma.ordenes_servicio.findUnique({
-        where: { id_orden_servicio: id },
-        select: {
-          id_tecnico_asignado: true,
-          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
-            select: { id_persona: true }
-          }
-        },
-      });
-
-      const idPersonaTecnico = ordenCompleta?.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_persona;
-
-      if (idPersonaTecnico) {
-        // Buscar última firma del técnico
-        const firmaTecnico = await this.prisma.firmas_digitales.findFirst({
-          where: { id_persona: idPersonaTecnico, tipo_firma: 'TECNICO' },
-          orderBy: { fecha_registro: 'desc' },
-          include: { persona: true },
-        });
-        if (firmaTecnico) firmasOrden.push(firmaTecnico);
-      }
-
-      // Buscar firma del cliente (si hay id_firma_cliente aunque sea null el técnico)
-      if (orden.id_firma_cliente) {
-        const firmaCliente = await this.prisma.firmas_digitales.findUnique({
-          where: { id_firma_digital: orden.id_firma_cliente },
-          include: { persona: true },
-        });
-        if (firmaCliente) firmasOrden.push(firmaCliente);
-      }
+    if (orden.id_firma_cliente && orden.id_firma_cliente !== orden.id_firma_tecnico) {
+      idsFirmas.push(orden.id_firma_cliente);
     }
 
-    // Mapear para incluir nombre_firmante desde persona
-    const firmasConNombre = firmasOrden.map(f => {
+    if (idsFirmas.length === 0) {
+      return {
+        success: true,
+        data: [],
+      };
+    }
+
+    const firmasRows = await this.prisma.firmas_digitales.findMany({
+      where: { id_firma_digital: { in: idsFirmas } },
+      include: { persona: true },
+    });
+    const firmasById = new Map<number, any>(firmasRows.map((f) => [f.id_firma_digital, f]));
+
+    const slotsVinculados: Array<{ slot: 'TECNICO' | 'CLIENTE'; firma: any }> = [];
+    if (orden.id_firma_tecnico && firmasById.has(orden.id_firma_tecnico)) {
+      slotsVinculados.push({
+        slot: 'TECNICO',
+        firma: firmasById.get(orden.id_firma_tecnico),
+      });
+    }
+    if (orden.id_firma_cliente && firmasById.has(orden.id_firma_cliente)) {
+      slotsVinculados.push({
+        slot: 'CLIENTE',
+        firma: firmasById.get(orden.id_firma_cliente),
+      });
+    }
+
+    // Mapear para incluir nombre_firmante desde persona / orden, respetando el slot real vinculado
+    const firmasConNombre = slotsVinculados.map(({ slot, firma: f }) => {
       // ✅ FIX 06-AGO-2026: Para CLIENTE, priorizar nombre_quien_recibe de la orden
       // (capturado del mobile: nombreFirmante/cargoFirmante) sobre el nombre de la persona
       const nombrePersona = f.persona
@@ -1137,18 +1122,19 @@ export class OrdenesController {
       const nombreQuienRecibe = orden.nombre_quien_recibe;
 
       let nombreFirmante: string;
-      if (f.tipo_firma === 'CLIENTE' && nombreQuienRecibe && nombreQuienRecibe !== 'Cliente') {
+      if (slot === 'CLIENTE' && nombreQuienRecibe && nombreQuienRecibe !== 'Cliente') {
         nombreFirmante = nombreQuienRecibe;
       } else if (nombrePersona) {
         nombreFirmante = nombrePersona;
       } else {
-        nombreFirmante = f.tipo_firma === 'CLIENTE' ? (nombreQuienRecibe || 'Cliente') : 'Sin nombre';
+        nombreFirmante = slot === 'CLIENTE' ? (nombreQuienRecibe || 'Cliente') : 'Sin nombre';
       }
 
       return {
         ...f,
+        tipo_firma: slot,
         nombre_firmante: nombreFirmante,
-        cargo_firmante: f.tipo_firma === 'TECNICO'
+        cargo_firmante: slot === 'TECNICO'
           ? 'Técnico Responsable'
           : (orden.cargo_quien_recibe || 'Cliente / Autorizador'),
       };
@@ -1417,8 +1403,31 @@ export class OrdenesController {
       }
       const hashFirma = createHash('sha256').update(base64Data).digest('hex').substring(0, 64);
 
+      // ✅ FIX ROOT-CAUSE 26-NOV-2026 (Copy-on-Write):
+      // Verificar si existingFirmaId existe y si es exclusivo de esta orden antes de mutar in-place.
+      // Si la firma estaba compartida con otra orden, crear un registro nuevo independiente.
+      let puedeActualizarEnSitio = false;
       if (existingFirmaId) {
-        // Actualizar la firma existente
+        const [firmaExistente, otrasOrdenesRef] = await Promise.all([
+          this.prisma.firmas_digitales.findUnique({
+            where: { id_firma_digital: existingFirmaId },
+            select: { id_firma_digital: true },
+          }),
+          this.prisma.ordenes_servicio.count({
+            where: {
+              id_orden_servicio: { not: id },
+              OR: [
+                { id_firma_tecnico: existingFirmaId },
+                { id_firma_cliente: existingFirmaId },
+              ],
+            },
+          }),
+        ]);
+        puedeActualizarEnSitio = Boolean(firmaExistente) && otrasOrdenesRef === 0;
+      }
+
+      if (existingFirmaId && puedeActualizarEnSitio) {
+        // Actualizar la firma existente exclusiva de esta orden
         await this.prisma.firmas_digitales.update({
           where: { id_firma_digital: existingFirmaId },
           data: {
@@ -1430,7 +1439,7 @@ export class OrdenesController {
         firmaId = existingFirmaId;
         console.log(`[FIRMAS] ✅ Firma ${tipoUpper} actualizada (id=${firmaId}) para orden ${id}`);
       } else {
-        // Crear nueva firma
+        // Crear nueva firma independiente (nueva o Copy-on-Write si la anterior era compartida)
         const nuevaFirma = await this.prisma.firmas_digitales.create({
           data: {
             id_persona: idPersona,
@@ -1814,15 +1823,29 @@ export class OrdenesController {
         data: { id_firma_tecnico: null, id_firma_cliente: null },
       });
 
-      // 2i. Eliminar firmas digitales vinculadas (opcional: solo si son exclusivas de esta orden)
-      const firmaIds: number[] = [];
-      if (orden.id_firma_tecnico) firmaIds.push(orden.id_firma_tecnico);
-      if (orden.id_firma_cliente) firmaIds.push(orden.id_firma_cliente);
+      // 2i. Eliminar firmas digitales vinculadas SOLO si son exclusivas (0 referencias en otras órdenes)
+      const firmaIds = Array.from(
+        new Set([orden.id_firma_tecnico, orden.id_firma_cliente].filter(Boolean) as number[]),
+      );
       if (firmaIds.length > 0) {
-        const deletedFirmas = await tx.firmas_digitales.deleteMany({
-          where: { id_firma_digital: { in: firmaIds } },
-        });
-        console.log(`  ├─ firmas_digitales: ${deletedFirmas.count}`);
+        const firmaIdsExclusivas: number[] = [];
+        for (const fId of firmaIds) {
+          const otrasOrdenesRef = await tx.ordenes_servicio.count({
+            where: {
+              id_orden_servicio: { not: id },
+              OR: [{ id_firma_tecnico: fId }, { id_firma_cliente: fId }],
+            },
+          });
+          if (otrasOrdenesRef === 0) {
+            firmaIdsExclusivas.push(fId);
+          }
+        }
+        if (firmaIdsExclusivas.length > 0) {
+          const deletedFirmas = await tx.firmas_digitales.deleteMany({
+            where: { id_firma_digital: { in: firmaIdsExclusivas } },
+          });
+          console.log(`  ├─ firmas_digitales: ${deletedFirmas.count} (exclusivas)`);
+        }
       }
 
       // 3. Registrar lápida (tombstone) para sincronización con app móvil

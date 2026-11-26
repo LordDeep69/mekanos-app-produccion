@@ -3,6 +3,7 @@ import { TransferenciaOrdenService } from './transferencia-orden.service';
 function createMockPrisma(
   ordenes: Record<number, any>,
   lotes: Record<number, any[]> = {},
+  firmas: Record<number, any> = {},
 ) {
   const created = {
     ordenes_equipos: [] as any[],
@@ -14,6 +15,7 @@ function createMockPrisma(
     ordenes_actividades_plan: [] as any[],
     ordenes_pendientes: [] as any[],
     historial_estados_orden: [] as any[],
+    firmas_digitales: [] as any[],
   };
   const updated = {
     ordenes_servicio: [] as any[],
@@ -23,6 +25,14 @@ function createMockPrisma(
   let nextId = 50000;
 
   const tx: any = {
+    firmas_digitales: {
+      findUnique: jest.fn(async (args: any) => firmas[args.where.id_firma_digital] ?? null),
+      create: jest.fn(async (args: any) => {
+        const row = { id_firma_digital: ++nextId, ...args.data };
+        created.firmas_digitales.push(row);
+        return row;
+      }),
+    },
     ordenes_servicio: {
       update: jest.fn(async (args: any) => {
         updated.ordenes_servicio.push(args);
@@ -483,5 +493,49 @@ describe('TransferenciaOrdenService - Transferencia Inteligente v2 y PDF Multi-E
     const prev = await svc.previsualizarTransferencia(94, 78);
     expect(prev.puedeTransferir).toBe(false);
     expect(prev.bloqueos.length).toBeGreaterThan(0);
+  });
+
+  it('clona firmas del origen en filas independientes (sin compartir FK) y nunca borra con NULL una firma ya existente en destino', async () => {
+    const { ordenOrigen, ordenDestino, lotes } = buildScenario9to6(false);
+    ordenOrigen.id_firma_tecnico = 89;
+    ordenOrigen.id_firma_cliente = null as any;
+    (ordenDestino as any).id_firma_cliente = 777;
+    (ordenDestino as any).id_firma_tecnico = null;
+    (ordenDestino as any).nombre_quien_recibe = 'Cliente Existente';
+
+    const firmasDb = {
+      89: {
+        id_firma_digital: 89,
+        id_persona: 10,
+        tipo_firma: 'TECNICO',
+        firma_base64: 'BASE64_TEC_ORIG',
+        formato_firma: 'PNG',
+        hash_firma: 'HASH_TEC',
+        fecha_captura: new Date('2026-11-20T10:00:00Z'),
+      },
+    };
+
+    const { prisma, created, updated } = createMockPrisma(
+      { 78: ordenOrigen, 94: ordenDestino },
+      lotes,
+      firmasDb,
+    );
+    const svc = new TransferenciaOrdenService(prisma);
+
+    await svc.ejecutarTransferencia(
+      94,
+      { idOrdenOrigen: 78, opciones: { incluirFirmas: true } },
+      1,
+    );
+
+    expect(created.firmas_digitales).toHaveLength(1);
+    const firmaClonada = created.firmas_digitales[0];
+    expect(firmaClonada.id_firma_digital).not.toBe(89);
+    expect(firmaClonada.firma_base64).toBe('BASE64_TEC_ORIG');
+
+    const updateOrden = updated.ordenes_servicio[0];
+    expect(updateOrden.data.id_firma_tecnico).toBe(firmaClonada.id_firma_digital);
+    expect(updateOrden.data.id_firma_cliente).toBe(777);
+    expect(updateOrden.data.nombre_quien_recibe).toBe('Cliente Existente');
   });
 });
