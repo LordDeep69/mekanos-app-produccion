@@ -149,7 +149,10 @@ export class CotizacionesController {
       id,
       dto.decision,
       user.id,
-      dto.observaciones_aprobador,
+      dto.observaciones_aprobador?.trim() ||
+        (dto.decision === 'APROBADA'
+          ? 'Aprobada internamente'
+          : 'Devuelta a borrador para ajustes'),
     );
     return await this.commandBus.execute(command);
   }
@@ -441,7 +444,11 @@ export class CotizacionesController {
     @Body() dto: SolicitarAprobacionDto,
     @CurrentUser() user: AuthUser,
   ) {
-    const command = new SolicitarAprobacionCommand(id, dto.observaciones_solicitante, user.id);
+    const command = new SolicitarAprobacionCommand(
+      id,
+      dto?.observaciones_solicitante?.trim() || 'Cotización lista para revisión y envío',
+      user.id,
+    );
     return await this.commandBus.execute(command);
   }
 
@@ -492,7 +499,7 @@ export class CotizacionesController {
     const command = new RechazarCotizacionCommand(
       id,
       dto.id_motivo_rechazo,
-      dto.observaciones_rechazo,
+      dto.observaciones_rechazo?.trim() || 'Rechazada por el cliente',
       user.id,
     );
     return await this.commandBus.execute(command);

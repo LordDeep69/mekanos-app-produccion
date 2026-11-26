@@ -64,11 +64,17 @@ export class ProcesarAprobacionHandler implements ICommandHandler<ProcesarAproba
     });
 
     // 4. Si APROBADA: Cotización → APROBADA_INTERNA (id_estado = 3)
+    const ahora = new Date();
     if (command.decision === 'APROBADA') {
       await this.prisma.cotizaciones.update({
         where: { id_cotizacion: aprobacion.id_cotizacion ?? undefined },
         data: {
           id_estado: 3, // APROBADA_INTERNA
+          aprobada_internamente_por: command.aprobadaPor,
+          fecha_aprobacion_interna: ahora,
+          fecha_cambio_estado: ahora,
+          fecha_modificacion: ahora,
+          modificado_por: command.aprobadaPor,
         },
       });
 
@@ -85,6 +91,9 @@ export class ProcesarAprobacionHandler implements ICommandHandler<ProcesarAproba
         where: { id_cotizacion: aprobacion.id_cotizacion ?? undefined },
         data: {
           id_estado: 1, // BORRADOR (permitir correcciones)
+          fecha_cambio_estado: ahora,
+          fecha_modificacion: ahora,
+          modificado_por: command.aprobadaPor,
         },
       });
 

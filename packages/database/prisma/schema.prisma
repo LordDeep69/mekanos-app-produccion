@@ -1350,6 +1350,7 @@ model items_cotizacion_componentes {
   id_item_componente     Int                   @id @default(autoincrement())
   id_cotizacion          Int
   id_equipo              Int?
+  equipos_ids            Int[]                 @default([])
   id_componente          Int?
   id_tipo_componente     Int?
   descripcion            String                @db.VarChar(300)
@@ -1385,6 +1386,7 @@ model items_cotizacion_servicios {
   id_item_servicio          Int                 @id @default(autoincrement())
   id_cotizacion             Int
   id_equipo                 Int?
+  equipos_ids               Int[]               @default([])
   id_servicio               Int?
   cantidad                  Decimal             @default(1) @db.Decimal(10, 2)
   unidad                    String?             @default("servicio") @db.VarChar(20)
@@ -3610,6 +3612,7 @@ model items_cotizacion_otros {
   id_item_otro         Int          @id @default(autoincrement())
   id_cotizacion        Int
   id_equipo            Int?
+  equipos_ids          Int[]        @default([])
   categoria_rubro      String       @default("OTRO") @db.VarChar(40)
   descripcion          String       @db.VarChar(300)
   detalle_calculo      String?      @db.VarChar(200)

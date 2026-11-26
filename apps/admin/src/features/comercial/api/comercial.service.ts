@@ -37,6 +37,7 @@ export interface CotizacionItemServicio {
   id_item_servicio?: number;
   id_servicio?: number | null;
   id_equipo?: number | null;
+  equipos_ids?: number[];
   cantidad: number | string;
   unidad?: string | null;
   costo_unitario?: number | string | null;
@@ -64,6 +65,7 @@ export interface CotizacionItemComponente {
   id_componente?: number | null;
   id_tipo_componente?: number | null;
   id_equipo?: number | null;
+  equipos_ids?: number[];
   descripcion: string;
   referencia_manual?: string | null;
   marca_manual?: string | null;
@@ -98,6 +100,7 @@ export interface CotizacionItemOtro {
   id_item_otro?: number;
   id_cotizacion?: number;
   id_equipo?: number | null;
+  equipos_ids?: number[];
   categoria_rubro: string;
   descripcion: string;
   detalle_calculo?: string | null;
@@ -123,6 +126,111 @@ export interface CotizacionVersionItem {
   resumen_cambios?: string | null;
   subtotal_version?: number | string | null;
   total_version?: number | string | null;
+}
+
+export interface CotizacionVersionSnapshotEquipo {
+  id_equipo?: number;
+  codigo_equipo?: string | null;
+  nombre_equipo?: string | null;
+  tipo_equipo?: string | null;
+  notas_alcance?: string | null;
+}
+
+export interface CotizacionVersionSnapshotServicio {
+  id_item?: number;
+  id_servicio?: number | null;
+  descripcion?: string | null;
+  servicio?: string | null;
+  cantidad?: number | string;
+  unidad?: string | null;
+  precio_unitario?: number | string;
+  descuento_porcentaje?: number | string;
+  subtotal?: number | string;
+  es_opcional?: boolean;
+}
+
+export interface CotizacionVersionSnapshotComponente {
+  id_item?: number;
+  id_componente?: number | null;
+  descripcion?: string | null;
+  componente?: string | null;
+  codigo_interno?: string | null;
+  referencia_manual?: string | null;
+  cantidad?: number | string;
+  unidad?: string | null;
+  precio_unitario?: number | string;
+  subtotal?: number | string;
+  es_opcional?: boolean;
+}
+
+export interface CotizacionVersionSnapshotOtro {
+  id_item_otro?: number;
+  categoria_rubro?: string | null;
+  descripcion?: string | null;
+  cantidad?: number | string;
+  unidad?: string | null;
+  costo_unitario?: number | string;
+  precio_unitario?: number | string;
+  subtotal?: number | string;
+  visible_cliente?: boolean;
+  es_opcional?: boolean;
+}
+
+export interface CotizacionVersionDatosSnapshot {
+  numero_cotizacion?: string | null;
+  tipo_cotizacion?: string | null;
+  moneda?: string | null;
+  asunto?: string | null;
+  estado?: string | null;
+  estado_nombre?: string | null;
+  cliente?: {
+    razon_social?: string | null;
+    nombre_comercial?: string | null;
+    nombre_completo?: string | null;
+  } | null;
+  equipos_vinculados?: CotizacionVersionSnapshotEquipo[];
+  alcance_trabajo?: string | null;
+  exclusiones?: string | null;
+  forma_pago?: string | null;
+  meses_garantia?: number | null;
+  subtotal_servicios?: number | string;
+  subtotal_componentes?: number | string;
+  subtotal_otros?: number | string;
+  subtotal_general?: number | string;
+  descuento_porcentaje?: number | string;
+  descuento_valor?: number | string;
+  usa_aiu?: boolean;
+  aiu_valor_total?: number | string;
+  iva_porcentaje?: number | string;
+  iva_valor?: number | string;
+  total_cotizacion?: number | string;
+  costo_total_estimado?: number | string;
+  utilidad_bruta_estimada?: number | string;
+  margen_bruto_porcentaje?: number | string;
+  items_otros?: CotizacionVersionSnapshotOtro[];
+}
+
+export interface CotizacionVersionDetalle {
+  id_version: number;
+  numero_version: number;
+  fecha_creacion?: string;
+  motivo_cambio?: string | null;
+  resumen_cambios?: string | null;
+  subtotal?: number | string | null;
+  total?: number | string | null;
+  creada_por?: {
+    id_usuario: number;
+    username?: string | null;
+    email?: string | null;
+  } | null;
+  cotizacion?: {
+    id_cotizacion: number;
+    numero_cotizacion: string;
+  } | null;
+  datos_cotizacion?: CotizacionVersionDatosSnapshot | null;
+  items_servicios?: CotizacionVersionSnapshotServicio[] | null;
+  items_componentes?: CotizacionVersionSnapshotComponente[] | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface CotizacionFirmaDigital {
@@ -320,6 +428,7 @@ export interface GuardarStudioPayload {
   items_servicios?: Array<{
     id_servicio?: number | null;
     id_equipo?: number | null;
+    equipos_ids?: number[];
     descripcion_personalizada?: string;
     cantidad: number;
     unidad?: string;
@@ -335,6 +444,7 @@ export interface GuardarStudioPayload {
     id_componente?: number | null;
     id_tipo_componente?: number | null;
     id_equipo?: number | null;
+    equipos_ids?: number[];
     descripcion: string;
     referencia_manual?: string;
     marca_manual?: string;
@@ -351,6 +461,7 @@ export interface GuardarStudioPayload {
   }>;
   items_otros?: Array<{
     id_equipo?: number | null;
+    equipos_ids?: number[];
     categoria_rubro: string;
     descripcion: string;
     detalle_calculo?: string;
@@ -972,7 +1083,7 @@ export async function recalcularCotizacion(id: number): Promise<unknown> {
 
 export async function solicitarAprobacionCotizacion(
   id: number,
-  observaciones_solicitante: string,
+  observaciones_solicitante?: string,
 ): Promise<{
   message: string;
   requiere_aprobacion: boolean;
@@ -980,7 +1091,7 @@ export async function solicitarAprobacionCotizacion(
   cotizacion?: CotizacionRecord;
 }> {
   const res = await apiClient.post(`/cotizaciones/${id}/solicitar-aprobacion`, {
-    observaciones_solicitante,
+    observaciones_solicitante: observaciones_solicitante?.trim() || undefined,
   });
   return res.data;
 }
@@ -1059,6 +1170,30 @@ export async function fetchCotizacionPdfBlob(id: number, forceRefresh = false): 
     responseType: 'blob',
   });
   return new Blob([res.data], { type: 'application/pdf' });
+}
+
+export async function fetchVersionCotizacionPdfBlob(
+  idVersion: number,
+  overrideDesglose?: boolean,
+): Promise<Blob> {
+  const params: Record<string, string> = {
+    _ts: String(Date.now()),
+  };
+  if (overrideDesglose !== undefined) {
+    params.desglose = overrideDesglose ? '1' : '0';
+  }
+  const res = await apiClient.get<Blob>(`/cotizaciones/versiones/${idVersion}/pdf`, {
+    params,
+    responseType: 'blob',
+  });
+  return new Blob([res.data], { type: 'application/pdf' });
+}
+
+export async function getVersionCotizacionDetalle(
+  idVersion: number,
+): Promise<CotizacionVersionDetalle> {
+  const res = await apiClient.get<CotizacionVersionDetalle>(`/cotizaciones/versiones/${idVersion}`);
+  return res.data;
 }
 
 export async function downloadCotizacionPdf(id: number, numeroCotizacion?: string): Promise<void> {

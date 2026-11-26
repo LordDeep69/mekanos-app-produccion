@@ -228,6 +228,58 @@ export class PdfController {
     });
   }
 
+  @Get('cotizaciones/versiones/:idVersion/pdf')
+  @Permisos('COTIZACIONES_READ')
+  @ApiOperation({
+    summary: 'Generar PDF histórico de una versión archivada de cotización',
+    description:
+      'Reconstruye el PDF corporativo desde el snapshot JSONB inmutable guardado en versiones_cotizacion',
+  })
+  @ApiParam({ name: 'idVersion', description: 'ID de la versión histórica', type: String })
+  @ApiQuery({
+    name: 'desglose',
+    required: false,
+    description: 'Override solo lectura de modo presentación (1 = Detallado, 0 = Suma Alzada)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'PDF histórico generado exitosamente',
+    content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } },
+  })
+  @ApiResponse({ status: 404, description: 'Versión histórica no encontrada' })
+  async generarPdfVersionCotizacion(
+    @Param('idVersion') idVersion: string,
+    @Query('desglose') desglose: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const idNumerico = parseInt(idVersion, 10);
+    if (isNaN(idNumerico)) {
+      throw new NotFoundException(`ID de versión inválido: ${idVersion}`);
+    }
+
+    const overrideDesglose =
+      desglose === '1' || desglose === 'true'
+        ? true
+        : desglose === '0' || desglose === 'false'
+          ? false
+          : undefined;
+
+    const { datosCotizacion } = await this.pdfAssembler.assembleCotizacionVersionPdf(
+      idNumerico,
+      overrideDesglose,
+    );
+    const resultado = await this.pdfService.generarPDFCotizacion(datosCotizacion);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${resultado.filename}"`);
+    res.setHeader('Content-Length', resultado.size);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('X-PDF-Snapshot-Version', String(datosCotizacion.version));
+    res.status(HttpStatus.OK).send(resultado.buffer);
+  }
+
   @Get('cotizaciones/:id/pdf')
   @Permisos('COTIZACIONES_READ')
   @ApiOperation({

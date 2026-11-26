@@ -12,6 +12,7 @@ import {
 import {
   actualizarPresentacionPdfCotizacion,
   fetchCotizacionPdfBlob,
+  fetchVersionCotizacionPdfBlob,
   type CotizacionRecord,
 } from '@/features/comercial/api/comercial.service';
 import { COMERCIAL_KEYS } from '@/features/comercial/hooks/use-comercial';
@@ -24,7 +25,9 @@ import {
   AlertTriangle,
   Download,
   ExternalLink,
+  Eye,
   FileText,
+  History,
   LayoutList,
   Layers,
   Loader2,
@@ -39,35 +42,47 @@ export interface CotizacionPdfPreviewModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   cotizacionId: number | null;
+  versionId?: number | null;
   numeroCotizacion?: string;
   version?: number | null;
   estadoLabel?: string;
   cacheKey?: string | number | null;
   mostrarDesglosePrecios?: boolean;
   onDesgloseChange?: (mostrarDesglose: boolean) => void;
+  historicalMeta?: {
+    fecha?: string;
+    motivo?: string | null;
+  } | null;
+  onInspectReadOnly?: () => void;
 }
 
 export function CotizacionPdfPreviewModal({
   open,
   onOpenChange,
   cotizacionId,
+  versionId = null,
   numeroCotizacion,
   version,
   estadoLabel,
   cacheKey,
   mostrarDesglosePrecios = false,
   onDesgloseChange,
+  historicalMeta = null,
+  onInspectReadOnly,
 }: CotizacionPdfPreviewModalProps) {
   const qc = useQueryClient();
   const [fullscreen, setFullscreen] = useState(false);
   const [localOverride, setLocalOverride] = useState<{
-    id: number;
+    key: string;
     value: boolean;
   } | null>(null);
   const forceNextRefreshRef = useRef(false);
 
+  const isHistorical = Boolean(versionId && versionId > 0);
+  const targetKey = isHistorical ? `ver-${versionId}` : `cot-${cotizacionId ?? 0}`;
+
   const activeDesglose =
-    localOverride && localOverride.id === cotizacionId
+    localOverride && localOverride.key === targetKey
       ? localOverride.value
       : Boolean(mostrarDesglosePrecios);
 
@@ -79,7 +94,7 @@ export function CotizacionPdfPreviewModal({
     onSuccess: (res) => {
       const nextVal = Boolean(res.mostrar_desglose_precios);
       if (cotizacionId) {
-        setLocalOverride({ id: cotizacionId, value: nextVal });
+        setLocalOverride({ key: `cot-${cotizacionId}`, value: nextVal });
         qc.setQueryData<CotizacionRecord | undefined>(
           COMERCIAL_KEYS.cotizacion(cotizacionId),
           (prev) => (prev ? { ...prev, mostrar_desglose_precios: nextVal } : prev),
@@ -134,17 +149,20 @@ export function CotizacionPdfPreviewModal({
   } = useQuery({
     queryKey: [
       'cotizacion-pdf-preview',
-      cotizacionId,
+      isHistorical ? `version-${versionId}` : cotizacionId,
       activeDesglose ? 'detallado' : 'suma-alzada',
       cacheKey ?? version ?? 'v1',
       orgSignature,
     ],
     queryFn: () => {
+      if (isHistorical && versionId) {
+        return fetchVersionCotizacionPdfBlob(versionId, activeDesglose);
+      }
       const force = forceNextRefreshRef.current;
       forceNextRefreshRef.current = false;
       return fetchCotizacionPdfBlob(cotizacionId!, force);
     },
-    enabled: open && Boolean(cotizacionId) && !toggleModeMut.isPending,
+    enabled: open && Boolean(isHistorical ? versionId : cotizacionId) && !toggleModeMut.isPending,
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: 'always',
@@ -164,7 +182,8 @@ export function CotizacionPdfPreviewModal({
     };
   }, [blobUrl]);
 
-  const filename = `${numeroCotizacion || `COTIZACION-${cotizacionId ?? ''}`}.pdf`;
+  const baseName = numeroCotizacion || `COTIZACION-${cotizacionId ?? ''}`;
+  const filename = isHistorical && version ? `${baseName}-v${version}.pdf` : `${baseName}.pdf`;
   const isLoadingPdf = isFetching || toggleModeMut.isPending;
 
   const handleDownload = () => {
@@ -189,12 +208,20 @@ export function CotizacionPdfPreviewModal({
   };
 
   const handleSelectMode = (nextVal: boolean) => {
-    if (nextVal === activeDesglose || toggleModeMut.isPending || !cotizacionId) return;
+    if (nextVal === activeDesglose || toggleModeMut.isPending) return;
+    if (isHistorical) {
+      // En modo snapshot histórico, alterna solo la vista previa sin mutar la BD activa
+      setLocalOverride({ key: targetKey, value: nextVal });
+      return;
+    }
+    if (!cotizacionId) return;
     toggleModeMut.mutate(nextVal);
   };
 
   const errorMessage =
     error instanceof Error ? error.message : 'No fue posible generar la vista previa del PDF.';
+
+  const numVersion = Number(version ?? 1);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -206,21 +233,42 @@ export function CotizacionPdfPreviewModal({
             : 'w-[96vw] max-w-[96vw] sm:max-w-[96vw] xl:max-w-[1400px] h-[94vh] rounded-xl border-slate-300/80'
         }`}
       >
-        <DialogHeader className="px-5 py-3 border-b border-slate-200 bg-slate-50/90 shrink-0 pr-12 space-y-2.5">
+        <DialogHeader className="px-5 py-3 border-b border-slate-200 bg-slate-50/90 shrink-0 pr-12 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
-                <FileText className="h-4 w-4" />
+              <div
+                className={`h-8 w-8 rounded-lg border flex items-center justify-center shrink-0 ${
+                  isHistorical
+                    ? 'bg-amber-100 text-amber-800 border-amber-200'
+                    : 'bg-primary/10 text-primary border-primary/20'
+                }`}
+              >
+                {isHistorical ? <History className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
               </div>
               <div className="min-w-0">
                 <DialogTitle className="text-sm font-bold text-slate-900 flex items-center gap-2 flex-wrap">
-                  <span>Vista Previa PDF</span>
+                  <span>{isHistorical ? 'PDF Histórico Archivado' : 'Vista Previa PDF'}</span>
                   {numeroCotizacion && (
                     <span className="font-mono text-primary">{numeroCotizacion}</span>
                   )}
                   {version != null && (
-                    <Badge variant="outline" className="font-mono text-[10px] bg-white">
-                      v{version}
+                    <Badge
+                      variant="outline"
+                      className={`font-mono text-[10px] inline-flex items-center gap-1 ${
+                        numVersion >= 2
+                          ? 'bg-amber-100 text-amber-800 border-amber-200 font-bold'
+                          : 'bg-blue-50 text-blue-700 border-blue-200 font-semibold'
+                      }`}
+                    >
+                      {numVersion >= 2 && <History className="h-2.5 w-2.5 shrink-0" />}v{numVersion}
+                    </Badge>
+                  )}
+                  {isHistorical && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-amber-50 text-amber-900 border-amber-200 font-semibold"
+                    >
+                      Snapshot Histórico
                     </Badge>
                   )}
                   {estadoLabel && (
@@ -230,13 +278,26 @@ export function CotizacionPdfPreviewModal({
                   )}
                 </DialogTitle>
                 <DialogDescription className="text-[11px] text-slate-500">
-                  Documento comercial corporativo listo para revisión, comparación de formato o
-                  descarga.
+                  {isHistorical
+                    ? `Copia inmutable archivada${historicalMeta?.fecha ? ` (${historicalMeta.fecha})` : ''}${historicalMeta?.motivo ? ` · ${historicalMeta.motivo}` : ''}. Cambiar formato aquí solo afecta esta vista previa.`
+                    : 'Documento comercial corporativo listo para revisión, comparación de formato o descarga.'}
                 </DialogDescription>
               </div>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {isHistorical && onInspectReadOnly && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100"
+                  onClick={onInspectReadOnly}
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1.5" />
+                  Ver Solo Lectura
+                </Button>
+              )}
               {/* Toggle rápido Suma Alzada vs Detallado */}
               <div
                 className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-xs"

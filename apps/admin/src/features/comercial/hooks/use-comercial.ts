@@ -63,10 +63,22 @@ export const COMERCIAL_KEYS = {
   motivosRechazo: ['comercial', 'motivos-rechazo'] as const,
 };
 
+function formatFriendlyApiError(raw: string): string {
+  // Limpia prefijos técnicos tipo "observaciones_solicitante: Mensaje..." para mostrar texto claro al usuario
+  return raw.replace(/^[a-z][a-z0-9_]*:\s*/i, '').trim();
+}
+
 function getErr(e: unknown, fallback: string): string {
   const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data
     ?.message;
-  return Array.isArray(msg) ? msg.join(', ') : msg || fallback;
+  if (Array.isArray(msg)) {
+    const cleaned = msg.map((item) => formatFriendlyApiError(String(item))).filter(Boolean);
+    return cleaned.length > 0 ? cleaned.join(' · ') : fallback;
+  }
+  if (typeof msg === 'string' && msg.trim()) {
+    return formatFriendlyApiError(msg) || fallback;
+  }
+  return fallback;
 }
 
 export function useCotizaciones(params?: {
@@ -386,16 +398,17 @@ export function useCotizacionWorkflowActions() {
     qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.cotizaciones });
     qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.aprobaciones });
     if (id) qc.invalidateQueries({ queryKey: COMERCIAL_KEYS.cotizacion(id) });
+    qc.removeQueries({ queryKey: ['cotizacion-pdf-preview'] });
   };
 
   const solicitarAprobacion = useMutation({
-    mutationFn: ({ id, observaciones }: { id: number; observaciones: string }) =>
+    mutationFn: ({ id, observaciones }: { id: number; observaciones?: string }) =>
       solicitarAprobacionCotizacion(id, observaciones),
     onSuccess: (res, vars) => {
       invalidateAll(vars.id);
-      toast.success(res.message || 'Aprobación solicitada');
+      toast.success(res.message || 'Aprobación registrada');
     },
-    onError: (e: unknown) => toast.error(getErr(e, 'Error al solicitar aprobación')),
+    onError: (e: unknown) => toast.error(getErr(e, 'No se pudo procesar la aprobación')),
   });
 
   const procesar = useMutation({
@@ -481,6 +494,9 @@ export function useCotizacionWorkflowActions() {
     mutationFn: ({ id, motivo_cambio }: { id: number; motivo_cambio?: string }) =>
       reabrirBorradorCotizacion(id, motivo_cambio),
     onSuccess: (res, vars) => {
+      if (res?.cotizacion) {
+        qc.setQueryData(COMERCIAL_KEYS.cotizacion(vars.id), res.cotizacion);
+      }
       invalidateAll(vars.id);
       toast.success(res.message || 'Cotización reabierta en BORRADOR');
     },

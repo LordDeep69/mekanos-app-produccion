@@ -487,6 +487,7 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       updateData.aprobada_internamente_por = data.aprobada_internamente_por;
     if (data.fecha_aprobacion_interna !== undefined)
       updateData.fecha_aprobacion_interna = data.fecha_aprobacion_interna;
+    if (data.version !== undefined) updateData.version = data.version;
     if (data.modificado_por !== undefined) updateData.modificado_por = data.modificado_por;
 
     const cotizacion = await this.prisma.cotizaciones.update({

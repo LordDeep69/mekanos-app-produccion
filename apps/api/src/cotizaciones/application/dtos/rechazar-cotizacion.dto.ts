@@ -1,19 +1,20 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsString, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class RechazarCotizacionDto {
   @ApiProperty({
     description: 'ID motivo rechazo (tabla motivos_rechazo)',
     example: 1,
   })
-  @IsInt({ message: 'ID motivo rechazo debe ser entero' })
+  @IsInt({ message: 'Debes seleccionar un motivo de rechazo válido' })
   id_motivo_rechazo!: number;
 
-  @ApiProperty({
-    description: 'Observaciones rechazo (obligatorio)',
-    example: 'Cliente considera precio 15% superior al presupuesto disponible',
+  @ApiPropertyOptional({
+    description: 'Detalle o retroalimentación del rechazo',
+    example: 'Precio superior al presupuesto disponible',
   })
-  @IsString()
-  @MinLength(10, { message: 'Observaciones rechazo mínimo 10 caracteres' })
-  observaciones_rechazo!: string;
+  @IsOptional()
+  @IsString({ message: 'El detalle de rechazo debe ser texto válido' })
+  @MaxLength(1000, { message: 'El detalle de rechazo no puede superar los 1000 caracteres' })
+  observaciones_rechazo?: string;
 }

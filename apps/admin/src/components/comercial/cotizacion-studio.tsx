@@ -37,10 +37,12 @@ import {
   normalizeSignatureDataUri,
 } from '@/components/shared/digital-signature-modal';
 import { CotizacionPdfPreviewModal } from './cotizacion-pdf-preview-modal';
+import { CotizacionVersionSnapshotModal } from './cotizacion-version-snapshot-modal';
 import {
   buildUnidadOptions,
   CpqBulletListEditor,
   CpqCreatableCombobox,
+  CpqEquiposMultiSelect,
   CpqMoneyInput,
   CpqSmartNumberInput,
   FORMA_PAGO_COMBOBOX_OPTIONS,
@@ -50,8 +52,17 @@ import {
 import {
   buildTipoOfertaComboboxOptions,
   normalizeTipoOfertaCodigo,
+  resolveTipoOfertaLabel,
   TiposOfertaManagerModal,
 } from './tipos-oferta-manager-modal';
+import {
+  getMultiEquipoBadgeInfo,
+  isRowScalablePerEquipo,
+  normalizeItemEquiposIds,
+  recalcRowOnEquiposAssignment,
+  recalcRowsOnEquiposListChange,
+  type CpqRowKind,
+} from './cotizacion-multiequipo.utils';
 import {
   useCotizacionDetalle,
   useCotizacionFirmaActions,
@@ -85,6 +96,7 @@ import { comprasService } from '@/lib/api/compras.service';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowRightCircle,
@@ -130,7 +142,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -141,6 +153,7 @@ interface ServicioRow {
   uid: string;
   id_servicio?: number | null;
   id_equipo?: number | null;
+  equipos_ids?: number[];
   descripcion: string;
   cantidad: number;
   unidad: string;
@@ -160,6 +173,7 @@ interface ComponenteRow {
   id_componente?: number | null;
   id_tipo_componente?: number | null;
   id_equipo?: number | null;
+  equipos_ids?: number[];
   descripcion: string;
   referencia_manual?: string;
   marca_manual?: string;
@@ -180,6 +194,7 @@ interface ComponenteRow {
 interface OtroRow {
   uid: string;
   id_equipo?: number | null;
+  equipos_ids?: number[];
   categoria_rubro: string;
   descripcion: string;
   detalle_calculo?: string;
@@ -415,23 +430,27 @@ function CotizacionStudioEditor({
   // Líneas editables: Servicios, Componentes, Otros Rubros
   const [serviciosRows, setServiciosRows] = useState<ServicioRow[]>(() => {
     if (cotizacion?.items_servicios) {
-      return cotizacion.items_servicios.map((s) => ({
-        uid: nextUid('srv'),
-        id_servicio: s.id_servicio ?? null,
-        id_equipo: s.id_equipo ?? null,
-        descripcion:
-          s.descripcion_personalizada ||
-          s.catalogo_servicios?.nombre_servicio ||
-          'Servicio Técnico',
-        cantidad: Number(s.cantidad) || 1,
-        unidad: s.unidad || 'servicio',
-        costo_unitario: Number(s.costo_unitario || 0),
-        precio_unitario: Number(s.precio_unitario || 0),
-        descuento_porcentaje: Number(s.descuento_porcentaje || 0),
-        es_opcional: Boolean(s.es_opcional),
-        iva_aplicable: s.iva_aplicable !== false,
-        observaciones: s.observaciones || '',
-      }));
+      return cotizacion.items_servicios.map((s) => {
+        const eqIds = normalizeItemEquiposIds(s.equipos_ids, s.id_equipo);
+        return {
+          uid: nextUid('srv'),
+          id_servicio: s.id_servicio ?? null,
+          id_equipo: eqIds.length === 1 ? eqIds[0] : null,
+          equipos_ids: eqIds,
+          descripcion:
+            s.descripcion_personalizada ||
+            s.catalogo_servicios?.nombre_servicio ||
+            'Servicio Técnico',
+          cantidad: Number(s.cantidad) || 1,
+          unidad: s.unidad || 'servicio',
+          costo_unitario: Number(s.costo_unitario || 0),
+          precio_unitario: Number(s.precio_unitario || 0),
+          descuento_porcentaje: Number(s.descuento_porcentaje || 0),
+          es_opcional: Boolean(s.es_opcional),
+          iva_aplicable: s.iva_aplicable !== false,
+          observaciones: s.observaciones || '',
+        };
+      });
     }
     if (initialPlantilla) {
       return initialPlantilla.items
@@ -464,25 +483,29 @@ function CotizacionStudioEditor({
 
   const [componentesRows, setComponentesRows] = useState<ComponenteRow[]>(() => {
     if (cotizacion?.items_componentes) {
-      return cotizacion.items_componentes.map((c) => ({
-        uid: nextUid('cmp'),
-        id_componente: c.id_componente ?? null,
-        id_tipo_componente: c.id_tipo_componente ?? null,
-        id_equipo: c.id_equipo ?? null,
-        descripcion: c.descripcion,
-        referencia_manual:
-          c.referencia_manual || c.catalogo_componentes?.referencia_fabricante || '',
-        marca_manual: c.marca_manual || '',
-        cantidad: Number(c.cantidad) || 1,
-        unidad: c.unidad || 'unidad',
-        costo_unitario: Number(c.costo_unitario ?? c.catalogo_componentes?.precio_compra ?? 0),
-        precio_unitario: Number(c.precio_unitario || 0),
-        descuento_porcentaje: Number(c.descuento_porcentaje || 0),
-        es_opcional: Boolean(c.es_opcional),
-        iva_aplicable: c.iva_aplicable !== false,
-        garantia_meses: c.garantia_meses ?? undefined,
-        stock_actual: c.catalogo_componentes?.stock_actual ?? null,
-      }));
+      return cotizacion.items_componentes.map((c) => {
+        const eqIds = normalizeItemEquiposIds(c.equipos_ids, c.id_equipo);
+        return {
+          uid: nextUid('cmp'),
+          id_componente: c.id_componente ?? null,
+          id_tipo_componente: c.id_tipo_componente ?? null,
+          id_equipo: eqIds.length === 1 ? eqIds[0] : null,
+          equipos_ids: eqIds,
+          descripcion: c.descripcion,
+          referencia_manual:
+            c.referencia_manual || c.catalogo_componentes?.referencia_fabricante || '',
+          marca_manual: c.marca_manual || '',
+          cantidad: Number(c.cantidad) || 1,
+          unidad: c.unidad || 'unidad',
+          costo_unitario: Number(c.costo_unitario ?? c.catalogo_componentes?.precio_compra ?? 0),
+          precio_unitario: Number(c.precio_unitario || 0),
+          descuento_porcentaje: Number(c.descuento_porcentaje || 0),
+          es_opcional: Boolean(c.es_opcional),
+          iva_aplicable: c.iva_aplicable !== false,
+          garantia_meses: c.garantia_meses ?? undefined,
+          stock_actual: c.catalogo_componentes?.stock_actual ?? null,
+        };
+      });
     }
     if (initialPlantilla) {
       return initialPlantilla.items
@@ -525,21 +548,25 @@ function CotizacionStudioEditor({
 
   const [otrosRows, setOtrosRows] = useState<OtroRow[]>(() => {
     if (cotizacion?.items_otros) {
-      return cotizacion.items_otros.map((o) => ({
-        uid: nextUid('otr'),
-        id_equipo: o.id_equipo ?? null,
-        categoria_rubro: o.categoria_rubro || 'OTRO',
-        descripcion: o.descripcion,
-        detalle_calculo: o.detalle_calculo || '',
-        cantidad: Number(o.cantidad) || 1,
-        unidad: o.unidad || 'global',
-        costo_unitario: Number(o.costo_unitario || 0),
-        precio_unitario: Number(o.precio_unitario || 0),
-        descuento_porcentaje: Number(o.descuento_porcentaje || 0),
-        visible_cliente: o.visible_cliente !== false,
-        es_opcional: Boolean(o.es_opcional),
-        iva_aplicable: o.iva_aplicable !== false,
-      }));
+      return cotizacion.items_otros.map((o) => {
+        const eqIds = normalizeItemEquiposIds(o.equipos_ids, o.id_equipo);
+        return {
+          uid: nextUid('otr'),
+          id_equipo: eqIds.length === 1 ? eqIds[0] : null,
+          equipos_ids: eqIds,
+          categoria_rubro: o.categoria_rubro || 'OTRO',
+          descripcion: o.descripcion,
+          detalle_calculo: o.detalle_calculo || '',
+          cantidad: Number(o.cantidad) || 1,
+          unidad: o.unidad || 'global',
+          costo_unitario: Number(o.costo_unitario || 0),
+          precio_unitario: Number(o.precio_unitario || 0),
+          descuento_porcentaje: Number(o.descuento_porcentaje || 0),
+          visible_cliente: o.visible_cliente !== false,
+          es_opcional: Boolean(o.es_opcional),
+          iva_aplicable: o.iva_aplicable !== false,
+        };
+      });
     }
     if (initialPlantilla) {
       return initialPlantilla.items
@@ -569,13 +596,64 @@ function CotizacionStudioEditor({
 
   // Buscadores rápidos para agregar plantillas / servicios / repuestos
   const [plantillaSearch, setPlantillaSearch] = useState('');
+  const [plantillaTipoFiltro, setPlantillaTipoFiltro] = useState<string>('TODOS');
   const [mostrarTodasPlantillas, setMostrarTodasPlantillas] = useState(false);
+  const [highlightItemsSection, setHighlightItemsSection] = useState<
+    'SERVICIOS' | 'COMPONENTES' | 'OTROS' | null
+  >(null);
+  const [appliedPlantillas, setAppliedPlantillas] = useState<
+    Array<{ id: number; nombre: string; veces: number; lineas: number }>
+  >(() => {
+    if (initialPlantilla) {
+      return [
+        {
+          id: initialPlantilla.id_plantilla,
+          nombre: initialPlantilla.nombre,
+          veces: 1,
+          lineas: initialPlantilla.items?.length || 0,
+        },
+      ];
+    }
+    if (cotizacion?.id_plantilla_origen && cotizacion.plantilla_origen?.nombre) {
+      return [
+        {
+          id: cotizacion.id_plantilla_origen,
+          nombre: cotizacion.plantilla_origen.nombre,
+          veces: 1,
+          lineas:
+            (cotizacion.items_servicios?.length || 0) +
+            (cotizacion.items_componentes?.length || 0) +
+            (cotizacion.items_otros?.length || 0),
+        },
+      ];
+    }
+    return [];
+  });
+  const serviciosSectionRef = useRef<HTMLDivElement>(null);
+  const componentesSectionRef = useRef<HTMLDivElement>(null);
+  const otrosSectionRef = useRef<HTMLDivElement>(null);
   const [srvSearch, setSrvSearch] = useState('');
   const [cmpSearch, setCmpSearch] = useState('');
   const [showCostosInternos, setShowCostosInternos] = useState(true);
 
-  // Modales de workflow
+  // Modales de workflow y bitácora histórica
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [historicalPdfTarget, setHistoricalPdfTarget] = useState<{
+    id_version: number;
+    numero_version: number;
+    fecha?: string;
+    motivo?: string | null;
+    estadoLabel?: string;
+  } | null>(null);
+  const [snapshotInspectVersionId, setSnapshotInspectVersionId] = useState<number | null>(null);
+  const [showAllVersions, setShowAllVersions] = useState(false);
+  const [highlightVersionesCard, setHighlightVersionesCard] = useState(false);
+  const versionesCardRef = useRef<HTMLDivElement>(null);
+  const scrollToVersiones = () => {
+    versionesCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setHighlightVersionesCard(true);
+    window.setTimeout(() => setHighlightVersionesCard(false), 1600);
+  };
   const [solicitarOpen, setSolicitarOpen] = useState(false);
   const [solicitarObs, setSolicitarObs] = useState('');
 
@@ -1077,55 +1155,72 @@ function CotizacionStudioEditor({
   // ═══════════════════════════════════════════════════════════════════════════
 
   const applyEquiposIdsChange = (nextIds: number[]) => {
-    const prevMult = Math.max(1, equiposIds.length);
+    const prevIds = equiposIds;
     const nextMult = Math.max(1, nextIds.length);
     setEquiposIds(nextIds);
 
-    if (prevMult === nextMult) return;
+    const srvRes = recalcRowsOnEquiposListChange(serviciosRows, prevIds, nextIds, 'SERVICIO');
+    const cmpRes = recalcRowsOnEquiposListChange(componentesRows, prevIds, nextIds, 'COMPONENTE');
+    const otrRes = recalcRowsOnEquiposListChange(otrosRows, prevIds, nextIds, 'OTRO');
 
-    const escalablesSrv = serviciosRows.filter(
-      (r) => r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null,
-    ).length;
-    const escalablesCmp = componentesRows.filter(
-      (r) => r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null,
-    ).length;
-    const escalablesOtr = otrosRows.filter(
-      (r) => r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null,
-    ).length;
-    const totalEscalables = escalablesSrv + escalablesCmp + escalablesOtr;
-    if (totalEscalables === 0) return;
+    if (srvRes.rows !== serviciosRows) setServiciosRows(srvRes.rows);
+    if (cmpRes.rows !== componentesRows) setComponentesRows(cmpRes.rows);
+    if (otrRes.rows !== otrosRows) setOtrosRows(otrRes.rows);
 
-    if (escalablesSrv > 0) {
-      setServiciosRows((prev) =>
-        prev.map((r) =>
-          r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null
-            ? { ...r, cantidad: Math.round(r.tpl_cantidad_base * nextMult * 100) / 100 }
-            : r,
-        ),
+    const totalEscalables = srvRes.adjustedCount + cmpRes.adjustedCount + otrRes.adjustedCount;
+    if (totalEscalables > 0) {
+      toast.info(
+        `Auto-escalado CPQ: ${totalEscalables} línea(s) × Equipo ajustadas a ×${nextMult} equipo${nextMult > 1 ? 's' : ''}`,
       );
     }
-    if (escalablesCmp > 0) {
-      setComponentesRows((prev) =>
-        prev.map((r) =>
-          r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null
-            ? { ...r, cantidad: Math.round(r.tpl_cantidad_base * nextMult * 100) / 100 }
-            : r,
-        ),
-      );
-    }
-    if (escalablesOtr > 0) {
-      setOtrosRows((prev) =>
-        prev.map((r) =>
-          r.tpl_es_por_equipo && !r.tpl_cantidad_manual && r.tpl_cantidad_base != null
-            ? { ...r, cantidad: Math.round(r.tpl_cantidad_base * nextMult * 100) / 100 }
-            : r,
-        ),
-      );
-    }
+  };
 
-    toast.info(
-      `Auto-escalado CPQ: ${totalEscalables} línea(s) × Equipo ajustadas a ×${nextMult} equipo${nextMult > 1 ? 's' : ''}`,
-    );
+  const updateItemEquipos = (kind: CpqRowKind, idx: number, nextEquiposIds: number[]) => {
+    const allIds = equiposIds;
+
+    const notifyIfAdjusted = (
+      res: {
+        changedCantidad: boolean;
+        prevCantidad: number;
+        nextCantidad: number;
+        effectiveCount: number;
+        isTodos: boolean;
+        row: { equipos_ids?: number[] };
+      },
+      unidad: string,
+    ) => {
+      if (!res.changedCantidad) return;
+      const singleId = res.row.equipos_ids?.length === 1 ? res.row.equipos_ids[0] : null;
+      const singleEq = singleId ? equiposSeleccionadosInfo.find((e) => e.id === singleId) : null;
+      const destino = res.isTodos
+        ? `Todos los equipos (×${allIds.length} eq.)`
+        : singleEq
+          ? singleEq.codigo
+          : `${res.effectiveCount} equipos seleccionados (×${res.effectiveCount} eq.)`;
+      toast.info(
+        `Cantidad ajustada: ${res.prevCantidad} → ${res.nextCantidad} ${unidad} (${destino})`,
+      );
+    };
+
+    if (kind === 'SERVICIO') {
+      const target = serviciosRows[idx];
+      if (!target) return;
+      const res = recalcRowOnEquiposAssignment(target, nextEquiposIds, allIds, 'SERVICIO');
+      setServiciosRows((prev) => prev.map((r, i) => (i === idx ? res.row : r)));
+      notifyIfAdjusted(res, target.unidad || 'serv.');
+    } else if (kind === 'COMPONENTE') {
+      const target = componentesRows[idx];
+      if (!target) return;
+      const res = recalcRowOnEquiposAssignment(target, nextEquiposIds, allIds, 'COMPONENTE');
+      setComponentesRows((prev) => prev.map((r, i) => (i === idx ? res.row : r)));
+      notifyIfAdjusted(res, target.unidad || 'und');
+    } else {
+      const target = otrosRows[idx];
+      if (!target) return;
+      const res = recalcRowOnEquiposAssignment(target, nextEquiposIds, allIds, 'OTRO');
+      setOtrosRows((prev) => prev.map((r, i) => (i === idx ? res.row : r)));
+      notifyIfAdjusted(res, target.unidad || 'global');
+    }
   };
 
   const toggleEquipo = (id: number) => {
@@ -1133,6 +1228,25 @@ function CotizacionStudioEditor({
       ? equiposIds.filter((x) => x !== id)
       : [...equiposIds, id];
     applyEquiposIdsChange(nextIds);
+  };
+
+  const scrollToItemsSection = (target: 'SERVICIOS' | 'COMPONENTES' | 'OTROS') => {
+    setHighlightItemsSection(target);
+    setTimeout(() => {
+      const refEl =
+        target === 'SERVICIOS'
+          ? serviciosSectionRef.current
+          : target === 'COMPONENTES'
+            ? componentesSectionRef.current
+            : otrosSectionRef.current;
+      if (refEl && typeof window !== 'undefined') {
+        const top = refEl.getBoundingClientRect().top + window.scrollY - 144;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      }
+    }, 120);
+    setTimeout(() => {
+      setHighlightItemsSection((curr) => (curr === target ? null : curr));
+    }, 1800);
   };
 
   const applyPlantillaLocal = (pl: PlantillaCotizacionRecord, reemplazar = false) => {
@@ -1266,9 +1380,30 @@ function CotizacionStudioEditor({
       setMostrarDesglosePrecios(Boolean(pl.mostrar_desglose_precios));
     }
 
-    toast.success(
-      `Plantilla "${pl.nombre}" cargada (×${mult} equipo${mult > 1 ? 's' : ''}): +${nuevosServ.length} serv., +${nuevosComp.length} rep., +${nuevosOtros.length} rubros`,
-    );
+    const totalNuevas = nuevosServ.length + nuevosComp.length + nuevosOtros.length;
+    setAppliedPlantillas((prev) => {
+      if (reemplazar) {
+        return [{ id: pl.id_plantilla, nombre: pl.nombre, veces: 1, lineas: totalNuevas }];
+      }
+      const existing = prev.find((p) => p.id === pl.id_plantilla);
+      if (existing) {
+        return prev.map((p) =>
+          p.id === pl.id_plantilla
+            ? { ...p, veces: p.veces + 1, lineas: p.lineas + totalNuevas }
+            : p,
+        );
+      }
+      return [...prev, { id: pl.id_plantilla, nombre: pl.nombre, veces: 1, lineas: totalNuevas }];
+    });
+
+    toast.success(`Plantilla "${pl.nombre}" aplicada correctamente`, {
+      description: `Escalado ×${mult} equipo${mult > 1 ? 's' : ''}: +${nuevosServ.length} serv., +${nuevosComp.length} rep., +${nuevosOtros.length} rubros`,
+    });
+
+    // Scroll suave + confirmación visual hacia la primera sección de ítems cargada
+    const targetSection: 'SERVICIOS' | 'COMPONENTES' | 'OTROS' =
+      nuevosServ.length > 0 ? 'SERVICIOS' : nuevosComp.length > 0 ? 'COMPONENTES' : 'OTROS';
+    scrollToItemsSection(targetSection);
   };
 
   const importBomKitLocal = (kit: NonNullable<typeof sugerencias>['bom_kits'][number]) => {
@@ -1287,6 +1422,8 @@ function CotizacionStudioEditor({
         es_opcional: false,
         iva_aplicable: true,
         stock_actual: i.stock_actual,
+        tpl_es_por_equipo: true,
+        tpl_cantidad_base: Number(i.cantidad_por_equipo || 1),
       }));
     if (nuevos.length === 0) {
       toast.info('Este modelo no tiene repuestos titulares en su BOM');
@@ -1296,6 +1433,7 @@ function CotizacionStudioEditor({
     toast.success(
       `Importados ${nuevos.length} repuestos BOM OEM de ${kit.etiqueta_modelo} (×${kit.equipos_gemelos})`,
     );
+    scrollToItemsSection('COMPONENTES');
   };
 
   const addOtroPreset = (categoria: string, label: string) => {
@@ -1336,6 +1474,8 @@ function CotizacionStudioEditor({
         visible_cliente: true,
         es_opcional: false,
         iva_aplicable: categoria !== 'POLIZA',
+        tpl_es_por_equipo: false,
+        tpl_cantidad_base: 1,
       },
     ]);
   };
@@ -1374,56 +1514,68 @@ function CotizacionStudioEditor({
     equipos: equiposIds.map((id, idx) => ({ id_equipo: id, orden_secuencia: idx + 1 })),
     items_servicios: serviciosRows
       .filter((s) => s.descripcion.trim().length > 0)
-      .map((s, idx) => ({
-        id_servicio: s.id_servicio ?? null,
-        id_equipo: s.id_equipo ?? null,
-        descripcion_personalizada: s.descripcion.trim(),
-        cantidad: Number(s.cantidad) || 1,
-        unidad: s.unidad || 'servicio',
-        costo_unitario: Number(s.costo_unitario) || 0,
-        precio_unitario: Number(s.precio_unitario) || 0,
-        descuento_porcentaje: Number(s.descuento_porcentaje) || 0,
-        es_opcional: s.es_opcional,
-        iva_aplicable: s.iva_aplicable,
-        observaciones: s.observaciones || undefined,
-        orden_item: idx + 1,
-      })),
+      .map((s, idx) => {
+        const normEq = normalizeItemEquiposIds(s.equipos_ids, s.id_equipo, equiposIds);
+        return {
+          id_servicio: s.id_servicio ?? null,
+          id_equipo: normEq.length === 1 ? normEq[0] : null,
+          equipos_ids: normEq,
+          descripcion_personalizada: s.descripcion.trim(),
+          cantidad: Number(s.cantidad) || 1,
+          unidad: s.unidad || 'servicio',
+          costo_unitario: Number(s.costo_unitario) || 0,
+          precio_unitario: Number(s.precio_unitario) || 0,
+          descuento_porcentaje: Number(s.descuento_porcentaje) || 0,
+          es_opcional: s.es_opcional,
+          iva_aplicable: s.iva_aplicable,
+          observaciones: s.observaciones || undefined,
+          orden_item: idx + 1,
+        };
+      }),
     items_componentes: componentesRows
       .filter((c) => c.descripcion.trim().length > 0)
-      .map((c, idx) => ({
-        id_componente: c.id_componente ?? null,
-        id_tipo_componente: c.id_tipo_componente ?? null,
-        id_equipo: c.id_equipo ?? null,
-        descripcion: c.descripcion.trim(),
-        referencia_manual: c.referencia_manual || undefined,
-        marca_manual: c.marca_manual || undefined,
-        cantidad: Number(c.cantidad) || 1,
-        unidad: c.unidad || 'unidad',
-        costo_unitario: Number(c.costo_unitario) || 0,
-        precio_unitario: Number(c.precio_unitario) || 0,
-        descuento_porcentaje: Number(c.descuento_porcentaje) || 0,
-        es_opcional: c.es_opcional,
-        iva_aplicable: c.iva_aplicable,
-        garantia_meses: c.garantia_meses,
-        orden_item: idx + 1,
-      })),
+      .map((c, idx) => {
+        const normEq = normalizeItemEquiposIds(c.equipos_ids, c.id_equipo, equiposIds);
+        return {
+          id_componente: c.id_componente ?? null,
+          id_tipo_componente: c.id_tipo_componente ?? null,
+          id_equipo: normEq.length === 1 ? normEq[0] : null,
+          equipos_ids: normEq,
+          descripcion: c.descripcion.trim(),
+          referencia_manual: c.referencia_manual || undefined,
+          marca_manual: c.marca_manual || undefined,
+          cantidad: Number(c.cantidad) || 1,
+          unidad: c.unidad || 'unidad',
+          costo_unitario: Number(c.costo_unitario) || 0,
+          precio_unitario: Number(c.precio_unitario) || 0,
+          descuento_porcentaje: Number(c.descuento_porcentaje) || 0,
+          es_opcional: c.es_opcional,
+          iva_aplicable: c.iva_aplicable,
+          garantia_meses: c.garantia_meses,
+          orden_item: idx + 1,
+        };
+      }),
     items_otros: otrosRows
       .filter((o) => o.descripcion.trim().length > 0)
-      .map((o, idx) => ({
-        id_equipo: o.id_equipo ?? null,
-        categoria_rubro: o.categoria_rubro || 'OTRO',
-        descripcion: o.descripcion.trim(),
-        detalle_calculo: o.detalle_calculo || undefined,
-        cantidad: Number(o.cantidad) || 1,
-        unidad: o.unidad || 'global',
-        costo_unitario: Number(o.costo_unitario) || 0,
-        precio_unitario: Number(o.precio_unitario) || 0,
-        descuento_porcentaje: Number(o.descuento_porcentaje) || 0,
-        visible_cliente: o.visible_cliente,
-        es_opcional: o.es_opcional,
-        iva_aplicable: o.iva_aplicable,
-        orden_item: idx + 1,
-      })),
+      .map((o, idx) => {
+        const normEq = normalizeItemEquiposIds(o.equipos_ids, o.id_equipo, equiposIds);
+        return {
+          id_equipo: normEq.length === 1 ? normEq[0] : null,
+          equipos_ids: normEq,
+          categoria_rubro: o.categoria_rubro || 'OTRO',
+          descripcion: o.descripcion.trim(),
+          detalle_calculo: o.detalle_calculo || undefined,
+          cantidad: Number(o.cantidad) || 1,
+          unidad: o.unidad || 'global',
+          costo_unitario: Number(o.costo_unitario) || 0,
+          precio_unitario: Number(o.precio_unitario) || 0,
+          descuento_porcentaje: Number(o.descuento_porcentaje) || 0,
+          visible_cliente: o.visible_cliente,
+          es_opcional: o.es_opcional,
+          iva_aplicable: o.iva_aplicable,
+          orden_item: idx + 1,
+        };
+      }),
   });
 
   const handleSave = async (): Promise<number | null> => {
@@ -1579,7 +1731,40 @@ function CotizacionStudioEditor({
       .slice(0, 30);
   }, [articulosMaestro, articulosSearch, cmpSearch, selectedTiposEquipoIds]);
 
-  const { plantillasVisibles, totalPlantillasDisponibles, bomKitsVisibles } = useMemo(() => {
+  const plantillasTiposFiltroOpciones = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of plantillasAll) {
+      if (p.tipo_cotizacion) {
+        counts.set(p.tipo_cotizacion, (counts.get(p.tipo_cotizacion) || 0) + 1);
+      }
+    }
+    const orderedCodes: string[] = [];
+    const seen = new Set<string>();
+    for (const t of tiposOfertaCatalogo) {
+      if (counts.has(t.codigo) && !seen.has(t.codigo)) {
+        seen.add(t.codigo);
+        orderedCodes.push(t.codigo);
+      }
+    }
+    for (const code of counts.keys()) {
+      if (!seen.has(code)) {
+        seen.add(code);
+        orderedCodes.push(code);
+      }
+    }
+    return orderedCodes.map((value) => ({
+      value,
+      label: resolveTipoOfertaLabel(value, tiposOfertaCatalogo),
+      count: counts.get(value) || 0,
+    }));
+  }, [plantillasAll, tiposOfertaCatalogo]);
+
+  const {
+    plantillasVisibles,
+    totalPlantillasDisponibles,
+    totalPlantillasFiltradas,
+    bomKitsVisibles,
+  } = useMemo(() => {
     const mult = Math.max(1, equiposIds.length);
     const sugMap = new Map(
       (sugerencias?.plantillas_sugeridas || []).map((s, idx) => [s.id_plantilla, { s, idx }]),
@@ -1593,13 +1778,19 @@ function CotizacionStudioEditor({
     });
 
     const q = plantillaSearch.trim();
+    const porTipo =
+      plantillaTipoFiltro !== 'TODOS'
+        ? ordenadas.filter((p) => p.tipo_cotizacion === plantillaTipoFiltro)
+        : ordenadas;
+
     const filtradas = q
-      ? ordenadas.filter((p) =>
+      ? porTipo.filter((p) =>
           matchesAllTokens(q, [
             p.nombre,
             p.codigo_plantilla,
             p.descripcion,
             p.tipo_cotizacion,
+            resolveTipoOfertaLabel(p.tipo_cotizacion, tiposOfertaCatalogo),
             p.tipos_equipo?.nombre_tipo,
             p.modelos_equipo?.marca,
             p.modelos_equipo?.modelo,
@@ -1607,7 +1798,7 @@ function CotizacionStudioEditor({
             ...(p.items || []).map((it) => it.descripcion),
           ]),
         )
-      : ordenadas;
+      : porTipo;
 
     const mapped = filtradas.map((p) => {
       const sug = sugMap.get(p.id_plantilla)?.s;
@@ -1630,23 +1821,44 @@ function CotizacionStudioEditor({
       };
     });
 
-    const kits = (sugerencias?.bom_kits || []).filter((kit) =>
-      q
-        ? matchesAllTokens(q, [
-            kit.etiqueta_modelo,
-            ...kit.items.map((it) => it.descripcion),
-            ...kit.items.map((it) => it.referencia_fabricante),
-          ])
-        : true,
-    );
+    const kits =
+      plantillaTipoFiltro !== 'TODOS'
+        ? []
+        : (sugerencias?.bom_kits || []).filter((kit) =>
+            q
+              ? matchesAllTokens(q, [
+                  kit.etiqueta_modelo,
+                  ...kit.items.map((it) => it.descripcion),
+                  ...kit.items.map((it) => it.referencia_fabricante),
+                ])
+              : true,
+          );
 
-    const visibles = q || mostrarTodasPlantillas ? mapped : mapped.slice(0, 4);
+    const hayFiltroActivo = Boolean(q) || plantillaTipoFiltro !== 'TODOS';
+    const visibles = hayFiltroActivo || mostrarTodasPlantillas ? mapped : mapped.slice(0, 4);
     return {
       plantillasVisibles: visibles,
       totalPlantillasDisponibles: ordenadas.length,
+      totalPlantillasFiltradas: mapped.length,
       bomKitsVisibles: kits,
     };
-  }, [plantillasAll, sugerencias, equiposIds.length, plantillaSearch, mostrarTodasPlantillas]);
+  }, [
+    plantillasAll,
+    sugerencias,
+    equiposIds.length,
+    plantillaSearch,
+    plantillaTipoFiltro,
+    mostrarTodasPlantillas,
+    tiposOfertaCatalogo,
+  ]);
+
+  const handleVolverAlHub = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/comercial/cotizaciones');
+    }
+  };
 
   const isSaving = createMut.isPending || guardarStudioMut.isPending;
 
@@ -1657,11 +1869,9 @@ function CotizacionStudioEditor({
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <div className="sticky top-0 z-20 px-4 py-3 bg-white/95 backdrop-blur border border-slate-200/90 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/comercial/cotizaciones">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Listado
-            </Link>
+          <Button type="button" variant="outline" size="sm" onClick={handleVolverAlHub}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Volver
           </Button>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -1675,9 +1885,33 @@ function CotizacionStudioEditor({
                 {ESTADO_LABELS_COTIZACION[estadoCodigo] || estadoCodigo}
               </Badge>
               {isEdit && (
-                <Badge variant="outline" className="font-mono text-[11px] bg-slate-50">
-                  v{cotizacion?.version || 1}
+                <Badge
+                  variant="outline"
+                  className={
+                    (cotizacion?.version || 1) >= 2
+                      ? 'font-mono text-[11px] font-bold bg-amber-100 text-amber-800 border-amber-200 inline-flex items-center gap-1'
+                      : 'font-mono text-[11px] font-semibold bg-blue-50 text-blue-700 border-blue-200'
+                  }
+                  title={
+                    (cotizacion?.version || 1) >= 2
+                      ? `Versión ${cotizacion?.version} — derivada de una renegociación previa`
+                      : 'Versión inicial de la cotización'
+                  }
+                >
+                  {(cotizacion?.version || 1) >= 2 && <History className="h-3 w-3 shrink-0" />}v
+                  {cotizacion?.version || 1}
                 </Badge>
+              )}
+              {isEdit && cotizacion?.versiones && cotizacion.versiones.length > 0 && (
+                <button
+                  type="button"
+                  onClick={scrollToVersiones}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-amber-100 hover:text-amber-900 border border-slate-200 hover:border-amber-200 transition-colors cursor-pointer"
+                  title="Ir a la Bitácora de Versiones Archivadas en el panel lateral"
+                >
+                  <History className="h-3 w-3 text-amber-600 shrink-0" />
+                  <span>Historial ({cotizacion.versiones.length})</span>
+                </button>
               )}
               {cotizacion?.orden_compra_cliente && (
                 <Badge className="bg-emerald-600 text-white text-[11px]">
@@ -1708,7 +1942,10 @@ function CotizacionStudioEditor({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPdfPreviewOpen(true)}
+                onClick={() => {
+                  setHistoricalPdfTarget(null);
+                  setPdfPreviewOpen(true);
+                }}
                 title="Previsualizar y descargar PDF corporativo"
               >
                 <FileText className="h-4 w-4 mr-1.5" />
@@ -1734,9 +1971,13 @@ function CotizacionStudioEditor({
                 size="sm"
                 disabled={workflow.duplicar.isPending}
                 onClick={async () => {
-                  const copia = await workflow.duplicar.mutateAsync(cotizacion.id_cotizacion);
-                  if (copia?.id_cotizacion) {
-                    router.push(`/comercial/cotizaciones/${copia.id_cotizacion}`);
+                  try {
+                    const copia = await workflow.duplicar.mutateAsync(cotizacion.id_cotizacion);
+                    if (copia?.id_cotizacion) {
+                      router.push(`/comercial/cotizaciones/${copia.id_cotizacion}`);
+                    }
+                  } catch {
+                    // Error notificado mediante toast en el hook
                   }
                 }}
               >
@@ -2210,7 +2451,9 @@ function CotizacionStudioEditor({
                           variant="outline"
                           className="text-[10px] px-1.5 py-0 h-4 bg-white/80 text-slate-600 border-slate-200 font-mono"
                         >
-                          {totalPlantillasDisponibles}
+                          {plantillaTipoFiltro !== 'TODOS' || plantillaSearch.trim()
+                            ? `${totalPlantillasFiltradas}/${totalPlantillasDisponibles}`
+                            : totalPlantillasDisponibles}
                         </Badge>
                       )}
                       {loadingSugerencias && (
@@ -2218,13 +2461,28 @@ function CotizacionStudioEditor({
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
+                      <Select value={plantillaTipoFiltro} onValueChange={setPlantillaTipoFiltro}>
+                        <SelectTrigger className="h-7 w-44 sm:w-48 text-xs bg-white/95 border-slate-200 rounded-lg">
+                          <SelectValue placeholder="Todos los tipos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TODOS" className="text-xs">
+                            Todos los tipos ({totalPlantillasDisponibles})
+                          </SelectItem>
+                          {plantillasTiposFiltroOpciones.map((t) => (
+                            <SelectItem key={t.value} value={t.value} className="text-xs">
+                              {t.label} ({t.count})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <div className="relative">
                         <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <Input
                           value={plantillaSearch}
                           onChange={(e) => setPlantillaSearch(e.target.value)}
                           placeholder="Buscar plantilla o kit..."
-                          className="h-7 w-48 sm:w-56 pl-7 pr-6 text-xs bg-white/95 border-slate-200 rounded-lg"
+                          className="h-7 w-44 sm:w-52 pl-7 pr-6 text-xs bg-white/95 border-slate-200 rounded-lg"
                         />
                         {plantillaSearch && (
                           <button
@@ -2267,21 +2525,67 @@ function CotizacionStudioEditor({
                       </div>
                     )}
 
+                  {/* Feedback persistente de plantillas ya aplicadas en esta cotización */}
+                  {appliedPlantillas.length > 0 && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-900">
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <span className="font-semibold">
+                          {appliedPlantillas.length === 1
+                            ? 'Plantilla aplicada:'
+                            : 'Plantillas aplicadas:'}
+                        </span>
+                        {appliedPlantillas.map((ap) => (
+                          <span
+                            key={ap.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-[11px] font-semibold text-emerald-800"
+                          >
+                            <span className="truncate max-w-[240px]">{ap.nombre}</span>
+                            {ap.veces > 1 && (
+                              <span className="font-mono text-[10px] text-emerald-700 bg-emerald-100 px-1 rounded">
+                                ×{ap.veces}
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          scrollToItemsSection(
+                            serviciosRows.length > 0
+                              ? 'SERVICIOS'
+                              : componentesRows.length > 0
+                                ? 'COMPONENTES'
+                                : 'OTROS',
+                          )
+                        }
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 hover:underline shrink-0"
+                      >
+                        Ver ítems cargados
+                        <ArrowDown className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+
                   {/* Plantillas sugeridas y resultados de búsqueda */}
                   {plantillasVisibles.length === 0 && bomKitsVisibles.length === 0 ? (
                     <div className="py-3 px-4 flex items-center justify-between gap-2 text-xs text-slate-500 border border-dashed border-slate-200 rounded-lg bg-white/70">
                       <span>
-                        {plantillaSearch.trim()
-                          ? `Sin plantillas ni kits que coincidan con "${plantillaSearch.trim()}".`
+                        {plantillaSearch.trim() || plantillaTipoFiltro !== 'TODOS'
+                          ? `Sin plantillas ni kits que coincidan con los filtros seleccionados.`
                           : 'Aún no hay plantillas estándar creadas en el catálogo.'}
                       </span>
-                      {plantillaSearch.trim() && (
+                      {(plantillaSearch.trim() || plantillaTipoFiltro !== 'TODOS') && (
                         <button
                           type="button"
-                          onClick={() => setPlantillaSearch('')}
+                          onClick={() => {
+                            setPlantillaSearch('');
+                            setPlantillaTipoFiltro('TODOS');
+                          }}
                           className="text-primary font-semibold hover:underline shrink-0"
                         >
-                          Limpiar filtro
+                          Limpiar filtros
                         </button>
                       )}
                     </div>
@@ -2289,35 +2593,116 @@ function CotizacionStudioEditor({
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-0.5">
                         {plantillasVisibles.map(
-                          ({ plantilla: fullTpl, total_items, subtotal_estimado }) => (
-                            <button
-                              key={fullTpl.id_plantilla}
-                              type="button"
-                              onClick={() => applyPlantillaLocal(fullTpl, false)}
-                              className="group text-left px-3 py-2.5 rounded-xl bg-slate-50/70 hover:bg-emerald-50/50 border border-slate-200/90 hover:border-emerald-300 hover:shadow-sm transition-all flex items-start justify-between gap-2.5"
-                            >
-                              <div className="flex items-start gap-2.5 min-w-0">
-                                <div className="h-7 w-7 mt-0.5 rounded-lg bg-primary/10 text-primary group-hover:bg-emerald-100 group-hover:text-emerald-700 flex items-center justify-center shrink-0 transition-colors">
-                                  <Layers className="h-3.5 w-3.5" />
+                          ({ plantilla: fullTpl, total_items, subtotal_estimado }) => {
+                            const appliedInfo = appliedPlantillas.find(
+                              (ap) => ap.id === fullTpl.id_plantilla,
+                            );
+
+                            if (appliedInfo) {
+                              return (
+                                <div
+                                  key={fullTpl.id_plantilla}
+                                  className="px-3 py-2.5 rounded-xl bg-emerald-50/75 border border-emerald-300 shadow-sm flex items-start justify-between gap-2.5"
+                                >
+                                  <div className="flex items-start gap-2.5 min-w-0">
+                                    <div className="h-7 w-7 mt-0.5 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                    </div>
+                                    <div className="min-w-0 space-y-0.5">
+                                      <p className="text-xs font-bold text-emerald-950 line-clamp-2 leading-snug">
+                                        {fullTpl.nombre}
+                                      </p>
+                                      <p className="text-[11px] text-emerald-800/80">
+                                        {total_items} líneas · ×{Math.max(1, equiposIds.length)} eq.
+                                        {subtotal_estimado > 0
+                                          ? ` · Est. ${formatCurrency(subtotal_estimado)}`
+                                          : ''}
+                                      </p>
+                                      {fullTpl.tipo_cotizacion && (
+                                        <span className="inline-block text-[10px] font-medium px-1.5 py-0.2 rounded bg-white/90 border border-emerald-200 text-emerald-800">
+                                          {resolveTipoOfertaLabel(
+                                            fullTpl.tipo_cotizacion,
+                                            tiposOfertaCatalogo,
+                                          )}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1 shrink-0 mt-0.5">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white">
+                                      <Check className="h-2.5 w-2.5" />
+                                      Aplicada
+                                      {appliedInfo.veces > 1 ? ` ×${appliedInfo.veces}` : ''}
+                                    </span>
+                                    <div className="flex items-center gap-2 text-[10px]">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          scrollToItemsSection(
+                                            serviciosRows.length > 0
+                                              ? 'SERVICIOS'
+                                              : componentesRows.length > 0
+                                                ? 'COMPONENTES'
+                                                : 'OTROS',
+                                          )
+                                        }
+                                        className="font-semibold text-emerald-800 hover:underline"
+                                      >
+                                        Ver ítems
+                                      </button>
+                                      <span className="text-emerald-300">·</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => applyPlantillaLocal(fullTpl, false)}
+                                        className="font-semibold text-slate-600 hover:text-primary hover:underline"
+                                        title="Volver a sumar las líneas de esta plantilla"
+                                      >
+                                        + Sumar
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="min-w-0 space-y-0.5">
-                                  <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 line-clamp-2 leading-snug">
-                                    {fullTpl.nombre}
-                                  </p>
-                                  <p className="text-[11px] text-slate-500">
-                                    {total_items} líneas · ×{Math.max(1, equiposIds.length)} eq.
-                                    {subtotal_estimado > 0
-                                      ? ` · Est. ${formatCurrency(subtotal_estimado)}`
-                                      : ''}
-                                  </p>
+                              );
+                            }
+
+                            return (
+                              <button
+                                key={fullTpl.id_plantilla}
+                                type="button"
+                                onClick={() => applyPlantillaLocal(fullTpl, false)}
+                                className="group text-left px-3 py-2.5 rounded-xl bg-slate-50/70 hover:bg-emerald-50/50 border border-slate-200/90 hover:border-emerald-300 hover:shadow-sm transition-all flex items-start justify-between gap-2.5"
+                              >
+                                <div className="flex items-start gap-2.5 min-w-0">
+                                  <div className="h-7 w-7 mt-0.5 rounded-lg bg-primary/10 text-primary group-hover:bg-emerald-100 group-hover:text-emerald-700 flex items-center justify-center shrink-0 transition-colors">
+                                    <Layers className="h-3.5 w-3.5" />
+                                  </div>
+                                  <div className="min-w-0 space-y-0.5">
+                                    <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 line-clamp-2 leading-snug">
+                                      {fullTpl.nombre}
+                                    </p>
+                                    <p className="text-[11px] text-slate-500">
+                                      {total_items} líneas · ×{Math.max(1, equiposIds.length)} eq.
+                                      {subtotal_estimado > 0
+                                        ? ` · Est. ${formatCurrency(subtotal_estimado)}`
+                                        : ''}
+                                    </p>
+                                    {fullTpl.tipo_cotizacion && (
+                                      <span className="inline-block text-[10px] font-medium px-1.5 py-0.2 rounded bg-white border border-slate-200 text-slate-600">
+                                        {resolveTipoOfertaLabel(
+                                          fullTpl.tipo_cotizacion,
+                                          tiposOfertaCatalogo,
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                              <span className="inline-flex items-center gap-0.5 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-colors mt-0.5">
-                                Aplicar
-                                <ArrowRight className="h-2.5 w-2.5" />
-                              </span>
-                            </button>
-                          ),
+                                <span className="inline-flex items-center gap-0.5 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-colors mt-0.5">
+                                  Aplicar
+                                  <Plus className="h-2.5 w-2.5" />
+                                </span>
+                              </button>
+                            );
+                          },
                         )}
 
                         {/* Kits OEM BOM detectados */}
@@ -2349,27 +2734,29 @@ function CotizacionStudioEditor({
                         ))}
                       </div>
 
-                      {!plantillaSearch.trim() && totalPlantillasDisponibles > 4 && (
-                        <div className="flex justify-center pt-0.5">
-                          <button
-                            type="button"
-                            onClick={() => setMostrarTodasPlantillas((v) => !v)}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-                          >
-                            {mostrarTodasPlantillas ? (
-                              <>
-                                <ChevronUp className="h-3.5 w-3.5" />
-                                Mostrar solo sugeridas (4)
-                              </>
-                            ) : (
-                              <>
-                                <ChevronDown className="h-3.5 w-3.5" />
-                                Ver todas las plantillas ({totalPlantillasDisponibles})
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      )}
+                      {!plantillaSearch.trim() &&
+                        plantillaTipoFiltro === 'TODOS' &&
+                        totalPlantillasDisponibles > 4 && (
+                          <div className="flex justify-center pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setMostrarTodasPlantillas((v) => !v)}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                            >
+                              {mostrarTodasPlantillas ? (
+                                <>
+                                  <ChevronUp className="h-3.5 w-3.5" />
+                                  Mostrar solo sugeridas (4)
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                  Ver todas las plantillas ({totalPlantillasDisponibles})
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                     </>
                   )}
                 </div>
@@ -2482,7 +2869,14 @@ function CotizacionStudioEditor({
           </Card>
 
           {/* PASO 3: SERVICIOS TÉCNICOS */}
-          <Card className="bg-white border-slate-200/90 shadow-sm rounded-xl">
+          <Card
+            ref={serviciosSectionRef}
+            className={`scroll-mt-20 bg-white border-slate-200/90 shadow-sm rounded-xl transition-all duration-300 ${
+              highlightItemsSection === 'SERVICIOS'
+                ? 'ring-2 ring-emerald-400 border-emerald-300'
+                : ''
+            }`}
+          >
             <CardHeader className="py-3.5 px-5 border-b border-slate-100 bg-slate-50/40 rounded-t-xl flex flex-row items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap">
                 <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-900">
@@ -2537,6 +2931,8 @@ function CotizacionStudioEditor({
                           descuento_porcentaje: 0,
                           es_opcional: false,
                           iva_aplicable: true,
+                          tpl_es_por_equipo: true,
+                          tpl_cantidad_base: 1,
                         },
                       ])
                     }
@@ -2588,6 +2984,8 @@ function CotizacionStudioEditor({
                                     descuento_porcentaje: 0,
                                     es_opcional: false,
                                     iva_aplicable: true,
+                                    tpl_es_por_equipo: true,
+                                    tpl_cantidad_base: 1,
                                   },
                                 ]);
                                 setSrvSearch('');
@@ -2702,7 +3100,7 @@ function CotizacionStudioEditor({
                               className="h-8 text-xs font-medium"
                             />
                           </div>
-                          <div className="col-span-4 md:col-span-1">
+                          <div className="col-span-4 md:col-span-1 flex flex-col items-center gap-1">
                             <CpqSmartNumberInput
                               min={0.01}
                               decimals={2}
@@ -2713,13 +3111,44 @@ function CotizacionStudioEditor({
                                 setServiciosRows((prev) =>
                                   prev.map((r, i) =>
                                     i === idx
-                                      ? { ...r, cantidad: val, tpl_cantidad_manual: true }
+                                      ? r.id_equipo != null
+                                        ? {
+                                            ...r,
+                                            cantidad: val,
+                                            tpl_cantidad_base: val,
+                                            tpl_cantidad_manual: false,
+                                          }
+                                        : { ...r, cantidad: val, tpl_cantidad_manual: true }
                                       : r,
                                   ),
                                 )
                               }
                               title="Cantidad"
                             />
+                            {(() => {
+                              const eqBadge = getMultiEquipoBadgeInfo(
+                                row,
+                                equiposSeleccionadosInfo.length,
+                                'SERVICIO',
+                              );
+                              if (!eqBadge.show) return null;
+                              return (
+                                <span
+                                  title={
+                                    eqBadge.isTodos
+                                      ? `Cantidad escalada para los ${eqBadge.count} equipos seleccionados`
+                                      : `Cantidad escalada para ${eqBadge.count} equipos elegidos en esta línea`
+                                  }
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap leading-none ${
+                                    eqBadge.isTodos
+                                      ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                      : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                  }`}
+                                >
+                                  × {eqBadge.count} eq.
+                                </span>
+                              );
+                            })()}
                           </div>
                           {showCostosInternos && (
                             <div className="col-span-4 md:col-span-2">
@@ -2818,32 +3247,17 @@ function CotizacionStudioEditor({
                               </div>
                             </div>
                             {equiposSeleccionadosInfo.length > 1 && (
-                              <select
+                              <CpqEquiposMultiSelect
                                 disabled={!isEditable}
-                                value={row.id_equipo ?? ''}
-                                onChange={(e) =>
-                                  setServiciosRows((prev) =>
-                                    prev.map((r, i) =>
-                                      i === idx
-                                        ? {
-                                            ...r,
-                                            id_equipo: e.target.value
-                                              ? Number(e.target.value)
-                                              : null,
-                                          }
-                                        : r,
-                                    ),
-                                  )
-                                }
-                                className="border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white max-w-[160px]"
-                              >
-                                <option value="">Todos los equipos</option>
-                                {equiposSeleccionadosInfo.map((eq) => (
-                                  <option key={eq.id} value={eq.id}>
-                                    {eq.codigo}
-                                  </option>
-                                ))}
-                              </select>
+                                equipos={equiposSeleccionadosInfo}
+                                selectedIds={normalizeItemEquiposIds(
+                                  row.equipos_ids,
+                                  row.id_equipo,
+                                  equiposIds,
+                                )}
+                                escalable={isRowScalablePerEquipo(row, 'SERVICIO')}
+                                onChange={(nextIds) => updateItemEquipos('SERVICIO', idx, nextIds)}
+                              />
                             )}
                             <label className="flex items-center gap-1 cursor-pointer">
                               <input
@@ -2898,7 +3312,14 @@ function CotizacionStudioEditor({
           </Card>
 
           {/* PASO 4: REPUESTOS, COMPONENTES E INSUMOS WMS */}
-          <Card className="bg-white border-slate-200/90 shadow-sm rounded-xl">
+          <Card
+            ref={componentesSectionRef}
+            className={`scroll-mt-20 bg-white border-slate-200/90 shadow-sm rounded-xl transition-all duration-300 ${
+              highlightItemsSection === 'COMPONENTES'
+                ? 'ring-2 ring-emerald-400 border-emerald-300'
+                : ''
+            }`}
+          >
             <CardHeader className="py-3.5 px-5 border-b border-slate-100 bg-slate-50/40 rounded-t-xl flex flex-row items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap">
                 <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-900">
@@ -2940,6 +3361,8 @@ function CotizacionStudioEditor({
                         descuento_porcentaje: 0,
                         es_opcional: false,
                         iva_aplicable: true,
+                        tpl_es_por_equipo: true,
+                        tpl_cantidad_base: 1,
                       },
                     ])
                   }
@@ -3005,6 +3428,8 @@ function CotizacionStudioEditor({
                                     es_opcional: false,
                                     iva_aplicable: true,
                                     stock_actual: c.es_inventariable === false ? null : stock,
+                                    tpl_es_por_equipo: true,
+                                    tpl_cantidad_base: 1,
                                   },
                                 ]);
                                 setCmpSearch('');
@@ -3152,7 +3577,7 @@ function CotizacionStudioEditor({
                               className="h-8 text-xs font-medium"
                             />
                           </div>
-                          <div className="col-span-4 md:col-span-1">
+                          <div className="col-span-4 md:col-span-1 flex flex-col items-center gap-1">
                             <CpqSmartNumberInput
                               min={0.01}
                               decimals={2}
@@ -3163,13 +3588,44 @@ function CotizacionStudioEditor({
                                 setComponentesRows((prev) =>
                                   prev.map((r, i) =>
                                     i === idx
-                                      ? { ...r, cantidad: val, tpl_cantidad_manual: true }
+                                      ? r.id_equipo != null
+                                        ? {
+                                            ...r,
+                                            cantidad: val,
+                                            tpl_cantidad_base: val,
+                                            tpl_cantidad_manual: false,
+                                          }
+                                        : { ...r, cantidad: val, tpl_cantidad_manual: true }
                                       : r,
                                   ),
                                 )
                               }
                               title="Cantidad"
                             />
+                            {(() => {
+                              const eqBadge = getMultiEquipoBadgeInfo(
+                                row,
+                                equiposSeleccionadosInfo.length,
+                                'COMPONENTE',
+                              );
+                              if (!eqBadge.show) return null;
+                              return (
+                                <span
+                                  title={
+                                    eqBadge.isTodos
+                                      ? `Cantidad escalada para los ${eqBadge.count} equipos seleccionados`
+                                      : `Cantidad escalada para ${eqBadge.count} equipos elegidos en esta línea`
+                                  }
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap leading-none ${
+                                    eqBadge.isTodos
+                                      ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                      : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                  }`}
+                                >
+                                  × {eqBadge.count} eq.
+                                </span>
+                              );
+                            })()}
                           </div>
                           {showCostosInternos && (
                             <div className="col-span-4 md:col-span-2">
@@ -3292,32 +3748,19 @@ function CotizacionStudioEditor({
                               </div>
                             </div>
                             {equiposSeleccionadosInfo.length > 1 && (
-                              <select
+                              <CpqEquiposMultiSelect
                                 disabled={!isEditable}
-                                value={row.id_equipo ?? ''}
-                                onChange={(e) =>
-                                  setComponentesRows((prev) =>
-                                    prev.map((r, i) =>
-                                      i === idx
-                                        ? {
-                                            ...r,
-                                            id_equipo: e.target.value
-                                              ? Number(e.target.value)
-                                              : null,
-                                          }
-                                        : r,
-                                    ),
-                                  )
+                                equipos={equiposSeleccionadosInfo}
+                                selectedIds={normalizeItemEquiposIds(
+                                  row.equipos_ids,
+                                  row.id_equipo,
+                                  equiposIds,
+                                )}
+                                escalable={isRowScalablePerEquipo(row, 'COMPONENTE')}
+                                onChange={(nextIds) =>
+                                  updateItemEquipos('COMPONENTE', idx, nextIds)
                                 }
-                                className="border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white max-w-[160px]"
-                              >
-                                <option value="">Todos los equipos</option>
-                                {equiposSeleccionadosInfo.map((eq) => (
-                                  <option key={eq.id} value={eq.id}>
-                                    {eq.codigo}
-                                  </option>
-                                ))}
-                              </select>
+                              />
                             )}
                             {row.stock_actual != null && (
                               <span
@@ -3384,7 +3827,12 @@ function CotizacionStudioEditor({
           </Card>
 
           {/* PASO 5: LOGÍSTICA, VIÁTICOS, PÓLIZAS Y OTROS RUBROS */}
-          <Card className="bg-white border-slate-200/90 shadow-sm rounded-xl">
+          <Card
+            ref={otrosSectionRef}
+            className={`scroll-mt-20 bg-white border-slate-200/90 shadow-sm rounded-xl transition-all duration-300 ${
+              highlightItemsSection === 'OTROS' ? 'ring-2 ring-emerald-400 border-emerald-300' : ''
+            }`}
+          >
             <CardHeader className="py-3.5 px-5 border-b border-slate-100 bg-slate-50/40 rounded-t-xl space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-900">
@@ -3506,7 +3954,7 @@ function CotizacionStudioEditor({
                               className="h-8 text-xs font-medium"
                             />
                           </div>
-                          <div className="col-span-4 md:col-span-1">
+                          <div className="col-span-4 md:col-span-1 flex flex-col items-center gap-1">
                             <CpqSmartNumberInput
                               min={0.01}
                               decimals={2}
@@ -3517,12 +3965,43 @@ function CotizacionStudioEditor({
                                 setOtrosRows((prev) =>
                                   prev.map((r, i) =>
                                     i === idx
-                                      ? { ...r, cantidad: val, tpl_cantidad_manual: true }
+                                      ? r.id_equipo != null
+                                        ? {
+                                            ...r,
+                                            cantidad: val,
+                                            tpl_cantidad_base: val,
+                                            tpl_cantidad_manual: false,
+                                          }
+                                        : { ...r, cantidad: val, tpl_cantidad_manual: true }
                                       : r,
                                   ),
                                 )
                               }
                             />
+                            {(() => {
+                              const eqBadge = getMultiEquipoBadgeInfo(
+                                row,
+                                equiposSeleccionadosInfo.length,
+                                'OTRO',
+                              );
+                              if (!eqBadge.show) return null;
+                              return (
+                                <span
+                                  title={
+                                    eqBadge.isTodos
+                                      ? `Cantidad escalada para los ${eqBadge.count} equipos seleccionados`
+                                      : `Cantidad escalada para ${eqBadge.count} equipos elegidos en esta línea`
+                                  }
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap leading-none ${
+                                    eqBadge.isTodos
+                                      ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                      : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                  }`}
+                                >
+                                  × {eqBadge.count} eq.
+                                </span>
+                              );
+                            })()}
                           </div>
                           <div className="col-span-4 md:col-span-2">
                             <CpqMoneyInput
@@ -3612,32 +4091,17 @@ function CotizacionStudioEditor({
                               </div>
                             )}
                             {equiposSeleccionadosInfo.length > 1 && (
-                              <select
+                              <CpqEquiposMultiSelect
                                 disabled={!isEditable}
-                                value={row.id_equipo ?? ''}
-                                onChange={(e) =>
-                                  setOtrosRows((prev) =>
-                                    prev.map((r, i) =>
-                                      i === idx
-                                        ? {
-                                            ...r,
-                                            id_equipo: e.target.value
-                                              ? Number(e.target.value)
-                                              : null,
-                                          }
-                                        : r,
-                                    ),
-                                  )
-                                }
-                                className="border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-white max-w-[160px]"
-                              >
-                                <option value="">Todos los equipos</option>
-                                {equiposSeleccionadosInfo.map((eq) => (
-                                  <option key={eq.id} value={eq.id}>
-                                    {eq.codigo}
-                                  </option>
-                                ))}
-                              </select>
+                                equipos={equiposSeleccionadosInfo}
+                                selectedIds={normalizeItemEquiposIds(
+                                  row.equipos_ids,
+                                  row.id_equipo,
+                                  equiposIds,
+                                )}
+                                escalable={isRowScalablePerEquipo(row, 'OTRO')}
+                                onChange={(nextIds) => updateItemEquipos('OTRO', idx, nextIds)}
+                              />
                             )}
                             <input
                               disabled={!isEditable}
@@ -4103,9 +4567,9 @@ function CotizacionStudioEditor({
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════════ */}
-        {/* COLUMNA DERECHA STICKY (4): RESUMEN FINANCIERO + RENTABILIDAD PRIVADA  */}
+        {/* COLUMNA DERECHA STICKY (4): RESUMEN + RENTABILIDAD + BITÁCORA VERSIONES */}
         {/* ═══════════════════════════════════════════════════════════════════════ */}
-        <div className="xl:col-span-4 space-y-4 xl:sticky xl:top-20">
+        <div className="xl:col-span-4 space-y-3.5 xl:sticky xl:top-20 xl:max-h-[calc(100vh-5.75rem)] xl:overflow-y-auto xl:pr-1 [scrollbar-width:thin]">
           {/* Resumen Económico Cliente */}
           <Card className="border-primary/30 shadow-md overflow-hidden">
             <div className="px-4 py-3 bg-primary text-white flex items-center justify-between">
@@ -4385,41 +4849,124 @@ function CotizacionStudioEditor({
             </CardContent>
           </Card>
 
-          {/* Historial de Versiones */}
+          {/* Bitácora Interactiva de Versiones Archivadas (en Columna Sticky) */}
           {isEdit && cotizacion?.versiones && cotizacion.versiones.length > 0 && (
-            <Card className="border-slate-200">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-bold uppercase text-slate-600 flex items-center gap-1.5">
-                  <History className="h-3.5 w-3.5 text-primary" />
-                  Versiones Archivadas ({cotizacion.versiones.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1.5">
-                {cotizacion.versiones.slice(0, 5).map((v) => (
-                  <div
-                    key={v.id_version}
-                    className="p-2 rounded bg-slate-50 border border-slate-100 text-xs flex items-center justify-between gap-2"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-mono font-bold text-slate-800 mr-1.5">
-                        v{v.numero_version}
-                      </span>
-                      <span className="text-slate-600 truncate">
-                        {v.motivo_cambio || v.resumen_cambios || 'Snapshot'}
-                      </span>
-                      {v.fecha_version && (
-                        <span className="block text-[10px] text-slate-400">
-                          {formatDate(v.fecha_version)}
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-mono font-semibold text-slate-700 shrink-0">
-                      {formatCurrency(v.total_version || 0)}
+            <div ref={versionesCardRef} className="scroll-mt-4">
+              <Card
+                className={`border-slate-200 shadow-sm transition-all duration-300 ${
+                  highlightVersionesCard ? 'ring-2 ring-amber-400 border-amber-300 shadow-md' : ''
+                }`}
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-bold uppercase text-slate-700 flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5">
+                      <History className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                      Versiones Archivadas ({cotizacion.versiones.length})
                     </span>
+                    <span className="text-[10px] font-medium normal-case text-slate-400">
+                      Clic para abrir PDF
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="max-h-[300px] overflow-y-auto pr-0.5 space-y-2 [scrollbar-width:thin]">
+                    {(showAllVersions
+                      ? cotizacion.versiones
+                      : cotizacion.versiones.slice(0, 5)
+                    ).map((v) => {
+                      const fechaFmt = v.fecha_version ? formatDate(v.fecha_version) : '';
+                      const motivoTexto =
+                        v.motivo_cambio || v.resumen_cambios || 'Snapshot histórico archivado';
+                      const abrirPdfVersion = () => {
+                        setPdfPreviewOpen(false);
+                        setHistoricalPdfTarget({
+                          id_version: v.id_version,
+                          numero_version: v.numero_version,
+                          fecha: fechaFmt || undefined,
+                          motivo: motivoTexto,
+                        });
+                      };
+
+                      return (
+                        <div
+                          key={v.id_version}
+                          role="button"
+                          tabIndex={0}
+                          onClick={abrirPdfVersion}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              abrirPdfVersion();
+                            }
+                          }}
+                          title={`Abrir vista previa del PDF histórico v${v.numero_version}`}
+                          className="group p-2.5 rounded-lg bg-slate-50/80 border border-slate-200/80 hover:border-amber-300 hover:bg-amber-50/40 hover:shadow-xs transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        >
+                          {/* Bitácora responsive: fecha+versión izquierda, motivo centro, monto resaltado derecha */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold shrink-0 border ${
+                                  v.numero_version >= 2
+                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}
+                              >
+                                {v.numero_version >= 2 && <History className="h-2.5 w-2.5" />}v
+                                {v.numero_version}
+                              </span>
+                              {fechaFmt && (
+                                <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">
+                                  {fechaFmt}
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-mono font-bold text-xs text-slate-900 bg-white border border-slate-200/90 group-hover:border-amber-200 px-2 py-0.5 rounded-md tabular-nums shrink-0 self-start sm:self-auto">
+                              {formatCurrency(v.total_version || 0)}
+                            </span>
+                          </div>
+
+                          <p className="mt-1.5 text-xs text-slate-700 leading-snug break-words">
+                            {motivoTexto}
+                          </p>
+
+                          <div className="mt-2 pt-1.5 border-t border-slate-200/70 flex items-center justify-between gap-2">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary group-hover:underline">
+                              <FileText className="h-3 w-3 shrink-0" />
+                              Ver PDF v{v.numero_version}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSnapshotInspectVersionId(v.id_version);
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-amber-900 hover:bg-amber-100/80 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                              title={`Inspeccionar detalle en modo Solo Lectura de v${v.numero_version}`}
+                            >
+                              <Eye className="h-3 w-3 shrink-0" />
+                              Solo lectura
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+
+                  {cotizacion.versiones.length > 5 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllVersions((prev) => !prev)}
+                      className="w-full py-1.5 text-[11px] font-semibold text-slate-600 hover:text-primary hover:bg-slate-50 rounded-md border border-dashed border-slate-200 transition-colors cursor-pointer"
+                    >
+                      {showAllVersions
+                        ? 'Mostrar solo las 5 más recientes'
+                        : `Ver historial completo (${cotizacion.versiones.length} versiones)`}
+                    </button>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       </div>
@@ -4428,43 +4975,85 @@ function CotizacionStudioEditor({
       {/* MODALES DE WORKFLOW COMERCIAL                                          */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
 
-      {/* Solicitar Aprobación */}
+      {/* Solicitar Aprobación / Aprobar para Envío */}
       <Dialog open={solicitarOpen} onOpenChange={setSolicitarOpen}>
         <DialogContent className="max-w-md bg-white">
           <DialogHeader>
-            <DialogTitle>Enviar a Aprobación Interna</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0" />
+              {resumenFinanciero.nivelAprobacion === 'NINGUNO'
+                ? 'Aprobar Cotización para Envío'
+                : `Solicitar Aprobación (${resumenFinanciero.nivelAprobacion})`}
+            </DialogTitle>
             <DialogDescription>
-              Guardaremos tus cambios actuales y evaluaremos la cotización contra las políticas
-              comerciales de la organización.
+              {resumenFinanciero.nivelAprobacion === 'NINGUNO'
+                ? 'Guardaremos tus cambios actuales y la cotización quedará aprobada y lista para enviar al cliente (sin marca de agua BORRADOR).'
+                : `Guardaremos tus cambios actuales y enviaremos la oferta a revisión interna de ${resumenFinanciero.nivelAprobacion} según las políticas comerciales.`}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label>Observaciones para el aprobador</Label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <Label>
+                {resumenFinanciero.nivelAprobacion === 'NINGUNO'
+                  ? 'Notas de aprobación (Opcional)'
+                  : 'Observaciones para el aprobador (Opcional)'}
+              </Label>
+              <span className="text-[11px] font-mono text-slate-400">
+                {solicitarObs.trim().length}/1000
+              </span>
+            </div>
             <Textarea
               rows={3}
+              maxLength={1000}
               value={solicitarObs}
               onChange={(e) => setSolicitarObs(e.target.value)}
-              placeholder="Ej: Cotización lista con margen validado y costos logísticos incluidos..."
+              placeholder={
+                resumenFinanciero.nivelAprobacion === 'NINGUNO'
+                  ? 'Ej: Aprobada y revisada con cliente, lista para envío formal...'
+                  : 'Ej: Descuento validado por volumen de equipos...'
+              }
             />
+            <p className="text-[11px] text-slate-500">
+              Opcional · Puedes escribir una nota breve o dejar el campo vacío para usar el registro
+              estándar.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSolicitarOpen(false)}>
               Cancelar
             </Button>
             <Button
+              className={
+                resumenFinanciero.nivelAprobacion === 'NINGUNO'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : undefined
+              }
               disabled={workflow.solicitarAprobacion.isPending || isSaving}
               onClick={async () => {
-                const savedId = await handleSave();
-                if (!savedId) return;
-                await workflow.solicitarAprobacion.mutateAsync({
-                  id: savedId,
-                  observaciones: solicitarObs.trim() || 'Cotización lista para revisión y envío',
-                });
-                setSolicitarOpen(false);
+                try {
+                  const savedId = await handleSave();
+                  if (!savedId) return;
+                  await workflow.solicitarAprobacion.mutateAsync({
+                    id: savedId,
+                    observaciones: solicitarObs.trim() || 'Cotización lista para revisión y envío',
+                  });
+                  setSolicitarObs('');
+                  setSolicitarOpen(false);
+                } catch {
+                  // Error manejado de forma segura mediante toast en el hook (sin crash overlay)
+                }
               }}
             >
-              <Send className="h-4 w-4 mr-1.5" />
-              Confirmar
+              {workflow.solicitarAprobacion.isPending || isSaving ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : resumenFinanciero.nivelAprobacion === 'NINGUNO' ? (
+                <ShieldCheck className="h-4 w-4 mr-1.5" />
+              ) : (
+                <Send className="h-4 w-4 mr-1.5" />
+              )}
+              {resumenFinanciero.nivelAprobacion === 'NINGUNO'
+                ? 'Aprobar para Envío'
+                : 'Enviar a Aprobación'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -4521,13 +5110,17 @@ function CotizacionStudioEditor({
                   .split(',')
                   .map((s) => s.trim())
                   .filter(Boolean);
-                await workflow.enviar.mutateAsync({
-                  id: cotizacion.id_cotizacion,
-                  destinatario_email: enviarEmail.trim(),
-                  destinatario_nombre: enviarNombre.trim(),
-                  emails_copia: cc.length ? cc : undefined,
-                });
-                setEnviarOpen(false);
+                try {
+                  await workflow.enviar.mutateAsync({
+                    id: cotizacion.id_cotizacion,
+                    destinatario_email: enviarEmail.trim(),
+                    destinatario_nombre: enviarNombre.trim(),
+                    emails_copia: cc.length ? cc : undefined,
+                  });
+                  setEnviarOpen(false);
+                } catch {
+                  // Error notificado mediante toast en el hook
+                }
               }}
             >
               {workflow.enviar.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
@@ -4579,12 +5172,16 @@ function CotizacionStudioEditor({
               disabled={workflow.aprobarCliente.isPending}
               onClick={async () => {
                 if (!cotizacion) return;
-                await workflow.aprobarCliente.mutateAsync({
-                  id: cotizacion.id_cotizacion,
-                  orden_compra_cliente: aprobarPO.trim() || undefined,
-                  observaciones: aprobarObs.trim() || 'Aprobada por cliente',
-                });
-                setAprobarOpen(false);
+                try {
+                  await workflow.aprobarCliente.mutateAsync({
+                    id: cotizacion.id_cotizacion,
+                    orden_compra_cliente: aprobarPO.trim() || undefined,
+                    observaciones: aprobarObs.trim() || 'Aprobada por cliente',
+                  });
+                  setAprobarOpen(false);
+                } catch {
+                  // Error notificado mediante toast en el hook
+                }
               }}
             >
               <Check className="h-4 w-4 mr-1.5" />
@@ -4634,16 +5231,20 @@ function CotizacionStudioEditor({
               variant="destructive"
               disabled={workflow.rechazarCliente.isPending}
               onClick={async () => {
-                if (!cotizacion || !motivoRechazoId || !obsRechazo.trim()) {
-                  toast.error('Selecciona motivo y detalle');
+                if (!cotizacion || !motivoRechazoId) {
+                  toast.error('Selecciona el motivo de rechazo');
                   return;
                 }
-                await workflow.rechazarCliente.mutateAsync({
-                  id: cotizacion.id_cotizacion,
-                  id_motivo_rechazo: Number(motivoRechazoId),
-                  observaciones_rechazo: obsRechazo.trim(),
-                });
-                setRechazarOpen(false);
+                try {
+                  await workflow.rechazarCliente.mutateAsync({
+                    id: cotizacion.id_cotizacion,
+                    id_motivo_rechazo: Number(motivoRechazoId),
+                    observaciones_rechazo: obsRechazo.trim() || 'Rechazada por el cliente',
+                  });
+                  setRechazarOpen(false);
+                } catch {
+                  // Error notificado mediante toast en el hook
+                }
               }}
             >
               Confirmar Rechazo
@@ -4679,12 +5280,16 @@ function CotizacionStudioEditor({
               disabled={workflow.reabrirBorrador.isPending}
               onClick={async () => {
                 if (!cotizacion) return;
-                await workflow.reabrirBorrador.mutateAsync({
-                  id: cotizacion.id_cotizacion,
-                  motivo_cambio: reabrirMotivo.trim() || undefined,
-                });
-                setReabrirOpen(false);
-                setReabrirMotivo('');
+                try {
+                  await workflow.reabrirBorrador.mutateAsync({
+                    id: cotizacion.id_cotizacion,
+                    motivo_cambio: reabrirMotivo.trim() || undefined,
+                  });
+                  setReabrirOpen(false);
+                  setReabrirMotivo('');
+                } catch {
+                  // Error notificado mediante toast en el hook
+                }
               }}
             >
               <RotateCcw className="h-4 w-4 mr-1.5" />
@@ -4733,12 +5338,16 @@ function CotizacionStudioEditor({
                   toast.error('Ingresa un nombre para la plantilla');
                   return;
                 }
-                await itemActions.guardarComoPlantilla.mutateAsync({
-                  nombre: saveTplNombre.trim(),
-                  descripcion: saveTplDesc.trim() || undefined,
-                  normalizar_por_equipo: true,
-                });
-                setSaveTplOpen(false);
+                try {
+                  await itemActions.guardarComoPlantilla.mutateAsync({
+                    nombre: saveTplNombre.trim(),
+                    descripcion: saveTplDesc.trim() || undefined,
+                    normalizar_por_equipo: true,
+                  });
+                  setSaveTplOpen(false);
+                } catch {
+                  // Error notificado mediante toast en el hook
+                }
               }}
             >
               <BookmarkPlus className="h-4 w-4 mr-1.5" />
@@ -4910,19 +5519,23 @@ function CotizacionStudioEditor({
                   disabled={workflow.convertirAOrden.isPending || equiposIds.length === 0}
                   onClick={async () => {
                     if (!cotizacion) return;
-                    const res = await workflow.convertirAOrden.mutateAsync({
-                      id: cotizacion.id_cotizacion,
-                      payload: {
-                        fecha_programada: q2oFecha,
-                        prioridad: q2oPrioridad,
-                        id_tipo_servicio:
-                          q2oTipoServId !== 'AUTO' ? Number(q2oTipoServId) : undefined,
-                        id_tecnico_asignado:
-                          q2oTecnicoId !== 'NONE' ? Number(q2oTecnicoId) : undefined,
-                        observaciones: q2oObs.trim() || undefined,
-                      },
-                    });
-                    setQ2oResultado(res);
+                    try {
+                      const res = await workflow.convertirAOrden.mutateAsync({
+                        id: cotizacion.id_cotizacion,
+                        payload: {
+                          fecha_programada: q2oFecha,
+                          prioridad: q2oPrioridad,
+                          id_tipo_servicio:
+                            q2oTipoServId !== 'AUTO' ? Number(q2oTipoServId) : undefined,
+                          id_tecnico_asignado:
+                            q2oTecnicoId !== 'NONE' ? Number(q2oTecnicoId) : undefined,
+                          observaciones: q2oObs.trim() || undefined,
+                        },
+                      });
+                      setQ2oResultado(res);
+                    } catch {
+                      // Error notificado mediante toast en el hook
+                    }
                   }}
                 >
                   {workflow.convertirAOrden.isPending && (
@@ -5044,29 +5657,79 @@ function CotizacionStudioEditor({
       />
 
       <CotizacionPdfPreviewModal
-        open={pdfPreviewOpen}
-        onOpenChange={setPdfPreviewOpen}
+        open={pdfPreviewOpen || Boolean(historicalPdfTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPdfPreviewOpen(false);
+            setHistoricalPdfTarget(null);
+          }
+        }}
         cotizacionId={cotizacion?.id_cotizacion ?? null}
+        versionId={historicalPdfTarget?.id_version ?? null}
         numeroCotizacion={cotizacion?.numero_cotizacion}
-        version={cotizacion?.version}
-        estadoLabel={ESTADO_LABELS_COTIZACION[estadoCodigo] || estadoCodigo}
-        cacheKey={[
-          cotizacion?.fecha_modificacion ?? '',
-          cotizacion?.version ?? 1,
-          cotizacion?.total_cotizacion ?? 0,
-          cotizacion?.id_estado ?? 0,
-          cotizacion?.items_servicios?.length ?? 0,
-          cotizacion?.items_componentes?.length ?? 0,
-          cotizacion?.items_otros?.length ?? 0,
-          firmaAsesorLocal?.id_firma_digital ?? (firmaAsesorLocal ? 'local' : 0),
-          firmaClienteLocal?.id_firma_digital ?? (firmaClienteLocal ? 'local' : 0),
-          atencionANombre,
-          atencionACargo,
-          orgConfig?.enable_cpq_governance ? 'gov1' : 'gov0',
-          orgConfig?.fecha_modificacion ?? '',
-        ].join('-')}
+        version={historicalPdfTarget ? historicalPdfTarget.numero_version : cotizacion?.version}
+        estadoLabel={
+          historicalPdfTarget
+            ? historicalPdfTarget.estadoLabel || 'Archivada'
+            : ESTADO_LABELS_COTIZACION[estadoCodigo] || estadoCodigo
+        }
+        historicalMeta={
+          historicalPdfTarget
+            ? {
+                fecha: historicalPdfTarget.fecha,
+                motivo: historicalPdfTarget.motivo,
+              }
+            : null
+        }
+        onInspectReadOnly={
+          historicalPdfTarget
+            ? () => {
+                const targetId = historicalPdfTarget.id_version;
+                setHistoricalPdfTarget(null);
+                setSnapshotInspectVersionId(targetId);
+              }
+            : undefined
+        }
+        cacheKey={
+          historicalPdfTarget
+            ? `hist-${historicalPdfTarget.id_version}`
+            : [
+                cotizacion?.fecha_modificacion ?? '',
+                cotizacion?.version ?? 1,
+                cotizacion?.total_cotizacion ?? 0,
+                cotizacion?.id_estado ?? 0,
+                cotizacion?.items_servicios?.length ?? 0,
+                cotizacion?.items_componentes?.length ?? 0,
+                cotizacion?.items_otros?.length ?? 0,
+                firmaAsesorLocal?.id_firma_digital ?? (firmaAsesorLocal ? 'local' : 0),
+                firmaClienteLocal?.id_firma_digital ?? (firmaClienteLocal ? 'local' : 0),
+                atencionANombre,
+                atencionACargo,
+                orgConfig?.enable_cpq_governance ? 'gov1' : 'gov0',
+                orgConfig?.fecha_modificacion ?? '',
+              ].join('-')
+        }
         mostrarDesglosePrecios={mostrarDesglosePrecios}
-        onDesgloseChange={setMostrarDesglosePrecios}
+        onDesgloseChange={historicalPdfTarget ? undefined : setMostrarDesglosePrecios}
+      />
+
+      <CotizacionVersionSnapshotModal
+        open={Boolean(snapshotInspectVersionId)}
+        onOpenChange={(open) => {
+          if (!open) setSnapshotInspectVersionId(null);
+        }}
+        versionId={snapshotInspectVersionId}
+        numeroCotizacion={cotizacion?.numero_cotizacion}
+        onOpenPdf={(ver) => {
+          setPdfPreviewOpen(false);
+          setHistoricalPdfTarget({
+            id_version: ver.id_version,
+            numero_version: ver.numero_version,
+            fecha: ver.fecha_version ? formatDate(ver.fecha_version) : undefined,
+            motivo: ver.motivo_cambio,
+            estadoLabel: ver.estadoLabel,
+          });
+        }}
       />
 
       <TiposOfertaManagerModal

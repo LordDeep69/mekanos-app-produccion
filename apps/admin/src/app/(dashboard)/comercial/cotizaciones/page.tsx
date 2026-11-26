@@ -35,6 +35,7 @@ import {
   Copy,
   Cpu,
   FileText,
+  History,
   Layers,
   Loader2,
   Plus,
@@ -42,11 +43,12 @@ import {
   Search,
   ShieldCheck,
   TrendingUp,
+  X,
   XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const ESTADO_STYLE: Record<string, string> = {
   BORRADOR: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -58,14 +60,29 @@ const ESTADO_STYLE: Record<string, string> = {
   VENCIDA: 'bg-slate-200 text-slate-600 border-slate-300',
 };
 
-export default function CotizacionesPage() {
+type CotizacionesTab = 'listado' | 'aprobaciones' | 'plantillas';
+
+function CotizacionesPageContent() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { formatCurrency, formatDate } = useOrgFormatters();
 
-  const [tab, setTab] = useState<'listado' | 'aprobaciones' | 'plantillas'>('listado');
-  const [search, setSearch] = useState('');
-  const [estadoFiltro, setEstadoFiltro] = useState<string>('TODOS');
-  const [tipoFiltro, setTipoFiltro] = useState<string>('TODOS');
+  // Hidratación y sincronización en tiempo real desde Query Params de URL
+  const rawTab = searchParams.get('tab');
+  const tab: CotizacionesTab =
+    rawTab === 'aprobaciones' || rawTab === 'plantillas' ? rawTab : 'listado';
+  const urlSearch = searchParams.get('q') || '';
+  const estadoFiltro = searchParams.get('estado') || 'TODOS';
+  const tipoFiltro = searchParams.get('tipo') || 'TODOS';
+
+  const [draftSearch, setDraftSearch] = useState<{ base: string; value: string }>({
+    base: urlSearch,
+    value: urlSearch,
+  });
+  const search = draftSearch.base === urlSearch ? draftSearch.value : urlSearch;
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [pdfPreviewTarget, setPdfPreviewTarget] = useState<{
     id: number;
     numero?: string;
@@ -74,6 +91,59 @@ export default function CotizacionesPage() {
     cacheKey?: string;
     mostrarDesglosePrecios?: boolean;
   } | null>(null);
+
+  const buildUrl = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [k, v] of Object.entries(updates)) {
+        if (v == null || v === '') params.delete(k);
+        else params.set(k, v);
+      }
+      const qs = params.toString();
+      return qs ? `${pathname}?${qs}` : pathname;
+    },
+    [pathname, searchParams],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
+  const setTab = (nextTab: CotizacionesTab) => {
+    router.replace(buildUrl({ tab: nextTab === 'listado' ? null : nextTab }), { scroll: false });
+  };
+
+  const handleSearchChange = (nextVal: string) => {
+    setDraftSearch({ base: urlSearch, value: nextVal });
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      const cleaned = nextVal.trim() ? nextVal : null;
+      router.replace(buildUrl({ q: cleaned }), { scroll: false });
+    }, 180);
+  };
+
+  const setEstadoFiltro = (nextEstado: string) => {
+    router.replace(buildUrl({ estado: nextEstado === 'TODOS' ? null : nextEstado }), {
+      scroll: false,
+    });
+  };
+
+  const setTipoFiltro = (nextTipo: string) => {
+    router.replace(buildUrl({ tipo: nextTipo === 'TODOS' ? null : nextTipo }), {
+      scroll: false,
+    });
+  };
+
+  const clearListadoFilters = () => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    setDraftSearch({ base: '', value: '' });
+    router.replace(buildUrl({ q: null, estado: null, tipo: null }), { scroll: false });
+  };
+
+  const hayFiltrosListado =
+    Boolean(search.trim()) || estadoFiltro !== 'TODOS' || tipoFiltro !== 'TODOS';
 
   const { data: cotData, isLoading, refetch } = useCotizaciones({ take: 150 });
   const { data: aprobacionesData } = useAprobacionesPendientes();
@@ -328,10 +398,20 @@ export default function CotizacionesPage() {
                 <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <Input
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Buscar por número, asunto, cliente u orden de compra (PO)..."
-                  className="pl-9 bg-white"
+                  className="pl-9 pr-8 bg-white"
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => handleSearchChange('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
               <Select value={estadoFiltro} onValueChange={setEstadoFiltro}>
                 <SelectTrigger className="w-48 bg-white">
@@ -359,6 +439,18 @@ export default function CotizacionesPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {hayFiltrosListado && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearListadoFilters}
+                  className="h-9 text-xs text-slate-500 hover:text-slate-900"
+                >
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Limpiar
+                </Button>
+              )}
             </div>
           </CardHeader>
 
@@ -407,12 +499,23 @@ export default function CotizacionesPage() {
                           className="hover:bg-slate-50/70 transition-colors"
                         >
                           <td className="py-3 px-3 whitespace-nowrap">
-                            <Link
-                              href={`/comercial/cotizaciones/${c.id_cotizacion}`}
-                              className="font-mono font-bold text-slate-900 hover:text-primary"
-                            >
-                              {c.numero_cotizacion}
-                            </Link>
+                            <div className="flex items-center gap-1.5">
+                              <Link
+                                href={`/comercial/cotizaciones/${c.id_cotizacion}`}
+                                className="font-mono font-bold text-slate-900 hover:text-primary"
+                              >
+                                {c.numero_cotizacion}
+                              </Link>
+                              {(c.version || 1) >= 2 && (
+                                <Badge
+                                  variant="outline"
+                                  className="px-1.5 py-0 h-5 font-mono text-[10px] font-bold bg-amber-100 text-amber-800 border-amber-200 inline-flex items-center gap-0.5"
+                                  title={`Versión ${c.version} — derivada de una negociación previa`}
+                                >
+                                  <History className="h-2.5 w-2.5 shrink-0" />v{c.version}
+                                </Badge>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-[10px] font-semibold text-slate-500">
                                 {resolveTipoOfertaLabel(c.tipo_cotizacion, tiposOfertaCatalogo)}
@@ -648,6 +751,7 @@ export default function CotizacionesPage() {
       {/* TAB 3: HUB DE PLANTILLAS CPQ */}
       {tab === 'plantillas' && (
         <PlantillasCotizacionManager
+          queryPrefix="pl_"
           onSelectForNewQuote={(pl) =>
             router.push(`/comercial/cotizaciones/nueva?plantilla=${pl.id_plantilla}`)
           }
@@ -672,5 +776,19 @@ export default function CotizacionesPage() {
         }
       />
     </div>
+  );
+}
+
+export default function CotizacionesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-24 flex justify-center">
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <CotizacionesPageContent />
+    </Suspense>
   );
 }

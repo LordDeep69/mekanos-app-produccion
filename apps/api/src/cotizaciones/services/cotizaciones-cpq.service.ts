@@ -69,6 +69,24 @@ export class CotizacionesCpqService {
     return Math.round(subtotal * 100) / 100;
   }
 
+  private normalizeItemEquipos(
+    equiposIds?: number[] | null,
+    idEquipo?: number | null,
+  ): { id_equipo: number | null; equipos_ids: number[] } {
+    const clean = Array.isArray(equiposIds)
+      ? Array.from(
+          new Set(equiposIds.filter((id): id is number => Number.isInteger(id) && Number(id) > 0)),
+        )
+      : [];
+    if (clean.length === 0 && idEquipo && Number.isInteger(idEquipo) && idEquipo > 0) {
+      return { id_equipo: idEquipo, equipos_ids: [idEquipo] };
+    }
+    return {
+      id_equipo: clean.length === 1 ? clean[0] : null,
+      equipos_ids: clean,
+    };
+  }
+
   // ==================== EQUIPOS N:M ====================
 
   async syncEquipos(idCotizacion: number, dto: SyncEquiposCotizacionDto) {
@@ -153,10 +171,12 @@ export class CotizacionesCpqService {
     const descuento = dto.descuento_porcentaje ?? 0;
     const subtotal = this.calcularSubtotalLinea(cantidad, precioUnitario, descuento);
 
+    const eqNorm = this.normalizeItemEquipos(dto.equipos_ids, dto.id_equipo);
     const creado = await this.prisma.items_cotizacion_otros.create({
       data: {
         id_cotizacion: idCotizacion,
-        id_equipo: dto.id_equipo ?? null,
+        id_equipo: eqNorm.id_equipo,
+        equipos_ids: eqNorm.equipos_ids,
         categoria_rubro: (dto.categoria_rubro || 'OTRO').toUpperCase(),
         descripcion: dto.descripcion.trim(),
         detalle_calculo: dto.detalle_calculo?.trim() || null,
@@ -199,10 +219,14 @@ export class CotizacionesCpqService {
     const descuento = dto.descuento_porcentaje ?? Number(existente.descuento_porcentaje);
     const subtotal = this.calcularSubtotalLinea(cantidad, precioUnitario, descuento);
 
+    const eqPatch =
+      dto.equipos_ids !== undefined || dto.id_equipo !== undefined
+        ? this.normalizeItemEquipos(dto.equipos_ids, dto.id_equipo)
+        : null;
     const actualizado = await this.prisma.items_cotizacion_otros.update({
       where: { id_item_otro: idItemOtro },
       data: {
-        ...(dto.id_equipo !== undefined ? { id_equipo: dto.id_equipo } : {}),
+        ...(eqPatch ? { id_equipo: eqPatch.id_equipo, equipos_ids: eqPatch.equipos_ids } : {}),
         ...(dto.categoria_rubro !== undefined
           ? { categoria_rubro: dto.categoria_rubro.toUpperCase() }
           : {}),
@@ -483,10 +507,12 @@ export class CotizacionesCpqService {
               lockCatalogUnitPrice && srvCat && srvCat.precio_base > 0
                 ? srvCat.precio_base
                 : s.precio_unitario;
+            const eqNorm = this.normalizeItemEquipos(s.equipos_ids, s.id_equipo);
             return {
               id_cotizacion: idCotizacion,
               id_servicio: s.id_servicio ?? null,
-              id_equipo: s.id_equipo ?? null,
+              id_equipo: eqNorm.id_equipo,
+              equipos_ids: eqNorm.equipos_ids,
               descripcion_personalizada: s.descripcion_personalizada ?? null,
               cantidad: s.cantidad,
               unidad: (s.unidad || 'servicio').trim().slice(0, 20),
@@ -517,11 +543,13 @@ export class CotizacionesCpqService {
               lockCatalogUnitPrice && cat && cat.precio_venta > 0
                 ? cat.precio_venta
                 : c.precio_unitario;
+            const eqNorm = this.normalizeItemEquipos(c.equipos_ids, c.id_equipo);
             return {
               id_cotizacion: idCotizacion,
               id_componente: c.id_componente ?? null,
               id_tipo_componente: c.id_tipo_componente ?? cat?.id_tipo_componente ?? null,
-              id_equipo: c.id_equipo ?? null,
+              id_equipo: eqNorm.id_equipo,
+              equipos_ids: eqNorm.equipos_ids,
               descripcion: c.descripcion.trim(),
               referencia_manual: c.referencia_manual ?? null,
               marca_manual: c.marca_manual ?? null,
@@ -553,9 +581,11 @@ export class CotizacionesCpqService {
             const cant = o.cantidad ?? 1;
             const pu = o.precio_unitario ?? 0;
             const desc = o.descuento_porcentaje ?? 0;
+            const eqNorm = this.normalizeItemEquipos(o.equipos_ids, o.id_equipo);
             return {
               id_cotizacion: idCotizacion,
-              id_equipo: o.id_equipo ?? null,
+              id_equipo: eqNorm.id_equipo,
+              equipos_ids: eqNorm.equipos_ids,
               categoria_rubro: (o.categoria_rubro || 'OTRO').toUpperCase(),
               descripcion: o.descripcion.trim(),
               detalle_calculo: o.detalle_calculo ?? null,
@@ -774,7 +804,7 @@ export class CotizacionesCpqService {
       );
     }
 
-    // 1. Guardar snapshot auditable antes de volver a borrador
+    // 1. Guardar snapshot auditable inmutable antes de volver a borrador
     const versionResult = await this.commandBus.execute(
       new CreateVersionCommand(
         idCotizacion,
@@ -782,6 +812,8 @@ export class CotizacionesCpqService {
         userId,
       ),
     );
+    const versionArchivada = Number(versionResult?.version?.numero_version || cot.version || 1);
+    const nuevaVersionActiva = Math.max((cot.version || 1) + 1, versionArchivada + 1);
 
     // 2. Cerrar aprobaciones pendientes si venía de EN_REVISION
     await this.prisma.aprobaciones_cotizacion.updateMany({
@@ -794,10 +826,20 @@ export class CotizacionesCpqService {
       },
     });
 
-    // 3. Volver a BORRADOR (id_estado = 1)
-    await this.cotizacionesRepository.update(idCotizacion, {
-      id_estado: 1,
-      modificado_por: userId,
+    // 3. Volver a BORRADOR (id_estado = 1), promover versión activa a v(N+1) y limpiar aprobación previa
+    // para que el PDF regenere inmediatamente con marca de agua BORRADOR hasta nueva aprobación.
+    const ahora = new Date();
+    await this.prisma.cotizaciones.update({
+      where: { id_cotizacion: idCotizacion },
+      data: {
+        id_estado: 1,
+        version: nuevaVersionActiva,
+        aprobada_internamente_por: null,
+        fecha_aprobacion_interna: null,
+        fecha_cambio_estado: ahora,
+        modificado_por: userId,
+        fecha_modificacion: ahora,
+      },
     });
 
     const cotizacionActualizada = await this.cotizacionesRepository.findById(idCotizacion, {
@@ -812,8 +854,9 @@ export class CotizacionesCpqService {
     });
 
     return {
-      message: `Cotización reabierta en BORRADOR (snapshot v${versionResult.version.numero_version} archivado)`,
+      message: `Cotización reabierta en BORRADOR como v${nuevaVersionActiva} (snapshot v${versionArchivada} archivado)`,
       version_archivada: versionResult.version,
+      nueva_version: nuevaVersionActiva,
       cotizacion: cotizacionActualizada,
     };
   }
@@ -900,6 +943,7 @@ export class CotizacionesCpqService {
           data: origen.items_cotizacion_servicios.map((s) => ({
             id_cotizacion: creada.id_cotizacion,
             id_equipo: s.id_equipo,
+            equipos_ids: s.equipos_ids || [],
             id_servicio: s.id_servicio,
             cantidad: s.cantidad,
             unidad: s.unidad,
@@ -924,6 +968,7 @@ export class CotizacionesCpqService {
           data: origen.items_cotizacion_componentes.map((c) => ({
             id_cotizacion: creada.id_cotizacion,
             id_equipo: c.id_equipo,
+            equipos_ids: c.equipos_ids || [],
             id_componente: c.id_componente,
             id_tipo_componente: c.id_tipo_componente,
             descripcion: c.descripcion,
@@ -952,6 +997,7 @@ export class CotizacionesCpqService {
           data: origen.items_cotizacion_otros.map((o) => ({
             id_cotizacion: creada.id_cotizacion,
             id_equipo: o.id_equipo,
+            equipos_ids: o.equipos_ids || [],
             categoria_rubro: o.categoria_rubro,
             descripcion: o.descripcion,
             detalle_calculo: o.detalle_calculo,

@@ -29,8 +29,9 @@ import {
   useTiposOfertaCotizacion,
 } from '@/features/comercial/hooks/use-comercial';
 import { useOrgFormatters } from '@/hooks/use-org-formatters';
-import { Copy, Edit3, Layers, Loader2, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Copy, Edit3, Layers, Loader2, Plus, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { matchesAllTokens } from './cpq-premium-controls';
 import { PlantillaCotizacionStudio } from './plantilla-cotizacion-studio';
 import { resolveTipoOfertaLabel } from './tipos-oferta-manager-modal';
@@ -38,36 +39,132 @@ import { resolveTipoOfertaLabel } from './tipos-oferta-manager-modal';
 interface Props {
   onSelectForNewQuote?: (plantilla: PlantillaCotizacionRecord) => void;
   onStudioModeChange?: (isStudio: boolean) => void;
+  /** Prefijo para query params de URL cuando se embebe dentro de otro Hub (ej. "pl_"). */
+  queryPrefix?: string;
 }
 
-interface StudioState {
-  mode: 'create' | 'edit' | 'duplicate';
-  plantilla?: PlantillaCotizacionRecord;
-  sessionKey: number;
-}
+type StudioMode = 'create' | 'edit' | 'duplicate';
 
-export function PlantillasCotizacionManager({ onSelectForNewQuote, onStudioModeChange }: Props) {
+export function PlantillasCotizacionManager({
+  onSelectForNewQuote,
+  onStudioModeChange,
+  queryPrefix = '',
+}: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { formatCurrency } = useOrgFormatters();
-  const [search, setSearch] = useState('');
-  const [tipoFiltro, setTipoFiltro] = useState('TODOS');
-  const [studioState, setStudioState] = useState<StudioState | null>(null);
+
+  const qKey = `${queryPrefix}q`;
+  const tipoKey = `${queryPrefix}tipo`;
+  const studioKey = `${queryPrefix}studio`;
+  const studioIdKey = `${queryPrefix}id`;
+
+  // Estado sincronizado en tiempo real con Query Params de la URL (persiste al navegar y usar Atrás)
+  const urlSearch = searchParams.get(qKey) || '';
+  const tipoFiltro = searchParams.get(tipoKey) || 'TODOS';
+  const rawStudioMode = searchParams.get(studioKey);
+  const studioMode: StudioMode | null =
+    rawStudioMode === 'create' || rawStudioMode === 'edit' || rawStudioMode === 'duplicate'
+      ? rawStudioMode
+      : null;
+  const rawStudioId = searchParams.get(studioIdKey);
+  const studioPlantillaId = rawStudioId && /^\d+$/.test(rawStudioId) ? Number(rawStudioId) : null;
+
+  const [draftSearch, setDraftSearch] = useState<{ base: string; value: string }>({
+    base: urlSearch,
+    value: urlSearch,
+  });
+  const search = draftSearch.base === urlSearch ? draftSearch.value : urlSearch;
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushedStudioRef = useRef(false);
+
   const [deleteTarget, setDeleteTarget] = useState<PlantillaCotizacionRecord | null>(null);
 
   const { data: plantillas = [], isLoading } = usePlantillasCotizacion();
   const { data: tiposOfertaCatalogo = [] } = useTiposOfertaCotizacion();
   const { eliminar } = usePlantillasActions();
 
-  const openStudio = (mode: StudioState['mode'], plantilla?: PlantillaCotizacionRecord) => {
-    setStudioState({ mode, plantilla, sessionKey: Date.now() });
-    onStudioModeChange?.(true);
+  const buildUrl = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [k, v] of Object.entries(updates)) {
+        if (v == null || v === '') params.delete(k);
+        else params.set(k, v);
+      }
+      const qs = params.toString();
+      return qs ? `${pathname}?${qs}` : pathname;
+    },
+    [pathname, searchParams],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
+  const studioPlantilla = useMemo(() => {
+    if (!studioMode || studioMode === 'create' || !studioPlantillaId) return undefined;
+    return plantillas.find((p) => p.id_plantilla === studioPlantillaId);
+  }, [studioMode, studioPlantillaId, plantillas]);
+
+  const isStudioActive = Boolean(
+    studioMode && (studioMode === 'create' || Boolean(studioPlantilla) || isLoading),
+  );
+
+  useEffect(() => {
+    onStudioModeChange?.(isStudioActive);
+  }, [isStudioActive, onStudioModeChange]);
+
+  const handleSearchChange = (nextVal: string) => {
+    setDraftSearch({ base: urlSearch, value: nextVal });
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      const cleaned = nextVal.trim() ? nextVal : null;
+      router.replace(buildUrl({ [qKey]: cleaned }), { scroll: false });
+    }, 180);
+  };
+
+  const handleTipoFiltroChange = (nextTipo: string) => {
+    router.replace(buildUrl({ [tipoKey]: nextTipo === 'TODOS' ? null : nextTipo }), {
+      scroll: false,
+    });
+  };
+
+  const clearFilters = () => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    setDraftSearch({ base: '', value: '' });
+    router.replace(buildUrl({ [qKey]: null, [tipoKey]: null }), { scroll: false });
+  };
+
+  const openStudio = (mode: StudioMode, plantilla?: PlantillaCotizacionRecord) => {
+    pushedStudioRef.current = true;
+    router.push(
+      buildUrl({
+        [studioKey]: mode,
+        [studioIdKey]: plantilla ? String(plantilla.id_plantilla) : null,
+      }),
+      { scroll: false },
+    );
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
-  const closeStudio = () => {
-    setStudioState(null);
-    onStudioModeChange?.(false);
+  const closeStudio = (preferHistoryBack = true) => {
+    if (
+      preferHistoryBack &&
+      pushedStudioRef.current &&
+      typeof window !== 'undefined' &&
+      window.history.length > 1
+    ) {
+      pushedStudioRef.current = false;
+      router.back();
+      return;
+    }
+    pushedStudioRef.current = false;
+    router.replace(buildUrl({ [studioKey]: null, [studioIdKey]: null }), { scroll: false });
   };
 
   const tiposFiltroOpciones = useMemo(() => {
@@ -113,18 +210,30 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote, onStudioModeC
   }, [plantillas, search, tipoFiltro, tiposOfertaCatalogo]);
 
   // ── MODO TEMPLATE STUDIO (VISTA COMPLETA 2 COLUMNAS) ──────────────────────
-  if (studioState) {
-    return (
-      <PlantillaCotizacionStudio
-        key={`${studioState.mode}-${studioState.plantilla?.id_plantilla ?? 'new'}-${studioState.sessionKey}`}
-        mode={studioState.mode}
-        plantilla={studioState.plantilla}
-        onBack={closeStudio}
-        onSaved={closeStudio}
-        onSelectForNewQuote={onSelectForNewQuote}
-      />
-    );
+  if (studioMode) {
+    if (studioMode !== 'create' && isLoading) {
+      return (
+        <div className="py-20 flex flex-col items-center justify-center gap-2 text-slate-500">
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+          <p className="text-xs font-medium">Cargando plantilla estándar...</p>
+        </div>
+      );
+    }
+    if (studioMode === 'create' || studioPlantilla) {
+      return (
+        <PlantillaCotizacionStudio
+          key={`${studioMode}-${studioPlantilla?.id_plantilla ?? 'new'}`}
+          mode={studioMode}
+          plantilla={studioPlantilla}
+          onBack={() => closeStudio(true)}
+          onSaved={() => closeStudio(true)}
+          onSelectForNewQuote={onSelectForNewQuote}
+        />
+      );
+    }
   }
+
+  const hayFiltrosActivos = Boolean(search.trim()) || tipoFiltro !== 'TODOS';
 
   // ── MODO HUB LISTA ────────────────────────────────────────────────────────
   return (
@@ -136,12 +245,22 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote, onStudioModeC
             <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <Input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Buscar plantilla por nombre, código, subsistema o clase de equipo..."
-              className="pl-9 bg-white"
+              className="pl-9 pr-8 bg-white"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => handleSearchChange('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                title="Limpiar búsqueda"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-          <Select value={tipoFiltro} onValueChange={setTipoFiltro}>
+          <Select value={tipoFiltro} onValueChange={handleTipoFiltroChange}>
             <SelectTrigger className="w-56 bg-white">
               <SelectValue placeholder="Todos los tipos" />
             </SelectTrigger>
@@ -154,6 +273,18 @@ export function PlantillasCotizacionManager({ onSelectForNewQuote, onStudioModeC
               ))}
             </SelectContent>
           </Select>
+          {hayFiltrosActivos && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={clearFilters}
+              className="h-9 text-xs text-slate-500 hover:text-slate-900"
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              Limpiar
+            </Button>
+          )}
         </div>
         <Button onClick={() => openStudio('create')} className="gap-1.5">
           <Plus className="h-4 w-4" />

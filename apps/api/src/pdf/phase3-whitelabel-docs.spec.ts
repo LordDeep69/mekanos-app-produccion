@@ -768,6 +768,7 @@ describe('Gate F3 — Motor Documental PDF & Emails 100% White-Label', () => {
     const expectations: Record<keyof PdfController, string[]> = {
       generarPdfOrden: ['INFORMES_READ'],
       generarPdfCotizacion: ['COTIZACIONES_READ'],
+      generarPdfVersionCotizacion: ['COTIZACIONES_READ'],
       generarPdfCotizacionPrueba: ['CONFIG_SYSTEM'],
       generarPdfPrueba: ['CONFIG_SYSTEM'],
       regenerarPdfOrden: ['INFORMES_CREATE'],

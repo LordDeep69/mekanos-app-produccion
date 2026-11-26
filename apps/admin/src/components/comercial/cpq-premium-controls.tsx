@@ -2,13 +2,84 @@
 
 import { cn } from '@/lib/utils';
 import type { UnidadMedida } from '@/types/compras.types';
-import { Check, ChevronDown, ChevronUp, Lock, Plus, Search, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Cpu, Lock, Plus, Search, X } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 
 const subscribeNoop = () => () => {};
 const getClientMounted = () => true;
 const getServerMounted = () => false;
+
+interface AnchoredCoords {
+  mode: 'document' | 'fixed';
+  top: number;
+  left: number;
+  width: number;
+  openUpward: boolean;
+  zIndex: number;
+}
+
+function findScrollableAncestor(el: HTMLElement | null): HTMLElement | null {
+  let curr = el?.parentElement || null;
+  while (curr && curr !== document.body && curr !== document.documentElement) {
+    const style = window.getComputedStyle(curr);
+    const oy = style.overflowY;
+    if (
+      (oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+      curr.scrollHeight > curr.clientHeight
+    ) {
+      return curr;
+    }
+    curr = curr.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Calcula coordenadas ancladas al trigger sin desligamiento en scroll:
+ * - En flujo normal de página: `position: absolute` en `document.body` (anclaje nativo GPU 120 FPS,
+ *   z-index 19 para deslizarse limpiamente bajo la barra sticky y el Header fijo del portal).
+ * - Dentro de un Dialog modal o contenedor scrollable: `position: fixed` (z-index 9999) con sync directo en DOM.
+ */
+function computeAnchoredCoords(
+  triggerEl: HTMLElement,
+  minWidth: number,
+  lockedOpenUpward?: boolean | null,
+): AnchoredCoords {
+  const rect = triggerEl.getBoundingClientRect();
+  const inDialog = Boolean(triggerEl.closest('[role="dialog"]'));
+  const scrollParent = findScrollableAncestor(triggerEl);
+  const mode: 'document' | 'fixed' = inDialog || scrollParent ? 'fixed' : 'document';
+
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const openUpward =
+    typeof lockedOpenUpward === 'boolean'
+      ? lockedOpenUpward
+      : spaceBelow < 280 && rect.top > spaceBelow;
+
+  const width = Math.min(Math.max(rect.width, minWidth), window.innerWidth - 16);
+  const rawLeft = Math.min(rect.left, Math.max(8, window.innerWidth - width - 8));
+
+  if (mode === 'document') {
+    return {
+      mode,
+      top: openUpward ? rect.top + window.scrollY - 4 : rect.bottom + window.scrollY + 4,
+      left: rawLeft + window.scrollX,
+      width,
+      openUpward,
+      zIndex: 19,
+    };
+  }
+
+  return {
+    mode,
+    top: openUpward ? rect.top - 4 : rect.bottom + 4,
+    left: rawLeft,
+    width,
+    openUpward,
+    zIndex: 9999,
+  };
+}
 
 /**
  * Normaliza texto para búsqueda insensible a mayúsculas y tildes/diacríticos.
@@ -94,12 +165,8 @@ export function CpqCreatableCombobox({
   const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [coords, setCoords] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-    width: number;
-  } | null>(null);
+  const [coords, setCoords] = useState<AnchoredCoords | null>(null);
+  const openUpwardLockedRef = useRef<boolean | null>(null);
 
   const selectedMatch = useMemo(() => {
     const v = String(value || '')
@@ -180,24 +247,25 @@ export function CpqCreatableCombobox({
     });
   }, [options, trimmedQuery, normalizedPreview]);
 
-  const updatePosition = () => {
+  const updatePosition = (lockDirection = false) => {
     if (!triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const openUpward = spaceBelow < 260 && rect.top > spaceBelow;
-    const width = Math.max(rect.width, minDropdownWidth);
-    const left = Math.min(rect.left, Math.max(8, window.innerWidth - width - 8));
-    setCoords({
-      top: openUpward ? undefined : rect.bottom + 4,
-      bottom: openUpward ? window.innerHeight - rect.top + 4 : undefined,
-      left,
-      width,
-    });
+    const next = computeAnchoredCoords(
+      triggerRef.current,
+      minDropdownWidth,
+      lockDirection ? null : openUpwardLockedRef.current,
+    );
+    if (lockDirection) {
+      openUpwardLockedRef.current = next.openUpward;
+    }
+    setCoords(next);
   };
 
   useEffect(() => {
-    if (!open) return;
-    updatePosition();
+    if (!open) {
+      openUpwardLockedRef.current = null;
+      return;
+    }
+    updatePosition(true);
     const timer = setTimeout(() => inputRef.current?.focus(), 10);
 
     const handleClickOutside = (e: MouseEvent) => {
@@ -210,18 +278,42 @@ export function CpqCreatableCombobox({
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
-    const handleScrollOrResize = () => updatePosition();
+    const handleScroll = (e: Event) => {
+      // Permitir scroll interno en la lista del desplegable sin recalcular ni cerrar
+      if (popoverRef.current?.contains(e.target as Node)) return;
+      if (!triggerRef.current) {
+        setOpen(false);
+        return;
+      }
+      const rect = triggerRef.current.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        setOpen(false);
+        return;
+      }
+      // En modo 'document' (position: absolute), el navegador ancla el menú al flujo del documento sin lag.
+      // En modo 'fixed' (modal/contenedor scrollable), actualizar estilo directo en DOM sin re-render.
+      if (popoverRef.current && popoverRef.current.style.position === 'fixed') {
+        const next = computeAnchoredCoords(
+          triggerRef.current,
+          minDropdownWidth,
+          openUpwardLockedRef.current,
+        );
+        popoverRef.current.style.top = `${next.top}px`;
+        popoverRef.current.style.left = `${next.left}px`;
+      }
+    };
+    const handleResize = () => updatePosition(false);
 
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleKey);
-    window.addEventListener('resize', handleScrollOrResize);
-    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, true);
     return () => {
       clearTimeout(timer);
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKey);
-      window.removeEventListener('resize', handleScrollOrResize);
-      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll, true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -300,12 +392,12 @@ export function CpqCreatableCombobox({
           <div
             ref={popoverRef}
             style={{
-              position: 'fixed',
+              position: coords.mode === 'document' ? 'absolute' : 'fixed',
               top: coords.top,
-              bottom: coords.bottom,
               left: coords.left,
               width: coords.width,
-              zIndex: 9999,
+              transform: coords.openUpward ? 'translateY(-100%)' : undefined,
+              zIndex: coords.zIndex,
             }}
             className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-100"
           >
@@ -429,6 +521,406 @@ export function CpqCreatableCombobox({
                   </span>
                 </button>
               )}
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 1B. SELECTOR MULTI-EQUIPO CON CHECKBOXES (Todos los equipos + 1 o varios)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface CpqEquipoOption {
+  id: number;
+  codigo: string;
+  nombre?: string | null;
+  tipo?: string | null;
+}
+
+export interface CpqEquiposMultiSelectProps {
+  equipos: CpqEquipoOption[];
+  /** Lista de IDs asignados a esta línea; [] significa "Todos los equipos" */
+  selectedIds: number[];
+  onChange: (nextSelectedIds: number[]) => void;
+  disabled?: boolean;
+  /** Indica si la fila escala automáticamente su cantidad con los equipos elegidos */
+  escalable?: boolean;
+}
+
+export function CpqEquiposMultiSelect({
+  equipos,
+  selectedIds,
+  onChange,
+  disabled = false,
+  escalable = true,
+}: CpqEquiposMultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const mounted = useSyncExternalStore(subscribeNoop, getClientMounted, getServerMounted);
+
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const [coords, setCoords] = useState<AnchoredCoords | null>(null);
+  const openUpwardLockedRef = useRef<boolean | null>(null);
+
+  const isTodos = selectedIds.length === 0;
+  const effectiveCount = isTodos ? equipos.length : selectedIds.length;
+  const checkedSet = useMemo(
+    () => new Set(isTodos ? equipos.map((e) => e.id) : selectedIds),
+    [isTodos, equipos, selectedIds],
+  );
+
+  const filteredEquipos = useMemo(() => {
+    const q = query.trim();
+    if (!q) return equipos;
+    return equipos.filter((e) => matchesAllTokens(q, [e.codigo, e.nombre, e.tipo]));
+  }, [equipos, query]);
+
+  const selectedLabels = useMemo(() => {
+    if (isTodos) return equipos.map((e) => e.codigo);
+    return equipos.filter((e) => checkedSet.has(e.id)).map((e) => e.codigo);
+  }, [isTodos, equipos, checkedSet]);
+
+  const updatePosition = (lockDirection = false) => {
+    if (!triggerRef.current) return;
+    const next = computeAnchoredCoords(
+      triggerRef.current,
+      304,
+      lockDirection ? null : openUpwardLockedRef.current,
+    );
+    if (lockDirection) openUpwardLockedRef.current = next.openUpward;
+    setCoords(next);
+  };
+
+  useEffect(() => {
+    if (!open) {
+      openUpwardLockedRef.current = null;
+      return;
+    }
+    updatePosition(true);
+    const timer = equipos.length > 5 ? setTimeout(() => searchRef.current?.focus(), 10) : undefined;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    const handleScroll = (e: Event) => {
+      if (popoverRef.current?.contains(e.target as Node)) return;
+      if (!triggerRef.current) {
+        setOpen(false);
+        return;
+      }
+      const rect = triggerRef.current.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        setOpen(false);
+        return;
+      }
+      if (popoverRef.current && popoverRef.current.style.position === 'fixed') {
+        const next = computeAnchoredCoords(triggerRef.current, 304, openUpwardLockedRef.current);
+        popoverRef.current.style.top = `${next.top}px`;
+        popoverRef.current.style.left = `${next.left}px`;
+      }
+    };
+    const handleResize = () => updatePosition(false);
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [open, equipos.length]);
+
+  const handleSelectTodos = () => {
+    onChange([]);
+  };
+
+  const handleToggleEquipo = (id: number) => {
+    if (isTodos) {
+      const remaining = equipos.filter((e) => e.id !== id).map((e) => e.id);
+      if (remaining.length === 0) return;
+      onChange(remaining);
+      return;
+    }
+
+    if (checkedSet.has(id)) {
+      const remaining = selectedIds.filter((x) => x !== id);
+      // Nunca dejar 0 equipos seleccionados en una fila activa
+      if (remaining.length === 0) return;
+      onChange(remaining);
+    } else {
+      const next = [...selectedIds, id];
+      if (next.length >= equipos.length) {
+        onChange([]);
+      } else {
+        onChange(next);
+      }
+    }
+  };
+
+  const handleSelectSolo = (id: number) => {
+    onChange([id]);
+  };
+
+  const triggerText = isTodos
+    ? `Todos (${equipos.length} eq.)`
+    : selectedIds.length === 1
+      ? selectedLabels[0] || `1 eq.`
+      : `${selectedIds.length} de ${equipos.length} eq.`;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((o) => !o)}
+        title={
+          isTodos
+            ? `Aplica a todos los equipos (${selectedLabels.join(', ')})`
+            : `Equipos seleccionados: ${selectedLabels.join(', ')}`
+        }
+        className={cn(
+          'h-7 px-2.5 rounded-lg text-[11px] font-semibold border inline-flex items-center gap-1.5 transition-all max-w-[195px]',
+          isTodos
+            ? 'bg-sky-50/80 border-sky-200/90 text-sky-900 hover:bg-sky-100/70 hover:border-sky-300'
+            : 'bg-indigo-50/80 border-indigo-200 text-indigo-900 hover:bg-indigo-100/70 hover:border-indigo-300',
+          open && 'ring-2 ring-primary/20 border-primary',
+          disabled && 'opacity-65 cursor-not-allowed',
+        )}
+      >
+        <Cpu className={cn('h-3 w-3 shrink-0', isTodos ? 'text-sky-600' : 'text-indigo-600')} />
+        <span className={cn('truncate', !isTodos && selectedIds.length === 1 && 'font-mono')}>
+          {triggerText}
+        </span>
+        <ChevronDown
+          className={cn(
+            'h-3 w-3 shrink-0 opacity-70 transition-transform',
+            open && 'rotate-180 text-primary opacity-100',
+          )}
+        />
+      </button>
+
+      {open &&
+        mounted &&
+        coords &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            style={{
+              position: coords.mode === 'document' ? 'absolute' : 'fixed',
+              top: coords.top,
+              left: coords.left,
+              width: coords.width,
+              transform: coords.openUpward ? 'translateY(-100%)' : undefined,
+              zIndex: coords.zIndex,
+            }}
+            className="bg-white border border-slate-200/95 rounded-xl shadow-[0_18px_42px_-10px_rgba(15,23,42,0.22)] ring-1 ring-slate-900/5 overflow-hidden animate-in fade-in-0 zoom-in-95 duration-100"
+          >
+            {/* Cabecera */}
+            <div className="px-3 py-2 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                <Cpu className="h-3.5 w-3.5 text-primary" />
+                Equipos cubiertos por esta línea
+              </span>
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600">
+                {effectiveCount}/{equipos.length}
+              </span>
+            </div>
+
+            {/* Opción destacada: Todos los equipos */}
+            <div className="p-2 pb-1.5">
+              <button
+                type="button"
+                onClick={handleSelectTodos}
+                className={cn(
+                  'w-full px-2.5 py-2 rounded-lg border text-left flex items-center justify-between gap-2 transition-all',
+                  isTodos
+                    ? 'bg-sky-50/90 border-sky-300 text-sky-950 shadow-2xs'
+                    : 'bg-slate-50/60 border-slate-200/80 text-slate-700 hover:bg-sky-50/50 hover:border-sky-200',
+                )}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className={cn(
+                      'h-4 w-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-colors',
+                      isTodos
+                        ? 'bg-sky-600 border-sky-600 text-white'
+                        : 'bg-white border-slate-300',
+                    )}
+                  >
+                    {isTodos && <Check className="h-3 w-3 stroke-[3]" />}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold leading-tight">
+                      Todos los equipos ({equipos.length})
+                    </div>
+                    <div className="text-[10px] text-slate-500 leading-tight mt-0.5">
+                      {escalable
+                        ? `Escala cantidad ×${equipos.length} automáticamente`
+                        : 'Aplica al conjunto completo (cantidad fija)'}
+                    </div>
+                  </div>
+                </div>
+                {isTodos && (
+                  <span className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-600 text-white shrink-0">
+                    Activo
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Separador + Buscador si hay >5 equipos */}
+            <div className="px-3 pt-1 pb-1 flex items-center gap-2">
+              <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">
+                O elegir uno o varios
+              </span>
+              <div className="h-px bg-slate-100 flex-1" />
+            </div>
+
+            {equipos.length > 5 && (
+              <div className="px-2 pb-1.5">
+                <div className="relative">
+                  <Search className="h-3 w-3 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    ref={searchRef}
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Filtrar equipo por código o nombre..."
+                    className="w-full h-7 pl-7 pr-6 text-[11px] bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:bg-white focus:border-primary"
+                  />
+                  {query && (
+                    <button
+                      type="button"
+                      onClick={() => setQuery('')}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Lista con checkboxes */}
+            <div className="max-h-56 overflow-y-auto px-2 pb-2 space-y-1">
+              {filteredEquipos.length === 0 ? (
+                <p className="py-4 text-center text-[11px] text-slate-400">
+                  Sin equipos coincidentes
+                </p>
+              ) : (
+                filteredEquipos.map((eq) => {
+                  const isChecked = checkedSet.has(eq.id);
+                  const isLastSingle = !isTodos && isChecked && selectedIds.length === 1;
+                  return (
+                    <div
+                      key={eq.id}
+                      onClick={() => handleToggleEquipo(eq.id)}
+                      role="checkbox"
+                      aria-checked={isChecked}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === ' ' || e.key === 'Enter') {
+                          e.preventDefault();
+                          handleToggleEquipo(eq.id);
+                        }
+                      }}
+                      className={cn(
+                        'group px-2.5 py-1.5 rounded-lg border flex items-center justify-between gap-2 cursor-pointer transition-all select-none',
+                        isChecked
+                          ? isTodos
+                            ? 'bg-white border-slate-200/80 hover:border-sky-300 hover:bg-sky-50/40'
+                            : 'bg-indigo-50/70 border-indigo-200 text-indigo-950'
+                          : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-200/80 text-slate-600',
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          title={
+                            isLastSingle
+                              ? 'Debe quedar al menos 1 equipo seleccionado'
+                              : isChecked
+                                ? 'Desmarcar equipo'
+                                : 'Marcar equipo'
+                          }
+                          className={cn(
+                            'h-4 w-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-colors',
+                            isChecked
+                              ? isTodos
+                                ? 'bg-sky-500/85 border-sky-500 text-white'
+                                : 'bg-indigo-600 border-indigo-600 text-white'
+                              : 'bg-white border-slate-300 group-hover:border-slate-400',
+                          )}
+                        >
+                          {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-mono font-bold text-[11px] text-slate-900 shrink-0">
+                              {eq.codigo}
+                            </span>
+                            {eq.tipo && (
+                              <span className="text-[9.5px] text-slate-400 truncate">
+                                · {eq.tipo}
+                              </span>
+                            )}
+                          </div>
+                          {eq.nombre && eq.nombre !== eq.codigo && (
+                            <div className="text-[10.5px] text-slate-500 truncate leading-tight">
+                              {eq.nombre}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {!(selectedIds.length === 1 && selectedIds[0] === eq.id) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectSolo(eq.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-opacity"
+                          title={`Asignar solo a ${eq.codigo}`}
+                        >
+                          Solo
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer resumen */}
+            <div className="px-3 py-1.5 bg-slate-50/90 border-t border-slate-100 flex items-center justify-between gap-2 text-[10.5px]">
+              <span className="text-slate-500">
+                {isTodos
+                  ? `Todos los equipos (${equipos.length})`
+                  : `${selectedIds.length} de ${equipos.length} seleccionado${selectedIds.length !== 1 ? 's' : ''}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="font-bold text-primary hover:underline"
+              >
+                Listo
+              </button>
             </div>
           </div>,
           document.body,

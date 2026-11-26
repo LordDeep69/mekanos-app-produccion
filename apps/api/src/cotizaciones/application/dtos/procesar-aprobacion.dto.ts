@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsString, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ProcesarAprobacionDto {
   @ApiProperty({
@@ -10,11 +10,12 @@ export class ProcesarAprobacionDto {
   @IsEnum(['APROBADA', 'RECHAZADA'], { message: 'Decisión debe ser APROBADA o RECHAZADA' })
   decision!: 'APROBADA' | 'RECHAZADA';
 
-  @ApiProperty({
-    description: 'Observaciones aprobador (obligatorio)',
-    example: 'Aprobado condiciones comerciales. Descuento 20% justificado por volumen compra cliente.',
+  @ApiPropertyOptional({
+    description: 'Observaciones opcionales del aprobador',
+    example: 'Aprobado condiciones comerciales.',
   })
-  @IsString()
-  @MinLength(10, { message: 'Observaciones aprobador mínimo 10 caracteres' })
-  observaciones_aprobador!: string;
+  @IsOptional()
+  @IsString({ message: 'Las observaciones del aprobador deben ser texto válido' })
+  @MaxLength(1000, { message: 'Las observaciones no pueden superar los 1000 caracteres' })
+  observaciones_aprobador?: string;
 }

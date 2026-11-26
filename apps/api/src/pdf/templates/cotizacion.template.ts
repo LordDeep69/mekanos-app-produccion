@@ -99,6 +99,8 @@ export interface DatosCotizacionPDF {
   estadoCodigo?: string;
   mostrarMarcaAguaBorrador?: boolean;
   textoMarcaAgua?: string;
+  esCopiaHistorica?: boolean;
+  fechaArchivoSnapshot?: string;
 
   // Presentación comercial PDF (false = Suma Alzada compacta 1 pág. | true = Detallado Licitación)
   mostrarDesglosePrecios?: boolean;
@@ -510,6 +512,14 @@ const editorialStyles = `
     color: #065F46;
     border: 1px solid #A7F3D0;
     font-weight: 700;
+  }
+
+  .ed-badge-hist {
+    background: #FFFBEB;
+    color: #92400E;
+    border: 1px solid #FDE68A;
+    font-weight: 700;
+    letter-spacing: 0.25px;
   }
 
   .ed-dates {
@@ -1502,11 +1512,18 @@ const generarHeaderEditorial = (datos: DatosCotizacionPDF, brand: OrgBrandingCon
       <div class="ed-doc-kicker">Cotización Comercial</div>
       <div class="ed-doc-number">${esc(datos.numeroCotizacion)}</div>
       <div class="ed-badges">
-        <span class="ed-badge">Versión ${datos.version}</span>
+        <span class="ed-badge${datos.version >= 2 ? ' ed-badge-hist' : ''}">Versión ${datos.version}</span>
+        ${datos.esCopiaHistorica ? `<span class="ed-badge ed-badge-hist">SNAPSHOT ARCHIVADO</span>` : ''}
         ${tipoLabel ? `<span class="ed-badge">${esc(tipoLabel)}</span>` : ''}
         ${
           datos.mostrarMarcaAguaBorrador
-            ? `<span class="ed-badge ed-badge-gov">BORRADOR · SIN APROBACIÓN</span>`
+            ? `<span class="ed-badge ed-badge-gov">${
+                datos.estadoCodigo === 'RECHAZADA'
+                  ? 'RECHAZADA'
+                  : datos.estadoCodigo === 'EN_REVISION'
+                    ? 'EN REVISIÓN INTERNA'
+                    : 'BORRADOR · SIN APROBACIÓN'
+              }</span>`
             : ''
         }
         ${

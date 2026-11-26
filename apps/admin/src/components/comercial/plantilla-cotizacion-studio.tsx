@@ -40,6 +40,7 @@ import {
   EyeOff,
   FileCheck2,
   FileText,
+  Info,
   Layers,
   Leaf,
   Loader2,
@@ -2767,7 +2768,13 @@ export function PlantillaCotizacionStudio({
               {/* Selector interactivo Simular para [1 | 2 | 3 | 5] + [ N ] equipos */}
               <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-slate-800">Simular escala multi-equipo</span>
+                  <span
+                    className="font-bold text-slate-800 inline-flex items-center gap-1"
+                    title="Vista previa temporal: la plantilla siempre se guarda en Base Unitaria (1 eq.) y escala automáticamente en cada cotización."
+                  >
+                    <span>Simular escala multi-equipo</span>
+                    <Info className="h-3 w-3 text-primary/80 shrink-0" />
+                  </span>
                   <span className="text-slate-500">
                     {sim.lineasEscalables} × eq. · {sim.lineasFijas} fija
                     {sim.lineasFijas !== 1 ? 's' : ''}
@@ -2816,6 +2823,14 @@ export function PlantillaCotizacionStudio({
                     />
                   </div>
                 </div>
+                <p className="text-[11px] leading-snug text-slate-600 flex items-start gap-1.5 pt-1.5 border-t border-primary/15">
+                  <Info className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Modo Simulación:</strong> Esta vista previa es temporal. La plantilla
+                    siempre se guarda en <strong>Base Unitaria (1 eq.)</strong> para escalar
+                    automáticamente según el número de equipos del cliente final.
+                  </span>
+                </p>
               </div>
 
               {/* Desglose por rubro */}

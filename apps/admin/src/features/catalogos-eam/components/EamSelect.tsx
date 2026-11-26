@@ -108,13 +108,15 @@ export function EamSelect({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [coords, setCoords] = useState<{
-    top?: number;
-    bottom?: number;
+    mode: 'document' | 'fixed';
+    top: number;
     left: number;
     width: number;
     maxHeight: number;
     openUpward: boolean;
+    zIndex: number;
   } | null>(null);
+  const openUpwardLockedRef = useRef<boolean | null>(null);
 
   const options = useMemo(() => normalizeOptions(rawOptions), [rawOptions]);
 
@@ -145,11 +147,33 @@ export function EamSelect({
     );
   }, [options, searchTerm]);
 
-  // Calcular coordenadas de forma atómica y síncrona
+  // Detectar si el trigger está dentro de un contenedor scrollable distinto del documento (ej. Dialog)
+  const hasScrollableAncestor = useCallback((el: HTMLElement | null): boolean => {
+    let curr = el?.parentElement || null;
+    while (curr && curr !== document.body && curr !== document.documentElement) {
+      const style = window.getComputedStyle(curr);
+      const oy = style.overflowY;
+      if (
+        (oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+        curr.scrollHeight > curr.clientHeight
+      ) {
+        return true;
+      }
+      curr = curr.parentElement;
+    }
+    return false;
+  }, []);
+
+  // Calcular coordenadas ancladas: en página normal usa `position: absolute` en documento
+  // (0ms de lag / cero desligamiento al hacer scroll); en modales/scrollables usa `fixed`.
   const calculatePosition = useCallback(
-    (explicitOptionCount?: number) => {
+    (explicitOptionCount?: number, lockedUpward?: boolean | null) => {
       if (!triggerRef.current) return null;
       const rect = triggerRef.current.getBoundingClientRect();
+      const inDialog = Boolean(triggerRef.current.closest('[role="dialog"]'));
+      const mode: 'document' | 'fixed' =
+        inDialog || hasScrollableAncestor(triggerRef.current) ? 'fixed' : 'document';
+
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
       const popoverWidth = dropdownWidth
@@ -160,13 +184,16 @@ export function EamSelect({
 
       const optionCount = explicitOptionCount ?? filteredOptions.length;
       const estimatedHeight = Math.min(340, optionCount * 44 + (shouldShowSearch ? 52 : 16));
-      const openUpward = dropUp
-        ? spaceAbove >= Math.min(260, estimatedHeight) + 12 || spaceAbove > spaceBelow
-        : spaceBelow < estimatedHeight &&
-          (spaceAbove >= estimatedHeight + 10 || spaceAbove > spaceBelow);
+      const openUpward =
+        typeof lockedUpward === 'boolean'
+          ? lockedUpward
+          : dropUp
+            ? spaceAbove >= Math.min(260, estimatedHeight) + 12 || spaceAbove > spaceBelow
+            : spaceBelow < estimatedHeight &&
+              (spaceAbove >= estimatedHeight + 10 || spaceAbove > spaceBelow);
 
       const availableSpace = openUpward ? spaceAbove - 16 : spaceBelow - 16;
-      const maxHeight = Math.max(140, Math.min(360, availableSpace));
+      const maxHeight = Math.max(160, Math.min(340, availableSpace));
 
       const preferRight =
         align === 'right' ||
@@ -174,16 +201,37 @@ export function EamSelect({
       let targetLeft = preferRight ? rect.right - popoverWidth : rect.left;
       targetLeft = Math.max(12, Math.min(targetLeft, window.innerWidth - popoverWidth - 12));
 
+      if (mode === 'document') {
+        return {
+          mode,
+          top: openUpward ? rect.top + window.scrollY - 6 : rect.bottom + window.scrollY + 6,
+          left: targetLeft + window.scrollX,
+          width: popoverWidth,
+          maxHeight,
+          openUpward,
+          zIndex: 19,
+        };
+      }
+
       return {
-        top: openUpward ? undefined : rect.bottom + 6,
-        bottom: openUpward ? window.innerHeight - rect.top + 6 : undefined,
+        mode,
+        top: openUpward ? rect.top - 6 : rect.bottom + 6,
         left: targetLeft,
         width: popoverWidth,
         maxHeight,
         openUpward,
+        zIndex: 99999,
       };
     },
-    [align, dropUp, dropdownWidth, minDropdownWidth, filteredOptions.length, shouldShowSearch],
+    [
+      align,
+      dropUp,
+      dropdownWidth,
+      minDropdownWidth,
+      filteredOptions.length,
+      shouldShowSearch,
+      hasScrollableAncestor,
+    ],
   );
 
   const handleToggle = () => {
@@ -192,13 +240,17 @@ export function EamSelect({
       setSearchTerm('');
       setHighlightedIndex(-1);
       if (usePortal) {
-        const nextCoords = calculatePosition(options.length);
-        if (nextCoords) setCoords(nextCoords);
+        const nextCoords = calculatePosition(options.length, null);
+        if (nextCoords) {
+          openUpwardLockedRef.current = nextCoords.openUpward;
+          setCoords(nextCoords);
+        }
       }
       setIsOpen(true);
     } else {
       setIsOpen(false);
       setCoords(null);
+      openUpwardLockedRef.current = null;
     }
   };
 
@@ -277,31 +329,37 @@ export function EamSelect({
     };
 
     const handleScroll = (e: Event) => {
-      // En modo absolute (usePortal=false), CSS mantiene el anclaje nativo perfecto sin desfase
+      // En modo absolute inline (usePortal=false), CSS mantiene el anclaje nativo perfecto
       if (!usePortal) return;
-      // Si el scroll ocurre dentro de la lista de opciones del popover, permitirlo
+      // Si el scroll ocurre dentro de la lista de opciones del popover, permitirlo sin interferir
       if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
         return;
       }
-      // Si el trigger ya no está visible en el viewport, cerrar limpiamente
       if (!triggerRef.current) {
         setIsOpen(false);
         setCoords(null);
         return;
       }
       const rect = triggerRef.current.getBoundingClientRect();
+      // Cerrar limpiamente solo cuando el campo sale por completo del viewport
       if (rect.bottom < 0 || rect.top > window.innerHeight) {
         setIsOpen(false);
         setCoords(null);
         return;
       }
-      // Si sigue en pantalla, recalcular posición en vivo para mantenerlo pegado al botón
-      const nextCoords = calculatePosition();
-      if (nextCoords) setCoords(nextCoords);
+      // En modo 'document' (position: absolute), el navegador mueve el menú soldado al campo a 120 FPS sin lag.
+      // Solo en modo 'fixed' (dentro de un Dialog / contenedor scrollable) sincronizamos estilo directo en DOM.
+      if (coords?.mode === 'fixed' && popoverRef.current) {
+        const next = calculatePosition(undefined, openUpwardLockedRef.current);
+        if (next) {
+          popoverRef.current.style.top = `${next.top}px`;
+          popoverRef.current.style.left = `${next.left}px`;
+        }
+      }
     };
 
     const handleResize = () => {
-      const nextCoords = calculatePosition();
+      const nextCoords = calculatePosition(undefined, openUpwardLockedRef.current);
       if (nextCoords) {
         setCoords(nextCoords);
       } else {
@@ -321,7 +379,7 @@ export function EamSelect({
       window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleResize);
     };
-  }, [isOpen, usePortal, calculatePosition, filteredOptions, highlightedIndex]);
+  }, [isOpen, usePortal, calculatePosition, filteredOptions, highlightedIndex, coords?.mode]);
 
   // Clases por variante y tamaño
   const isDark = variant === 'dark';
@@ -544,7 +602,7 @@ export function EamSelect({
         </div>
       )}
 
-      {/* MODO 2: Portal Flotante (usePortal === true) -> Para contenedores con overflow-hidden */}
+      {/* MODO 2: Portal Anclado (usePortal === true) -> Sin recorte por overflow-hidden y sin desligamiento al scroll */}
       {usePortal &&
         mounted &&
         isOpen &&
@@ -553,14 +611,14 @@ export function EamSelect({
           <div
             ref={popoverRef}
             style={{
-              position: 'fixed',
+              position: coords.mode === 'document' ? 'absolute' : 'fixed',
               top: coords.top,
-              bottom: coords.bottom,
               left: coords.left,
               width: coords.width,
               maxHeight: coords.maxHeight,
               maxWidth: 'calc(100vw - 24px)',
-              zIndex: 99999,
+              transform: coords.openUpward ? 'translateY(-100%)' : undefined,
+              zIndex: coords.zIndex,
             }}
             className={`flex flex-col rounded-2xl border ring-1 ring-slate-900/5 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.24)] backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
               coords.openUpward ? 'origin-bottom' : 'origin-top'

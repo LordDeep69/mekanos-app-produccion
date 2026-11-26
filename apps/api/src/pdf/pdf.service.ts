@@ -1498,7 +1498,10 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`📄 Generando PDF de Cotización: ${datosCotizacion.numeroCotizacion}`);
       const brand = await this.resolveBranding(datosCotizacion.branding);
       const html = this.obtenerHTML('COTIZACION', { ...datosCotizacion, branding: brand }, brand);
-      const filename = this.generarFilename('COTIZACION', datosCotizacion.numeroCotizacion, brand);
+      const baseCodigoDoc = datosCotizacion.esCopiaHistorica
+        ? `${datosCotizacion.numeroCotizacion}-v${datosCotizacion.version}`
+        : datosCotizacion.numeroCotizacion;
+      const filename = this.generarFilename('COTIZACION', baseCodigoDoc, brand);
 
       const escFooter = (s: string) =>
         s
@@ -1517,7 +1520,12 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           .join(' · '),
       );
       const footerNota = brand.textoPiePdf?.trim() ? escFooter(brand.textoPiePdf.trim()) : '';
-      const footerRight = escFooter(datosCotizacion.numeroCotizacion);
+      const footerRightLabel = datosCotizacion.esCopiaHistorica
+        ? `${datosCotizacion.numeroCotizacion} · v${datosCotizacion.version} (Archivo)`
+        : datosCotizacion.version > 1
+          ? `${datosCotizacion.numeroCotizacion} · v${datosCotizacion.version}`
+          : datosCotizacion.numeroCotizacion;
+      const footerRight = escFooter(footerRightLabel);
 
       const buffer = await this.renderHtmlToPdf(
         html,

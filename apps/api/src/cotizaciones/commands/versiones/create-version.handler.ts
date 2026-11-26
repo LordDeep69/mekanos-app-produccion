@@ -1,12 +1,14 @@
 import { PrismaService } from '@mekanos/database';
 import { NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { EquipoSpecsReader } from '../../../equipos/services/equipo-specs.reader';
 import { CreateVersionCommand } from './create-version.command';
 
 /**
  * CreateVersionHandler (EAM-CPQ Completo)
- * Crea snapshot JSONB auditable incluyendo equipos vinculados, servicios, componentes,
- * logística/otros, AIU, opcionales y métricas de rentabilidad, y actualiza `cotizaciones.version`.
+ * Crea snapshot JSONB auditable e inmutable (apto para reconstrucción fiel de PDF histórico),
+ * incluyendo equipos vinculados, servicios, componentes, logística/otros, AIU, opcionales,
+ * condiciones comerciales y métricas de rentabilidad.
  */
 @CommandHandler(CreateVersionCommand)
 export class CreateVersionHandler implements ICommandHandler<CreateVersionCommand> {
@@ -21,16 +23,26 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
         estados_cotizacion: true,
         clientes: { include: { persona: true } },
         sedes_cliente: true,
-        equipos: true,
+        empleados: { include: { persona: true } },
+        equipos: {
+          include: {
+            tipos_equipo: true,
+            modelos_equipo: true,
+            equipos_generador: true,
+            equipos_motor: true,
+            equipos_bomba: true,
+          },
+        },
         cotizaciones_equipos: {
           orderBy: { orden_secuencia: 'asc' },
           include: {
             equipos: {
-              select: {
-                id_equipo: true,
-                codigo_equipo: true,
-                nombre_equipo: true,
+              include: {
                 tipos_equipo: { select: { codigo_tipo: true, nombre_tipo: true } },
+                modelos_equipo: { select: { marca: true, modelo: true } },
+                equipos_generador: true,
+                equipos_motor: true,
+                equipos_bomba: true,
               },
             },
           },
@@ -61,17 +73,42 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
 
     const numeroVersion = ultimaVersion ? ultimaVersion.numero_version + 1 : 1;
 
+    const elaboradorPersona = cotizacion.empleados?.persona;
+    const elaboradoPorNombre =
+      elaboradorPersona?.nombre_completo ||
+      [
+        elaboradorPersona?.primer_nombre,
+        elaboradorPersona?.segundo_nombre,
+        elaboradorPersona?.primer_apellido,
+        elaboradorPersona?.segundo_apellido,
+      ]
+        .filter(Boolean)
+        .join(' ') ||
+      null;
+
     const datosCotizacion = {
       numero_cotizacion: cotizacion.numero_cotizacion,
       tipo_cotizacion: cotizacion.tipo_cotizacion,
       moneda: cotizacion.moneda,
       fecha_cotizacion: cotizacion.fecha_cotizacion,
       fecha_vencimiento: cotizacion.fecha_vencimiento,
+      dias_validez: cotizacion.dias_validez,
       asunto: cotizacion.asunto,
-      estado: cotizacion.estados_cotizacion?.codigo_estado || cotizacion.estados_cotizacion?.nombre_estado,
+      estado_id: cotizacion.id_estado,
+      estado:
+        cotizacion.estados_cotizacion?.codigo_estado ||
+        cotizacion.estados_cotizacion?.nombre_estado,
+      estado_nombre: cotizacion.estados_cotizacion?.nombre_estado,
+      orden_compra_cliente: cotizacion.orden_compra_cliente,
+      atencion_a_nombre: cotizacion.atencion_a_nombre,
+      atencion_a_cargo: cotizacion.atencion_a_cargo,
+      mostrar_desglose_precios: Boolean(cotizacion.mostrar_desglose_precios ?? false),
+      elaborado_por: elaboradoPorNombre,
       cliente: {
         razon_social: cotizacion.clientes?.persona?.razon_social,
+        nombre_comercial: cotizacion.clientes?.persona?.nombre_comercial,
         nombre_completo: cotizacion.clientes?.persona?.nombre_completo,
+        numero_identificacion: cotizacion.clientes?.persona?.numero_identificacion,
       },
       sede: cotizacion.sedes_cliente?.nombre_sede,
       equipo: cotizacion.equipos?.nombre_equipo,
@@ -80,6 +117,10 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
         codigo_equipo: ce.equipos.codigo_equipo,
         nombre_equipo: ce.equipos.nombre_equipo,
         tipo_equipo: ce.equipos.tipos_equipo?.nombre_tipo,
+        marca: ce.equipos.modelos_equipo?.marca || EquipoSpecsReader.getMarca(ce.equipos as any),
+        modelo: ce.equipos.modelos_equipo?.modelo || EquipoSpecsReader.getModelo(ce.equipos as any),
+        serie: EquipoSpecsReader.getSerie(ce.equipos as any),
+        ubicacion_texto: ce.equipos.ubicacion_texto,
         notas_alcance: ce.notas_alcance,
       })),
       descripcion_general: cotizacion.descripcion_general,
@@ -95,8 +136,11 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       subtotal_con_descuento: Number(cotizacion.subtotal_con_descuento || 0),
       usa_aiu: cotizacion.usa_aiu,
       aiu_admin_porcentaje: Number(cotizacion.aiu_admin_porcentaje || 0),
+      aiu_admin_valor: Number(cotizacion.aiu_admin_valor || 0),
       aiu_imprevistos_porcentaje: Number(cotizacion.aiu_imprevistos_porcentaje || 0),
+      aiu_imprevistos_valor: Number(cotizacion.aiu_imprevistos_valor || 0),
       aiu_utilidad_porcentaje: Number(cotizacion.aiu_utilidad_porcentaje || 0),
+      aiu_utilidad_valor: Number(cotizacion.aiu_utilidad_valor || 0),
       aiu_valor_total: Number(cotizacion.aiu_valor_total || 0),
       iva_sobre_utilidad_aiu: cotizacion.iva_sobre_utilidad_aiu,
       iva_porcentaje: Number(cotizacion.iva_porcentaje || 0),
@@ -108,8 +152,13 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       tiempo_estimado_dias: cotizacion.tiempo_estimado_dias,
       forma_pago: cotizacion.forma_pago,
       meses_garantia: cotizacion.meses_garantia,
+      observaciones_garantia: cotizacion.observaciones_garantia,
+      terminos_condiciones: cotizacion.terminos_condiciones,
       items_otros: cotizacion.items_cotizacion_otros.map((o) => ({
         id_item_otro: o.id_item_otro,
+        id_equipo: o.id_equipo,
+        equipos_ids: Array.isArray((o as any).equipos_ids) ? (o as any).equipos_ids : [],
+        orden_item: o.orden_item,
         categoria_rubro: o.categoria_rubro,
         descripcion: o.descripcion,
         detalle_calculo: o.detalle_calculo,
@@ -117,6 +166,7 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
         unidad: o.unidad,
         costo_unitario: Number(o.costo_unitario),
         precio_unitario: Number(o.precio_unitario),
+        descuento_porcentaje: Number(o.descuento_porcentaje || 0),
         subtotal: Number(o.subtotal),
         visible_cliente: o.visible_cliente,
         es_opcional: o.es_opcional,
@@ -128,6 +178,8 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       id_item: item.id_item_servicio,
       id_servicio: item.id_servicio,
       id_equipo: item.id_equipo,
+      equipos_ids: Array.isArray((item as any).equipos_ids) ? (item as any).equipos_ids : [],
+      orden_item: item.orden_item,
       servicio: item.catalogo_servicios?.nombre_servicio,
       descripcion: item.descripcion_personalizada || item.catalogo_servicios?.nombre_servicio,
       cantidad: Number(item.cantidad),
@@ -145,7 +197,11 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       id_item: item.id_item_componente,
       id_componente: item.id_componente,
       id_equipo: item.id_equipo,
+      equipos_ids: Array.isArray((item as any).equipos_ids) ? (item as any).equipos_ids : [],
+      orden_item: item.orden_item,
       componente: item.catalogo_componentes?.referencia_fabricante,
+      codigo_interno: item.catalogo_componentes?.codigo_interno,
+      marca: item.marca_manual || item.catalogo_componentes?.marca,
       descripcion: item.descripcion,
       referencia_manual: item.referencia_manual,
       marca_manual: item.marca_manual,
@@ -176,9 +232,10 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       },
     });
 
+    const versionActiva = Math.max(cotizacion.version || 1, numeroVersion);
     await this.prisma.cotizaciones.update({
       where: { id_cotizacion: idCotizacion },
-      data: { version: numeroVersion },
+      data: { version: versionActiva },
     });
 
     return {
@@ -196,7 +253,7 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       cotizacion: {
         id_cotizacion: cotizacion.id_cotizacion,
         numero_cotizacion: cotizacion.numero_cotizacion,
-        version: numeroVersion,
+        version: versionActiva,
         estado: cotizacion.estados_cotizacion?.nombre_estado,
       },
     };

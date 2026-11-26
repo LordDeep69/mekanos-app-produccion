@@ -654,8 +654,14 @@ export class PdfAssemblerService {
       .trim()
       .toUpperCase();
     const estadosNoAutorizados = new Set(['BORRADOR', 'EN_REVISION', 'RECHAZADA']);
-    const mostrarMarcaAguaBorrador =
-      Boolean(orgGov?.enable_cpq_governance) && estadosNoAutorizados.has(estadoCodigo);
+    const mostrarMarcaAguaBorrador = estadosNoAutorizados.has(estadoCodigo);
+    const textoMarcaAgua =
+      estadoCodigo === 'RECHAZADA'
+        ? 'COTIZACIÓN RECHAZADA'
+        : estadoCodigo === 'EN_REVISION'
+          ? 'BORRADOR — EN REVISIÓN INTERNA'
+          : 'BORRADOR — PENDIENTE DE APROBACIÓN';
+    void orgGov;
 
     const buildFirmaDataUri = (
       firma?: { firma_base64?: string | null; formato_firma?: string | null } | null,
@@ -684,6 +690,29 @@ export class PdfAssemblerService {
       }
     }
 
+    const equiposCodigoMap = new Map<number, string>();
+    for (const ce of cot.cotizaciones_equipos || []) {
+      if (ce.equipos?.id_equipo && ce.equipos?.codigo_equipo) {
+        equiposCodigoMap.set(ce.equipos.id_equipo, ce.equipos.codigo_equipo);
+      }
+    }
+    if (cot.equipos?.id_equipo && cot.equipos?.codigo_equipo) {
+      equiposCodigoMap.set(cot.equipos.id_equipo, cot.equipos.codigo_equipo);
+    }
+
+    const resolveItemEquipoEtiqueta = (item: any): string | undefined => {
+      const ids: number[] = Array.isArray(item.equipos_ids)
+        ? item.equipos_ids.filter((id: unknown): id is number => typeof id === 'number' && id > 0)
+        : [];
+      if (ids.length > 0) {
+        const labels = ids
+          .map((id) => equiposCodigoMap.get(id))
+          .filter((lbl): lbl is string => Boolean(lbl));
+        if (labels.length > 0) return labels.join(', ');
+      }
+      return item.equipos?.codigo_equipo || undefined;
+    };
+
     const datosCotizacion: DatosCotizacionPDF = {
       branding: brand,
       numeroCotizacion: cot.numero_cotizacion || `COT-${idRef ?? ''}`,
@@ -696,7 +725,7 @@ export class PdfAssemblerService {
       ordenCompraCliente: cot.orden_compra_cliente || undefined,
       estadoCodigo,
       mostrarMarcaAguaBorrador,
-      textoMarcaAgua: 'BORRADOR — PENDIENTE DE APROBACIÓN',
+      textoMarcaAgua,
       mostrarDesglosePrecios: Boolean(cot.mostrar_desglose_precios ?? false),
       atencionANombre: cot.atencion_a_nombre?.trim() || undefined,
       atencionACargo: cot.atencion_a_cargo?.trim() || undefined,
@@ -726,7 +755,7 @@ export class PdfAssemblerService {
         orden: item.orden_item ?? idx + 1,
         descripcion:
           item.descripcion_personalizada || item.catalogo_servicios?.nombre_servicio || 'Servicio',
-        equipoEtiqueta: item.equipos?.codigo_equipo || undefined,
+        equipoEtiqueta: resolveItemEquipoEtiqueta(item),
         cantidad: Number(item.cantidad) || 1,
         unidad: item.unidad || 'UND',
         precioUnitario: Number(item.precio_unitario) || 0,
@@ -742,7 +771,7 @@ export class PdfAssemblerService {
         referencia:
           item.catalogo_componentes?.codigo_interno || item.referencia_manual || undefined,
         marca: item.marca_manual || item.catalogo_componentes?.marca || undefined,
-        equipoEtiqueta: item.equipos?.codigo_equipo || undefined,
+        equipoEtiqueta: resolveItemEquipoEtiqueta(item),
         garantiaMeses: item.garantia_meses ?? undefined,
         cantidad: Number(item.cantidad) || 1,
         unidad: item.unidad || 'UND',
@@ -756,7 +785,7 @@ export class PdfAssemblerService {
         categoriaRubro: item.categoria_rubro || 'OTRO',
         descripcion: item.descripcion,
         detalleCalculo: item.detalle_calculo || undefined,
-        equipoEtiqueta: item.equipos?.codigo_equipo || undefined,
+        equipoEtiqueta: resolveItemEquipoEtiqueta(item),
         cantidad: Number(item.cantidad) || 1,
         unidad: item.unidad || 'global',
         precioUnitario: Number(item.precio_unitario) || 0,
@@ -802,6 +831,493 @@ export class PdfAssemblerService {
       cotizacion: cot,
       datosCotizacion,
       branding: brand,
+    };
+  }
+
+  /**
+   * Ensambla `DatosCotizacionPDF` a partir de un snapshot histórico inmutable
+   * almacenado en `versiones_cotizacion` (JSONB), permitiendo auditar y visualizar
+   * el PDF exacto de cualquier versión archivada (v1, v2, ...) sin afectar el registro activo.
+   */
+  async assembleCotizacionVersionPdf(
+    idVersion: number,
+    overrideDesglose?: boolean,
+  ): Promise<AssembledCotizacionPdf & { versionRecord: any }> {
+    const [brand, versionRow] = await Promise.all([
+      this.resolveBranding(),
+      this.prisma.versiones_cotizacion.findUnique({
+        where: { id_version: idVersion },
+        include: {
+          cotizaciones: {
+            include: {
+              clientes: { include: { persona: true } },
+              sedes_cliente: true,
+              empleados: { include: { persona: true } },
+              equipos: { include: { tipos_equipo: true, modelos_equipo: true } },
+              cotizaciones_equipos: {
+                orderBy: { orden_secuencia: 'asc' },
+                include: {
+                  equipos: {
+                    include: {
+                      tipos_equipo: true,
+                      modelos_equipo: true,
+                      equipos_generador: true,
+                      equipos_motor: true,
+                      equipos_bomba: true,
+                    },
+                  },
+                },
+              },
+              firma_asesor: {
+                select: {
+                  id_firma_digital: true,
+                  firma_base64: true,
+                  formato_firma: true,
+                },
+              },
+              firma_cliente: {
+                select: {
+                  id_firma_digital: true,
+                  firma_base64: true,
+                  formato_firma: true,
+                },
+              },
+            },
+          },
+        },
+      }) as Promise<any>,
+    ]);
+
+    if (!versionRow || !versionRow.cotizaciones) {
+      throw new NotFoundException(`Versión histórica #${idVersion} no encontrada`);
+    }
+
+    const cot = versionRow.cotizaciones;
+    const snap: Record<string, any> =
+      versionRow.datos_cotizacion && typeof versionRow.datos_cotizacion === 'object'
+        ? (versionRow.datos_cotizacion as Record<string, any>)
+        : {};
+    const snapServicios: any[] = Array.isArray(versionRow.items_servicios)
+      ? versionRow.items_servicios
+      : [];
+    const snapComponentes: any[] = Array.isArray(versionRow.items_componentes)
+      ? versionRow.items_componentes
+      : [];
+    const snapOtros: any[] = Array.isArray(snap.items_otros) ? snap.items_otros : [];
+
+    // Normalizar código de estado archivado (soporta tanto código como nombre legible en snapshots antiguos)
+    const normalizeEstadoCodigo = (raw?: string | null, estadoId?: number | null): string => {
+      const ESTADO_MAP: Record<number, string> = {
+        1: 'BORRADOR',
+        2: 'EN_REVISION',
+        3: 'APROBADA_INTERNA',
+        4: 'ENVIADA',
+        5: 'APROBADA_CLIENTE',
+        6: 'RECHAZADA',
+        7: 'VENCIDA',
+      };
+      if (estadoId && ESTADO_MAP[Number(estadoId)]) return ESTADO_MAP[Number(estadoId)];
+      const norm = String(raw || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, '_');
+      if (!norm) return 'APROBADA_INTERNA';
+      if (norm.includes('BORRADOR')) return 'BORRADOR';
+      if (norm.includes('REVISION')) return 'EN_REVISION';
+      if (norm.includes('APROBADA_CLIENTE')) return 'APROBADA_CLIENTE';
+      if (norm.includes('APROBADA')) return 'APROBADA_INTERNA';
+      if (norm.includes('ENVIADA')) return 'ENVIADA';
+      if (norm.includes('RECHAZADA')) return 'RECHAZADA';
+      if (norm.includes('VENCIDA')) return 'VENCIDA';
+      return norm;
+    };
+
+    const estadoCodigo = normalizeEstadoCodigo(snap.estado, snap.estado_id);
+    const estadosNoAutorizados = new Set(['BORRADOR', 'EN_REVISION', 'RECHAZADA']);
+    const mostrarMarcaAguaBorrador = estadosNoAutorizados.has(estadoCodigo);
+    const textoMarcaAgua =
+      estadoCodigo === 'RECHAZADA'
+        ? 'COTIZACIÓN RECHAZADA'
+        : estadoCodigo === 'EN_REVISION'
+          ? 'BORRADOR — EN REVISIÓN INTERNA'
+          : 'BORRADOR — PENDIENTE DE APROBACIÓN';
+
+    // Mapa auxiliar de equipos del registro padre para enriquecer snapshots históricos
+    const parentEquiposById = new Map<number, any>();
+    for (const ce of cot.cotizaciones_equipos || []) {
+      if (ce.equipos?.id_equipo) {
+        parentEquiposById.set(ce.equipos.id_equipo, ce.equipos);
+      }
+    }
+    if (cot.equipos?.id_equipo) {
+      parentEquiposById.set(cot.equipos.id_equipo, cot.equipos);
+    }
+
+    const equiposCodigoMap = new Map<number, string>();
+    for (const [idEq, eq] of parentEquiposById.entries()) {
+      if (eq.codigo_equipo) equiposCodigoMap.set(idEq, eq.codigo_equipo);
+    }
+    const snapEquiposRaw: any[] = Array.isArray(snap.equipos_vinculados)
+      ? snap.equipos_vinculados
+      : [];
+    for (const eq of snapEquiposRaw) {
+      if (eq?.id_equipo && eq?.codigo_equipo) {
+        equiposCodigoMap.set(Number(eq.id_equipo), String(eq.codigo_equipo));
+      }
+    }
+
+    const equiposMulti = snapEquiposRaw.map((se: any) => {
+      const parentEq = se?.id_equipo ? parentEquiposById.get(Number(se.id_equipo)) : undefined;
+      return {
+        codigoEquipo: se.codigo_equipo || parentEq?.codigo_equipo || undefined,
+        nombreEquipo: se.nombre_equipo || parentEq?.nombre_equipo || undefined,
+        tipoEquipo: se.tipo_equipo || parentEq?.tipos_equipo?.nombre_tipo || 'EQUIPO',
+        marca:
+          se.marca ||
+          parentEq?.modelos_equipo?.marca ||
+          (parentEq ? EquipoSpecsReader.getMarca(parentEq) : undefined) ||
+          'N/A',
+        modelo:
+          se.modelo ||
+          parentEq?.modelos_equipo?.modelo ||
+          (parentEq ? EquipoSpecsReader.getModelo(parentEq) : undefined),
+        serie: se.serie || (parentEq ? EquipoSpecsReader.getSerie(parentEq) : undefined),
+        ubicacion: se.ubicacion_texto || parentEq?.ubicacion_texto || undefined,
+        notasAlcance: se.notas_alcance || undefined,
+      };
+    });
+
+    const equipoUnico =
+      equiposMulti.length > 0
+        ? equiposMulti[0]
+        : snap.equipo
+          ? {
+              nombreEquipo: String(snap.equipo),
+              tipoEquipo: cot.equipos?.tipos_equipo?.nombre_tipo || 'EQUIPO',
+              marca:
+                cot.equipos?.modelos_equipo?.marca ||
+                (cot.equipos ? EquipoSpecsReader.getMarca(cot.equipos) : undefined) ||
+                'N/A',
+              modelo:
+                cot.equipos?.modelos_equipo?.modelo ||
+                (cot.equipos ? EquipoSpecsReader.getModelo(cot.equipos) : undefined),
+            }
+          : undefined;
+
+    const resolveSnapEquipoEtiqueta = (item: any): string | undefined => {
+      const ids: number[] = Array.isArray(item.equipos_ids)
+        ? item.equipos_ids
+            .map((id: unknown) => Number(id))
+            .filter((id: number) => Number.isInteger(id) && id > 0)
+        : [];
+      if (ids.length > 0) {
+        const labels = ids
+          .map((id) => equiposCodigoMap.get(id))
+          .filter((lbl): lbl is string => Boolean(lbl));
+        if (labels.length > 0) return labels.join(', ');
+      }
+      if (item.id_equipo) {
+        return equiposCodigoMap.get(Number(item.id_equipo));
+      }
+      return undefined;
+    };
+
+    const serviciosActivos = snapServicios.filter((i: any) => !i.es_opcional);
+    const componentesActivos = snapComponentes.filter((i: any) => !i.es_opcional);
+    const otrosVisiblesActivos = snapOtros.filter(
+      (i: any) => !i.es_opcional && i.visible_cliente !== false,
+    );
+
+    const itemsOpcionales = [
+      ...snapServicios
+        .filter((i: any) => i.es_opcional)
+        .map((i: any) => ({
+          tipo: 'SERVICIO' as const,
+          descripcion: i.descripcion || i.servicio || 'Servicio',
+          cantidad: Number(i.cantidad) || 1,
+          unidad: i.unidad || 'servicio',
+          precioUnitario: Number(i.precio_unitario) || 0,
+          subtotal: Number(i.subtotal) || 0,
+        })),
+      ...snapComponentes
+        .filter((i: any) => i.es_opcional)
+        .map((i: any) => ({
+          tipo: 'REPUESTO' as const,
+          descripcion: i.descripcion || i.componente || 'Componente',
+          referencia: i.codigo_interno || i.referencia_manual || i.componente || undefined,
+          cantidad: Number(i.cantidad) || 1,
+          unidad: i.unidad || 'unidad',
+          precioUnitario: Number(i.precio_unitario) || 0,
+          subtotal: Number(i.subtotal) || 0,
+        })),
+      ...snapOtros
+        .filter((i: any) => i.es_opcional && i.visible_cliente !== false)
+        .map((i: any) => ({
+          tipo: 'OTRO' as const,
+          descripcion: i.descripcion,
+          cantidad: Number(i.cantidad) || 1,
+          unidad: i.unidad || 'global',
+          precioUnitario: Number(i.precio_unitario) || 0,
+          subtotal: Number(i.subtotal) || 0,
+        })),
+    ];
+
+    const subtotalServicios =
+      snap.subtotal_servicios != null
+        ? Number(snap.subtotal_servicios)
+        : serviciosActivos.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
+    const subtotalComponentes =
+      snap.subtotal_componentes != null
+        ? Number(snap.subtotal_componentes)
+        : componentesActivos.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
+    const subtotalOtros =
+      snap.subtotal_otros != null
+        ? Number(snap.subtotal_otros)
+        : otrosVisiblesActivos.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
+    const subtotalGeneral =
+      snap.subtotal_general != null
+        ? Number(snap.subtotal_general)
+        : versionRow.subtotal_version != null
+          ? Number(versionRow.subtotal_version)
+          : subtotalServicios + subtotalComponentes + subtotalOtros;
+    const subtotalOpcionales =
+      snap.subtotal_opcionales != null
+        ? Number(snap.subtotal_opcionales)
+        : itemsOpcionales.reduce((acc, i) => acc + i.subtotal, 0);
+    const descuentoPorcentaje = Number(snap.descuento_porcentaje) || 0;
+    const descuentoValor = Number(snap.descuento_valor) || 0;
+    const subtotalConDescuento =
+      snap.subtotal_con_descuento != null
+        ? Number(snap.subtotal_con_descuento)
+        : subtotalGeneral - descuentoValor;
+
+    const usaAiu = Boolean(snap.usa_aiu);
+    const aiuAdminPorcentaje = Number(snap.aiu_admin_porcentaje || 0);
+    const aiuImprevistosPorcentaje = Number(snap.aiu_imprevistos_porcentaje || 0);
+    const aiuUtilidadPorcentaje = Number(snap.aiu_utilidad_porcentaje || 0);
+    const aiuAdminValor =
+      snap.aiu_admin_valor != null
+        ? Number(snap.aiu_admin_valor)
+        : usaAiu
+          ? (subtotalConDescuento * aiuAdminPorcentaje) / 100
+          : 0;
+    const aiuImprevistosValor =
+      snap.aiu_imprevistos_valor != null
+        ? Number(snap.aiu_imprevistos_valor)
+        : usaAiu
+          ? (subtotalConDescuento * aiuImprevistosPorcentaje) / 100
+          : 0;
+    const aiuUtilidadValor =
+      snap.aiu_utilidad_valor != null
+        ? Number(snap.aiu_utilidad_valor)
+        : usaAiu
+          ? (subtotalConDescuento * aiuUtilidadPorcentaje) / 100
+          : 0;
+    const aiuValorTotal = Number(snap.aiu_valor_total || 0);
+    const ivaSobreUtilidadAiu = Boolean(snap.iva_sobre_utilidad_aiu);
+    const ivaPorcentaje =
+      snap.iva_porcentaje != null ? Number(snap.iva_porcentaje) : brand.tasaImpuestoDefecto;
+    const ivaValor =
+      snap.iva_valor != null
+        ? Number(snap.iva_valor)
+        : (subtotalConDescuento * ivaPorcentaje) / 100;
+    const totalCotizacion =
+      snap.total_cotizacion != null
+        ? Number(snap.total_cotizacion)
+        : versionRow.total_version != null
+          ? Number(versionRow.total_version)
+          : subtotalConDescuento + aiuValorTotal + ivaValor;
+
+    const diasValidez = snap.dias_validez ?? cot.dias_validez ?? brand.validezCotizacionDiasDefecto;
+    const fechaBase = snap.fecha_cotizacion
+      ? new Date(snap.fecha_cotizacion)
+      : cot.fecha_cotizacion
+        ? new Date(cot.fecha_cotizacion)
+        : new Date();
+    const fechaVencBase = snap.fecha_vencimiento
+      ? new Date(snap.fecha_vencimiento)
+      : new Date(fechaBase.getTime() + diasValidez * 86400000);
+
+    const clientePersona = cot.clientes?.persona;
+    const clienteNombreBase =
+      snap.cliente?.razon_social ||
+      snap.cliente?.nombre_comercial ||
+      snap.cliente?.nombre_completo ||
+      clientePersona?.razon_social ||
+      clientePersona?.nombre_comercial ||
+      clientePersona?.nombre_completo ||
+      'N/A';
+    const nombreSede = snap.sede || cot.sedes_cliente?.nombre_sede || cot.clientes?.nombre_sede;
+    const clienteNombre = nombreSede ? `${clienteNombreBase} - ${nombreSede}` : clienteNombreBase;
+
+    const empleadoPersona = cot.empleados?.persona;
+    const elaboradoPor =
+      snap.elaborado_por ||
+      this.resolverNombrePersona(empleadoPersona) ||
+      `Equipo ${brand.nombreComercial}`;
+
+    const buildFirmaDataUri = (
+      firma?: { firma_base64?: string | null; formato_firma?: string | null } | null,
+    ) => {
+      const raw = firma?.firma_base64?.trim();
+      if (!raw) return undefined;
+      if (raw.startsWith('data:image/')) return raw;
+      const fmt =
+        (firma?.formato_firma || 'png').toLowerCase().replace(/[^a-z0-9+.-]/g, '') || 'png';
+      const mime = fmt === 'jpg' ? 'jpeg' : fmt;
+      return `data:image/${mime};base64,${raw}`;
+    };
+
+    const tipoRaw = snap.tipo_cotizacion || cot.tipo_cotizacion;
+    let tipoCotizacionLabel: string | undefined = tipoRaw || undefined;
+    if (tipoRaw) {
+      try {
+        const tipoCatalogo = await this.prisma.tipos_oferta_cotizacion.findUnique({
+          where: { codigo: String(tipoRaw).trim().toUpperCase() },
+          select: { nombre: true },
+        });
+        if (tipoCatalogo?.nombre) {
+          tipoCotizacionLabel = tipoCatalogo.nombre;
+        }
+      } catch {
+        // Fallback silencioso
+      }
+    }
+
+    const atencionNombre =
+      (snap.atencion_a_nombre ?? cot.atencion_a_nombre)?.toString().trim() || undefined;
+    const atencionCargo =
+      (snap.atencion_a_cargo ?? cot.atencion_a_cargo)?.toString().trim() || undefined;
+
+    const mostrarDesgloseFinal =
+      overrideDesglose !== undefined
+        ? overrideDesglose
+        : Boolean(snap.mostrar_desglose_precios ?? cot.mostrar_desglose_precios ?? false);
+
+    const datosCotizacion: DatosCotizacionPDF = {
+      branding: brand,
+      numeroCotizacion:
+        snap.numero_cotizacion || cot.numero_cotizacion || `COT-${cot.id_cotizacion}`,
+      tipoCotizacion: tipoCotizacionLabel,
+      moneda: snap.moneda || cot.moneda || brand.codigoMoneda,
+      fechaCotizacion: formatCalendarDateOrg(fechaBase, brand),
+      fechaVencimiento: formatCalendarDateOrg(fechaVencBase, brand),
+      diasValidez,
+      version: Number(versionRow.numero_version) || 1,
+      ordenCompraCliente: snap.orden_compra_cliente || undefined,
+      estadoCodigo,
+      mostrarMarcaAguaBorrador,
+      textoMarcaAgua,
+      esCopiaHistorica: true,
+      fechaArchivoSnapshot: versionRow.fecha_version
+        ? formatCalendarDateOrg(versionRow.fecha_version, brand)
+        : undefined,
+      mostrarDesglosePrecios: mostrarDesgloseFinal,
+      atencionANombre: atencionNombre,
+      atencionACargo: atencionCargo,
+      cliente: {
+        nombre: clienteNombre,
+        nit:
+          snap.cliente?.numero_identificacion || clientePersona?.numero_identificacion || undefined,
+        direccion:
+          cot.sedes_cliente?.direccion_sede ||
+          clientePersona?.direccion_principal ||
+          brand.ciudadDefecto ||
+          'N/A',
+        telefono:
+          cot.sedes_cliente?.telefono_sede ||
+          clientePersona?.telefono_principal ||
+          clientePersona?.celular ||
+          undefined,
+        email: cot.sedes_cliente?.email_sede || clientePersona?.email_principal || undefined,
+        contacto: atencionNombre,
+      },
+      equipo: equipoUnico,
+      equipos: equiposMulti.length > 0 ? equiposMulti : equipoUnico ? [equipoUnico] : [],
+      asunto: snap.asunto || cot.asunto || `Cotización ${cot.numero_cotizacion || ''}`.trim(),
+      descripcionGeneral: snap.descripcion_general ?? undefined,
+      alcanceTrabajo: snap.alcance_trabajo ?? undefined,
+      exclusiones: snap.exclusiones ?? undefined,
+      itemsServicios: serviciosActivos.map((item: any, idx: number) => ({
+        orden: item.orden_item ?? idx + 1,
+        descripcion: item.descripcion || item.servicio || 'Servicio',
+        equipoEtiqueta: resolveSnapEquipoEtiqueta(item),
+        cantidad: Number(item.cantidad) || 1,
+        unidad: item.unidad || 'UND',
+        precioUnitario: Number(item.precio_unitario) || 0,
+        descuentoPorcentaje: Number(item.descuento_porcentaje) || 0,
+        subtotal: Number(item.subtotal) || 0,
+        ivaAplicable: item.iva_aplicable !== false,
+        observaciones: item.observaciones || undefined,
+      })),
+      itemsComponentes: componentesActivos.map((item: any, idx: number) => ({
+        orden: item.orden_item ?? idx + 1,
+        descripcion: item.descripcion || item.componente || 'Componente',
+        referencia: item.codigo_interno || item.referencia_manual || item.componente || undefined,
+        marca: item.marca || item.marca_manual || undefined,
+        equipoEtiqueta: resolveSnapEquipoEtiqueta(item),
+        garantiaMeses: item.garantia_meses ?? undefined,
+        cantidad: Number(item.cantidad) || 1,
+        unidad: item.unidad || 'UND',
+        precioUnitario: Number(item.precio_unitario) || 0,
+        descuentoPorcentaje: Number(item.descuento_porcentaje) || 0,
+        subtotal: Number(item.subtotal) || 0,
+        ivaAplicable: item.iva_aplicable !== false,
+      })),
+      itemsOtros: otrosVisiblesActivos.map((item: any, idx: number) => ({
+        orden: item.orden_item ?? idx + 1,
+        categoriaRubro: item.categoria_rubro || 'OTRO',
+        descripcion: item.descripcion,
+        detalleCalculo: item.detalle_calculo || undefined,
+        equipoEtiqueta: resolveSnapEquipoEtiqueta(item),
+        cantidad: Number(item.cantidad) || 1,
+        unidad: item.unidad || 'global',
+        precioUnitario: Number(item.precio_unitario) || 0,
+        descuentoPorcentaje: Number(item.descuento_porcentaje) || 0,
+        subtotal: Number(item.subtotal) || 0,
+        ivaAplicable: item.iva_aplicable !== false,
+      })),
+      itemsOpcionales,
+      totales: {
+        subtotalServicios,
+        subtotalComponentes,
+        subtotalOtros,
+        subtotalGeneral,
+        subtotalOpcionales,
+        descuentoPorcentaje,
+        descuentoValor,
+        subtotalConDescuento,
+        usaAiu,
+        aiuAdminPorcentaje,
+        aiuAdminValor,
+        aiuImprevistosPorcentaje,
+        aiuImprevistosValor,
+        aiuUtilidadPorcentaje,
+        aiuUtilidadValor,
+        aiuValorTotal,
+        ivaSobreUtilidadAiu,
+        ivaPorcentaje,
+        ivaValor,
+        totalCotizacion,
+      },
+      formaPago: snap.forma_pago || cot.forma_pago || 'CONTADO',
+      tiempoEstimadoDias: snap.tiempo_estimado_dias ?? undefined,
+      mesesGarantia: snap.meses_garantia ?? brand.garantiaMesesDefecto,
+      observacionesGarantia: snap.observaciones_garantia ?? cot.observaciones_garantia ?? undefined,
+      terminosCondiciones: snap.terminos_condiciones ?? cot.terminos_condiciones ?? undefined,
+      elaboradoPor,
+      cargoElaborador: 'Asesor Comercial',
+      firmaAsesorDataUri: buildFirmaDataUri(cot.firma_asesor),
+      firmaClienteDataUri: buildFirmaDataUri(cot.firma_cliente),
+    };
+
+    return {
+      cotizacion: cot,
+      datosCotizacion,
+      branding: brand,
+      versionRecord: versionRow,
     };
   }
 

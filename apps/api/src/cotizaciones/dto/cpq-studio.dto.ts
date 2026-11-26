@@ -22,6 +22,15 @@ export class CreateItemOtroDto {
   id_equipo?: number | null;
 
   @ApiPropertyOptional({
+    description: 'Lista de IDs de equipos a los que aplica el ítem (vacío = Todos los equipos)',
+    type: [Number],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  equipos_ids?: number[];
+
+  @ApiPropertyOptional({
     description:
       'Categoría del rubro (TRANSPORTE, VIATICOS, POLIZA, ALQUILER, DISPOSICION_AMBIENTAL, SUBCONTRATO, OTRO o personalizado)',
     default: 'OTRO',
@@ -122,6 +131,12 @@ export class UpdateItemOtroDto {
   @IsOptional()
   @IsInt()
   id_equipo?: number | null;
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  equipos_ids?: number[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -241,6 +256,11 @@ export class StudioServicioItemDto {
   id_equipo?: number | null;
 
   @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  equipos_ids?: number[];
+
+  @IsOptional()
   @IsString()
   descripcion_personalizada?: string;
 
@@ -307,6 +327,11 @@ export class StudioComponenteItemDto {
   @IsOptional()
   @IsInt()
   id_equipo?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  equipos_ids?: number[];
 
   @IsNotEmpty()
   @IsString()

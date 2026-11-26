@@ -1,12 +1,13 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MinLength } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class SolicitarAprobacionDto {
-  @ApiProperty({
-    description: 'Observaciones del solicitante (obligatorio)',
-    example: 'Cliente corporativo, descuento excepcional aprobado verbalmente por gerencia',
+  @ApiPropertyOptional({
+    description: 'Observaciones opcionales del solicitante para el historial o aprobador',
+    example: 'Aprobada con condiciones comerciales validadas',
   })
-  @IsString()
-  @MinLength(10, { message: 'Observaciones solicitante mínimo 10 caracteres' })
-  observaciones_solicitante!: string;
+  @IsOptional()
+  @IsString({ message: 'Las observaciones deben ser texto válido' })
+  @MaxLength(1000, { message: 'Las observaciones no pueden superar los 1000 caracteres' })
+  observaciones_solicitante?: string;
 }
