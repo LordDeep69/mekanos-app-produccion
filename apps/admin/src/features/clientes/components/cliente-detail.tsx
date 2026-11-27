@@ -22,6 +22,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useOrgFormatters } from '@/hooks/use-org-formatters';
 import {
+  readPersistedFilterParams,
+  writePersistedFilterParams,
+} from '@/lib/navigation-filter-memory';
+import {
   PERIODICIDAD_LABELS,
   TIPO_CLIENTE_LABELS,
   type PeriodicidadMantenimientoEnum,
@@ -53,7 +57,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useCliente } from '../hooks/use-clientes';
 import { BitacoraTab } from './bitacora-tab';
@@ -69,7 +73,33 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
   const router = useRouter();
   const { formatCurrency: formatOrgCurrency, formatDate: formatOrgDate } = useOrgFormatters();
   const [activeTab, setActiveTab] = useState<'general' | 'trazabilidad' | 'bitacora'>('general');
+  const tabHydratedRef = useRef(false);
   const { data: cliente, isLoading, isError, error } = useCliente(clienteId);
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const routeKey = `/clientes/${clienteId}`;
+      const params = readPersistedFilterParams(routeKey);
+      const savedTab = params.get('tab');
+      if (savedTab === 'general' || savedTab === 'trazabilidad' || savedTab === 'bitacora') {
+        setActiveTab(savedTab);
+      }
+      tabHydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clienteId]);
+
+  useEffect(() => {
+    if (!tabHydratedRef.current) return;
+    const routeKey = `/clientes/${clienteId}`;
+    const params = new URLSearchParams();
+    if (activeTab !== 'general') params.set('tab', activeTab);
+    writePersistedFilterParams(routeKey, routeKey, params);
+  }, [clienteId, activeTab]);
 
   // Loading
   if (isLoading) {
@@ -213,7 +243,13 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
       const nombre = eq.tipos_equipo?.nombre_tipo || code;
       const cur = map.get(code);
       if (cur) cur.cantidad += 1;
-      else map.set(code, { id_tipo_equipo: eq.id_tipo_equipo ?? null, codigo_tipo: code, nombre_tipo: nombre, cantidad: 1 });
+      else
+        map.set(code, {
+          id_tipo_equipo: eq.id_tipo_equipo ?? null,
+          codigo_tipo: code,
+          nombre_tipo: nombre,
+          cantidad: 1,
+        });
     }
     return Array.from(map.values()).sort((a, b) => b.cantidad - a.cantidad);
   })();

@@ -41,7 +41,10 @@ const EquipoForm = dynamic(
 );
 import { cn } from '@/lib/utils';
 import { resolveEquipoLucideIcon } from '@/lib/equipo-icon';
-import { useOrgFormatters } from '@/hooks/use-org-formatters';
+import {
+  readPersistedFilterParams,
+  writePersistedFilterParams,
+} from '@/lib/navigation-filter-memory';
 import {
   AlertCircle,
   AlertTriangle,
@@ -1246,6 +1249,13 @@ export default function EquiposPage() {
   const [debouncedBTreeTexto, setDebouncedBTreeTexto] = useState<string>('');
 
   useEffect(() => {
+    if (
+      filtroAtributoValorMin === debouncedBTreeMin &&
+      filtroAtributoValorMax === debouncedBTreeMax &&
+      filtroAtributoTexto === debouncedBTreeTexto
+    ) {
+      return;
+    }
     const timer = setTimeout(() => {
       setDebouncedBTreeMin(filtroAtributoValorMin);
       setDebouncedBTreeMax(filtroAtributoValorMax);
@@ -1253,7 +1263,14 @@ export default function EquiposPage() {
       setPage(1);
     }, 280);
     return () => clearTimeout(timer);
-  }, [filtroAtributoValorMin, filtroAtributoValorMax, filtroAtributoTexto]);
+  }, [
+    filtroAtributoValorMin,
+    filtroAtributoValorMax,
+    filtroAtributoTexto,
+    debouncedBTreeMin,
+    debouncedBTreeMax,
+    debouncedBTreeTexto,
+  ]);
 
   const campoBTreeActual = useMemo(() => {
     if (!filtroAtributoCodigo) return null;
@@ -1327,17 +1344,25 @@ export default function EquiposPage() {
 
   const [debouncedMarcaValor, setDebouncedMarcaValor] = useState('');
   useEffect(() => {
+    if (filtroMarcaValor === debouncedMarcaValor) return;
     const timer = setTimeout(() => {
       setDebouncedMarcaValor(filtroMarcaValor);
       setPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [filtroMarcaValor]);
+  }, [filtroMarcaValor, debouncedMarcaValor]);
 
   const [debouncedValorMin, setDebouncedValorMin] = useState<number | ''>('');
   const [debouncedValorMax, setDebouncedValorMax] = useState<number | ''>('');
   const [debouncedValorExacto, setDebouncedValorExacto] = useState<string>('');
   useEffect(() => {
+    if (
+      filtroValorMin === debouncedValorMin &&
+      filtroValorMax === debouncedValorMax &&
+      filtroValorExacto === debouncedValorExacto
+    ) {
+      return;
+    }
     const timer = setTimeout(() => {
       setDebouncedValorMin(filtroValorMin);
       setDebouncedValorMax(filtroValorMax);
@@ -1345,7 +1370,14 @@ export default function EquiposPage() {
       setPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [filtroValorMin, filtroValorMax, filtroValorExacto]);
+  }, [
+    filtroValorMin,
+    filtroValorMax,
+    filtroValorExacto,
+    debouncedValorMin,
+    debouncedValorMax,
+    debouncedValorExacto,
+  ]);
 
   const { data: facetasData } = useFacetasEquipos(tiposFiltro.length === 1 ? tiposFiltro[0] : '');
   const marcasDisponibles = useMemo(() => facetasData?.marcas || [], [facetasData]);
@@ -1441,13 +1473,161 @@ export default function EquiposPage() {
     setPage(1);
   }, []);
 
+  const hydratedRef = useRef(false);
+
+  // Restaurar filtros EAM (multi-check tipos, B-Tree, facetas, vista, orden y página) al volver desde /equipos/[id]
   useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const params = readPersistedFilterParams('/equipos');
+      const q = params.get('q') || '';
+      const tiposRaw = params.get('tipos') || params.get('tipo') || '';
+      const estado = params.get('estado') || '';
+      const pageParam = Number(params.get('page'));
+      const sort = params.get('sort') as SortBy | null;
+      const dir = params.get('dir') as SortOrder | null;
+      const view = params.get('view') as 'grid' | 'list' | null;
+      const adv = params.get('adv') === '1';
+
+      const at = params.get('at') || '';
+      const atminRaw = params.get('atmin');
+      const atmaxRaw = params.get('atmax');
+      const atu = params.get('atu') || '';
+      const attxt = params.get('attxt') || '';
+      const atbool = params.get('atbool') || '';
+
+      const mc = params.get('mc') || '';
+      const mv = params.get('mv') || '';
+      const mt = params.get('mt') || '';
+      const vc = params.get('vc') || '';
+      const vminRaw = params.get('vmin');
+      const vmaxRaw = params.get('vmax');
+      const vex = params.get('vex') || '';
+      const vt = params.get('vt') || '';
+
+      if (q) {
+        setSearchInput(q);
+        setDebouncedSearch(q);
+      }
+      if (tiposRaw) {
+        const parsedTipos = tiposRaw
+          .split(',')
+          .map((t) => t.trim().toUpperCase())
+          .filter(Boolean);
+        if (parsedTipos.length > 0) setTiposFiltro(parsedTipos);
+      }
+      if (estado) setEstadoFiltro(estado);
+      if (Number.isInteger(pageParam) && pageParam >= 1) setPage(pageParam);
+      if (sort && ['codigo', 'nombre', 'fecha'].includes(sort)) setSortBy(sort);
+      if (dir && (dir === 'asc' || dir === 'desc')) setSortOrder(dir);
+      if (view && (view === 'grid' || view === 'list')) setViewMode(view);
+      if (adv || at || mc || vc) setShowAdvancedFilters(true);
+
+      if (at) setFiltroAtributoCodigo(at);
+      if (atminRaw !== null && atminRaw !== '' && !Number.isNaN(Number(atminRaw))) {
+        setFiltroAtributoValorMin(Number(atminRaw));
+        setDebouncedBTreeMin(Number(atminRaw));
+      }
+      if (atmaxRaw !== null && atmaxRaw !== '' && !Number.isNaN(Number(atmaxRaw))) {
+        setFiltroAtributoValorMax(Number(atmaxRaw));
+        setDebouncedBTreeMax(Number(atmaxRaw));
+      }
+      if (atu) setFiltroAtributoUnidad(atu);
+      if (attxt) {
+        setFiltroAtributoTexto(attxt);
+        setDebouncedBTreeTexto(attxt);
+      }
+      if (atbool) setFiltroAtributoBooleano(atbool);
+
+      if (mc) setFiltroMarcaCampo(mc);
+      if (mv) {
+        setFiltroMarcaValor(mv);
+        setDebouncedMarcaValor(mv);
+      }
+      if (mt) setFiltroMarcaTabla(mt);
+      if (vc) setFiltroValorCampo(vc);
+      if (vminRaw !== null && vminRaw !== '' && !Number.isNaN(Number(vminRaw))) {
+        setFiltroValorMin(Number(vminRaw));
+        setDebouncedValorMin(Number(vminRaw));
+      }
+      if (vmaxRaw !== null && vmaxRaw !== '' && !Number.isNaN(Number(vmaxRaw))) {
+        setFiltroValorMax(Number(vmaxRaw));
+        setDebouncedValorMax(Number(vmaxRaw));
+      }
+      if (vex) {
+        setFiltroValorExacto(vex);
+        setDebouncedValorExacto(vex);
+      }
+      if (vt) setFiltroValorTabla(vt);
+
+      hydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (searchInput === debouncedSearch) return;
     const timer = setTimeout(() => {
       setDebouncedSearch(searchInput);
       setPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, debouncedSearch]);
+
+  // Persistir filtros activos EAM en URL y sessionStorage
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set('q', debouncedSearch);
+    if (tiposFiltro.length > 0) params.set('tipos', tiposFiltro.join(','));
+    if (estadoFiltro) params.set('estado', estadoFiltro);
+    if (page > 1) params.set('page', String(page));
+    if (sortBy !== 'codigo') params.set('sort', sortBy);
+    if (sortOrder !== 'asc') params.set('dir', sortOrder);
+    if (viewMode !== 'grid') params.set('view', viewMode);
+    if (showAdvancedFilters) params.set('adv', '1');
+    if (filtroAtributoCodigo) params.set('at', filtroAtributoCodigo);
+    if (debouncedBTreeMin !== '') params.set('atmin', String(debouncedBTreeMin));
+    if (debouncedBTreeMax !== '') params.set('atmax', String(debouncedBTreeMax));
+    if (filtroAtributoUnidad) params.set('atu', filtroAtributoUnidad);
+    if (debouncedBTreeTexto) params.set('attxt', debouncedBTreeTexto);
+    if (filtroAtributoBooleano) params.set('atbool', filtroAtributoBooleano);
+    if (filtroMarcaCampo) params.set('mc', filtroMarcaCampo);
+    if (debouncedMarcaValor) params.set('mv', debouncedMarcaValor);
+    if (filtroMarcaTabla) params.set('mt', filtroMarcaTabla);
+    if (filtroValorCampo) params.set('vc', filtroValorCampo);
+    if (debouncedValorMin !== '') params.set('vmin', String(debouncedValorMin));
+    if (debouncedValorMax !== '') params.set('vmax', String(debouncedValorMax));
+    if (debouncedValorExacto) params.set('vex', debouncedValorExacto);
+    if (filtroValorTabla) params.set('vt', filtroValorTabla);
+    writePersistedFilterParams('/equipos', '/equipos', params);
+  }, [
+    debouncedSearch,
+    tiposFiltro,
+    estadoFiltro,
+    page,
+    sortBy,
+    sortOrder,
+    viewMode,
+    showAdvancedFilters,
+    filtroAtributoCodigo,
+    debouncedBTreeMin,
+    debouncedBTreeMax,
+    filtroAtributoUnidad,
+    debouncedBTreeTexto,
+    filtroAtributoBooleano,
+    filtroMarcaCampo,
+    debouncedMarcaValor,
+    filtroMarcaTabla,
+    filtroValorCampo,
+    debouncedValorMin,
+    debouncedValorMax,
+    debouncedValorExacto,
+    filtroValorTabla,
+  ]);
 
   const { data, isLoading, isError, refetch, isFetching } = useEquipos({
     page,

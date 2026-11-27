@@ -17,10 +17,27 @@ import {
 // Query Keys
 export const bitacorasKeys = {
   all: ['bitacoras'] as const,
-  preview: (idCliente: number, mes: number, anio: number, categoria?: string, fechaInicio?: string, fechaFin?: string, tipoServicio?: string) =>
-    [...bitacorasKeys.all, 'preview', idCliente, mes, anio, categoria, fechaInicio, fechaFin, tipoServicio] as const,
-  historial: (idCliente: number) =>
-    [...bitacorasKeys.all, 'historial', idCliente] as const,
+  preview: (
+    idCliente: number,
+    mes: number,
+    anio: number,
+    categoria?: string,
+    fechaInicio?: string,
+    fechaFin?: string,
+    tipoServicio?: string,
+  ) =>
+    [
+      ...bitacorasKeys.all,
+      'preview',
+      idCliente,
+      mes,
+      anio,
+      categoria,
+      fechaInicio,
+      fechaFin,
+      tipoServicio,
+    ] as const,
+  historial: (idCliente: number) => [...bitacorasKeys.all, 'historial', idCliente] as const,
   mesesDisponibles: (idCliente: number, categoria?: string, tipoServicio?: string) =>
     [...bitacorasKeys.all, 'meses-disponibles', idCliente, categoria, tipoServicio] as const,
 };
@@ -42,10 +59,19 @@ export function useBitacoraPreview(
   const modoRango = !!(fechaInicio && fechaFin);
 
   return useQuery({
-    queryKey: bitacorasKeys.preview(idCliente, mes, anio, categoria, fechaInicio, fechaFin, tipoServicio),
-    queryFn: () => getBitacoraPreview(idCliente, mes, anio, categoria, fechaInicio, fechaFin, tipoServicio),
+    queryKey: bitacorasKeys.preview(
+      idCliente,
+      mes,
+      anio,
+      categoria,
+      fechaInicio,
+      fechaFin,
+      tipoServicio,
+    ),
+    queryFn: () =>
+      getBitacoraPreview(idCliente, mes, anio, categoria, fechaInicio, fechaFin, tipoServicio),
     staleTime: 2 * 60 * 1000,
-    enabled: options?.enabled ?? (modoRango ? (idCliente > 0) : (idCliente > 0 && mes > 0 && anio > 0)),
+    enabled: options?.enabled ?? (modoRango ? idCliente > 0 : idCliente > 0 && mes > 0 && anio > 0),
   });
 }
 
@@ -61,6 +87,12 @@ export function useEnviarBitacora() {
       queryClient.invalidateQueries({
         queryKey: bitacorasKeys.historial(variables.id_cliente_principal),
       });
+      queryClient.invalidateQueries({
+        queryKey: bitacorasKeys.all,
+      });
+      // Sincronizar badges ✉️ ENVIADO en el módulo de órdenes e historial de emails
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      queryClient.invalidateQueries({ queryKey: ['historial-emails'] });
     },
   });
 }
@@ -80,7 +112,12 @@ export function useBitacoraHistorial(idCliente: number, options?: { enabled?: bo
 /**
  * Hook para obtener meses con informes disponibles
  */
-export function useMesesDisponibles(idCliente: number, categoria?: string, options?: { enabled?: boolean }, tipoServicio?: string) {
+export function useMesesDisponibles(
+  idCliente: number,
+  categoria?: string,
+  options?: { enabled?: boolean },
+  tipoServicio?: string,
+) {
   return useQuery({
     queryKey: bitacorasKeys.mesesDisponibles(idCliente, categoria, tipoServicio),
     queryFn: () => getMesesDisponibles(idCliente, categoria, tipoServicio),

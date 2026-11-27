@@ -59,7 +59,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Droplets,
   Eye,
   FilePlus2,
   FileText,
@@ -77,12 +76,15 @@ import {
   Users,
   Wrench,
   X,
-  Zap,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useArquetiposEam } from '@/features/catalogos-eam/hooks/use-catalogos-eam';
 import { resolveEquipoLucideIcon } from '@/lib/equipo-icon';
+import {
+  readPersistedFilterParams,
+  writePersistedFilterParams,
+} from '@/lib/navigation-filter-memory';
 import { useBranding } from '@/providers/branding-provider';
 import { getClientes } from '../api/clientes.service';
 import { useClientes, useDeleteCliente, useRefreshClientes } from '../hooks/use-clientes';
@@ -120,16 +122,64 @@ export function ClientesTable() {
 
   const refreshClientes = useRefreshClientes();
   const deleteMutation = useDeleteCliente();
+  const hydratedRef = useRef(false);
 
-  // Debounce optimizado a 300ms para búsqueda ágil
+  // Restaurar filtros, búsqueda, orden y página al regresar desde /clientes/[id] o recargar
   useEffect(() => {
+    const params = readPersistedFilterParams('/clientes');
+    const q = params.get('q') || '';
+    const tipo = params.get('tipo') as TipoClienteEnum | 'TODOS' | null;
+    const equipo = params.get('equipo');
+    const est = params.get('est') as 'TODOS' | 'PRINCIPALES' | 'SEDES' | 'INDEPENDIENTES' | null;
+    const pageParam = Number(params.get('page'));
+    const sort = params.get('sort') as SortField | null;
+    const dir = params.get('dir') as 'asc' | 'desc' | null;
+
+    if (q) {
+      setSearchInput(q);
+      setSearch(q);
+    }
+    if (tipo) setTipoFilter(tipo);
+    if (equipo) setTipoEquipoFilter(equipo);
+    if (est && ['TODOS', 'PRINCIPALES', 'SEDES', 'INDEPENDIENTES'].includes(est)) {
+      setEstructuraFilter(est);
+    }
+    if (Number.isInteger(pageParam) && pageParam > 0) {
+      setPage(pageParam);
+    }
+    if (sort && ['codigo', 'nombre', 'nit', 'tipo', 'estado'].includes(sort)) {
+      setSortField(sort);
+    }
+    if (dir && (dir === 'asc' || dir === 'desc')) {
+      setSortOrder(dir);
+    }
+    hydratedRef.current = true;
+  }, []);
+
+  // Debounce optimizado a 300ms para búsqueda ágil (sin pisar la página restaurada en el montaje)
+  useEffect(() => {
+    if (searchInput === search) return;
     const timer = setTimeout(() => {
       setSearch(searchInput);
       setPage(0);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, search]);
+
+  // Persistir filtros activos en URL y sessionStorage
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const params = new URLSearchParams();
+    if (search) params.set('q', search);
+    if (tipoFilter !== 'TODOS') params.set('tipo', tipoFilter);
+    if (tipoEquipoFilter !== 'TODOS') params.set('equipo', tipoEquipoFilter);
+    if (estructuraFilter !== 'TODOS') params.set('est', estructuraFilter);
+    if (page > 0) params.set('page', String(page));
+    if (sortField !== 'nombre') params.set('sort', sortField);
+    if (sortOrder !== 'asc') params.set('dir', sortOrder);
+    writePersistedFilterParams('/clientes', '/clientes', params);
+  }, [search, tipoFilter, tipoEquipoFilter, estructuraFilter, page, sortField, sortOrder]);
 
   // Query con filtros
   const { data, isLoading, isFetching, isError, error } = useClientes({
@@ -440,8 +490,12 @@ export function ClientesTable() {
               a.id_tipo_equipo === tipoStat.id_tipo_equipo ||
               a.codigo_tipo?.toUpperCase() === tipoStat.codigo_tipo?.toUpperCase(),
           );
-          const TipoIcon = resolveEquipoLucideIcon(arqMatch?.icono_ui ?? arqMatch?.icono, tipoStat.codigo_tipo);
-          const accentColor = arqMatch?.color_hex ?? arqMatch?.color ?? (idx === 0 ? '#D97706' : '#2563EB');
+          const TipoIcon = resolveEquipoLucideIcon(
+            arqMatch?.icono_ui ?? arqMatch?.icono,
+            tipoStat.codigo_tipo,
+          );
+          const accentColor =
+            arqMatch?.color_hex ?? arqMatch?.color ?? (idx === 0 ? '#D97706' : '#2563EB');
           return (
             <Card
               key={`${tipoStat.codigo_tipo}-${tipoStat.id_tipo_equipo ?? idx}`}
@@ -452,7 +506,9 @@ export function ClientesTable() {
                 setPage(0);
               }}
               className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
-                isSelected ? 'ring-2 ring-primary bg-primary/5 border-primary/40' : 'border-border/80'
+                isSelected
+                  ? 'ring-2 ring-primary bg-primary/5 border-primary/40'
+                  : 'border-border/80'
               }`}
             >
               <CardContent className="p-3 sm:p-4 flex items-center justify-between gap-1.5">
