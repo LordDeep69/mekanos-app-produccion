@@ -340,6 +340,113 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
 
     if (!cotizacion) return null;
 
+    // Enriquecer versiones con nombre del asesor y metadatos clave del snapshot sin sobrecargar el payload
+    if (
+      includeItems &&
+      Array.isArray(cotizacion.versiones_cotizacion) &&
+      cotizacion.versiones_cotizacion.length > 0
+    ) {
+      const creadorIds = Array.from(
+        new Set(
+          cotizacion.versiones_cotizacion
+            .map((v) => v.creada_por)
+            .filter((id): id is number => typeof id === 'number' && id > 0),
+        ),
+      );
+
+      const usuarioNombreById = new Map<number, string>();
+      if (creadorIds.length > 0) {
+        const usuarios = await this.prisma.usuarios.findMany({
+          where: { id_usuario: { in: creadorIds } },
+          select: {
+            id_usuario: true,
+            username: true,
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                segundo_nombre: true,
+                primer_apellido: true,
+                segundo_apellido: true,
+              },
+            },
+          },
+        });
+        for (const u of usuarios) {
+          const full =
+            u.persona?.nombre_completo?.trim() ||
+            [
+              u.persona?.primer_nombre,
+              u.persona?.segundo_nombre,
+              u.persona?.primer_apellido,
+              u.persona?.segundo_apellido,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .trim() ||
+            u.username;
+          if (full) {
+            usuarioNombreById.set(u.id_usuario, full);
+          }
+        }
+      }
+
+      const elaboradorPersona = (cotizacion as any).empleados?.persona;
+      const elaboradorActualNombre =
+        elaboradorPersona?.nombre_completo?.trim() ||
+        [
+          elaboradorPersona?.primer_nombre,
+          elaboradorPersona?.segundo_nombre,
+          elaboradorPersona?.primer_apellido,
+          elaboradorPersona?.segundo_apellido,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim() ||
+        null;
+
+      (cotizacion as any).versiones_cotizacion = cotizacion.versiones_cotizacion.map((v) => {
+        const datos = (v.datos_cotizacion ?? {}) as Record<string, unknown>;
+        const elaboradorSnap =
+          typeof datos.elaborado_por === 'string' && datos.elaborado_por.trim()
+            ? datos.elaborado_por.trim()
+            : null;
+        const creadaPorNombre =
+          typeof v.creada_por === 'number' ? usuarioNombreById.get(v.creada_por) || null : null;
+        const descRaw = datos.descuento_porcentaje;
+        const descuentoPct =
+          descRaw !== undefined && descRaw !== null && Number.isFinite(Number(descRaw))
+            ? Number(descRaw)
+            : null;
+
+        return {
+          id_version: v.id_version,
+          id_cotizacion: v.id_cotizacion,
+          numero_version: v.numero_version,
+          fecha_version: v.fecha_version,
+          motivo_cambio: v.motivo_cambio,
+          resumen_cambios: v.resumen_cambios,
+          subtotal_version: v.subtotal_version ? Number(v.subtotal_version) : 0,
+          total_version: v.total_version ? Number(v.total_version) : 0,
+          creada_por: v.creada_por,
+          asesor_nombre: elaboradorSnap || creadaPorNombre || elaboradorActualNombre,
+          creada_por_nombre: creadaPorNombre,
+          estado_codigo: typeof datos.estado === 'string' ? datos.estado : null,
+          estado_nombre: typeof datos.estado_nombre === 'string' ? datos.estado_nombre : null,
+          descuento_porcentaje: descuentoPct,
+          moneda:
+            typeof datos.moneda === 'string' && datos.moneda.trim()
+              ? datos.moneda.trim()
+              : cotizacion.moneda || 'COP',
+          items_servicios_count: Array.isArray(v.items_servicios) ? v.items_servicios.length : 0,
+          items_componentes_count: Array.isArray(v.items_componentes)
+            ? v.items_componentes.length
+            : 0,
+          items_otros_count: Array.isArray(datos.items_otros) ? datos.items_otros.length : 0,
+        };
+      });
+    }
+
     return this.mapToEntity(cotizacion);
   }
 

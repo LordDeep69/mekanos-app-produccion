@@ -50,7 +50,11 @@ export class CreatePropuestaHandler implements ICommandHandler<CreatePropuestaCo
     }
 
     // Validar orden servicio está EN_PROCESO (técnico puede generar propuestas durante ejecución)
-    if (ordenServicio.estados_orden.nombre_estado !== 'EN_PROCESO') {
+    const codigoEstadoOrden = (ordenServicio.estados_orden.codigo_estado || '').toUpperCase();
+    const nombreEstadoOrdenNorm = (ordenServicio.estados_orden.nombre_estado || '')
+      .toUpperCase()
+      .replace(/\s+/g, '_');
+    if (codigoEstadoOrden !== 'EN_PROCESO' && nombreEstadoOrdenNorm !== 'EN_PROCESO') {
       throw new BadRequestException(
         `Solo se pueden generar propuestas desde órdenes EN_PROCESO. Estado actual: ${ordenServicio.estados_orden.nombre_estado}`,
       );

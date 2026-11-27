@@ -49,10 +49,17 @@ export class ConvertirPropuestaOrdenHandler
       throw new NotFoundException(`Propuesta ${idPropuesta} no encontrada`);
     }
 
-    // PASO 2: Validar propuesta está APROBADA
-    if (propuesta.estados_cotizacion.nombre_estado !== 'APROBADA') {
+    // PASO 2: Validar propuesta está APROBADA (acepta APROBADA_CLIENTE, APROBADA_INTERNA o APROBADA)
+    const estadoPropCodigo = (propuesta.estados_cotizacion.codigo_estado || '').toUpperCase();
+    const estadoPropNombre = (propuesta.estados_cotizacion.nombre_estado || '').toUpperCase();
+    const esAprobada =
+      estadoPropCodigo === 'APROBADA_CLIENTE' ||
+      estadoPropCodigo === 'APROBADA_INTERNA' ||
+      estadoPropCodigo === 'APROBADA' ||
+      estadoPropNombre.includes('APROBADA');
+    if (!esAprobada) {
       throw new BadRequestException(
-        `Solo se pueden convertir propuestas APROBADAS. Estado actual: ${propuesta.estados_cotizacion.nombre_estado}`,
+        `Solo se pueden convertir propuestas aprobadas (escálala primero a Cotización para aprobación comercial). Estado actual: ${propuesta.estados_cotizacion.nombre_estado}`,
       );
     }
 
@@ -65,7 +72,12 @@ export class ConvertirPropuestaOrdenHandler
 
     // PASO 4: Obtener estado PROGRAMADA para nueva orden servicio
     const estadoProgramada = await this.prisma.estados_orden.findFirst({
-      where: { nombre_estado: 'PROGRAMADA' },
+      where: {
+        OR: [
+          { codigo_estado: 'PROGRAMADA' },
+          { nombre_estado: { equals: 'PROGRAMADA', mode: 'insensitive' } },
+        ],
+      },
     });
 
     if (!estadoProgramada) {
@@ -101,12 +113,13 @@ export class ConvertirPropuestaOrdenHandler
     // PASO 6: Crear orden servicio + actualizar propuesta en transacción
     const result = await this.prisma.$transaction(async (prisma) => {
       // 6.1. Crear orden servicio desde propuesta
+      const idEquipoTarget = propuesta.id_equipo ?? ordenOrigen.id_equipo;
       const ordenServicio = await prisma.ordenes_servicio.create({
         data: {
           numero_orden: numeroOrden,
           id_cliente: propuesta.id_cliente,
           id_sede: ordenOrigen.id_sede,
-          id_equipo: propuesta.id_equipo ?? ordenOrigen.id_equipo,
+          id_equipo: idEquipoTarget,
           id_estado_actual: estadoProgramada.id_estado,
           descripcion_inicial: propuesta.solucion_propuesta,
           prioridad: propuesta.prioridad || 'NORMAL',
@@ -116,6 +129,17 @@ export class ConvertirPropuestaOrdenHandler
           fecha_creacion: new Date(),
         },
       });
+
+      // 6.1.b Vincular equipo en ordenes_equipos (paridad multi-equipo EAM)
+      if (idEquipoTarget) {
+        await prisma.ordenes_equipos.create({
+          data: {
+            id_orden_servicio: ordenServicio.id_orden_servicio,
+            id_equipo: idEquipoTarget,
+            orden_secuencia: 1,
+          },
+        });
+      }
 
       // 6.2. Actualizar propuesta marcando conversión
       const propuestaActualizada = await prisma.propuestas_correctivo.update({

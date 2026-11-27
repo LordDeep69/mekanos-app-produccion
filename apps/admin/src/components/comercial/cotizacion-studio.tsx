@@ -37,6 +37,7 @@ import {
   normalizeSignatureDataUri,
 } from '@/components/shared/digital-signature-modal';
 import { CotizacionPdfPreviewModal } from './cotizacion-pdf-preview-modal';
+import { CotizacionVersionHistoryDrawer } from './cotizacion-version-history-drawer';
 import { CotizacionVersionSnapshotModal } from './cotizacion-version-snapshot-modal';
 import {
   buildUnidadOptions,
@@ -646,14 +647,7 @@ function CotizacionStudioEditor({
     estadoLabel?: string;
   } | null>(null);
   const [snapshotInspectVersionId, setSnapshotInspectVersionId] = useState<number | null>(null);
-  const [showAllVersions, setShowAllVersions] = useState(false);
-  const [highlightVersionesCard, setHighlightVersionesCard] = useState(false);
-  const versionesCardRef = useRef<HTMLDivElement>(null);
-  const scrollToVersiones = () => {
-    versionesCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    setHighlightVersionesCard(true);
-    window.setTimeout(() => setHighlightVersionesCard(false), 1600);
-  };
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [solicitarOpen, setSolicitarOpen] = useState(false);
   const [solicitarObs, setSolicitarObs] = useState('');
 
@@ -1905,9 +1899,9 @@ function CotizacionStudioEditor({
               {isEdit && cotizacion?.versiones && cotizacion.versiones.length > 0 && (
                 <button
                   type="button"
-                  onClick={scrollToVersiones}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-amber-100 hover:text-amber-900 border border-slate-200 hover:border-amber-200 transition-colors cursor-pointer"
-                  title="Ir a la Bitácora de Versiones Archivadas en el panel lateral"
+                  onClick={() => setHistoryDrawerOpen(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-amber-100 hover:text-amber-900 border border-slate-200 hover:border-amber-200 transition-colors cursor-pointer shadow-2xs"
+                  title="Abrir historial de versiones en línea de tiempo"
                 >
                   <History className="h-3 w-3 text-amber-600 shrink-0" />
                   <span>Historial ({cotizacion.versiones.length})</span>
@@ -4567,9 +4561,9 @@ function CotizacionStudioEditor({
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════════ */}
-        {/* COLUMNA DERECHA STICKY (4): RESUMEN + RENTABILIDAD + BITÁCORA VERSIONES */}
+        {/* COLUMNA DERECHA STICKY (4): RESUMEN ECONÓMICO + RENTABILIDAD PRIVADA   */}
         {/* ═══════════════════════════════════════════════════════════════════════ */}
-        <div className="xl:col-span-4 space-y-3.5 xl:sticky xl:top-20 xl:max-h-[calc(100vh-5.75rem)] xl:overflow-y-auto xl:pr-1 [scrollbar-width:thin]">
+        <div className="xl:col-span-4 space-y-3.5 xl:sticky xl:top-20">
           {/* Resumen Económico Cliente */}
           <Card className="border-primary/30 shadow-md overflow-hidden">
             <div className="px-4 py-3 bg-primary text-white flex items-center justify-between">
@@ -4848,126 +4842,6 @@ function CotizacionStudioEditor({
               </div>
             </CardContent>
           </Card>
-
-          {/* Bitácora Interactiva de Versiones Archivadas (en Columna Sticky) */}
-          {isEdit && cotizacion?.versiones && cotizacion.versiones.length > 0 && (
-            <div ref={versionesCardRef} className="scroll-mt-4">
-              <Card
-                className={`border-slate-200 shadow-sm transition-all duration-300 ${
-                  highlightVersionesCard ? 'ring-2 ring-amber-400 border-amber-300 shadow-md' : ''
-                }`}
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-bold uppercase text-slate-700 flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5">
-                      <History className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                      Versiones Archivadas ({cotizacion.versiones.length})
-                    </span>
-                    <span className="text-[10px] font-medium normal-case text-slate-400">
-                      Clic para abrir PDF
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="max-h-[300px] overflow-y-auto pr-0.5 space-y-2 [scrollbar-width:thin]">
-                    {(showAllVersions
-                      ? cotizacion.versiones
-                      : cotizacion.versiones.slice(0, 5)
-                    ).map((v) => {
-                      const fechaFmt = v.fecha_version ? formatDate(v.fecha_version) : '';
-                      const motivoTexto =
-                        v.motivo_cambio || v.resumen_cambios || 'Snapshot histórico archivado';
-                      const abrirPdfVersion = () => {
-                        setPdfPreviewOpen(false);
-                        setHistoricalPdfTarget({
-                          id_version: v.id_version,
-                          numero_version: v.numero_version,
-                          fecha: fechaFmt || undefined,
-                          motivo: motivoTexto,
-                        });
-                      };
-
-                      return (
-                        <div
-                          key={v.id_version}
-                          role="button"
-                          tabIndex={0}
-                          onClick={abrirPdfVersion}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              abrirPdfVersion();
-                            }
-                          }}
-                          title={`Abrir vista previa del PDF histórico v${v.numero_version}`}
-                          className="group p-2.5 rounded-lg bg-slate-50/80 border border-slate-200/80 hover:border-amber-300 hover:bg-amber-50/40 hover:shadow-xs transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30"
-                        >
-                          {/* Bitácora responsive: fecha+versión izquierda, motivo centro, monto resaltado derecha */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span
-                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold shrink-0 border ${
-                                  v.numero_version >= 2
-                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
-                                    : 'bg-blue-50 text-blue-700 border-blue-200'
-                                }`}
-                              >
-                                {v.numero_version >= 2 && <History className="h-2.5 w-2.5" />}v
-                                {v.numero_version}
-                              </span>
-                              {fechaFmt && (
-                                <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">
-                                  {fechaFmt}
-                                </span>
-                              )}
-                            </div>
-                            <span className="font-mono font-bold text-xs text-slate-900 bg-white border border-slate-200/90 group-hover:border-amber-200 px-2 py-0.5 rounded-md tabular-nums shrink-0 self-start sm:self-auto">
-                              {formatCurrency(v.total_version || 0)}
-                            </span>
-                          </div>
-
-                          <p className="mt-1.5 text-xs text-slate-700 leading-snug break-words">
-                            {motivoTexto}
-                          </p>
-
-                          <div className="mt-2 pt-1.5 border-t border-slate-200/70 flex items-center justify-between gap-2">
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary group-hover:underline">
-                              <FileText className="h-3 w-3 shrink-0" />
-                              Ver PDF v{v.numero_version}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSnapshotInspectVersionId(v.id_version);
-                              }}
-                              className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-amber-900 hover:bg-amber-100/80 px-2 py-0.5 rounded transition-colors cursor-pointer"
-                              title={`Inspeccionar detalle en modo Solo Lectura de v${v.numero_version}`}
-                            >
-                              <Eye className="h-3 w-3 shrink-0" />
-                              Solo lectura
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {cotizacion.versiones.length > 5 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllVersions((prev) => !prev)}
-                      className="w-full py-1.5 text-[11px] font-semibold text-slate-600 hover:text-primary hover:bg-slate-50 rounded-md border border-dashed border-slate-200 transition-colors cursor-pointer"
-                    >
-                      {showAllVersions
-                        ? 'Mostrar solo las 5 más recientes'
-                        : `Ver historial completo (${cotizacion.versiones.length} versiones)`}
-                    </button>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
         </div>
       </div>
 
@@ -5655,6 +5529,37 @@ function CotizacionStudioEditor({
           setFirmaModalTipo(null);
         }}
       />
+
+      {isEdit && cotizacion && (
+        <CotizacionVersionHistoryDrawer
+          open={historyDrawerOpen}
+          onOpenChange={setHistoryDrawerOpen}
+          numeroCotizacion={cotizacion.numero_cotizacion}
+          versionActual={cotizacion.version || 1}
+          estadoActualLabel={ESTADO_LABELS_COTIZACION[estadoCodigo] || estadoCodigo}
+          estadoActualClassName={ESTADO_BADGE[estadoCodigo]}
+          totalActual={resumenFinanciero.totalCotizacion}
+          asesorActualNombre={asesorActivoNombre}
+          versiones={cotizacion.versiones || []}
+          onOpenCurrentPdf={() => {
+            setHistoricalPdfTarget(null);
+            setPdfPreviewOpen(true);
+          }}
+          onOpenVersionPdf={(ver) => {
+            setPdfPreviewOpen(false);
+            setHistoricalPdfTarget({
+              id_version: ver.id_version,
+              numero_version: ver.numero_version,
+              fecha: ver.fecha_version ? formatDate(ver.fecha_version) : undefined,
+              motivo: ver.motivo_cambio || ver.resumen_cambios,
+              estadoLabel: ver.estado_nombre || undefined,
+            });
+          }}
+          onInspectVersionReadOnly={(ver) => {
+            setSnapshotInspectVersionId(ver.id_version);
+          }}
+        />
+      )}
 
       <CotizacionPdfPreviewModal
         open={pdfPreviewOpen || Boolean(historicalPdfTarget)}

@@ -126,6 +126,16 @@ export interface CotizacionVersionItem {
   resumen_cambios?: string | null;
   subtotal_version?: number | string | null;
   total_version?: number | string | null;
+  creada_por?: number | null;
+  asesor_nombre?: string | null;
+  creada_por_nombre?: string | null;
+  estado_codigo?: string | null;
+  estado_nombre?: string | null;
+  descuento_porcentaje?: number | null;
+  moneda?: string | null;
+  items_servicios_count?: number;
+  items_componentes_count?: number;
+  items_otros_count?: number;
 }
 
 export interface CotizacionVersionSnapshotEquipo {
@@ -717,17 +727,26 @@ export interface PropuestaCorrectivoItem {
   urgencia_propuesta?: string;
   descripcion_problema?: string;
   solucion_propuesta?: string;
-  prioridad?: number;
+  prioridad?: string | number;
   fecha_propuesta?: string;
   fecha_vencimiento?: string | null;
   subtotal_servicios?: number | string;
   subtotal_componentes?: number | string;
   total_propuesta?: number | string;
   estado?: string;
+  estado_codigo?: string;
   orden_servicio?: {
     id_orden_servicio: number;
     numero_orden: string;
   } | null;
+  cliente?: string | null;
+  equipo?: string | null;
+  cotizaciones_derivadas?: Array<{
+    id_cotizacion: number;
+    numero_cotizacion: string;
+    estado_codigo?: string;
+    estado_nombre?: string;
+  }>;
   clientes?: {
     persona?: {
       razon_social?: string | null;
@@ -1292,11 +1311,16 @@ export async function getPropuestasPendientes(params?: {
   urgencia?: string;
   skip?: number;
   take?: number;
-}): Promise<{ propuestas: PropuestaCorrectivoItem[]; total: number }> {
-  const res = await apiClient.get<{ propuestas: PropuestaCorrectivoItem[]; total: number }>(
-    '/propuestas-correctivo/pendientes',
-    { params },
-  );
+}): Promise<{
+  propuestas: PropuestaCorrectivoItem[];
+  total?: number;
+  pagination?: { total: number; skip: number; take: number; has_more: boolean };
+}> {
+  const res = await apiClient.get<{
+    propuestas: PropuestaCorrectivoItem[];
+    total?: number;
+    pagination?: { total: number; skip: number; take: number; has_more: boolean };
+  }>('/propuestas-correctivo/pendientes', { params });
   return res.data;
 }
 

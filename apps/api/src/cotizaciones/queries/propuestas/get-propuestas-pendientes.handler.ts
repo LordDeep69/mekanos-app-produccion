@@ -96,7 +96,22 @@ export class GetPropuestasPendientesHandler implements IQueryHandler<GetPropuest
         },
         estados_cotizacion: {
           select: {
+            codigo_estado: true,
             nombre_estado: true,
+          },
+        },
+        cotizaciones_derivadas: {
+          orderBy: { id_cotizacion: 'desc' },
+          take: 5,
+          select: {
+            id_cotizacion: true,
+            numero_cotizacion: true,
+            estados_cotizacion: {
+              select: {
+                codigo_estado: true,
+                nombre_estado: true,
+              },
+            },
           },
         },
       },
@@ -108,13 +123,21 @@ export class GetPropuestasPendientesHandler implements IQueryHandler<GetPropuest
     });
 
     return {
+      total,
       propuestas: propuestas.map((p) => {
         const ordenOrigen =
           p.ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio;
+        const meta = (p.metadata ?? {}) as Record<string, unknown>;
         return {
           id_propuesta: p.id_propuesta,
           numero_propuesta: p.numero_propuesta,
           categoria: p.categoria,
+          tipo_propuesta:
+            typeof meta.tipo_propuesta_original === 'string'
+              ? meta.tipo_propuesta_original
+              : p.categoria,
+          urgencia_propuesta:
+            typeof meta.urgencia_propuesta === 'string' ? meta.urgencia_propuesta : undefined,
           descripcion_problema: p.descripcion_problema,
           solucion_propuesta: p.solucion_propuesta,
           prioridad: p.prioridad,
@@ -124,6 +147,7 @@ export class GetPropuestasPendientesHandler implements IQueryHandler<GetPropuest
           subtotal_componentes: p.subtotal_componentes,
           total_propuesta: p.total_propuesta,
           estado: p.estados_cotizacion.nombre_estado,
+          estado_codigo: p.estados_cotizacion.codigo_estado,
           orden_servicio: {
             id_orden_servicio: ordenOrigen.id_orden_servicio,
             numero_orden: ordenOrigen.numero_orden,
@@ -131,8 +155,14 @@ export class GetPropuestasPendientesHandler implements IQueryHandler<GetPropuest
           cliente:
             p.clientes.persona.razon_social ||
             `${p.clientes.persona.primer_nombre} ${p.clientes.persona.primer_apellido}`,
-          equipo: p.equipos?.nombre_equipo,
+          equipo: p.equipos?.nombre_equipo ?? null,
           convertida_a_orden: !!p.id_orden_servicio_generada,
+          cotizaciones_derivadas: (p.cotizaciones_derivadas || []).map((c) => ({
+            id_cotizacion: c.id_cotizacion,
+            numero_cotizacion: c.numero_cotizacion,
+            estado_codigo: c.estados_cotizacion?.codigo_estado,
+            estado_nombre: c.estados_cotizacion?.nombre_estado,
+          })),
         };
       }),
       pagination: {

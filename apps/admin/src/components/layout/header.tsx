@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useIsHydrated } from '@/hooks/use-is-hydrated';
 import { cn } from '@/lib/utils';
 import { useBranding } from '@/providers/branding-provider';
 import { LogOut, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react';
@@ -22,6 +23,7 @@ import { signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
 
 export function Header() {
+  const isHydrated = useIsHydrated();
   const { data: session } = useSession();
   const { isCollapsed, toggle } = useSidebar();
   const { branding } = useBranding();
@@ -79,50 +81,81 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2 px-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback
-                    className="text-white text-sm font-semibold"
-                    style={{ backgroundColor: branding.color_primario }}
-                  >
-                    {getInitials(session?.user?.nombre)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="hidden flex-col items-start md:flex">
-                  <span className="text-sm font-medium text-slate-800">
-                    {sanitizeUserName(session?.user?.nombre)}
-                  </span>
-                  <span className="text-xs text-slate-500">{session?.user?.rol || 'Sin rol'}</span>
-                </div>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/configuracion/empresa" className="flex items-center">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Configuración de Empresa
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/configuracion" className="flex items-center">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Centro de Configuración
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleLogout}
-                className="text-red-600 focus:bg-red-50 focus:text-red-600 cursor-pointer"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Cerrar Sesión
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {isHydrated ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  id="dashboard-user-menu-trigger"
+                  variant="ghost"
+                  className="flex items-center gap-2 px-2"
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback
+                      className="text-white text-sm font-semibold"
+                      style={{ backgroundColor: branding.color_primario }}
+                    >
+                      {getInitials(session?.user?.nombre)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="hidden flex-col items-start md:flex">
+                    <span className="text-sm font-medium text-slate-800">
+                      {sanitizeUserName(session?.user?.nombre)}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {session?.user?.rol || 'Sin rol'}
+                    </span>
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/configuracion/empresa" className="flex items-center">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Configuración de Empresa
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/configuracion" className="flex items-center">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Centro de Configuración
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="text-red-600 focus:bg-red-50 focus:text-red-600 cursor-pointer"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Cerrar Sesión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button
+              id="dashboard-user-menu-trigger"
+              variant="ghost"
+              className="flex items-center gap-2 px-2"
+              type="button"
+              aria-label="Menú de usuario"
+            >
+              <Avatar className="h-8 w-8">
+                <AvatarFallback
+                  className="text-white text-sm font-semibold"
+                  style={{ backgroundColor: branding.color_primario }}
+                >
+                  {getInitials(session?.user?.nombre)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="hidden flex-col items-start md:flex">
+                <span className="text-sm font-medium text-slate-800">
+                  {sanitizeUserName(session?.user?.nombre)}
+                </span>
+                <span className="text-xs text-slate-500">{session?.user?.rol || 'Sin rol'}</span>
+              </div>
+            </Button>
+          )}
         </div>
       </div>
     </header>
