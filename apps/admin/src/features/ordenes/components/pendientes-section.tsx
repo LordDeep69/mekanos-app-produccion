@@ -34,7 +34,8 @@ import {
 } from '@/types/ordenes';
 import { ProgramarVisitaModal } from './hilo-continuidad-caso';
 import { useQueryClient } from '@tanstack/react-query';
-import { useActividadesOrden, useMedicionesCompletasOrden } from '../hooks/use-ordenes';
+import { useActividadesCompletasOrden, useMedicionesCompletasOrden } from '../hooks/use-ordenes';
+import type { OrdenRealtimeMirrorState } from '../hooks/use-orden-realtime-mirror';
 
 interface CatalogoPendienteItem {
   id_pendiente_catalogo: number;
@@ -45,10 +46,11 @@ interface CatalogoPendienteItem {
 
 interface PendientesSectionProps {
   orden: Orden;
+  mirror?: OrdenRealtimeMirrorState;
   onUpdate?: () => void;
 }
 
-export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
+export function PendientesSection({ orden, mirror, onUpdate }: PendientesSectionProps) {
   // Unificar todos los pendientes del Caso (hilo_caso.pendientes_caso + ordenes_pendientes + pendientes_asignados_resolver)
   const initialUnificados = useMemo(() => {
     const map = new Map<number, OrdenPendiente>();
@@ -70,7 +72,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
   ]);
 
   const queryClient = useQueryClient();
-  const { data: actividadesData } = useActividadesOrden(orden.id_orden_servicio);
+  const { data: actividadesData } = useActividadesCompletasOrden(orden.id_orden_servicio);
   const { data: medicionesData } = useMedicionesCompletasOrden(orden.id_orden_servicio);
   const [pendientes, setPendientes] = useState<OrdenPendiente[]>(initialUnificados);
   useEffect(() => {
@@ -456,6 +458,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
     const items: HallazgoSugeridoItem[] = [];
 
     for (const act of acts) {
+      if (act.id_actividad_ejecutada == null) continue;
       const est = String(act?.estado || '')
         .trim()
         .toUpperCase();
@@ -901,22 +904,32 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                 p.id_orden_servicio ||
                 orden.id_orden_servicio;
 
+              const isLivePendiente = Boolean(mirror?.isPulsing(`pend:${p.id_orden_pendiente}`));
+
               return (
                 <div
                   key={p.id_orden_pendiente}
                   className={cn(
-                    'rounded-xl border p-4 transition-all relative flex flex-col justify-between gap-3',
+                    'rounded-xl border p-4 transition-all duration-500 relative flex flex-col justify-between gap-3',
                     isResuelto
                       ? 'bg-emerald-50/20 border-emerald-200'
                       : isCancelado
                         ? 'bg-gray-50 border-gray-200 opacity-60'
                         : 'bg-white border-amber-200/80 shadow-sm hover:border-amber-300',
+                    isLivePendiente &&
+                      'ring-2 ring-emerald-400 border-emerald-400 bg-emerald-50/40 shadow-md shadow-emerald-100',
                   )}
                 >
                   <div>
                     {/* Header de la card */}
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex flex-wrap items-center gap-1.5">
+                        {isLivePendiente && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            En vivo
+                          </span>
+                        )}
                         <span
                           className={cn(
                             'px-2 py-0.5 rounded-md text-[11px] font-bold border',

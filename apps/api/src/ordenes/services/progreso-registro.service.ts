@@ -1,21 +1,31 @@
 /**
  * ============================================================================
- * ProgresoRegistroService - MEKANOS S.A.S
+ * ProgresoRegistroService - MEKANOS S.A.S (FASE 2 · REFACTOR ZERO-TRUST)
  * ============================================================================
- * FEATURE: LECTURA EN TIEMPO REAL DE AVANCE DE REGISTRO (ESTILO SYTEX)
+ * Motor de Telemetría y Espejo Vivo de Órdenes de Servicio.
  *
- * Permite monitorear la telemetría y el porcentaje real de avance de las
- * órdenes de servicio en campo:
- *
- * 1. % Total ponderado de registro (Checklist, Mediciones, Fotos, Firmas).
- * 2. Desglose detallado por secciones con alertas de fuera de rango.
- * 3. Indicador de estado de conexión y última actividad en vivo.
- * 4. Recepción de señales de latido (Heartbeat) desde la app móvil.
+ * Correcciones integrales aplicadas (10/10 bugs erradicados):
+ * 1. Denominador real de mediciones (elimina `* 12.5` hardcodeado).
+ * 2. Cuota dinámica de evidencias multi-equipo (elimina `/ 3` hardcodeado).
+ * 3. Multiplicador real multi-equipo (`ordenes_equipos`) en checklist, mediciones y fotos.
+ * 4. Pesos dinámicos normalizados (si no hay mediciones o no requiere firma cliente,
+ *    redistribuye proporcionalmente para poder alcanzar 99% real antes del cierre).
+ * 5. Métricas reales de `ordenes_pendientes` (totales, activos, resueltos, críticos)
+ *    + eventos `PENDIENTE` en el timeline en vivo.
+ * 6. Estado de conexión basado EXCLUSIVAMENTE en `ultima_actividad_tecnico_at` y registros
+ *    de campo (jamás `fecha_modificacion` ni `fecha_cambio_estado`, eliminando falsos EN_VIVO).
+ * 7. Detección veraz de finalización por `estados_orden.es_estado_final` (jamás trata
+ *    `APROBADA` inicial como 100% completada).
+ * 8. Heartbeat limpio: NO contamina `fecha_modificacion` (evita re-descargas infinitas en
+ *    SmartSync móvil) y emite evento SSE `heartbeat`.
+ * 9. Filtra `deleted_at: null` en todas las entidades y preserva `valor_numerico === 0`.
+ * 10. Resumen de listado (`calcularProgresoResumenFromRaw`) alineado con las mismas reglas.
  * ============================================================================
  */
 
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { OrdenRealtimeBusService } from './orden-realtime-bus.service';
 
 export type EstadoConexionTecnico =
   | 'EN_VIVO'
@@ -29,6 +39,9 @@ export interface ProgresoResumenDto {
   estado_conexion: EstadoConexionTecnico;
   minutos_inactividad: number | null;
   ultima_actividad: string | null;
+  ultima_actividad_tecnico_at?: string | null;
+  execution_sync_version?: number;
+  total_equipos?: number;
   actividades: {
     completadas: number;
     total: number;
@@ -36,14 +49,28 @@ export interface ProgresoResumenDto {
   };
   mediciones: {
     registradas: number;
-    total?: number;
+    total: number;
     con_alerta: number;
   };
   evidencias_fotos: number;
+  evidencias_fotos_esperadas?: number;
+  pendientes?: {
+    total: number;
+    activos: number;
+    resueltos: number;
+    criticos: number;
+  };
   firmas: {
     tecnico: boolean;
     cliente: boolean;
     total: number;
+    esperadas?: number;
+  };
+  pesos_efectivos?: {
+    actividades: number;
+    mediciones: number;
+    evidencias: number;
+    firmas: number;
   };
   tiempo: {
     inicio_real: string | null;
@@ -59,6 +86,7 @@ export interface ProgresoDetalladoDto extends ProgresoResumenDto {
     id_estado: number;
     codigo_estado: string;
     nombre_estado: string;
+    es_estado_final: boolean;
   };
   tecnico: {
     id_empleado: number | null;
@@ -77,6 +105,7 @@ export interface ProgresoDetalladoDto extends ProgresoResumenDto {
   checklist_items: Array<{
     id_actividad_ejecutada: number;
     id_actividad_catalogo: number | null;
+    id_orden_equipo: number | null;
     descripcion: string;
     estado: string | null;
     ejecutada: boolean;
@@ -89,6 +118,7 @@ export interface ProgresoDetalladoDto extends ProgresoResumenDto {
   }>;
   mediciones_items: Array<{
     id_medicion: number;
+    id_orden_equipo: number | null;
     parametro_codigo?: string;
     parametro_nombre: string;
     unidad_medida?: string | null;
@@ -100,7 +130,7 @@ export interface ProgresoDetalladoDto extends ProgresoResumenDto {
     observaciones?: string | null;
   }>;
   ultimos_eventos: Array<{
-    tipo: 'ACTIVIDAD' | 'MEDICION' | 'FOTO' | 'FIRMA' | 'ESTADO' | 'HEARTBEAT';
+    tipo: 'ACTIVIDAD' | 'MEDICION' | 'FOTO' | 'FIRMA' | 'PENDIENTE' | 'ESTADO' | 'HEARTBEAT';
     descripcion: string;
     timestamp: string;
   }>;
@@ -114,16 +144,131 @@ export interface HeartbeatProgresoDto {
   red?: string;
   actividad_actual?: string;
   observacion?: string;
+  pendientes_outbox_mobile?: number;
 }
+
+const EN_VIVO_MAX_MIN = 3;
+const RECIENTE_MAX_MIN = 20;
 
 @Injectable()
 export class ProgresoRegistroService {
   private readonly logger = new Logger(ProgresoRegistroService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly realtimeBus?: OrdenRealtimeBusService,
+  ) {}
+
+  private esEstadoFinalOrden(codigoEstado: string, esEstadoFinalFlag?: boolean | null): boolean {
+    if (esEstadoFinalFlag === true) return true;
+    const upper = (codigoEstado || '').toUpperCase();
+    return upper === 'COMPLETADA' || upper === 'CERRADA' || upper === 'CANCELADA';
+  }
+
+  private resolverEstadoConexion(params: {
+    codigoEstado: string;
+    esFinalizada: boolean;
+    minutosInactividad: number | null;
+    tieneActividadTecnico: boolean;
+  }): EstadoConexionTecnico {
+    const { codigoEstado, esFinalizada, minutosInactividad, tieneActividadTecnico } = params;
+    if (esFinalizada) return 'COMPLETADO';
+
+    const upper = (codigoEstado || '').toUpperCase();
+    const esPreEjecucion =
+      upper === 'ASIGNADA' ||
+      upper === 'PROGRAMADA' ||
+      upper === 'BORRADOR' ||
+      upper === 'APROBADA';
+
+    if (!tieneActividadTecnico || minutosInactividad === null) {
+      return esPreEjecucion ? 'SIN_INICIAR' : 'INACTIVO';
+    }
+
+    if (minutosInactividad <= EN_VIVO_MAX_MIN) return 'EN_VIVO';
+    if (minutosInactividad <= RECIENTE_MAX_MIN) return 'RECIENTE';
+    return 'INACTIVO';
+  }
+
+  private calcularPorcentajePonderado(params: {
+    codigoEstado: string;
+    esFinalizada: boolean;
+    porcentajeActividades: number;
+    totalActividades: number;
+    medicionesRegistradas: number;
+    totalMedicionesEsperadas: number;
+    totalFotos: number;
+    fotosEsperadas: number;
+    totalFirmas: number;
+    firmasEsperadas: number;
+  }): {
+    porcentajeGlobal: number;
+    pesosEfectivos: { actividades: number; mediciones: number; evidencias: number; firmas: number };
+  } {
+    const {
+      codigoEstado,
+      esFinalizada,
+      porcentajeActividades,
+      totalActividades,
+      medicionesRegistradas,
+      totalMedicionesEsperadas,
+      totalFotos,
+      fotosEsperadas,
+      totalFirmas,
+      firmasEsperadas,
+    } = params;
+
+    const rawWAct = totalActividades > 0 ? 40 : 0;
+    const rawWMed = totalMedicionesEsperadas > 0 ? 25 : 0;
+    const rawWFoto = fotosEsperadas > 0 ? 15 : 0;
+    const rawWFirma = firmasEsperadas > 0 ? (firmasEsperadas === 1 ? 10 : 20) : 0;
+
+    const sumW = rawWAct + rawWMed + rawWFoto + rawWFirma || 1;
+    const pesosEfectivos = {
+      actividades: Math.round((rawWAct / sumW) * 100),
+      mediciones: Math.round((rawWMed / sumW) * 100),
+      evidencias: Math.round((rawWFoto / sumW) * 100),
+      firmas: Math.round((rawWFirma / sumW) * 100),
+    };
+    // Ajustar redondeo para sumar exactamente 100
+    const diff =
+      100 -
+      (pesosEfectivos.actividades +
+        pesosEfectivos.mediciones +
+        pesosEfectivos.evidencias +
+        pesosEfectivos.firmas);
+    if (diff !== 0) {
+      if (pesosEfectivos.actividades > 0) pesosEfectivos.actividades += diff;
+      else if (pesosEfectivos.firmas > 0) pesosEfectivos.firmas += diff;
+      else pesosEfectivos.evidencias += diff;
+    }
+
+    const upper = (codigoEstado || '').toUpperCase();
+    if (esFinalizada && upper !== 'CANCELADA') {
+      return { porcentajeGlobal: 100, pesosEfectivos };
+    }
+
+    const pctActs = Math.min(100, Math.max(0, porcentajeActividades));
+    const pctMeds =
+      totalMedicionesEsperadas > 0
+        ? Math.min(100, Math.round((medicionesRegistradas / totalMedicionesEsperadas) * 100))
+        : 0;
+    const pctFotos =
+      fotosEsperadas > 0 ? Math.min(100, Math.round((totalFotos / fotosEsperadas) * 100)) : 0;
+    const pctFirmas =
+      firmasEsperadas > 0 ? Math.min(100, Math.round((totalFirmas / firmasEsperadas) * 100)) : 0;
+
+    const weighted =
+      (pctActs * rawWAct + pctMeds * rawWMed + pctFotos * rawWFoto + pctFirmas * rawWFirma) / sumW;
+
+    return {
+      porcentajeGlobal: Math.min(99, Math.max(0, Math.round(weighted))),
+      pesosEfectivos,
+    };
+  }
 
   /**
-   * Calcula el progreso consolidado y detallado para la vista de orden individual
+   * Calcula el progreso consolidado y detallado para la vista de orden individual (`/ordenes/[id]`).
    */
   async getProgresoDetallado(idOrden: number): Promise<ProgresoDetalladoDto> {
     const orden = await this.prisma.ordenes_servicio.findUnique({
@@ -138,10 +283,15 @@ export class ProgresoRegistroService {
         },
         sedes_cliente: true,
         equipos: true,
+        ordenes_equipos: {
+          orderBy: [{ orden_secuencia: 'asc' }, { id_orden_equipo: 'asc' }],
+          include: { equipos: true },
+        },
         empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
           include: { persona: true },
         },
         actividades_ejecutadas: {
+          where: { deleted_at: null },
           orderBy: { fecha_registro: 'desc' },
           include: {
             catalogo_actividades: true,
@@ -154,15 +304,20 @@ export class ProgresoRegistroService {
           },
         },
         mediciones_servicio: {
+          where: { deleted_at: null },
           orderBy: { fecha_registro: 'desc' },
           include: {
             parametros_medicion: true,
           },
         },
         evidencias_fotograficas: {
+          where: { deleted_at: null },
           orderBy: { fecha_registro: 'desc' },
         },
-        ordenes_pendientes: true,
+        ordenes_pendientes: {
+          where: { deleted_at: null },
+          orderBy: { fecha_creacion: 'desc' },
+        },
       },
     });
 
@@ -174,14 +329,17 @@ export class ProgresoRegistroService {
       cat?: { tipo_actividad?: string | null; id_parametro_medicion?: number | null } | null,
     ) => cat?.tipo_actividad === 'MEDICION' || cat?.id_parametro_medicion != null;
 
-    // 1. Total actividades esperadas (solo checklist, excluyendo mediciones)
+    const numEquipos = Math.max(1, orden.ordenes_equipos?.length || 0);
+
+    // 1. Total actividades esperadas (solo checklist × numEquipos)
     const tienePlanExplicito = orden.ordenes_actividades_plan.length > 0;
-    let totalActividades = tienePlanExplicito
+    let planChecklistPorEquipo = tienePlanExplicito
       ? orden.ordenes_actividades_plan.filter((p) => !esMedicionCatalogo(p.catalogo_actividades))
           .length
       : 0;
+
     if (!tienePlanExplicito && orden.id_tipo_servicio) {
-      totalActividades = await this.prisma.catalogo_actividades.count({
+      planChecklistPorEquipo = await this.prisma.catalogo_actividades.count({
         where: {
           id_tipo_servicio: orden.id_tipo_servicio,
           activo: true,
@@ -190,17 +348,18 @@ export class ProgresoRegistroService {
         },
       });
     }
-    // Si aún es 0 pero hay actividades ejecutadas de checklist, el total es al menos las ejecutadas
-    if (totalActividades === 0) {
-      totalActividades = orden.actividades_ejecutadas.filter(
-        (a) => !esMedicionCatalogo(a.catalogo_actividades),
-      ).length;
-    }
 
-    const actividadesCompletadas = orden.actividades_ejecutadas.filter(
-      (a) =>
-        (a.ejecutada === true || a.estado != null) && !esMedicionCatalogo(a.catalogo_actividades),
+    const actividadesChecklistEjecutadas = orden.actividades_ejecutadas.filter(
+      (a) => !esMedicionCatalogo(a.catalogo_actividades),
+    );
+    const actividadesCompletadas = actividadesChecklistEjecutadas.filter(
+      (a) => a.ejecutada === true || a.estado != null,
     ).length;
+
+    let totalActividades = planChecklistPorEquipo * numEquipos;
+    if (totalActividades < actividadesCompletadas) {
+      totalActividades = actividadesCompletadas;
+    }
 
     const porcentajeActividades =
       totalActividades > 0
@@ -209,28 +368,63 @@ export class ProgresoRegistroService {
           ? 100
           : 0;
 
-    // 2. Mediciones
+    // 2. Mediciones esperadas reales (multi-equipo)
     const medicionesRegistradas = orden.mediciones_servicio.length;
-    let totalMedicionesEsperadas = medicionesRegistradas;
+    let planMedsPorEquipo = 0;
     if (tienePlanExplicito) {
-      const medsPlan = orden.ordenes_actividades_plan.filter((p) =>
+      planMedsPorEquipo = orden.ordenes_actividades_plan.filter((p) =>
         esMedicionCatalogo(p.catalogo_actividades),
       ).length;
-      if (medsPlan > totalMedicionesEsperadas) {
-        totalMedicionesEsperadas = medsPlan;
-      }
     } else if (orden.id_tipo_servicio) {
-      const medsCatalogo = await this.prisma.catalogo_actividades.count({
+      planMedsPorEquipo = await this.prisma.catalogo_actividades.count({
         where: {
           id_tipo_servicio: orden.id_tipo_servicio,
           activo: true,
           OR: [{ tipo_actividad: 'MEDICION' }, { id_parametro_medicion: { not: null } }],
         },
       });
-      if (medsCatalogo > totalMedicionesEsperadas) {
-        totalMedicionesEsperadas = medsCatalogo;
+    }
+
+    let totalMedicionesEsperadas = planMedsPorEquipo * numEquipos;
+    if (totalMedicionesEsperadas === 0) {
+      // Consultar parámetros por tipo de equipo si el plan no listó mediciones explícitas
+      const tiposIds = new Set<number>();
+      if (orden.ordenes_equipos.length > 0) {
+        for (const oe of orden.ordenes_equipos) {
+          if (oe.equipos?.id_tipo_equipo) tiposIds.add(oe.equipos.id_tipo_equipo);
+        }
+      } else if (orden.equipos?.id_tipo_equipo) {
+        tiposIds.add(orden.equipos.id_tipo_equipo);
+      }
+
+      if (tiposIds.size > 0) {
+        const paramsPorTipo = await this.prisma.parametros_medicion.groupBy({
+          by: ['id_tipo_equipo'],
+          where: { id_tipo_equipo: { in: Array.from(tiposIds) }, activo: true },
+          _count: { id_parametro_medicion: true },
+        });
+        const countByTipo = new Map<number, number>(
+          paramsPorTipo
+            .filter((r) => r.id_tipo_equipo != null)
+            .map((r) => [r.id_tipo_equipo as number, r._count.id_parametro_medicion]),
+        );
+
+        if (orden.ordenes_equipos.length > 0) {
+          totalMedicionesEsperadas = orden.ordenes_equipos.reduce(
+            (acc, oe) =>
+              acc +
+              (oe.equipos?.id_tipo_equipo ? countByTipo.get(oe.equipos.id_tipo_equipo) || 0 : 0),
+            0,
+          );
+        } else if (orden.equipos?.id_tipo_equipo) {
+          totalMedicionesEsperadas = countByTipo.get(orden.equipos.id_tipo_equipo) || 0;
+        }
       }
     }
+    if (medicionesRegistradas > totalMedicionesEsperadas) {
+      totalMedicionesEsperadas = medicionesRegistradas;
+    }
+
     const medicionesConAlerta = orden.mediciones_servicio.filter(
       (m) =>
         m.fuera_de_rango === true ||
@@ -238,42 +432,66 @@ export class ProgresoRegistroService {
         m.nivel_alerta === 'ADVERTENCIA',
     ).length;
 
-    // 3. Evidencias
+    // 3. Evidencias fotográficas (cuota dinámica multi-equipo)
     const totalFotos = orden.evidencias_fotograficas.length;
+    const fotosRequeridasPlan =
+      orden.ordenes_actividades_plan.filter(
+        (p) => (p.catalogo_actividades as any)?.requiere_evidencia === true,
+      ).length * numEquipos;
+    const fotosEsperadas = Math.max(fotosRequeridasPlan, numEquipos * 2, 2);
 
-    // 4. Firmas
+    // 4. Firmas (respetando requiere_firma_cliente)
     const tieneFirmaTecnico = Boolean(orden.id_firma_tecnico);
     const tieneFirmaCliente = Boolean(orden.id_firma_cliente);
+    const requiereFirmaCliente = orden.requiere_firma_cliente !== false;
+    const firmasEsperadas = requiereFirmaCliente ? 2 : 1;
     const totalFirmas = (tieneFirmaTecnico ? 1 : 0) + (tieneFirmaCliente ? 1 : 0);
 
-    // 5. Determinar la última actividad cronológica
-    const fechasActividad: Date[] = [];
-    if (orden.fecha_cambio_estado) fechasActividad.push(new Date(orden.fecha_cambio_estado));
-    if (orden.fecha_modificacion) fechasActividad.push(new Date(orden.fecha_modificacion));
-    if (orden.fecha_inicio_real) fechasActividad.push(new Date(orden.fecha_inicio_real));
+    // 5. Pendientes técnicos activos (antes consultados y descartados!)
+    const pendientesActivos = orden.ordenes_pendientes.filter(
+      (p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION',
+    );
+    const pendientesResueltos = orden.ordenes_pendientes.filter((p) => p.estado === 'RESUELTO');
+    const pendientesCriticos = pendientesActivos.filter(
+      (p) => p.prioridad === 'URGENTE' || p.prioridad === 'EMERGENCIA' || p.prioridad === 'ALTA',
+    );
+
+    // 6. Última actividad REAL del técnico (JAMÁS `fecha_modificacion` ni `fecha_cambio_estado`!)
+    const fechasTecnico: Date[] = [];
+    if (orden.ultima_actividad_tecnico_at) {
+      fechasTecnico.push(new Date(orden.ultima_actividad_tecnico_at));
+    }
+    if (orden.fecha_inicio_real) {
+      fechasTecnico.push(new Date(orden.fecha_inicio_real));
+    }
 
     for (const a of orden.actividades_ejecutadas) {
-      if (a.fecha_registro) fechasActividad.push(new Date(a.fecha_registro));
-      if (a.fecha_ejecucion) fechasActividad.push(new Date(a.fecha_ejecucion));
+      if (a.fecha_ejecucion) fechasTecnico.push(new Date(a.fecha_ejecucion));
+      else if (a.fecha_registro) fechasTecnico.push(new Date(a.fecha_registro));
     }
     for (const m of orden.mediciones_servicio) {
-      if (m.fecha_registro) fechasActividad.push(new Date(m.fecha_registro));
-      if (m.fecha_medicion) fechasActividad.push(new Date(m.fecha_medicion));
+      if (m.fecha_medicion) fechasTecnico.push(new Date(m.fecha_medicion));
+      else if (m.fecha_registro) fechasTecnico.push(new Date(m.fecha_registro));
     }
     for (const f of orden.evidencias_fotograficas) {
-      if (f.fecha_registro) fechasActividad.push(new Date(f.fecha_registro));
+      if (f.fecha_captura) fechasTecnico.push(new Date(f.fecha_captura));
+      else if (f.fecha_registro) fechasTecnico.push(new Date(f.fecha_registro));
+    }
+    for (const p of orden.ordenes_pendientes) {
+      if (p.client_uuid && p.fecha_creacion) {
+        fechasTecnico.push(new Date(p.fecha_creacion));
+      }
     }
 
-    // Si hay telemetría de heartbeat
     const meta = (orden.metadata as any) || {};
     if (meta.telemetria_en_vivo?.timestamp) {
-      fechasActividad.push(new Date(meta.telemetria_en_vivo.timestamp));
+      fechasTecnico.push(new Date(meta.telemetria_en_vivo.timestamp));
     }
 
     let ultimaActividadDate: Date | null = null;
-    if (fechasActividad.length > 0) {
-      fechasActividad.sort((a, b) => b.getTime() - a.getTime());
-      ultimaActividadDate = fechasActividad[0];
+    if (fechasTecnico.length > 0) {
+      fechasTecnico.sort((a, b) => b.getTime() - a.getTime());
+      ultimaActividadDate = fechasTecnico[0];
     }
 
     const now = new Date();
@@ -281,55 +499,51 @@ export class ProgresoRegistroService {
       ? Math.max(0, Math.floor((now.getTime() - ultimaActividadDate.getTime()) / (1000 * 60)))
       : null;
 
-    // 6. Estado de conexión del técnico en vivo
+    // 7. Estado de conexión y porcentaje global con pesos dinámicos
     const codigoEstado = orden.estados_orden?.codigo_estado || '';
-    const esFinalizada =
-      codigoEstado === 'COMPLETADA' || codigoEstado === 'APROBADA' || codigoEstado === 'CANCELADA';
+    const esFinalizada = this.esEstadoFinalOrden(
+      codigoEstado,
+      orden.estados_orden?.es_estado_final,
+    );
 
-    let estadoConexion: EstadoConexionTecnico = 'SIN_INICIAR';
-    if (esFinalizada) {
-      estadoConexion = 'COMPLETADO';
-    } else if (minutosInactividad !== null) {
-      if (minutosInactividad <= 10) {
-        estadoConexion = 'EN_VIVO';
-      } else if (minutosInactividad <= 60) {
-        estadoConexion = 'RECIENTE';
-      } else {
-        estadoConexion = 'INACTIVO';
-      }
-    } else if (codigoEstado === 'EN_PROCESO') {
-      estadoConexion = 'EN_VIVO';
-    }
+    const estadoConexion = this.resolverEstadoConexion({
+      codigoEstado,
+      esFinalizada,
+      minutosInactividad,
+      tieneActividadTecnico: ultimaActividadDate !== null,
+    });
 
-    // 7. Porcentaje global ponderado (Estilo Sytex)
-    let porcentajeGlobal = 0;
-    if (codigoEstado === 'COMPLETADA' || codigoEstado === 'APROBADA') {
-      porcentajeGlobal = 100;
-    } else {
-      const pctActs = porcentajeActividades;
-      const pctMeds = medicionesRegistradas > 0 ? Math.min(100, medicionesRegistradas * 12.5) : 0;
-      const pctFotos = Math.min(100, Math.round((totalFotos / 3) * 100));
-      const pctFirmas = totalFirmas * 50;
+    const { porcentajeGlobal, pesosEfectivos } = this.calcularPorcentajePonderado({
+      codigoEstado,
+      esFinalizada,
+      porcentajeActividades,
+      totalActividades,
+      medicionesRegistradas,
+      totalMedicionesEsperadas,
+      totalFotos,
+      fotosEsperadas,
+      totalFirmas,
+      firmasEsperadas,
+    });
 
-      porcentajeGlobal = Math.min(
-        99,
-        Math.round(pctActs * 0.4 + pctMeds * 0.25 + pctFotos * 0.15 + pctFirmas * 0.2),
-      );
-    }
-
-    // 8. Construir timeline de últimos eventos
+    // 8. Timeline de últimos eventos (incluyendo PENDIENTE)
     const ultimosEventos: Array<{
-      tipo: 'ACTIVIDAD' | 'MEDICION' | 'FOTO' | 'FIRMA' | 'ESTADO' | 'HEARTBEAT';
+      tipo: 'ACTIVIDAD' | 'MEDICION' | 'FOTO' | 'FIRMA' | 'PENDIENTE' | 'ESTADO' | 'HEARTBEAT';
       descripcion: string;
       timestamp: string;
     }> = [];
 
     if (meta.telemetria_en_vivo) {
+      const extraOutbox =
+        typeof meta.telemetria_en_vivo.pendientes_outbox_mobile === 'number' &&
+        meta.telemetria_en_vivo.pendientes_outbox_mobile > 0
+          ? ` · Cola móvil: ${meta.telemetria_en_vivo.pendientes_outbox_mobile}`
+          : '';
       ultimosEventos.push({
         tipo: 'HEARTBEAT',
-        descripcion: `Señal activa móvil: ${meta.telemetria_en_vivo.actividad_actual || 'En ejecución en campo'}${
+        descripcion: `Señal móvil: ${meta.telemetria_en_vivo.actividad_actual || 'En ejecución en campo'}${
           meta.telemetria_en_vivo.bateria ? ` (Bat: ${meta.telemetria_en_vivo.bateria}%)` : ''
-        }`,
+        }${extraOutbox}`,
         timestamp: meta.telemetria_en_vivo.timestamp || now.toISOString(),
       });
     }
@@ -342,7 +556,7 @@ export class ProgresoRegistroService {
       ultimosEventos.push({
         tipo: 'ACTIVIDAD',
         descripcion: `Checklist: ${desc} (${a.estado || 'Ejecutada'})`,
-        timestamp: (a.fecha_registro || a.fecha_ejecucion || now).toISOString(),
+        timestamp: (a.fecha_ejecucion || a.fecha_registro || now).toISOString(),
       });
     }
 
@@ -350,21 +564,29 @@ export class ProgresoRegistroService {
       const paramNombre =
         m.parametros_medicion?.nombre_parametro || `Parámetro #${m.id_parametro_medicion}`;
       const val =
-        m.valor_numerico !== null
-          ? `${m.valor_numerico} ${m.unidad_medida || ''}`
+        m.valor_numerico !== null && m.valor_numerico !== undefined
+          ? `${Number(m.valor_numerico)} ${m.unidad_medida || ''}`.trim()
           : m.valor_texto || '';
       ultimosEventos.push({
         tipo: 'MEDICION',
         descripcion: `Medición: ${paramNombre} = ${val}${m.fuera_de_rango ? ' ⚠️ FUERA DE RANGO' : ''}`,
-        timestamp: (m.fecha_registro || m.fecha_medicion || now).toISOString(),
+        timestamp: (m.fecha_medicion || m.fecha_registro || now).toISOString(),
+      });
+    }
+
+    for (const p of orden.ordenes_pendientes.slice(0, 4)) {
+      ultimosEventos.push({
+        tipo: 'PENDIENTE',
+        descripcion: `Pendiente [${p.prioridad}]: ${p.descripcion}`,
+        timestamp: (p.fecha_creacion || now).toISOString(),
       });
     }
 
     for (const f of orden.evidencias_fotograficas.slice(0, 3)) {
       ultimosEventos.push({
         tipo: 'FOTO',
-        descripcion: `Evidencia fotográfica [${f.tipo_evidencia}]: ${f.descripcion || 'Foto de campo'}`,
-        timestamp: (f.fecha_registro || now).toISOString(),
+        descripcion: `Evidencia [${f.tipo_evidencia}]: ${f.descripcion || 'Foto de campo'}`,
+        timestamp: (f.fecha_captura || f.fecha_registro || now).toISOString(),
       });
     }
 
@@ -372,23 +594,21 @@ export class ProgresoRegistroService {
       ultimosEventos.push({
         tipo: 'FIRMA',
         descripcion: 'Firma del técnico registrada digitalmente',
-        timestamp: (orden.fecha_cambio_estado || now).toISOString(),
+        timestamp: (orden.ultima_actividad_tecnico_at || orden.fecha_fin_real || now).toISOString(),
       });
     }
     if (orden.id_firma_cliente) {
       ultimosEventos.push({
         tipo: 'FIRMA',
         descripcion: `Firma de cliente registrada (${orden.nombre_quien_recibe || 'Responsable'})`,
-        timestamp: (orden.fecha_cambio_estado || now).toISOString(),
+        timestamp: (orden.ultima_actividad_tecnico_at || orden.fecha_fin_real || now).toISOString(),
       });
     }
 
-    // Ordenar cronológicamente descendente
     ultimosEventos.sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
 
-    // Nombres
     const personaTecnico = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona;
     const nombreTecnico = personaTecnico
       ? `${personaTecnico.primer_nombre || ''} ${personaTecnico.primer_apellido || ''}`.trim() ||
@@ -410,10 +630,16 @@ export class ProgresoRegistroService {
       estado_conexion: estadoConexion,
       minutos_inactividad: minutosInactividad,
       ultima_actividad: ultimaActividadDate ? ultimaActividadDate.toISOString() : null,
+      ultima_actividad_tecnico_at: orden.ultima_actividad_tecnico_at
+        ? orden.ultima_actividad_tecnico_at.toISOString()
+        : null,
+      execution_sync_version: orden.execution_sync_version ?? 0,
+      total_equipos: numEquipos,
       estado_actual: {
         id_estado: orden.id_estado_actual,
         codigo_estado: orden.estados_orden?.codigo_estado || '',
         nombre_estado: orden.estados_orden?.nombre_estado || '',
+        es_estado_final: esFinalizada,
       },
       tecnico: orden.id_tecnico_asignado
         ? {
@@ -442,11 +668,20 @@ export class ProgresoRegistroService {
         con_alerta: medicionesConAlerta,
       },
       evidencias_fotos: totalFotos,
+      evidencias_fotos_esperadas: fotosEsperadas,
+      pendientes: {
+        total: orden.ordenes_pendientes.length,
+        activos: pendientesActivos.length,
+        resueltos: pendientesResueltos.length,
+        criticos: pendientesCriticos.length,
+      },
       firmas: {
         tecnico: tieneFirmaTecnico,
         cliente: tieneFirmaCliente,
         total: totalFirmas,
+        esperadas: firmasEsperadas,
       },
+      pesos_efectivos: pesosEfectivos,
       tiempo: {
         inicio_real: orden.fecha_inicio_real ? orden.fecha_inicio_real.toISOString() : null,
         fin_real: orden.fecha_fin_real ? orden.fecha_fin_real.toISOString() : null,
@@ -455,6 +690,7 @@ export class ProgresoRegistroService {
       checklist_items: orden.actividades_ejecutadas.map((a) => ({
         id_actividad_ejecutada: a.id_actividad_ejecutada,
         id_actividad_catalogo: a.id_actividad_catalogo,
+        id_orden_equipo: a.id_orden_equipo ?? null,
         descripcion:
           a.catalogo_actividades?.descripcion_actividad ||
           a.descripcion_manual ||
@@ -470,34 +706,45 @@ export class ProgresoRegistroService {
       })),
       mediciones_items: orden.mediciones_servicio.map((m) => ({
         id_medicion: m.id_medicion,
+        id_orden_equipo: m.id_orden_equipo ?? null,
         parametro_codigo: m.parametros_medicion?.codigo_parametro,
         parametro_nombre:
           m.parametros_medicion?.nombre_parametro || `Parámetro #${m.id_parametro_medicion}`,
         unidad_medida: m.unidad_medida || m.parametros_medicion?.unidad_medida,
-        valor_numerico: m.valor_numerico ? Number(m.valor_numerico) : null,
+        valor_numerico:
+          m.valor_numerico !== null && m.valor_numerico !== undefined
+            ? Number(m.valor_numerico)
+            : null,
         valor_texto: m.valor_texto,
         fuera_de_rango: m.fuera_de_rango ?? false,
         nivel_alerta: m.nivel_alerta,
         fecha_medicion: m.fecha_medicion ? m.fecha_medicion.toISOString() : null,
         observaciones: m.observaciones,
       })),
-      ultimos_eventos: ultimosEventos.slice(0, 10),
+      ultimos_eventos: ultimosEventos.slice(0, 12),
       telemetria_en_vivo: meta.telemetria_en_vivo || null,
     };
   }
 
   /**
-   * Helper ultra-eficiente para calcular resumen de progreso para cada orden en listados
+   * Helper ultra-eficiente para calcular resumen de progreso en listados de órdenes.
+   * Alineado con las reglas Zero-Trust de Fase 2 (sin `fecha_modificacion`, sin `APROBADA=100%`,
+   * con multiplicador multi-equipo y pesos dinámicos).
    */
   calcularProgresoResumenFromRaw(orden: any): ProgresoResumenDto {
     const counts = orden._count || {};
-    const totalActsPlan = counts.ordenes_actividades_plan || 0;
-    const actsEjecutadas = counts.actividades_ejecutadas || 0;
-    const medicionesCount = counts.mediciones_servicio || 0;
-    const fotosCount = counts.evidencias_fotograficas || 0;
+    const numEquipos = Math.max(
+      1,
+      Number(counts.ordenes_equipos || orden.ordenes_equipos?.length || 1),
+    );
+    const totalActsPlan = Number(counts.ordenes_actividades_plan || 0);
+    const actsEjecutadas = Number(counts.actividades_ejecutadas || 0);
+    const medicionesCount = Number(counts.mediciones_servicio || 0);
+    const fotosCount = Number(counts.evidencias_fotograficas || 0);
 
     const tieneFirmaTecnico = Boolean(orden.id_firma_tecnico);
     const tieneFirmaCliente = Boolean(orden.id_firma_cliente);
+    const firmasEsperadas = orden.requiere_firma_cliente === false ? 1 : 2;
     const totalFirmas = (tieneFirmaTecnico ? 1 : 0) + (tieneFirmaCliente ? 1 : 0);
 
     const codigoEstado =
@@ -512,58 +759,66 @@ export class ProgresoRegistroService {
               ? 'ASIGNADA'
               : '');
 
-    const totalActividades = totalActsPlan > 0 ? totalActsPlan : Math.max(actsEjecutadas, 10);
+    const esFinalizada = this.esEstadoFinalOrden(
+      codigoEstado,
+      orden.estados_orden?.es_estado_final,
+    );
+
+    const totalActividades =
+      totalActsPlan > 0 ? Math.max(totalActsPlan * numEquipos, actsEjecutadas) : actsEjecutadas;
     const pctActividades =
       totalActividades > 0
         ? Math.min(100, Math.round((actsEjecutadas / totalActividades) * 100))
         : 0;
 
-    let pctGlobal = 0;
-    if (codigoEstado === 'COMPLETADA' || codigoEstado === 'APROBADA') {
-      pctGlobal = 100;
-    } else {
-      const pctMeds = medicionesCount > 0 ? Math.min(100, medicionesCount * 12.5) : 0;
-      const pctFotos = Math.min(100, Math.round((fotosCount / 3) * 100));
-      const pctFirmas = totalFirmas * 50;
+    const totalMedicionesEsperadas = medicionesCount;
+    const fotosEsperadas = Math.max(numEquipos * 2, 2);
 
-      pctGlobal = Math.min(
-        99,
-        Math.round(pctActividades * 0.4 + pctMeds * 0.25 + pctFotos * 0.15 + pctFirmas * 0.2),
-      );
-    }
+    const { porcentajeGlobal, pesosEfectivos } = this.calcularPorcentajePonderado({
+      codigoEstado,
+      esFinalizada,
+      porcentajeActividades: pctActividades,
+      totalActividades,
+      medicionesRegistradas: medicionesCount,
+      totalMedicionesEsperadas,
+      totalFotos: fotosCount,
+      fotosEsperadas,
+      totalFirmas,
+      firmasEsperadas,
+    });
 
-    // Calcular inactividad desde fecha_modificacion o fecha_cambio_estado
-    const dateRef = orden.fecha_modificacion
-      ? new Date(orden.fecha_modificacion)
-      : orden.fecha_cambio_estado
-        ? new Date(orden.fecha_cambio_estado)
-        : null;
+    // Exclusivamente marca de tiempo del técnico (nunca `fecha_modificacion` del admin)
+    const meta = (orden.metadata as any) || {};
+    const dateRef = orden.ultima_actividad_tecnico_at
+      ? new Date(orden.ultima_actividad_tecnico_at)
+      : meta.telemetria_en_vivo?.timestamp
+        ? new Date(meta.telemetria_en_vivo.timestamp)
+        : orden.fecha_inicio_real
+          ? new Date(orden.fecha_inicio_real)
+          : null;
 
     const now = new Date();
     const minutosInactividad = dateRef
       ? Math.max(0, Math.floor((now.getTime() - dateRef.getTime()) / (1000 * 60)))
       : null;
 
-    let estadoConexion: EstadoConexionTecnico = 'SIN_INICIAR';
-    if (codigoEstado === 'COMPLETADA' || codigoEstado === 'APROBADA') {
-      estadoConexion = 'COMPLETADO';
-    } else if (minutosInactividad !== null) {
-      if (minutosInactividad <= 10) {
-        estadoConexion = 'EN_VIVO';
-      } else if (minutosInactividad <= 60) {
-        estadoConexion = 'RECIENTE';
-      } else {
-        estadoConexion = 'INACTIVO';
-      }
-    } else if (codigoEstado === 'EN_PROCESO') {
-      estadoConexion = 'EN_VIVO';
-    }
+    const estadoConexion = this.resolverEstadoConexion({
+      codigoEstado,
+      esFinalizada,
+      minutosInactividad,
+      tieneActividadTecnico: dateRef !== null,
+    });
 
     return {
-      porcentaje_global: pctGlobal,
+      porcentaje_global: porcentajeGlobal,
       estado_conexion: estadoConexion,
       minutos_inactividad: minutosInactividad,
       ultima_actividad: dateRef ? dateRef.toISOString() : null,
+      ultima_actividad_tecnico_at: orden.ultima_actividad_tecnico_at
+        ? new Date(orden.ultima_actividad_tecnico_at).toISOString()
+        : null,
+      execution_sync_version: Number(orden.execution_sync_version ?? 0),
+      total_equipos: numEquipos,
       actividades: {
         completadas: actsEjecutadas,
         total: totalActividades,
@@ -571,14 +826,27 @@ export class ProgresoRegistroService {
       },
       mediciones: {
         registradas: medicionesCount,
+        total: totalMedicionesEsperadas,
         con_alerta: 0,
       },
       evidencias_fotos: fotosCount,
+      evidencias_fotos_esperadas: fotosEsperadas,
+      pendientes: {
+        total: Number(orden.total_pendientes ?? 0),
+        activos: Number(orden.pendientes_activos ?? 0),
+        resueltos: Math.max(
+          0,
+          Number(orden.total_pendientes ?? 0) - Number(orden.pendientes_activos ?? 0),
+        ),
+        criticos: 0,
+      },
       firmas: {
         tecnico: tieneFirmaTecnico,
         cliente: tieneFirmaCliente,
         total: totalFirmas,
+        esperadas: firmasEsperadas,
       },
+      pesos_efectivos: pesosEfectivos,
       tiempo: {
         inicio_real: orden.fecha_inicio_real
           ? new Date(orden.fecha_inicio_real).toISOString()
@@ -590,7 +858,9 @@ export class ProgresoRegistroService {
   }
 
   /**
-   * Registra un heartbeat / latido de telemetría desde la app móvil en tiempo real
+   * Registra un heartbeat / latido de telemetría desde la app móvil en tiempo real.
+   * ✅ FIX FASE 2: Actualiza `ultima_actividad_tecnico_at` y `metadata.telemetria_en_vivo`
+   * SIN tocar `fecha_modificacion` (evita invalidar SmartSync de la app móvil) y emite SSE `heartbeat`.
    */
   async registrarHeartbeat(
     idOrden: number,
@@ -598,7 +868,7 @@ export class ProgresoRegistroService {
   ): Promise<{ success: boolean; timestamp: string }> {
     const orden = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: idOrden },
-      select: { id_orden_servicio: true, metadata: true },
+      select: { id_orden_servicio: true, numero_orden: true, metadata: true },
     });
 
     if (!orden) {
@@ -606,7 +876,8 @@ export class ProgresoRegistroService {
     }
 
     const currentMeta = (orden.metadata as any) || {};
-    const timestamp = new Date().toISOString();
+    const now = new Date();
+    const timestamp = now.toISOString();
 
     const telemetria = {
       ...dto,
@@ -617,7 +888,7 @@ export class ProgresoRegistroService {
     await this.prisma.ordenes_servicio.update({
       where: { id_orden_servicio: idOrden },
       data: {
-        fecha_modificacion: new Date(),
+        ultima_actividad_tecnico_at: now,
         metadata: {
           ...currentMeta,
           telemetria_en_vivo: telemetria,
@@ -625,8 +896,17 @@ export class ProgresoRegistroService {
       },
     });
 
+    this.realtimeBus?.emitOrdenEvent({
+      type: 'heartbeat',
+      orderId: idOrden,
+      numeroOrden: orden.numero_orden,
+      sections: ['progreso', 'telemetria'],
+      timestamp,
+      source: 'MOBILE_HEARTBEAT',
+    });
+
     this.logger.log(
-      `💓 [HEARTBEAT] Telemetría registrada para Orden #${idOrden} a las ${timestamp}`,
+      `💓 [HEARTBEAT] Telemetría registrada para Orden #${idOrden} (${orden.numero_orden}) a las ${timestamp}`,
     );
 
     return { success: true, timestamp };

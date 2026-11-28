@@ -18,11 +18,14 @@ import {
   asignarTecnico,
   cambiarEstadoOrden,
   cancelarOrden,
+  createActividadOrden,
   createMedicionOrden,
   createOrden,
   deleteOrden,
+  getActividadesCompletasOrden,
   getActividadesOrden,
   getEvidenciasOrden,
+  type CreateActividadOrdenDto,
   getFirmasOrden,
   getHistorialEmails,
   getMedicionesCompletasOrden,
@@ -156,6 +159,41 @@ export function useActividadesOrden(idOrden: number) {
 }
 
 /**
+ * ✅ FASE 2 (ESPEJO VIVO): Hook para obtener actividades completas (plan esperado + ejecutadas)
+ */
+export function useActividadesCompletasOrden(idOrden: number) {
+  return useQuery({
+    queryKey: [...ACTIVIDADES_ORDEN_KEY, idOrden, 'completas'],
+    queryFn: () => getActividadesCompletasOrden(idOrden),
+    enabled: !!idOrden,
+    ...CacheStrategy.DYNAMIC,
+  });
+}
+
+/**
+ * ✅ FASE 2: Hook para registrar una actividad SIN_REGISTRO directamente desde Portal Admin
+ */
+export function useCreateActividadOrden() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ idOrden, data }: { idOrden: number; data: CreateActividadOrdenDto }) =>
+      createActividadOrden(idOrden, data),
+    onSuccess: (_, { idOrden }) => {
+      queryClient.invalidateQueries({ queryKey: [...ACTIVIDADES_ORDEN_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: [...PROGRESO_REGISTRO_KEY, idOrden] });
+      toast.success('Actividad registrada');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { message?: string | string[] } } };
+      const message = err.response?.data?.message;
+      const errorText = Array.isArray(message) ? message.join(', ') : message;
+      toast.error(errorText || 'Error al registrar actividad');
+    },
+  });
+}
+
+/**
  * Hook para obtener mediciones de una orden
  */
 export function useMedicionesOrden(idOrden: number) {
@@ -196,10 +234,12 @@ export function useCreateMedicion() {
         valor_numerico?: number;
         valor_texto?: string;
         observaciones?: string;
+        id_orden_equipo?: number;
       };
     }) => createMedicionOrden(idOrden, data),
     onSuccess: (_, { idOrden }) => {
       queryClient.invalidateQueries({ queryKey: [...MEDICIONES_ORDEN_KEY, idOrden] });
+      queryClient.invalidateQueries({ queryKey: [...PROGRESO_REGISTRO_KEY, idOrden] });
       toast.success('Medición registrada exitosamente');
     },
   });
@@ -485,6 +525,7 @@ export function useUpdateActividad() {
       updateActividad(idActividad, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ACTIVIDADES_ORDEN_KEY });
+      queryClient.invalidateQueries({ queryKey: PROGRESO_REGISTRO_KEY });
       toast.success('Actividad actualizada');
     },
     onError: (error: unknown) => {
@@ -508,6 +549,7 @@ export function useUpdateMedicion() {
       updateMedicion(idMedicion, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: MEDICIONES_ORDEN_KEY });
+      queryClient.invalidateQueries({ queryKey: PROGRESO_REGISTRO_KEY });
       toast.success('Medición actualizada');
     },
     onError: (error: unknown) => {

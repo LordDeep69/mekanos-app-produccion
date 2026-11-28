@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { ActividadesEjecutadasModule } from './actividades-ejecutadas/actividades.module';
@@ -110,6 +111,10 @@ import { CuentasEmailModule } from './cuentas-email/cuentas-email.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: join(__dirname, '../.env'), // ✅ CORREGIDO: dist/ → ../.env
+    }),
+    EventEmitterModule.forRoot({
+      wildcard: false,
+      maxListeners: 200,
     }),
     PrismaModule, // ← PrismaService con conexión real a Supabase
     HealthModule, // ← Health check endpoint para validar conexión DB
@@ -237,4 +242,4 @@ import { CuentasEmailModule } from './cuentas-email/cuentas-email.module';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

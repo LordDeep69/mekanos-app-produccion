@@ -10,23 +10,26 @@ export * from './api/ordenes.service';
 // Hooks
 export * from './hooks/use-catalogos';
 export * from './hooks/use-ordenes';
+export * from './hooks/use-orden-realtime-mirror';
 
 // Types (re-export from types folder)
 export type {
-    CambiarEstadoDto,
-    CreateOrdenDto,
-    Orden,
-    OrdenesQueryParams,
-    OrdenesResponse,
-    EstadoConexionTecnico,
-    ProgresoRegistroResumen,
-    ProgresoRegistroDetallado,
+  CambiarEstadoDto,
+  CreateOrdenDto,
+  Orden,
+  OrdenesQueryParams,
+  OrdenesResponse,
+  EstadoConexionTecnico,
+  ProgresoRegistroResumen,
+  ProgresoRegistroDetallado,
 } from '@/types/ordenes';
 
 export {
-    getClienteNombre,
-    getEstadoColor,
-    getPrioridadColor, getTecnicoLabel, getTecnicoNombre
+  getClienteNombre,
+  getEstadoColor,
+  getPrioridadColor,
+  getTecnicoLabel,
+  getTecnicoNombre,
 } from '@/types/ordenes';
 
 // Components

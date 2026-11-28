@@ -1,15 +1,16 @@
 /**
  * MEKANOS S.A.S - Portal Admin
- * Componente: ProgresoRegistroTelemetria (Estilo Sytex)
+ * Componente: ProgresoRegistroTelemetria (FASE 2 · Espejo Vivo SSE)
  *
- * Panel completo de telemetría y lectura en tiempo real de avance
+ * Panel completo de telemetría y Espejo Vivo en tiempo real de avance
  * de registro de orden de servicio en campo.
  */
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useProgresoRegistro } from '../hooks/use-ordenes';
+import type { OrdenRealtimeMirrorState } from '../hooks/use-orden-realtime-mirror';
 import { cn } from '@/lib/utils';
 import {
   Activity,
@@ -18,11 +19,14 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ClipboardList,
   Clock,
   FileCheck2,
+  PauseCircle,
   PenTool,
   Radio,
   RefreshCw,
+  WifiOff,
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,21 +34,23 @@ import { toast } from 'sonner';
 interface ProgresoRegistroTelemetriaProps {
   idOrden: number;
   className?: string;
+  mirror?: OrdenRealtimeMirrorState;
   onVerChecklistTab?: () => void;
   onVerMedicionesTab?: () => void;
   onVerDocumentosTab?: () => void;
+  onVerPendientesTab?: () => void;
 }
 
 export function ProgresoRegistroTelemetria({
   idOrden,
   className,
+  mirror,
   onVerChecklistTab,
   onVerMedicionesTab,
   onVerDocumentosTab,
+  onVerPendientesTab,
 }: ProgresoRegistroTelemetriaProps) {
-  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
-  const [ordenFinalizada, setOrdenFinalizada] = useState<boolean>(false);
-  const refreshIntervalMs = 15000; // 15 segundos
+  const [autoRefreshFallback, setAutoRefreshFallback] = useState<boolean>(true);
   const [isExpanded, setIsExpanded] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('mekanos_telemetria_desplegada');
@@ -63,23 +69,15 @@ export function ProgresoRegistroTelemetria({
     });
   };
 
+  // Si `mirror` (SSE + fallback polling integrado) está montado, no duplicar polling HTTP aquí
   const {
     data: progreso,
     isLoading,
     isFetching,
     refetch,
   } = useProgresoRegistro(idOrden, {
-    refetchInterval: autoRefresh && !ordenFinalizada ? refreshIntervalMs : false,
+    refetchInterval: !mirror && autoRefreshFallback ? 15000 : false,
   });
-
-  const esFinalizadaMemo =
-    progreso?.estado_actual?.codigo_estado === 'COMPLETADA' ||
-    progreso?.estado_actual?.codigo_estado === 'APROBADA' ||
-    progreso?.estado_conexion === 'COMPLETADO';
-
-  useEffect(() => {
-    setOrdenFinalizada(Boolean(esFinalizadaMemo));
-  }, [esFinalizadaMemo]);
 
   if (isLoading && !progreso) {
     return (
@@ -106,39 +104,45 @@ export function ProgresoRegistroTelemetria({
     actividades = {
       total: 0,
       completadas: 0,
-      obligatorias_total: 0,
-      obligatorias_completadas: 0,
       porcentaje: 0,
     },
-    mediciones = { registradas: 0, con_alerta: 0 },
+    mediciones = { registradas: 0, total: 0, con_alerta: 0 },
     evidencias_fotos = 0,
-    firmas = { tecnico: false, cliente: false, total: 0 },
+    evidencias_fotos_esperadas = 3,
+    pendientes = { total: 0, activos: 0, resueltos: 0, criticos: 0 },
+    firmas = { tecnico: false, cliente: false, total: 0, esperadas: 2 },
+    pesos_efectivos = { actividades: 40, mediciones: 25, evidencias: 15, firmas: 20 },
+    total_equipos = 1,
     tecnico,
     ultimos_eventos: ultimosEventos = [],
   } = progreso;
 
+  const codigoEstado = (progreso.estado_actual?.codigo_estado || '').toUpperCase();
   const esFinalizada =
-    progreso.estado_actual?.codigo_estado === 'COMPLETADA' ||
-    progreso.estado_actual?.codigo_estado === 'APROBADA' ||
+    progreso.estado_actual?.es_estado_final === true ||
+    codigoEstado === 'COMPLETADA' ||
+    codigoEstado === 'CERRADA' ||
+    codigoEstado === 'CANCELADA' ||
     estado_conexion === 'COMPLETADO';
 
-  // Formato de tiempo relativo
+  const firmasEsperadas = firmas.esperadas ?? 2;
+  const medsTotal = Math.max(mediciones.total ?? mediciones.registradas, mediciones.registradas);
+  const fotosEsperadas = Math.max(evidencias_fotos_esperadas ?? 2, 1);
+
   const formatRelativo = () => {
     if (esFinalizada) return 'Orden Finalizada';
-    if (minutos_inactividad === null || minutos_inactividad === undefined)
-      return 'Sin actividad registrada';
-    if (minutos_inactividad < 1) return 'Actividad hace segundos';
-    if (minutos_inactividad < 60) return `Actividad hace ${minutos_inactividad} minutos`;
+    if (minutos_inactividad === null || minutos_inactividad === undefined) {
+      return 'Sin sincronización móvil aún';
+    }
+    if (minutos_inactividad < 1) return 'Última sincr. hace segundos';
+    if (minutos_inactividad < 60) return `Última sincr. hace ${minutos_inactividad} min`;
     const horas = Math.floor(minutos_inactividad / 60);
-    return `Actividad hace ${horas} hora(s)`;
+    return `Última sincr. hace ${horas} h`;
   };
 
-  // Configuración visual según estado de conexión
   const getStatusStyle = () => {
     if (esFinalizada) {
       return {
-        bg: 'bg-emerald-500 text-white',
-        border: 'border-emerald-200',
         badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-300',
         text: 'FINALIZADA',
         dot: 'bg-emerald-500',
@@ -149,40 +153,32 @@ export function ProgresoRegistroTelemetria({
     switch (estado_conexion) {
       case 'EN_VIVO':
         return {
-          bg: 'bg-green-500 text-white',
-          border: 'border-green-300 shadow-green-100',
-          badgeBg: 'bg-green-50 text-green-700 border-green-300',
+          badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-300',
           text: 'TÉCNICO EN VIVO',
-          dot: 'bg-green-500',
-          label: 'Técnico trabajando en tiempo real',
+          dot: 'bg-emerald-500',
+          label: 'Técnico trabajando en vivo',
           ping: true,
         };
       case 'RECIENTE':
         return {
-          bg: 'bg-amber-500 text-white',
-          border: 'border-amber-200',
           badgeBg: 'bg-amber-50 text-amber-700 border-amber-300',
           text: 'ACTIVIDAD RECIENTE',
           dot: 'bg-amber-500',
-          label: 'Actividad en la última hora',
+          label: 'Actividad reciente en campo',
           ping: false,
         };
       case 'INACTIVO':
         return {
-          bg: 'bg-slate-400 text-white',
-          border: 'border-slate-200',
-          badgeBg: 'bg-slate-50 text-slate-600 border-slate-300',
+          badgeBg: 'bg-orange-50 text-orange-700 border-orange-300',
           text: 'SIN SEÑAL RECIENTE',
-          dot: 'bg-slate-400',
-          label: 'Sin actividad reciente',
+          dot: 'bg-orange-400',
+          label: 'En campo sin señal reciente',
           ping: false,
         };
       default:
         return {
-          bg: 'bg-slate-300 text-slate-700',
-          border: 'border-slate-200',
-          badgeBg: 'bg-slate-50 text-slate-500 border-slate-200',
-          text: 'SIN INICIAR',
+          badgeBg: 'bg-slate-50 text-slate-600 border-slate-200',
+          text: 'EN ESPERA',
           dot: 'bg-slate-300',
           label: 'Esperando inicio en campo',
           ping: false,
@@ -192,15 +188,104 @@ export function ProgresoRegistroTelemetria({
 
   const statusStyle = getStatusStyle();
 
+  const renderMirrorBadge = () => {
+    if (esFinalizada && (!mirror || mirror.connectionStatus === 'DISABLED')) {
+      return (
+        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40">
+          <span>✓</span>
+          <span>Sincronizada</span>
+        </span>
+      );
+    }
+
+    if (mirror) {
+      switch (mirror.connectionStatus) {
+        case 'CONNECTED':
+          return (
+            <span
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm"
+              title="Conectado al canal SSE en tiempo real (se pausa automáticamente si cambias de pestaña)"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+              </span>
+              <span>SSE En Vivo</span>
+            </span>
+          );
+        case 'PAUSED_HIDDEN':
+          return (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-white/10 text-slate-300 border-white/15">
+              <PauseCircle className="h-3.5 w-3.5" />
+              <span>Pausado</span>
+            </span>
+          );
+        case 'FALLBACK_POLLING':
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                mirror.reconnect();
+                toast.info('Reintentando conexión SSE en vivo...');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-amber-500/20 text-amber-200 border-amber-400/40 hover:bg-amber-500/30 transition-colors"
+              title="Polling automático activo cada 15s. Clic para reintentar SSE."
+            >
+              <WifiOff className="h-3.5 w-3.5" />
+              <span>Respaldo (15s)</span>
+            </button>
+          );
+        case 'CONNECTING':
+          return (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-indigo-500/20 text-indigo-200 border-indigo-400/40">
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              <span>Conectando...</span>
+            </span>
+          );
+        default:
+          return null;
+      }
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          const next = !autoRefreshFallback;
+          setAutoRefreshFallback(next);
+          toast.info(next ? 'Auto-refresco activado (15s)' : 'Auto-refresco pausado');
+        }}
+        className={cn(
+          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
+          autoRefreshFallback
+            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
+            : 'bg-white/10 text-slate-300 border-white/10 hover:bg-white/15',
+        )}
+      >
+        <span
+          className={cn(
+            'inline-flex rounded-full h-2 w-2',
+            autoRefreshFallback ? 'bg-emerald-400' : 'bg-slate-400',
+          )}
+        />
+        <span>{autoRefreshFallback ? 'En vivo (15s)' : 'Pausado'}</span>
+      </button>
+    );
+  };
+
   return (
     <div
       className={cn(
         'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all',
+        mirror?.isSectionPulsing('progreso') &&
+          'ring-2 ring-emerald-400/80 border-emerald-300 shadow-emerald-100',
         className,
       )}
     >
       {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* CABECERA DE TELEMETRÍA (Estilo Sytex Console) - Plegable / Desplegable */}
+      {/* CABECERA ESPEJO EN VIVO - Plegable / Desplegable                        */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <div
         onClick={handleToggleExpand}
@@ -213,23 +298,23 @@ export function ProgresoRegistroTelemetria({
               <Radio
                 className={cn(
                   'h-5 w-5',
-                  statusStyle.ping ? 'text-green-400 animate-pulse' : 'text-slate-300',
+                  statusStyle.ping ? 'text-emerald-400 animate-pulse' : 'text-slate-300',
                 )}
               />
               {statusStyle.ping && (
                 <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 border-2 border-slate-900" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-slate-900" />
                 </span>
               )}
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-bold text-base tracking-tight text-white flex items-center gap-2">
-                  Lectura en Tiempo Real
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
-                    Modo Sytex
+                  Espejo en Tiempo Real
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                    {total_equipos > 1 ? `Multi-Equipo (${total_equipos})` : 'Live Sync'}
                   </span>
                 </h3>
               </div>
@@ -251,7 +336,7 @@ export function ProgresoRegistroTelemetria({
             </div>
           </div>
 
-          {/* Resumen Compacto cuando está contraída (Visible en pantallas medianas/grandes) */}
+          {/* Resumen Compacto cuando está contraída */}
           {!isExpanded && (
             <div className="hidden md:flex items-center gap-3 px-3.5 py-1.5 rounded-xl bg-white/10 backdrop-blur border border-white/15">
               <div className="flex items-center gap-1.5">
@@ -278,67 +363,35 @@ export function ProgresoRegistroTelemetria({
               </span>
               <span className="text-slate-500 text-xs">•</span>
               <span className="text-xs text-slate-300">
-                <strong className="text-white">{mediciones.registradas}</strong>/
-                {Math.max(
-                  (mediciones as { registradas: number; total?: number }).total ??
-                    mediciones.registradas,
-                  mediciones.registradas,
-                )}{' '}
-                meds
+                <strong className="text-white">{mediciones.registradas}</strong>/{medsTotal} meds
               </span>
               <span className="text-slate-500 text-xs">•</span>
               <span className="text-xs text-slate-300">
                 <strong className="text-white">{evidencias_fotos}</strong> fotos
               </span>
+              {pendientes.total > 0 && (
+                <>
+                  <span className="text-slate-500 text-xs">•</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onVerPendientesTab?.();
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400/20 text-amber-200 border border-amber-400/40 hover:bg-amber-400/30 transition-colors"
+                  >
+                    <ClipboardList className="h-3 w-3" />
+                    <span>{pendientes.activos} pend</span>
+                  </button>
+                </>
+              )}
             </div>
           )}
 
-          {/* Controles: Auto-refresco / Sincronizada + Refrescar Ahora + Botón Desplegar/Contraer */}
+          {/* Controles */}
           <div className="flex items-center gap-2 self-end lg:self-auto">
-            {esFinalizada ? (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40">
-                <span>✓</span>
-                <span>Sincronizada</span>
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const nuevoEstado = !autoRefresh;
-                  setAutoRefresh(nuevoEstado);
-                  toast.info(
-                    nuevoEstado ? 'Auto-refresco activado (cada 15s)' : 'Auto-refresco pausado',
-                  );
-                }}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
-                  autoRefresh
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
-                    : 'bg-white/10 text-slate-300 border-white/10 hover:bg-white/15',
-                )}
-                title={
-                  autoRefresh
-                    ? 'Pausar actualización en vivo'
-                    : 'Activar actualización automática en vivo'
-                }
-              >
-                <span className="relative flex h-2 w-2">
-                  {autoRefresh && (
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  )}
-                  <span
-                    className={cn(
-                      'relative inline-flex rounded-full h-2 w-2',
-                      autoRefresh ? 'bg-emerald-400' : 'bg-slate-400',
-                    )}
-                  />
-                </span>
-                <span>{autoRefresh ? 'En vivo (15s)' : 'Pausado'}</span>
-              </button>
-            )}
+            {renderMirrorBadge()}
 
-            {/* Botón Refrescar */}
             <button
               type="button"
               onClick={(e) => {
@@ -353,7 +406,6 @@ export function ProgresoRegistroTelemetria({
               <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin text-indigo-300')} />
             </button>
 
-            {/* Botón Desplegar / Contraer */}
             <button
               type="button"
               onClick={(e) => {
@@ -376,7 +428,7 @@ export function ProgresoRegistroTelemetria({
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* GRID DE MÉTRICAS KPI (Tarjetas Interactivas) - PLEGABLE */}
+      {/* GRID DE MÉTRICAS KPI - PLEGABLE                                         */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {isExpanded && (
         <div className="p-5 space-y-5 border-t border-slate-200/80 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -390,12 +442,11 @@ export function ProgresoRegistroTelemetria({
                 <div className="text-2xl font-black text-slate-900 tracking-tight">
                   {porcentaje_global}%
                   <span className="text-xs font-semibold text-slate-500 ml-2">
-                    {esFinalizada ? 'Completado al 100%' : 'de registro completado'}
+                    {esFinalizada ? 'Completado al 100%' : 'de registro en campo'}
                   </span>
                 </div>
               </div>
 
-              {/* Badge de conexión */}
               <div
                 className={cn(
                   'px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5',
@@ -407,7 +458,6 @@ export function ProgresoRegistroTelemetria({
               </div>
             </div>
 
-            {/* Barra visual principal */}
             <div className="w-full bg-slate-200/80 rounded-full h-3 overflow-hidden shadow-inner mb-2">
               <div
                 className={cn(
@@ -424,25 +474,27 @@ export function ProgresoRegistroTelemetria({
               />
             </div>
 
-            {/* Explicación de ponderación */}
-            <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1">
-              <span>Checklist: 40%</span>
+            {/* Pesos dinámicos normalizados del backend */}
+            <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1 gap-2">
+              <span>Checklist: {pesos_efectivos.actividades}%</span>
               <span>•</span>
-              <span>Mediciones: 25%</span>
+              <span>Mediciones: {pesos_efectivos.mediciones}%</span>
               <span>•</span>
-              <span>Evidencias: 15%</span>
+              <span>Evidencias: {pesos_efectivos.evidencias}%</span>
               <span>•</span>
-              <span>Firmas y Cierre: 20%</span>
+              <span>Firmas y Cierre: {pesos_efectivos.firmas}%</span>
             </div>
           </div>
 
-          {/* Grid de 4 Bloques de Trabajo */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Grid de 5 Bloques de Trabajo (incluye Pendientes en Vivo) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {/* 1. CHECKLIST */}
             <div
               onClick={onVerChecklistTab}
               className={cn(
                 'p-3.5 rounded-xl border bg-white shadow-sm transition-all',
+                mirror?.isSectionPulsing('actividades') &&
+                  'ring-2 ring-emerald-400 border-emerald-300',
                 onVerChecklistTab && 'cursor-pointer hover:border-indigo-300 hover:shadow-md',
               )}
             >
@@ -461,7 +513,7 @@ export function ProgresoRegistroTelemetria({
                 />
               </div>
               <div className="text-[11px] text-slate-500 font-medium">
-                {actividades.porcentaje}% ejecutadas
+                {actividades.porcentaje}% registradas
               </div>
             </div>
 
@@ -473,6 +525,8 @@ export function ProgresoRegistroTelemetria({
                 (mediciones.con_alerta ?? 0) > 0
                   ? 'border-amber-300 bg-amber-50/20'
                   : 'border-slate-200',
+                mirror?.isSectionPulsing('mediciones') &&
+                  'ring-2 ring-emerald-400 border-emerald-300',
                 onVerMedicionesTab && 'cursor-pointer hover:border-emerald-300 hover:shadow-md',
               )}
             >
@@ -482,7 +536,7 @@ export function ProgresoRegistroTelemetria({
               </div>
               <div className="text-xl font-extrabold text-slate-900">
                 {mediciones.registradas}
-                <span className="text-xs font-normal text-slate-500"> registradas</span>
+                <span className="text-xs font-normal text-slate-500"> / {medsTotal}</span>
               </div>
               <div className="flex items-center gap-1.5 my-2">
                 {(mediciones.con_alerta ?? 0) > 0 ? (
@@ -493,12 +547,14 @@ export function ProgresoRegistroTelemetria({
                 ) : (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-800">
                     <CheckCircle2 className="h-3 w-3" />
-                    Parámetros normales
+                    {mediciones.registradas > 0 ? 'Parámetros normales' : 'Sin capturas aún'}
                   </span>
                 )}
               </div>
               <div className="text-[11px] text-slate-500 font-medium">
-                {mediciones.registradas > 0 ? 'Capturas registradas' : 'Pendiente toma'}
+                {medsTotal > 0
+                  ? `${Math.round((mediciones.registradas / medsTotal) * 100)}% capturadas`
+                  : 'Sin parámetros'}
               </div>
             </div>
 
@@ -507,6 +563,8 @@ export function ProgresoRegistroTelemetria({
               onClick={onVerDocumentosTab}
               className={cn(
                 'p-3.5 rounded-xl border border-slate-200 bg-white shadow-sm transition-all',
+                mirror?.isSectionPulsing('evidencias') &&
+                  'ring-2 ring-emerald-400 border-emerald-300',
                 onVerDocumentosTab && 'cursor-pointer hover:border-blue-300 hover:shadow-md',
               )}
             >
@@ -516,30 +574,70 @@ export function ProgresoRegistroTelemetria({
               </div>
               <div className="text-xl font-extrabold text-slate-900">
                 {evidencias_fotos}
-                <span className="text-xs font-normal text-slate-500"> fotos</span>
+                <span className="text-xs font-normal text-slate-500"> / {fotosEsperadas}</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-1.5 my-2 overflow-hidden">
                 <div
                   className="bg-blue-600 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, (evidencias_fotos / 3) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (evidencias_fotos / fotosEsperadas) * 100)}%` }}
                 />
               </div>
               <div className="text-[11px] text-slate-500 font-medium">
-                {evidencias_fotos >= 3
-                  ? 'Cuota ideal cumplida'
-                  : `${evidencias_fotos}/3 recomendadas`}
+                {evidencias_fotos >= fotosEsperadas
+                  ? 'Cuota mínima cumplida'
+                  : `${evidencias_fotos}/${fotosEsperadas} esperadas`}
               </div>
             </div>
 
-            {/* 4. FIRMAS DIGITALES */}
-            <div className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-sm">
+            {/* 4. PENDIENTES EN VIVO */}
+            <div
+              onClick={onVerPendientesTab}
+              className={cn(
+                'p-3.5 rounded-xl border bg-white shadow-sm transition-all',
+                pendientes.activos > 0 ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200',
+                mirror?.isSectionPulsing('pendientes') &&
+                  'ring-2 ring-emerald-400 border-emerald-300',
+                onVerPendientesTab && 'cursor-pointer hover:border-amber-400 hover:shadow-md',
+              )}
+            >
+              <div className="flex items-center justify-between text-amber-700 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider">Pendientes</span>
+                <ClipboardList className="h-4 w-4" />
+              </div>
+              <div className="text-xl font-extrabold text-slate-900">
+                {pendientes.activos}
+                <span className="text-xs font-normal text-slate-500"> activos</span>
+              </div>
+              <div className="flex items-center gap-1.5 my-2">
+                {(pendientes.criticos ?? 0) > 0 ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
+                    {pendientes.criticos} prioritarios
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                    {pendientes.total} reportados
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">
+                {pendientes.resueltos} resueltos
+              </div>
+            </div>
+
+            {/* 5. FIRMAS DIGITALES */}
+            <div
+              className={cn(
+                'p-3.5 rounded-xl border border-slate-200 bg-white shadow-sm transition-all',
+                mirror?.isSectionPulsing('firmas') && 'ring-2 ring-emerald-400 border-emerald-300',
+              )}
+            >
               <div className="flex items-center justify-between text-purple-700 mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider">Firmas Cierre</span>
                 <PenTool className="h-4 w-4" />
               </div>
               <div className="text-xl font-extrabold text-slate-900">
                 {firmas.total}
-                <span className="text-xs font-normal text-slate-500"> de 2</span>
+                <span className="text-xs font-normal text-slate-500"> de {firmasEsperadas}</span>
               </div>
               <div className="flex items-center gap-1.5 my-2">
                 <span
@@ -552,26 +650,26 @@ export function ProgresoRegistroTelemetria({
                 >
                   Téc: {firmas.tecnico ? 'OK' : 'Pend'}
                 </span>
-                <span
-                  className={cn(
-                    'px-1.5 py-0.5 rounded text-[10px] font-bold border',
-                    firmas.cliente
-                      ? 'bg-purple-100 text-purple-800 border-purple-200'
-                      : 'bg-gray-100 text-gray-500 border-gray-200',
-                  )}
-                >
-                  Cli: {firmas.cliente ? 'OK' : 'Pend'}
-                </span>
+                {firmasEsperadas >= 2 && (
+                  <span
+                    className={cn(
+                      'px-1.5 py-0.5 rounded text-[10px] font-bold border',
+                      firmas.cliente
+                        ? 'bg-purple-100 text-purple-800 border-purple-200'
+                        : 'bg-gray-100 text-gray-500 border-gray-200',
+                    )}
+                  >
+                    Cli: {firmas.cliente ? 'OK' : 'Pend'}
+                  </span>
+                )}
               </div>
               <div className="text-[11px] text-slate-500 font-medium">
-                {firmas.total === 2 ? 'Firmas completas' : 'Esperando firmas'}
+                {firmas.total >= firmasEsperadas ? 'Firmas completas' : 'Esperando firmas'}
               </div>
             </div>
           </div>
 
-          {/* ═══════════════════════════════════════════════════════════════════════ */}
-          {/* TIMELINE DE ÚLTIMOS EVENTOS REGISTRADOS EN CAMPO */}
-          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {/* TIMELINE DE ÚLTIMOS EVENTOS EN CAMPO */}
           {ultimosEventos.length > 0 && (
             <div className="pt-2 border-t border-slate-100">
               <div className="flex items-center justify-between mb-3">
@@ -580,12 +678,12 @@ export function ProgresoRegistroTelemetria({
                   Últimas Acciones en Campo
                 </span>
                 <span className="text-[11px] text-slate-400">
-                  Mostrando últimos {Math.min(5, ultimosEventos.length)} registros
+                  Mostrando últimos {Math.min(6, ultimosEventos.length)} registros
                 </span>
               </div>
 
               <div className="space-y-2">
-                {ultimosEventos.slice(0, 5).map((evt, idx: number) => {
+                {ultimosEventos.slice(0, 6).map((evt, idx: number) => {
                   const horaTexto = evt.timestamp
                     ? new Date(evt.timestamp).toLocaleTimeString([], {
                         hour: '2-digit',
@@ -597,23 +695,25 @@ export function ProgresoRegistroTelemetria({
                   const getIcon = () => {
                     switch (evt.tipo) {
                       case 'ACTIVIDAD':
-                        return <FileCheck2 className="h-3.5 w-3.5 text-indigo-600" />;
+                        return <FileCheck2 className="h-3.5 w-3.5 text-indigo-600 shrink-0" />;
                       case 'MEDICION':
-                        return <Activity className="h-3.5 w-3.5 text-emerald-600" />;
+                        return <Activity className="h-3.5 w-3.5 text-emerald-600 shrink-0" />;
                       case 'FOTO':
-                        return <Camera className="h-3.5 w-3.5 text-blue-600" />;
+                        return <Camera className="h-3.5 w-3.5 text-blue-600 shrink-0" />;
+                      case 'PENDIENTE':
+                        return <ClipboardList className="h-3.5 w-3.5 text-amber-600 shrink-0" />;
                       case 'FIRMA':
-                        return <PenTool className="h-3.5 w-3.5 text-purple-600" />;
+                        return <PenTool className="h-3.5 w-3.5 text-purple-600 shrink-0" />;
                       case 'HEARTBEAT':
-                        return <Zap className="h-3.5 w-3.5 text-amber-500" />;
+                        return <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
                       default:
-                        return <CheckCircle2 className="h-3.5 w-3.5 text-slate-500" />;
+                        return <CheckCircle2 className="h-3.5 w-3.5 text-slate-500 shrink-0" />;
                     }
                   };
 
                   return (
                     <div
-                      key={idx}
+                      key={`${evt.tipo}-${idx}`}
                       className="flex items-center justify-between text-xs py-1.5 px-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
                     >
                       <div className="flex items-center gap-2 truncate pr-2">
@@ -632,10 +732,10 @@ export function ProgresoRegistroTelemetria({
             </div>
           )}
 
-          {/* Botón de contraer al pie del panel */}
+          {/* Pie */}
           <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs text-slate-500">
             <span className="text-[11px] text-slate-400">
-              Telemetría de campo sincronizada en tiempo real (Modo Sytex)
+              Espejo en vivo vía Server-Sent Events · Pausa automática en pestañas ocultas
             </span>
             <button
               type="button"

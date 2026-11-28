@@ -261,6 +261,9 @@ export interface ProgresoRegistroResumen {
   estado_conexion: EstadoConexionTecnico;
   minutos_inactividad: number | null;
   ultima_actividad: string | null;
+  ultima_actividad_tecnico_at?: string | null;
+  execution_sync_version?: number;
+  total_equipos?: number;
   actividades: {
     completadas: number;
     total: number;
@@ -270,13 +273,28 @@ export interface ProgresoRegistroResumen {
   };
   mediciones: {
     registradas: number;
+    total?: number;
     con_alerta?: number;
   };
   evidencias_fotos: number;
+  evidencias_fotos_esperadas?: number;
+  pendientes?: {
+    total: number;
+    activos: number;
+    resueltos: number;
+    criticos?: number;
+  };
   firmas: {
     tecnico: boolean;
     cliente: boolean;
     total: number;
+    esperadas?: number;
+  };
+  pesos_efectivos?: {
+    actividades: number;
+    mediciones: number;
+    evidencias: number;
+    firmas: number;
   };
   tiempo?: {
     inicio_real: string | null;
@@ -292,6 +310,7 @@ export interface ProgresoRegistroDetallado extends ProgresoRegistroResumen {
     id_estado: number;
     codigo_estado: string;
     nombre_estado: string;
+    es_estado_final?: boolean;
   };
   tecnico: {
     id_empleado: number | null;
@@ -310,6 +329,7 @@ export interface ProgresoRegistroDetallado extends ProgresoRegistroResumen {
   checklist_items: Array<{
     id_actividad_ejecutada: number;
     id_actividad_catalogo: number | null;
+    id_orden_equipo?: number | null;
     descripcion: string;
     estado: string | null;
     ejecutada: boolean;
@@ -322,6 +342,7 @@ export interface ProgresoRegistroDetallado extends ProgresoRegistroResumen {
   }>;
   mediciones_items: Array<{
     id_medicion: number;
+    id_orden_equipo?: number | null;
     parametro_codigo?: string;
     parametro_nombre: string;
     unidad_medida?: string | null;
@@ -333,7 +354,7 @@ export interface ProgresoRegistroDetallado extends ProgresoRegistroResumen {
     observaciones?: string | null;
   }>;
   ultimos_eventos: Array<{
-    tipo: 'ACTIVIDAD' | 'MEDICION' | 'FOTO' | 'FIRMA' | 'ESTADO' | 'HEARTBEAT';
+    tipo: 'ACTIVIDAD' | 'MEDICION' | 'FOTO' | 'FIRMA' | 'PENDIENTE' | 'ESTADO' | 'HEARTBEAT';
     descripcion: string;
     timestamp: string;
   }>;
@@ -341,17 +362,29 @@ export interface ProgresoRegistroDetallado extends ProgresoRegistroResumen {
 }
 
 export interface ActividadEjecutadaOrden {
-  id_actividad_ejecutada: number;
+  id_actividad_ejecutada: number | null;
+  virtual_key?: string;
+  estado_registro?: 'SIN_REGISTRO' | 'REGISTRADA';
   id_orden_servicio?: number;
   id_orden_equipo?: number | null;
-  descripcion_manual?: string;
-  sistema?: string;
-  estado?: string;
-  observaciones?: string;
+  id_actividad_catalogo?: number | null;
+  id_orden_actividad_plan?: number | null;
+  descripcion_manual?: string | null;
+  sistema?: string | null;
+  orden_secuencia?: number;
+  estado?: string | null;
+  observaciones?: string | null;
   ejecutada?: boolean;
-  fecha_ejecucion?: string;
+  fecha_ejecucion?: string | null;
+  fecha_registro?: string | null;
+  es_obligatoria?: boolean;
+  es_manual?: boolean;
+  evidencias_count?: number;
+  client_uuid?: string | null;
+  sync_version?: number;
   respuesta_json?: Record<string, unknown> | null;
   catalogo_actividades?: {
+    id_actividad_catalogo?: number;
     descripcion_actividad?: string;
     codigo_actividad?: string;
     tipo_control_input?: string;
@@ -361,7 +394,17 @@ export interface ActividadEjecutadaOrden {
     catalogo_sistemas?: {
       nombre_sistema?: string;
     };
-  };
+  } | null;
+}
+
+export interface ActividadesCompletasResumen {
+  total_plan: number;
+  registradas: number;
+  sin_registro: number;
+  manuales: number;
+  porcentaje: number;
+  fuente_plan: 'PLAN_ORDEN' | 'CATALOGO_SERVICIO' | 'SOLO_EJECUTADAS';
+  total_equipos: number;
 }
 
 export interface MedicionOrden {
@@ -396,10 +439,30 @@ export interface MedicionOrden {
 export interface ParametroSinMedirOrden {
   id_parametro_medicion: number;
   nombre_parametro: string;
+  codigo_parametro?: string;
   unidad_medida?: string | null;
   es_obligatorio?: boolean;
   valor_minimo_normal?: number | string | null;
   valor_maximo_normal?: number | string | null;
+  valor_minimo_critico?: number | string | null;
+  valor_maximo_critico?: number | string | null;
+  es_personalizado_equipo?: boolean;
+  // ✅ FASE 2 (FIX MULTI-EQUIPO): Identificación exacta del equipo faltante
+  id_orden_equipo?: number | null;
+  equipo_label?: string | null;
+  codigo_equipo?: string | null;
+  orden_secuencia?: number | null;
+}
+
+export interface MedicionesPorEquipoBackend {
+  id_orden_equipo: number | null;
+  orden_secuencia: number;
+  equipo_label: string;
+  codigo_equipo: string;
+  mediciones: MedicionOrden[];
+  parametros_sin_medir: ParametroSinMedirOrden[];
+  total_esperados: number;
+  total_registrados: number;
 }
 
 export interface ServicioOrdenDetalle {

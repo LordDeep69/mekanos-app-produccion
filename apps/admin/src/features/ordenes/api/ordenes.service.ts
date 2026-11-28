@@ -8,11 +8,13 @@
 import { apiClient } from '@/lib/api/client';
 import type {
   ActividadEjecutadaOrden,
+  ActividadesCompletasResumen,
   CambiarEstadoDto,
   CreateOrdenDto,
   EvidenciaOrden,
   FirmaOrden,
   MedicionOrden,
+  MedicionesPorEquipoBackend,
   Orden,
   OrdenPendiente,
   OrdenesQueryParams,
@@ -302,6 +304,68 @@ export async function getActividadesOrden(
 }
 
 /**
+ * ✅ FASE 2 (ESPEJO VIVO): Proyección completa del plan + actividades ejecutadas con SIN_REGISTRO
+ */
+export async function getActividadesCompletasOrden(idOrden: number): Promise<{
+  success: boolean;
+  data: ActividadEjecutadaOrden[];
+  resumen: ActividadesCompletasResumen;
+}> {
+  const response = await apiClient.get<{
+    success: boolean;
+    data: ActividadEjecutadaOrden[];
+    resumen: ActividadesCompletasResumen;
+  }>(`${ORDENES_BASE}/${idOrden}/actividades-completas`);
+  return response.data;
+}
+
+export interface CreateActividadOrdenDto {
+  id_actividad_catalogo?: number | null;
+  id_orden_equipo?: number | null;
+  descripcion_manual?: string | null;
+  sistema?: string | null;
+  orden_secuencia?: number | null;
+  estado?: EstadoActividad;
+  observaciones?: string | null;
+  ejecutada?: boolean;
+  respuestaJson?: Record<string, unknown> | null;
+}
+
+/**
+ * ✅ FASE 2: Registrar/actualizar una actividad del plan directamente desde Portal Admin
+ */
+export async function createActividadOrden(
+  idOrden: number,
+  data: CreateActividadOrdenDto,
+): Promise<{ success: boolean; data: ActividadEjecutadaOrden }> {
+  const response = await apiClient.post<{ success: boolean; data: ActividadEjecutadaOrden }>(
+    `${ORDENES_BASE}/${idOrden}/actividades`,
+    data,
+  );
+  return response.data;
+}
+
+/**
+ * ✅ FASE 2: Solicitar ticket efímero (30s, un solo uso) para stream SSE de la orden
+ */
+export async function requestOrdenStreamTicket(idOrden: number): Promise<{
+  success: boolean;
+  orderId: number;
+  ticket: string;
+  expiresInSeconds: number;
+  streamPath: string;
+}> {
+  const response = await apiClient.post<{
+    success: boolean;
+    orderId: number;
+    ticket: string;
+    expiresInSeconds: number;
+    streamPath: string;
+  }>(`${ORDENES_BASE}/${idOrden}/stream-ticket`);
+  return response.data;
+}
+
+/**
  * Obtener mediciones de una orden
  */
 export async function getMedicionesOrden(
@@ -314,19 +378,19 @@ export async function getMedicionesOrden(
 }
 
 /**
- * ✅ 24-FEB-2026: Obtener mediciones completas (registradas + parámetros sin medir)
+ * ✅ 24-FEB-2026 / FASE 2 MULTI-EQUIPO: Obtener mediciones completas (registradas + parámetros sin medir por equipo)
  */
-export async function getMedicionesCompletasOrden(
-  idOrden: number,
-): Promise<{
+export async function getMedicionesCompletasOrden(idOrden: number): Promise<{
   success: boolean;
   data: MedicionOrden[];
   parametros_sin_medir: ParametroSinMedirOrden[];
+  por_equipo?: MedicionesPorEquipoBackend[];
 }> {
   const response = await apiClient.get<{
     success: boolean;
     data: MedicionOrden[];
     parametros_sin_medir: ParametroSinMedirOrden[];
+    por_equipo?: MedicionesPorEquipoBackend[];
   }>(`${ORDENES_BASE}/${idOrden}/mediciones-completas`);
   return response.data;
 }
@@ -341,6 +405,7 @@ export async function createMedicionOrden(
     valor_numerico?: number;
     valor_texto?: string;
     observaciones?: string;
+    id_orden_equipo?: number;
   },
 ): Promise<{ success: boolean; data: MedicionOrden }> {
   const response = await apiClient.post<{ success: boolean; data: MedicionOrden }>(
@@ -690,9 +755,7 @@ export async function getHistorialEmails(idOrden: number): Promise<HistorialEmai
  * ✅ 26-FEB-2026: Eliminar orden de servicio (HARD DELETE)
  * Elimina permanentemente la orden y TODOS sus datos asociados
  */
-export async function deleteOrden(
-  id: number,
-): Promise<{
+export async function deleteOrden(id: number): Promise<{
   success: boolean;
   message: string;
   data: { id_orden_servicio: number; numero_orden: string };
@@ -709,10 +772,7 @@ export async function deleteOrden(
  * ✅ TRANSFERENCIA INTELIGENTE DE DATOS ENTRE ÓRDENES (v2.0)
  * Tipos compartidos para previsualización, mapeo 1:1 por equipo y ejecución atómica.
  */
-export type AccionEquipoTransferencia =
-  | 'MAPEAR_A_DESTINO'
-  | 'AGREGAR_A_DESTINO'
-  | 'DESCARTAR';
+export type AccionEquipoTransferencia = 'MAPEAR_A_DESTINO' | 'AGREGAR_A_DESTINO' | 'DESCARTAR';
 
 export type TipoCoincidenciaEquipo =
   | 'EXACTA_ID_EQUIPO'

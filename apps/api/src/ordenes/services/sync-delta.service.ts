@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   estado_actividad_enum,
@@ -24,6 +25,7 @@ import {
 import { CloudinaryAccount } from '../../storage/cloudinary.service';
 import { MediaUploadStrategyService } from '../../storage/media-upload-strategy.service';
 import { PrepareEvidenciasUploadDto, SyncDeltaDto } from '../dto/sync-delta.dto';
+import { OrdenRealtimeBusService, OrdenRealtimeSection } from './orden-realtime-bus.service';
 
 export interface SyncDeltaActor {
   id: number;
@@ -92,6 +94,7 @@ export class SyncDeltaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mediaUploadStrategy: MediaUploadStrategyService,
+    @Optional() private readonly realtimeBus?: OrdenRealtimeBusService,
   ) {}
 
   private normalizeEstadoActividad(raw?: string | null): estado_actividad_enum | null {
@@ -1198,6 +1201,62 @@ export class SyncDeltaService {
     this.logger.log(
       `🔄 [SYNC-DELTA] OS ${orden.numero_orden} (#${orderId}) v=${txResult.executionSyncVersion} · acks=${acks.length} · sections=[${sectionsUpdated.join(',')}]`,
     );
+
+    // Emitir evento SSE `delta_synced` DESPUÉS de confirmar la transacción PostgreSQL
+    if (this.realtimeBus) {
+      const sseSections = new Set<OrdenRealtimeSection>(['progreso']);
+      for (const sec of sectionsUpdated) {
+        if (
+          sec === 'orden' ||
+          sec === 'actividades' ||
+          sec === 'mediciones' ||
+          sec === 'evidencias' ||
+          sec === 'pendientes' ||
+          sec === 'firmas'
+        ) {
+          sseSections.add(sec);
+        }
+      }
+
+      const appliedAcks = acks.filter((a) => a.status === 'APPLIED' || a.status === 'DELETED');
+      const changedIds = {
+        actividades: appliedAcks
+          .filter((a) => a.entityType === 'ACTIVIDAD' && a.serverId != null)
+          .map((a) => a.serverId as number),
+        mediciones: appliedAcks
+          .filter((a) => a.entityType === 'MEDICION' && a.serverId != null)
+          .map((a) => a.serverId as number),
+        evidencias: appliedAcks
+          .filter((a) => a.entityType === 'EVIDENCIA' && a.serverId != null)
+          .map((a) => a.serverId as number),
+        pendientes: appliedAcks
+          .filter((a) => a.entityType === 'PENDIENTE' && a.serverId != null)
+          .map((a) => a.serverId as number),
+        actividadClientUuids: appliedAcks
+          .filter((a) => a.entityType === 'ACTIVIDAD')
+          .map((a) => a.clientUuid),
+        medicionClientUuids: appliedAcks
+          .filter((a) => a.entityType === 'MEDICION')
+          .map((a) => a.clientUuid),
+        evidenciaClientUuids: appliedAcks
+          .filter((a) => a.entityType === 'EVIDENCIA')
+          .map((a) => a.clientUuid),
+        pendienteClientUuids: appliedAcks
+          .filter((a) => a.entityType === 'PENDIENTE')
+          .map((a) => a.clientUuid),
+      };
+
+      this.realtimeBus.emitOrdenEvent({
+        type: 'delta_synced',
+        orderId,
+        numeroOrden: orden.numero_orden,
+        executionSyncVersion: txResult.executionSyncVersion,
+        sections: Array.from(sseSections),
+        changedIds,
+        timestamp: now.toISOString(),
+        source: 'MOBILE_DELTA',
+      });
+    }
 
     return {
       success: true,

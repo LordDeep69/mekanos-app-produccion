@@ -20,7 +20,7 @@ import {
   getPrioridadColor,
   getTecnicoLabel,
   getTecnicoNombre,
-  useActividadesOrden,
+  useActividadesCompletasOrden,
   useAddServicioOrden,
   useAsignarTecnico,
   useCambiarEstadoOrden,
@@ -33,12 +33,14 @@ import {
   useAddComponenteOrden,
   useComponentesOrden,
   useOrden,
+  useOrdenRealtimeMirror,
   useRemoveComponenteOrden,
   useRemoveServicioOrden,
   useServiciosComerciales,
   useServiciosOrden,
   useTecnicosSelector,
   type ComponenteUsadoOrden,
+  type OrdenRealtimeMirrorState,
   type TecnicoSelector,
 } from '@/features/ordenes';
 import {
@@ -943,16 +945,19 @@ function EquipoHeader({
 
 function TabEjecucion({
   orden,
+  mirror,
   onOpenPendientesTab,
 }: {
   orden: Orden;
+  mirror?: OrdenRealtimeMirrorState;
   onOpenPendientesTab?: () => void;
 }) {
   const [subTab, setSubTab] = useState<'checklist' | 'mediciones'>('checklist');
-  const { data: actividadesData, isLoading: isLoadingAct } = useActividadesOrden(
+  // ✅ FASE 2 (ESPEJO VIVO): Proyección completa del plan + ejecutadas (muestra "Sin registro" desde ASIGNADA)
+  const { data: actividadesData, isLoading: isLoadingAct } = useActividadesCompletasOrden(
     orden.id_orden_servicio,
   );
-  // ✅ 24-FEB-2026: Usar mediciones-completas para obtener también parámetros sin medir
+  // ✅ 24-FEB-2026 / FASE 2 MULTI-EQUIPO: Mediciones completas con tracking por id_orden_equipo
   const { data: medicionesData, isLoading: isLoadingMed } = useMedicionesCompletasOrden(
     orden.id_orden_servicio,
   );
@@ -960,7 +965,10 @@ function TabEjecucion({
 
   const actividades = useMemo(() => actividadesData?.data || [], [actividadesData?.data]);
   const mediciones = useMemo(() => medicionesData?.data || [], [medicionesData?.data]);
-  const parametrosSinMedir = medicionesData?.parametros_sin_medir || [];
+  const parametrosSinMedir = useMemo(
+    () => medicionesData?.parametros_sin_medir || [],
+    [medicionesData?.parametros_sin_medir],
+  );
 
   // ✅ MULTI-EQUIPO: Detectar y agrupar (siempre ordenados canónicamente por orden_secuencia)
   const equipos = useMemo(
@@ -1004,7 +1012,18 @@ function TabEjecucion({
     return grupo?.mediciones || [];
   }, [mediciones, medicionesPorEquipo, equipoFiltro, esMultiEquipo]);
 
-  const actividadesCompletadas = actividadesFiltradas.filter((a) => a.ejecutada).length;
+  const parametrosSinMedirFiltrados = useMemo(() => {
+    if (!esMultiEquipo || equipoFiltro === 'todos') return parametrosSinMedir;
+    return parametrosSinMedir.filter(
+      (p) => p.id_orden_equipo === equipoFiltro || p.id_orden_equipo == null,
+    );
+  }, [parametrosSinMedir, esMultiEquipo, equipoFiltro]);
+
+  const esActividadRegistrada = (a: ActividadEjecutadaOrden) =>
+    a.estado_registro === 'REGISTRADA' ||
+    (a.estado_registro !== 'SIN_REGISTRO' && Boolean(a.ejecutada || a.estado));
+
+  const actividadesCompletadas = actividadesFiltradas.filter(esActividadRegistrada).length;
   const porcentajeProgreso =
     actividadesFiltradas.length > 0
       ? Math.round((actividadesCompletadas / actividadesFiltradas.length) * 100)
@@ -1015,20 +1034,22 @@ function TabEjecucion({
     (m) => m.fuera_de_rango || m.nivel_alerta === 'CRITICO',
   ).length;
 
-  // ✅ 24-FEB-2026: Estado para crear nueva medición desde parámetro sin medir
-  const [creandoParam, setCreandoParam] = useState<number | null>(null);
+  // ✅ FASE 2 MULTI-EQUIPO: Clave compuesta `${idOrdenEquipo}-${idParametro}` para no abrir el form en todos los equipos
+  const [creandoParamKey, setCreandoParamKey] = useState<string | null>(null);
   const [nuevoValor, setNuevoValor] = useState('');
   const [nuevaObs, setNuevaObs] = useState('');
 
-  const handleCrearMedicion = async (idParametro: number) => {
+  const handleCrearMedicion = async (idParametro: number, idOrdenEquipoParam?: number | null) => {
     if (!nuevoValor && !nuevaObs) return;
-    const idOrdenEquipoTarget = esMultiEquipo
-      ? equipoFiltro !== 'todos'
-        ? equipoFiltro
-        : undefined
-      : equipos.length === 1
-        ? equipos[0].id_orden_equipo
-        : undefined;
+    const idOrdenEquipoTarget =
+      idOrdenEquipoParam ??
+      (esMultiEquipo
+        ? equipoFiltro !== 'todos'
+          ? equipoFiltro
+          : undefined
+        : equipos.length === 1
+          ? equipos[0].id_orden_equipo
+          : undefined);
     try {
       await createMedicion.mutateAsync({
         idOrden: orden.id_orden_servicio,
@@ -1039,7 +1060,7 @@ function TabEjecucion({
           ...(idOrdenEquipoTarget ? { id_orden_equipo: idOrdenEquipoTarget } : {}),
         },
       });
-      setCreandoParam(null);
+      setCreandoParamKey(null);
       setNuevoValor('');
       setNuevaObs('');
     } catch (err) {
@@ -1064,16 +1085,26 @@ function TabEjecucion({
   // Helper para renderizar el contenido de checklist de un grupo de actividades
   const renderChecklistContent = (acts: ActividadEjecutadaOrden[]) => (
     <div className="space-y-2">
-      {acts.map((act) => {
+      {acts.map((act, idx) => {
         const metricaProps = resolveMetricaActividad(act.id_orden_equipo);
+        const cardKey =
+          act.virtual_key ||
+          `${act.id_orden_equipo ?? 'sin'}-${act.id_actividad_ejecutada ?? act.id_actividad_catalogo ?? idx}`;
+        const isLivePulsing = Boolean(
+          mirror &&
+            ((act.id_actividad_ejecutada != null &&
+              mirror.isPulsing(`act:${act.id_actividad_ejecutada}`)) ||
+              (act.client_uuid && mirror.isPulsing(`act-uuid:${act.client_uuid}`))),
+        );
         return (
           <ActividadCardAdvanced
-            key={`${act.id_orden_equipo ?? 'sin'}-${act.id_actividad_ejecutada}`}
+            key={cardKey}
             actividad={act}
             idOrdenServicio={orden.id_orden_servicio}
             unidadUso={metricaProps.unidadUso}
             etiquetaContador={metricaProps.etiquetaContador}
             requiereHorometro={metricaProps.requiereHorometro}
+            isRecentlyUpdated={isLivePulsing}
             horasActualesEquipo={(() => {
               const oeMatch = (orden.ordenes_equipos || []).find(
                 (oe) => oe.id_orden_equipo === act.id_orden_equipo,
@@ -1095,8 +1126,140 @@ function TabEjecucion({
           key={`${med.id_orden_equipo ?? 'sin'}-${med.id_medicion}`}
           medicion={med}
           idOrdenServicio={orden.id_orden_servicio}
+          isRecentlyUpdated={Boolean(mirror?.isPulsing(`med:${med.id_medicion}`))}
         />
       ))}
+    </div>
+  );
+
+  // Helper para renderizar tarjetas "Sin registro" de parámetros por medir (compatible multi-equipo)
+  const renderParametrosSinMedirCards = (paramsList: typeof parametrosSinMedir) => (
+    <div className="space-y-2">
+      {paramsList.map((param) => {
+        const paramKey = `${param.id_orden_equipo ?? 0}-${param.id_parametro_medicion}`;
+        const isOpen = creandoParamKey === paramKey;
+        return (
+          <div
+            key={paramKey}
+            className="rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/40 transition-all duration-200"
+          >
+            <div className="p-3">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-sm bg-amber-100/80 border border-dashed border-amber-300">
+                  <Settings className="h-6 w-6 text-amber-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider truncate">
+                      {param.nombre_parametro}
+                    </p>
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-500 border border-dashed border-slate-300">
+                      Sin registro
+                    </span>
+                    {param.es_personalizado_equipo && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-violet-100 text-violet-800 border border-violet-200">
+                        Rango equipo
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-amber-700 font-medium mt-0.5">
+                    Esperando lectura — {param.unidad_medida || 'und'}
+                    {param.valor_minimo_normal != null && param.valor_maximo_normal != null && (
+                      <span className="text-xs text-slate-500 ml-2">
+                        (Normal: {Number(param.valor_minimo_normal)}–
+                        {Number(param.valor_maximo_normal)} {param.unidad_medida})
+                      </span>
+                    )}
+                  </p>
+                  {param.es_obligatorio && (
+                    <span className="text-[10px] font-bold text-red-500">OBLIGATORIO</span>
+                  )}
+                </div>
+
+                {!isOpen ? (
+                  <button
+                    onClick={() => {
+                      setCreandoParamKey(paramKey);
+                      setNuevoValor('');
+                      setNuevaObs('');
+                    }}
+                    className="flex-shrink-0 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition-all flex items-center gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Registrar
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setCreandoParamKey(null)}
+                    className="flex-shrink-0 px-2 py-1 text-xs text-gray-400 hover:text-gray-600"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {isOpen && (
+                <div className="mt-3 space-y-2 bg-white/80 p-3 rounded-lg border border-amber-100">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                      Valor ({param.unidad_medida})
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={nuevoValor}
+                      onChange={(e) => setNuevoValor(e.target.value)}
+                      placeholder={`Ingrese valor en ${param.unidad_medida}...`}
+                      className="w-full mt-1 px-3 py-2 text-lg font-bold border-2 border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                      autoFocus
+                    />
+                    {param.valor_minimo_normal != null && param.valor_maximo_normal != null && (
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        Rango normal: {Number(param.valor_minimo_normal)} -{' '}
+                        {Number(param.valor_maximo_normal)} {param.unidad_medida}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                      Observaciones (opcional)
+                    </label>
+                    <textarea
+                      value={nuevaObs}
+                      onChange={(e) => setNuevaObs(e.target.value)}
+                      placeholder="Notas sobre esta medición..."
+                      rows={2}
+                      className="w-full mt-1 px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCreandoParamKey(null)}
+                      className="flex-1 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all flex items-center justify-center gap-1"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleCrearMedicion(param.id_parametro_medicion, param.id_orden_equipo)
+                      }
+                      disabled={createMedicion.isPending || (!nuevoValor && !nuevaObs)}
+                      className="flex-1 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                    >
+                      {createMedicion.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5" />
+                      )}
+                      Guardar Medición
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 
@@ -1141,7 +1304,7 @@ function TabEjecucion({
                 (g: ActividadesPorEquipo) => g.equipo.idOrdenEquipo === oe.id_orden_equipo,
               );
               const actCount = actGroup?.actividades.length || 0;
-              const actDone = actGroup?.actividades.filter((a) => a.ejecutada).length || 0;
+              const actDone = actGroup?.actividades.filter(esActividadRegistrada).length || 0;
 
               return (
                 <button
@@ -1244,9 +1407,9 @@ function TabEjecucion({
             >
               {medicionesFiltradas.length}
             </span>
-            {parametrosSinMedir.length > 0 && (
+            {parametrosSinMedirFiltrados.length > 0 && (
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500 text-white font-bold">
-                +{parametrosSinMedir.length}
+                +{parametrosSinMedirFiltrados.length}
               </span>
             )}
             {medicionesCritico > 0 && (
@@ -1304,163 +1467,67 @@ function TabEjecucion({
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
                 </div>
-              ) : medicionesFiltradas.length === 0 && parametrosSinMedir.length === 0 ? (
+              ) : medicionesFiltradas.length === 0 && parametrosSinMedirFiltrados.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <Settings className="h-12 w-12 mx-auto mb-3 text-gray-200" />
                   <p className="font-medium">Sin mediciones de campo</p>
                 </div>
               ) : (
                 <>
-                  {medicionesFiltradas.length > 0 && (
+                  {(medicionesFiltradas.length > 0 || parametrosSinMedirFiltrados.length > 0) && (
                     <ResumenMediciones
                       mediciones={medicionesFiltradas}
-                      totalParametros={medicionesFiltradas.length + parametrosSinMedir.length}
+                      totalParametros={
+                        medicionesFiltradas.length + parametrosSinMedirFiltrados.length
+                      }
                     />
                   )}
 
-                  {/* Mediciones registradas */}
+                  {/* Mediciones registradas + parámetros pendientes agrupados por equipo */}
                   {esMultiEquipo && medicionesPorEquipo && equipoFiltro === 'todos' ? (
-                    /* ✅ MULTI-EQUIPO: Vista agrupada por equipo */
                     <div className="space-y-4">
-                      {medicionesPorEquipo.map((grupo: MedicionesPorEquipo, idx: number) => (
-                        <div key={grupo.equipo.idOrdenEquipo} className="space-y-2">
-                          <EquipoHeader equipo={grupo.equipo} index={idx} count={equipos.length} />
-                          {grupo.mediciones.length > 0 ? (
-                            renderMedicionesContent(grupo.mediciones)
-                          ) : (
-                            <p className="text-xs text-gray-400 pl-11 py-2">
-                              Sin mediciones para este equipo
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : medicionesFiltradas.length > 0 ? (
-                    /* Vista normal */
-                    renderMedicionesContent(medicionesFiltradas)
-                  ) : null}
-
-                  {/* ✅ 24-FEB-2026: Parámetros sin medir (para que admin pueda registrarlos) */}
-                  {parametrosSinMedir.length > 0 && (
-                    <div className="mt-4 space-y-2">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="h-px flex-1 bg-amber-200" />
-                        <span className="text-xs font-bold text-amber-600 uppercase tracking-wider px-2">
-                          Parámetros Sin Registrar ({parametrosSinMedir.length})
-                        </span>
-                        <div className="h-px flex-1 bg-amber-200" />
-                      </div>
-
-                      {parametrosSinMedir.map((param) => (
-                        <div
-                          key={param.id_parametro_medicion}
-                          className="rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50 transition-all duration-200"
-                        >
-                          <div className="p-3">
-                            <div className="flex items-start gap-3">
-                              <div className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-sm bg-amber-100 border border-amber-200">
-                                <Settings className="h-6 w-6 text-amber-500" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider truncate">
-                                  {param.nombre_parametro}
-                                </p>
-                                <p className="text-sm text-amber-600 font-medium mt-0.5">
-                                  Sin registrar — {param.unidad_medida}
-                                </p>
-                                {param.es_obligatorio && (
-                                  <span className="text-[10px] font-bold text-red-500">
-                                    OBLIGATORIO
-                                  </span>
-                                )}
-                              </div>
-
-                              {creandoParam !== param.id_parametro_medicion ? (
-                                <button
-                                  onClick={() => {
-                                    setCreandoParam(param.id_parametro_medicion);
-                                    setNuevoValor('');
-                                    setNuevaObs('');
-                                  }}
-                                  className="flex-shrink-0 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition-all flex items-center gap-1"
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                  Registrar
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => setCreandoParam(null)}
-                                  className="flex-shrink-0 px-2 py-1 text-xs text-gray-400 hover:text-gray-600"
-                                >
-                                  <XCircle className="h-4 w-4" />
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Formulario inline para crear medición */}
-                            {creandoParam === param.id_parametro_medicion && (
-                              <div className="mt-3 space-y-2 bg-white/80 p-3 rounded-lg border border-amber-100">
-                                <div>
-                                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                                    Valor ({param.unidad_medida})
-                                  </label>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={nuevoValor}
-                                    onChange={(e) => setNuevoValor(e.target.value)}
-                                    placeholder={`Ingrese valor en ${param.unidad_medida}...`}
-                                    className="w-full mt-1 px-3 py-2 text-lg font-bold border-2 border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                                    autoFocus
-                                  />
-                                  {param.valor_minimo_normal != null &&
-                                    param.valor_maximo_normal != null && (
-                                      <p className="text-[10px] text-gray-400 mt-1">
-                                        Rango normal: {Number(param.valor_minimo_normal)} -{' '}
-                                        {Number(param.valor_maximo_normal)} {param.unidad_medida}
-                                      </p>
-                                    )}
-                                </div>
-                                <div>
-                                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                                    Observaciones (opcional)
-                                  </label>
-                                  <textarea
-                                    value={nuevaObs}
-                                    onChange={(e) => setNuevaObs(e.target.value)}
-                                    placeholder="Notas sobre esta medición..."
-                                    rows={2}
-                                    className="w-full mt-1 px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
-                                  />
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => setCreandoParam(null)}
-                                    className="flex-1 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all flex items-center justify-center gap-1"
-                                  >
-                                    Cancelar
-                                  </button>
-                                  <button
-                                    onClick={() => handleCrearMedicion(param.id_parametro_medicion)}
-                                    disabled={
-                                      createMedicion.isPending || (!nuevoValor && !nuevaObs)
-                                    }
-                                    className="flex-1 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-all flex items-center justify-center gap-1 disabled:opacity-50"
-                                  >
-                                    {createMedicion.isPending ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                      <Check className="h-3.5 w-3.5" />
-                                    )}
-                                    Guardar Medición
-                                  </button>
-                                </div>
-                              </div>
+                      {medicionesPorEquipo.map((grupo: MedicionesPorEquipo, idx: number) => {
+                        const sinMedirEquipo = parametrosSinMedir.filter(
+                          (p) => p.id_orden_equipo === grupo.equipo.idOrdenEquipo,
+                        );
+                        return (
+                          <div key={grupo.equipo.idOrdenEquipo} className="space-y-2">
+                            <EquipoHeader
+                              equipo={grupo.equipo}
+                              index={idx}
+                              count={equipos.length}
+                            />
+                            {grupo.mediciones.length > 0 &&
+                              renderMedicionesContent(grupo.mediciones)}
+                            {sinMedirEquipo.length > 0 &&
+                              renderParametrosSinMedirCards(sinMedirEquipo)}
+                            {grupo.mediciones.length === 0 && sinMedirEquipo.length === 0 && (
+                              <p className="text-xs text-gray-400 pl-11 py-2">
+                                Sin mediciones configuradas para este equipo
+                              </p>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
+                  ) : (
+                    <>
+                      {medicionesFiltradas.length > 0 &&
+                        renderMedicionesContent(medicionesFiltradas)}
+
+                      {parametrosSinMedirFiltrados.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="h-px flex-1 bg-amber-200" />
+                            <span className="text-xs font-bold text-amber-600 uppercase tracking-wider px-2">
+                              Parámetros Sin Registro ({parametrosSinMedirFiltrados.length})
+                            </span>
+                            <div className="h-px flex-1 bg-amber-200" />
+                          </div>
+                          {renderParametrosSinMedirCards(parametrosSinMedirFiltrados)}
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -3917,6 +3984,14 @@ export default function OrdenDetallePage() {
 
   const orden = data?.data;
 
+  // ✅ FASE 2 (ESPEJO VIVO): Canal SSE real-time a nivel de página (se pausa al ocultar pestaña)
+  const esEstadoFinalHook =
+    orden?.estados_orden?.es_estado_final ??
+    ['COMPLETADA', 'CANCELADA'].includes(orden?.estados_orden?.codigo_estado || '');
+  const mirror = useOrdenRealtimeMirror(orden?.id_orden_servicio, {
+    enabled: Boolean(orden) && (!esEstadoFinalHook || Boolean(orden?.edicion_tecnico_habilitada)),
+  });
+
   const handleCambiarEstado = async (nuevoEstado: string) => {
     if (!orden) return;
 
@@ -4352,12 +4427,14 @@ export default function OrdenDetallePage() {
       {/* ✅ HILO DE CONTINUIDAD DEL CASO (Visita 1 ──▶ Visita N) */}
       <HiloContinuidadCaso orden={orden} onOpenPendientesTab={() => setActiveTab('pendientes')} />
 
-      {/* ✅ FEATURE ESTILO SYTEX: Panel de Telemetría y Lectura en Tiempo Real */}
+      {/* ✅ FASE 2: Panel de Espejo Vivo y Telemetría SSE */}
       <ProgresoRegistroTelemetria
         idOrden={orden.id_orden_servicio}
+        mirror={mirror}
         onVerChecklistTab={() => setActiveTab('ejecucion')}
         onVerMedicionesTab={() => setActiveTab('ejecucion')}
         onVerDocumentosTab={() => setActiveTab('documentos')}
+        onVerPendientesTab={() => setActiveTab('pendientes')}
       />
 
       {/* Tabs */}
@@ -4373,6 +4450,13 @@ export default function OrdenDetallePage() {
               (orden.ordenes_pendientes || []).filter(
                 (p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION',
               ).length;
+            const hasLiveTabPulse =
+              (tab.id === 'ejecucion' &&
+                (mirror.isSectionPulsing('actividades') ||
+                  mirror.isSectionPulsing('mediciones'))) ||
+              (tab.id === 'pendientes' && mirror.isSectionPulsing('pendientes')) ||
+              (tab.id === 'documentos' &&
+                (mirror.isSectionPulsing('evidencias') || mirror.isSectionPulsing('firmas')));
 
             return (
               <button
@@ -4387,13 +4471,23 @@ export default function OrdenDetallePage() {
               >
                 <Icon className="h-4 w-4" />
                 <span>{tab.label}</span>
+                {hasLiveTabPulse && (
+                  <span
+                    className="relative flex h-2 w-2"
+                    title="Actualización recibida en vivo desde campo"
+                  >
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                )}
                 {tab.id === 'pendientes' && totalCasoPendientes > 0 && (
                   <span
                     className={cn(
-                      'px-2 py-0.5 rounded-full text-[11px] font-bold',
+                      'px-2 py-0.5 rounded-full text-[11px] font-bold transition-all',
                       activosCasoPendientes > 0
                         ? 'bg-amber-100 text-amber-800 border border-amber-300'
                         : 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+                      mirror.isSectionPulsing('pendientes') && 'ring-2 ring-emerald-400 scale-105',
                     )}
                   >
                     {activosCasoPendientes > 0
@@ -4413,9 +4507,13 @@ export default function OrdenDetallePage() {
           <TabGeneral orden={orden} onOpenPendientesTab={() => setActiveTab('pendientes')} />
         )}
         {activeTab === 'ejecucion' && (
-          <TabEjecucion orden={orden} onOpenPendientesTab={() => setActiveTab('pendientes')} />
+          <TabEjecucion
+            orden={orden}
+            mirror={mirror}
+            onOpenPendientesTab={() => setActiveTab('pendientes')}
+          />
         )}
-        {activeTab === 'pendientes' && <PendientesSection orden={orden} />}
+        {activeTab === 'pendientes' && <PendientesSection orden={orden} mirror={mirror} />}
         {activeTab === 'financiero' && <TabFinanciero orden={orden} />}
         {activeTab === 'documentos' && <TabDocumentos orden={orden} />}
       </div>

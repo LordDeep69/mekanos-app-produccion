@@ -10,6 +10,7 @@ import {
   HttpStatus,
   InternalServerErrorException,
   Logger,
+  MessageEvent,
   NotFoundException,
   Optional,
   Param,
@@ -19,13 +20,18 @@ import {
   Put,
   Query,
   Res,
+  Sse,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { createHash } from 'crypto';
 import { Response } from 'express';
+import { Observable } from 'rxjs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 // Commands
@@ -69,6 +75,8 @@ import { DespacharComponenteOrdenDto, InventarioService } from '../inventario/in
 import { extractR2KeyFromUrl } from '../pdf/pdf-naming.helper';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { FinalizacionOrdenService, ProgressEvent } from './services/finalizacion-orden.service';
+import { OrdenRealtimeBusService } from './services/orden-realtime-bus.service';
+import { OrdenesEspejoService, UpsertActividadAdminDto } from './services/ordenes-espejo.service';
 import {
   ProgresoRegistroService,
   HeartbeatProgresoDto,
@@ -119,6 +127,8 @@ export class OrdenesController {
     private readonly transferenciaService: TransferenciaOrdenService,
     @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
     @Optional() private readonly syncDeltaService?: SyncDeltaService,
+    @Optional() private readonly espejoService?: OrdenesEspejoService,
+    @Optional() private readonly realtimeBus?: OrdenRealtimeBusService,
   ) {}
 
   /**
@@ -162,6 +172,61 @@ export class OrdenesController {
       console.error(`❌ [HISTORIAL-EMAILS] Error al buscar historial:`, error);
       throw error;
     }
+  }
+
+  /**
+   * POST /api/ordenes/:id/stream-ticket (FASE 2 · Espejo Vivo SSE)
+   * Emite un ticket efímero de un solo uso (30s) para conectar `EventSource` sin exponer JWT en la URL.
+   */
+  @Post(':id/stream-ticket')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Genera ticket efímero (30s, un solo uso) para stream SSE de la orden',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: Number })
+  async createStreamTicket(@Param('id', ParseIntPipe) id: number, @UserId() userId: number) {
+    if (!this.realtimeBus) {
+      throw new InternalServerErrorException('OrdenRealtimeBusService no disponible');
+    }
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: { id_orden_servicio: true },
+    });
+    if (!orden) {
+      throw new NotFoundException(`Orden #${id} no encontrada`);
+    }
+    const issued = this.realtimeBus.issueStreamTicket(id, userId || 1);
+    return {
+      success: true,
+      orderId: id,
+      ticket: issued.ticket,
+      expiresInSeconds: issued.expiresInSeconds,
+      streamPath: `/ordenes/${id}/stream?ticket=${issued.ticket}`,
+    };
+  }
+
+  /**
+   * GET /api/ordenes/:id/stream (FASE 2 · Canal SSE Real-Time vía EventEmitter2)
+   * Emite `connected`, `delta_synced`, `heartbeat`, `order_updated`, `order_finalized` y `ping`.
+   */
+  @Public()
+  @SkipThrottle()
+  @Sse(':id/stream')
+  @ApiOperation({
+    summary: 'Canal Server-Sent Events (SSE) en tiempo real para el Espejo Vivo de una orden',
+  })
+  streamOrdenRealtime(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('ticket') ticket?: string,
+  ): Observable<MessageEvent> {
+    if (!this.realtimeBus) {
+      throw new InternalServerErrorException('OrdenRealtimeBusService no disponible');
+    }
+    const valid = this.realtimeBus.consumeStreamTicket(id, ticket);
+    if (!valid) {
+      throw new UnauthorizedException('Ticket de stream SSE inválido, expirado o ya utilizado');
+    }
+    return this.realtimeBus.subscribeOrden(id);
   }
 
   /**
@@ -570,7 +635,7 @@ export class OrdenesController {
   @UseGuards(JwtAuthGuard)
   async getActividadesEjecutadas(@Param('id', ParseIntPipe) id: number) {
     const actividades = await this.prisma.actividades_ejecutadas.findMany({
-      where: { id_orden_servicio: id },
+      where: { id_orden_servicio: id, deleted_at: null },
       include: {
         catalogo_actividades: true,
         empleados: { include: { persona: true } },
@@ -584,6 +649,42 @@ export class OrdenesController {
       success: true,
       data: actividades,
     };
+  }
+
+  /**
+   * GET /api/ordenes/:id/actividades-completas (FASE 2 · Espejo Vivo)
+   * Proyecta 100% del plan de actividades esperado (por equipo en multi-equipo) unido con
+   * `actividades_ejecutadas`, devolviendo `estado_registro: 'SIN_REGISTRO'` para lo aún no tocado.
+   */
+  @Get(':id/actividades-completas')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Proyección completa del checklist (plan esperado + ejecutadas con SIN_REGISTRO)',
+  })
+  async getActividadesCompletas(@Param('id', ParseIntPipe) id: number) {
+    if (!this.espejoService) {
+      throw new InternalServerErrorException('OrdenesEspejoService no disponible');
+    }
+    return await this.espejoService.getActividadesCompletas(id);
+  }
+
+  /**
+   * POST /api/ordenes/:id/actividades (FASE 2 · Registro directo desde Admin sobre SIN_REGISTRO)
+   */
+  @Post(':id/actividades')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Registra o actualiza una actividad del plan directamente desde Portal Admin',
+  })
+  async upsertActividadDesdeAdmin(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpsertActividadAdminDto,
+    @UserId() userId: number,
+  ) {
+    if (!this.espejoService) {
+      throw new InternalServerErrorException('OrdenesEspejoService no disponible');
+    }
+    return await this.espejoService.upsertActividadDesdeAdmin(id, body, userId || 1);
   }
 
   private enrichParametroMedicionConEquipo(
@@ -635,7 +736,7 @@ export class OrdenesController {
         },
       }),
       this.prisma.mediciones_servicio.findMany({
-        where: { id_orden_servicio: id },
+        where: { id_orden_servicio: id, deleted_at: null },
         include: {
           parametros_medicion: true,
         },
@@ -660,197 +761,16 @@ export class OrdenesController {
 
   /**
    * GET /api/ordenes/:id/mediciones-completas
-   * ✅ 24-FEB-2026 (v3): Retorna mediciones registradas + parámetros disponibles sin medir
-   *
-   * ESTRATEGIA ROBUSTA (4 fuentes de parámetros):
-   * 1. Plan de actividades de la orden (ordenes_actividades_plan → catalogo_actividades MEDICION → parametros_medicion)
-   * 2. Catálogo de actividades del tipo de servicio (catalogo_actividades → MEDICION → parametros_medicion)
-   * 3. Parámetros del tipo de equipo (parametros_medicion → id_tipo_equipo)
-   * 4. Parámetros de equipos múltiples (ordenes_equipos → equipos → id_tipo_equipo → parametros_medicion)
-   * Se hace UNION de las 4 fuentes y se restan los ya medidos.
+   * ✅ FASE 2 (FIX MULTI-EQUIPO): Delega a OrdenesEspejoService para trackear parámetros
+   * independientemente por cada `id_orden_equipo` con sus overrides de rango propios.
    */
   @Get(':id/mediciones-completas')
   @UseGuards(JwtAuthGuard)
   async getMedicionesCompletas(@Param('id', ParseIntPipe) id: number) {
-    // 1. Obtener la orden con equipo, tipo servicio, equipos múltiples y plan
-    const orden = await this.prisma.ordenes_servicio.findUnique({
-      where: { id_orden_servicio: id },
-      select: {
-        id_orden_servicio: true,
-        id_tipo_servicio: true,
-        equipos: {
-          select: {
-            id_tipo_equipo: true,
-            config_parametros: true,
-            plantillas_parametros: true,
-          },
-        },
-        ordenes_equipos: {
-          select: {
-            id_orden_equipo: true,
-            equipos: {
-              select: {
-                id_tipo_equipo: true,
-                config_parametros: true,
-                plantillas_parametros: true,
-              },
-            },
-          },
-        },
-        ordenes_actividades_plan: {
-          select: {
-            catalogo_actividades: {
-              select: {
-                tipo_actividad: true,
-                id_parametro_medicion: true,
-                descripcion_actividad: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!orden) {
-      return { success: false, data: [], parametros_sin_medir: [] };
+    if (!this.espejoService) {
+      throw new InternalServerErrorException('OrdenesEspejoService no disponible');
     }
-
-    console.log(
-      `[MEDICIONES-COMPLETAS] Orden #${id}: id_tipo_servicio=${orden.id_tipo_servicio}, id_tipo_equipo=${orden.equipos?.id_tipo_equipo}, plan_items=${orden.ordenes_actividades_plan?.length}, ordenes_equipos=${orden.ordenes_equipos?.length}`,
-    );
-
-    // 2. Obtener mediciones ya registradas (orden determinista por equipo y registro)
-    const mediciones = await this.prisma.mediciones_servicio.findMany({
-      where: { id_orden_servicio: id },
-      include: { parametros_medicion: true },
-      orderBy: [{ id_orden_equipo: 'asc' }, { id_medicion: 'asc' }],
-    });
-
-    const idsMedidos = new Set(mediciones.map((m) => m.id_parametro_medicion));
-    console.log(
-      `[MEDICIONES-COMPLETAS] Mediciones registradas: ${mediciones.length}, IDs medidos: [${Array.from(idsMedidos).join(',')}]`,
-    );
-
-    // 3. FUENTE 1: Parámetros del plan de actividades de la orden (MEDICION)
-    const idsDesdelPlan = new Set<number>();
-    for (const planItem of orden.ordenes_actividades_plan || []) {
-      const act = planItem.catalogo_actividades;
-      if (act?.tipo_actividad === 'MEDICION' && act.id_parametro_medicion) {
-        idsDesdelPlan.add(act.id_parametro_medicion);
-      }
-    }
-    console.log(
-      `[MEDICIONES-COMPLETAS] FUENTE 1 (plan orden): ${idsDesdelPlan.size} params -> [${Array.from(idsDesdelPlan).join(',')}]`,
-    );
-
-    // 4. FUENTE 2: Catálogo de actividades del tipo de servicio (MEDICION con parámetro vinculado)
-    const idsDesdeServicio = new Set<number>();
-    if (orden.id_tipo_servicio) {
-      const actividadesCatalogo = await this.prisma.catalogo_actividades.findMany({
-        where: {
-          id_tipo_servicio: orden.id_tipo_servicio,
-          tipo_actividad: 'MEDICION',
-          id_parametro_medicion: { not: null },
-          activo: true,
-        },
-        select: { id_parametro_medicion: true, descripcion_actividad: true },
-      });
-      for (const act of actividadesCatalogo) {
-        if (act.id_parametro_medicion) {
-          idsDesdeServicio.add(act.id_parametro_medicion);
-        }
-      }
-      console.log(
-        `[MEDICIONES-COMPLETAS] FUENTE 2 (catalogo tipo_servicio=${orden.id_tipo_servicio}): ${idsDesdeServicio.size} params -> [${Array.from(idsDesdeServicio).join(',')}]`,
-      );
-    }
-
-    // 5. FUENTE 3: Parámetros del tipo de equipo directo
-    const tiposEquipoIds = new Set<number>();
-    if (orden.equipos?.id_tipo_equipo) {
-      tiposEquipoIds.add(orden.equipos.id_tipo_equipo);
-    }
-
-    // 6. FUENTE 4: Parámetros de equipos múltiples (ordenes_equipos)
-    for (const oe of orden.ordenes_equipos || []) {
-      if (oe.equipos?.id_tipo_equipo) {
-        tiposEquipoIds.add(oe.equipos.id_tipo_equipo);
-      }
-    }
-
-    const parametrosPorTipo =
-      tiposEquipoIds.size > 0
-        ? await this.prisma.parametros_medicion.findMany({
-            where: {
-              id_tipo_equipo: { in: Array.from(tiposEquipoIds) },
-              activo: true,
-            },
-          })
-        : [];
-    console.log(
-      `[MEDICIONES-COMPLETAS] FUENTE 3+4 (tipos_equipo=[${Array.from(tiposEquipoIds).join(',')}]): ${parametrosPorTipo.length} params`,
-    );
-
-    // 7. Consultar parámetros del plan + servicio
-    const idsFromPlans = new Set([...idsDesdelPlan, ...idsDesdeServicio]);
-    const parametrosDelPlan =
-      idsFromPlans.size > 0
-        ? await this.prisma.parametros_medicion.findMany({
-            where: {
-              id_parametro_medicion: { in: Array.from(idsFromPlans) },
-              activo: true,
-            },
-          })
-        : [];
-
-    // 8. UNION de todas las fuentes (deduplicar por ID)
-    const mapaParametros = new Map<number, any>();
-    for (const p of parametrosPorTipo) {
-      mapaParametros.set(p.id_parametro_medicion, p);
-    }
-    for (const p of parametrosDelPlan) {
-      mapaParametros.set(p.id_parametro_medicion, p);
-    }
-
-    // 9. Filtrar los que NO han sido medidos y enriquecer con overrides del equipo
-    const parametrosSinMedir = Array.from(mapaParametros.values())
-      .filter((p) => !idsMedidos.has(p.id_parametro_medicion))
-      .sort((a, b) => (a.nombre_parametro || '').localeCompare(b.nombre_parametro || ''))
-      .map((p) => this.enrichParametroMedicionConEquipo(p, orden, null));
-
-    const medicionesEnriquecidas = mediciones.map((m) => ({
-      ...m,
-      parametros_medicion: this.enrichParametroMedicionConEquipo(
-        m.parametros_medicion,
-        orden,
-        m.id_orden_equipo,
-      ),
-    }));
-
-    console.log(
-      `[MEDICIONES-COMPLETAS] RESULTADO: total_disponibles=${mapaParametros.size}, medidos=${idsMedidos.size}, sin_medir=${parametrosSinMedir.length}`,
-    );
-    if (parametrosSinMedir.length > 0) {
-      console.log(
-        `[MEDICIONES-COMPLETAS] Sin medir: ${parametrosSinMedir.map((p) => p.nombre_parametro).join(', ')}`,
-      );
-    }
-
-    return {
-      success: true,
-      data: medicionesEnriquecidas,
-      parametros_sin_medir: parametrosSinMedir,
-      _debug: {
-        total_parametros_disponibles: mapaParametros.size,
-        total_medidos: idsMedidos.size,
-        total_sin_medir: parametrosSinMedir.length,
-        fuentes: {
-          plan_actividades: idsDesdelPlan.size,
-          catalogo_servicio: idsDesdeServicio.size,
-          tipos_equipo: parametrosPorTipo.length,
-        },
-      },
-    };
+    return await this.espejoService.getMedicionesCompletas(id);
   }
 
   /**
@@ -988,6 +908,15 @@ export class OrdenesController {
         }
       }
     }
+
+    this.realtimeBus?.emitOrdenEvent({
+      type: 'order_updated',
+      orderId: id,
+      sections: ['mediciones', 'progreso'],
+      changedIds: { mediciones: [nuevaMedicion.id_medicion] },
+      timestamp: new Date().toISOString(),
+      source: 'ADMIN_ACTION',
+    });
 
     return {
       success: true,
@@ -1207,7 +1136,7 @@ export class OrdenesController {
   @UseGuards(JwtAuthGuard)
   async getEvidencias(@Param('id', ParseIntPipe) id: number) {
     const evidencias = await this.prisma.evidencias_fotograficas.findMany({
-      where: { id_orden_servicio: id },
+      where: { id_orden_servicio: id, deleted_at: null },
       include: {
         actividades_ejecutadas: {
           include: {

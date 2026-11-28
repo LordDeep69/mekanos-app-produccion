@@ -126,10 +126,10 @@ export class PrismaOrdenServicioRepository {
       SELECT
         o.id_orden_servicio AS id,
         (SELECT COUNT(*)::int FROM historial_emails_enviados t WHERE t.id_orden_servicio = o.id_orden_servicio) AS emails,
-        (SELECT COUNT(*)::int FROM actividades_ejecutadas t WHERE t.id_orden_servicio = o.id_orden_servicio) AS actividades,
+        (SELECT COUNT(*)::int FROM actividades_ejecutadas t WHERE t.id_orden_servicio = o.id_orden_servicio AND t.deleted_at IS NULL) AS actividades,
         (SELECT COUNT(*)::int FROM ordenes_actividades_plan t WHERE t.id_orden_servicio = o.id_orden_servicio) AS plan,
-        (SELECT COUNT(*)::int FROM mediciones_servicio t WHERE t.id_orden_servicio = o.id_orden_servicio) AS mediciones,
-        (SELECT COUNT(*)::int FROM evidencias_fotograficas t WHERE t.id_orden_servicio = o.id_orden_servicio) AS evidencias,
+        (SELECT COUNT(*)::int FROM mediciones_servicio t WHERE t.id_orden_servicio = o.id_orden_servicio AND t.deleted_at IS NULL) AS mediciones,
+        (SELECT COUNT(*)::int FROM evidencias_fotograficas t WHERE t.id_orden_servicio = o.id_orden_servicio AND t.deleted_at IS NULL) AS evidencias,
         (SELECT COUNT(*)::int FROM documentos_generados d WHERE d.id_referencia = o.id_orden_servicio AND d.tipo_documento = 'INFORME_SERVICIO'::tipo_documento_enum) AS pdfs,
         COALESCE(p.total, 0)::int AS pendientes_total,
         COALESCE(p.activos, 0)::int AS pendientes_activos
@@ -138,7 +138,8 @@ export class PrismaOrdenServicioRepository {
         SELECT COUNT(*)::int AS total,
                COUNT(*) FILTER (WHERE op.estado IN ('PENDIENTE','EN_GESTION'))::int AS activos
         FROM ordenes_pendientes op
-        WHERE op.id_orden_servicio = o.id_orden_servicio OR op.id_orden_resolucion = o.id_orden_servicio
+        WHERE (op.id_orden_servicio = o.id_orden_servicio OR op.id_orden_resolucion = o.id_orden_servicio)
+          AND op.deleted_at IS NULL
       ) p ON TRUE
       WHERE o.id_orden_servicio = ANY(${ordenIds}::int[])
     `;
@@ -1199,8 +1200,9 @@ export class PrismaOrdenServicioRepository {
             documentos_generados: true,
           },
         },
-        // ✅ PENDIENTES TÉCNICOS: Incluir pendientes registrados
+        // ✅ PENDIENTES TÉCNICOS: Incluir pendientes registrados activos (sin tombstones)
         ordenes_pendientes: {
+          where: { deleted_at: null },
           include: {
             equipos: {
               select: {
@@ -1253,6 +1255,7 @@ export class PrismaOrdenServicioRepository {
           },
         },
         pendientes_asignados_resolver: {
+          where: { deleted_at: null },
           include: {
             equipos: {
               select: {
@@ -1387,6 +1390,7 @@ export class PrismaOrdenServicioRepository {
 
     const pendientesCaso = await this.prisma.ordenes_pendientes.findMany({
       where: {
+        deleted_at: null,
         OR: [
           { id_orden_servicio: { in: visitasIds } },
           { id_orden_resolucion: { in: visitasIds } },

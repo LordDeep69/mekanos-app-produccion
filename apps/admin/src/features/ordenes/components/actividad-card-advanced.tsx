@@ -15,10 +15,10 @@
 
 import { cn } from '@/lib/utils';
 import { useOrgFormatters } from '@/hooks/use-org-formatters';
-import { Check, ChevronDown, ChevronUp, Loader2, MessageSquare, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Clock, Loader2, MessageSquare, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { EstadoActividad } from '../api/ordenes.service';
-import { useUpdateActividad } from '../hooks/use-ordenes';
+import { useCreateActividadOrden, useUpdateActividad } from '../hooks/use-ordenes';
 import { GaleriaActividadFotos } from './galeria-actividad-fotos';
 import { getMetricaUsoMeta } from '@/features/catalogos-eam';
 import {
@@ -38,24 +38,32 @@ import {
 } from './rich-text-editor';
 
 interface Actividad {
-  id_actividad_ejecutada: number;
-  descripcion_manual?: string;
-  sistema?: string;
-  estado?: string;
-  observaciones?: string;
+  id_actividad_ejecutada: number | null;
+  virtual_key?: string;
+  estado_registro?: 'SIN_REGISTRO' | 'REGISTRADA';
+  id_actividad_catalogo?: number | null;
+  orden_secuencia?: number;
+  es_obligatoria?: boolean;
+  evidencias_count?: number;
+  client_uuid?: string | null;
+  descripcion_manual?: string | null;
+  sistema?: string | null;
+  estado?: string | null;
+  observaciones?: string | null;
   ejecutada?: boolean;
-  fecha_ejecucion?: string;
+  fecha_ejecucion?: string | null;
   respuesta_json?: Record<string, unknown> | null;
   // ✅ FIX 30-ABR-2026: Soporte multi-equipo para fotos
   id_orden_equipo?: number | null;
   catalogo_actividades?: {
+    id_actividad_catalogo?: number;
     descripcion_actividad?: string;
     codigo_actividad?: string;
     tipo_control_input?: string;
     config_input_json?: unknown;
     rol_semantico?: string | null;
     naturaleza_personalizada?: string | null;
-  };
+  } | null;
 }
 
 interface ActividadCardAdvancedProps {
@@ -65,6 +73,7 @@ interface ActividadCardAdvancedProps {
   etiquetaContador?: string | null;
   requiereHorometro?: boolean | null;
   horasActualesEquipo?: number | null;
+  isRecentlyUpdated?: boolean;
   onUpdate?: () => void;
 }
 
@@ -98,19 +107,38 @@ const ESTADOS_CONFIG = [
     border: 'border-yellow-500',
   },
   {
-    value: null,
+    value: 'NA',
     label: 'N/A',
     short: 'N/A',
-    color: 'bg-gray-400 hover:bg-gray-500 text-white',
-    border: 'border-gray-400',
+    color: 'bg-slate-500 hover:bg-slate-600 text-white',
+    border: 'border-slate-500',
   },
 ] as const;
 
-function getEstadoConfig(estado?: string | null) {
-  return ESTADOS_CONFIG.find((e) => e.value === estado) || ESTADOS_CONFIG[4]; // Default N/A
+const SIN_REGISTRO_CONFIG = {
+  value: null,
+  label: 'Sin registro',
+  short: '—',
+  color: 'bg-white text-slate-400 border border-dashed border-slate-300',
+  border: 'border-slate-300',
+} as const;
+
+function isActividadSinRegistro(actividad: Actividad): boolean {
+  if (actividad.estado_registro === 'SIN_REGISTRO') return true;
+  if (actividad.id_actividad_ejecutada == null) return true;
+  return !actividad.estado && !actividad.ejecutada;
 }
 
-function getEstadoBgColor(estado?: string | null) {
+function getEstadoConfig(estado?: string | null, sinRegistro = false) {
+  if (sinRegistro) return SIN_REGISTRO_CONFIG;
+  if (estado === 'N/A' || estado === 'NA') return ESTADOS_CONFIG[4];
+  return ESTADOS_CONFIG.find((e) => e.value === estado) || SIN_REGISTRO_CONFIG;
+}
+
+function getEstadoBgColor(estado?: string | null, sinRegistro = false) {
+  if (sinRegistro) {
+    return 'bg-slate-50/70 border-dashed border-slate-300 hover:border-slate-400';
+  }
   switch (estado) {
     case 'B':
       return 'bg-green-50 border-green-200';
@@ -120,6 +148,9 @@ function getEstadoBgColor(estado?: string | null) {
       return 'bg-blue-50 border-blue-200';
     case 'R':
       return 'bg-yellow-50 border-yellow-200';
+    case 'NA':
+    case 'N/A':
+      return 'bg-slate-100/80 border-slate-300';
     default:
       return 'bg-gray-50 border-gray-200';
   }
@@ -316,13 +347,18 @@ export function ActividadCardAdvanced({
   etiquetaContador,
   requiereHorometro,
   horasActualesEquipo,
+  isRecentlyUpdated = false,
   onUpdate,
 }: ActividadCardAdvancedProps) {
   const { formatNumber, formatDateTime } = useOrgFormatters();
   const updateActividad = useUpdateActividad();
+  const createActividad = useCreateActividadOrden();
+  const isMutating = updateActividad.isPending || createActividad.isPending;
   const [isExpanded, setIsExpanded] = useState(false);
   const [observaciones, setObservaciones] = useState(actividad.observaciones || '');
   const [showObservaciones, setShowObservaciones] = useState(false);
+
+  const sinRegistro = isActividadSinRegistro(actividad);
 
   const metricaUso = getMetricaUsoMeta({
     unidadUso,
@@ -334,8 +370,37 @@ export function ActividadCardAdvanced({
     actividad.catalogo_actividades?.descripcion_actividad ||
     actividad.descripcion_manual ||
     'Sin descripción';
-  const estadoActual = actividad.estado as EstadoActividad;
-  const estadoConfig = getEstadoConfig(estadoActual);
+  const estadoActual = (actividad.estado ?? null) as EstadoActividad;
+  const estadoConfig = getEstadoConfig(estadoActual, sinRegistro);
+
+  const persistActividadChange = async (payload: {
+    estado?: EstadoActividad;
+    observaciones?: string | null;
+    ejecutada?: boolean;
+    respuestaJson?: Record<string, unknown> | null;
+  }) => {
+    if (actividad.id_actividad_ejecutada != null) {
+      await updateActividad.mutateAsync({
+        idActividad: actividad.id_actividad_ejecutada,
+        data: payload,
+      });
+    } else {
+      await createActividad.mutateAsync({
+        idOrden: idOrdenServicio,
+        data: {
+          id_actividad_catalogo:
+            actividad.id_actividad_catalogo ??
+            actividad.catalogo_actividades?.id_actividad_catalogo ??
+            null,
+          id_orden_equipo: actividad.id_orden_equipo ?? null,
+          descripcion_manual: actividad.descripcion_manual ?? null,
+          sistema: actividad.sistema ?? null,
+          orden_secuencia: actividad.orden_secuencia ?? null,
+          ...payload,
+        },
+      });
+    }
+  };
 
   const tipoControlInput = (
     actividad.catalogo_actividades?.tipo_control_input || 'ESCALA_ESTADO'
@@ -404,15 +469,12 @@ export function ActividadCardAdvanced({
   }, [actividad.observaciones, esRico, editor]);
 
   const handleEstadoChange = async (nuevoEstado: EstadoActividad) => {
-    if (updateActividad.isPending) return;
+    if (isMutating) return;
 
     try {
-      await updateActividad.mutateAsync({
-        idActividad: actividad.id_actividad_ejecutada,
-        data: {
-          estado: nuevoEstado,
-          ejecutada: nuevoEstado !== null,
-        },
+      await persistActividadChange({
+        estado: nuevoEstado,
+        ejecutada: nuevoEstado !== null,
       });
       onUpdate?.();
     } catch (error) {
@@ -421,21 +483,18 @@ export function ActividadCardAdvanced({
   };
 
   const handleSeleccionDeclarativa = async (opcion: OpcionInputDeclarativo) => {
-    if (updateActividad.isPending) return;
+    if (isMutating) return;
     const mappedEstado: EstadoActividad =
       opcion.semaforo === 'NA' ? 'NA' : (opcion.semaforo as EstadoActividad);
     try {
-      await updateActividad.mutateAsync({
-        idActividad: actividad.id_actividad_ejecutada,
-        data: {
-          estado: mappedEstado,
-          ejecutada: true,
-          respuestaJson: {
-            ...(respuestaActualObj || {}),
-            valor: opcion.valor,
-            etiqueta: opcion.etiqueta,
-            semaforo: opcion.semaforo,
-          },
+      await persistActividadChange({
+        estado: mappedEstado,
+        ejecutada: true,
+        respuestaJson: {
+          ...(respuestaActualObj || {}),
+          valor: opcion.valor,
+          etiqueta: opcion.etiqueta,
+          semaforo: opcion.semaforo,
         },
       });
       onUpdate?.();
@@ -445,7 +504,7 @@ export function ActividadCardAdvanced({
   };
 
   const handleGuardarContador = async () => {
-    if (updateActividad.isPending) return;
+    if (isMutating) return;
     const trimmed = contadorInput.trim();
     if (!trimmed) return;
     const valNum = Number(trimmed.replace(',', '.'));
@@ -468,20 +527,17 @@ export function ActividadCardAdvanced({
       ? `${trimmed} ${metricaUso.sufijoCorto}`
       : trimmed;
     try {
-      await updateActividad.mutateAsync({
-        idActividad: actividad.id_actividad_ejecutada,
-        data: {
-          estado: (estadoActual || 'B') as EstadoActividad,
-          ejecutada: true,
-          observaciones: observacionesGuardar,
-          respuestaJson: {
-            ...(respuestaActualObj || {}),
-            valor: trimmed,
-            etiqueta: etiquetaDisplay,
-            unidad: metricaUso.sufijoCorto,
-            unidadUso: metricaUso.unidadUso,
-            semaforo: estadoActual || 'B',
-          },
+      await persistActividadChange({
+        estado: (estadoActual || 'B') as EstadoActividad,
+        ejecutada: true,
+        observaciones: observacionesGuardar,
+        respuestaJson: {
+          ...(respuestaActualObj || {}),
+          valor: trimmed,
+          etiqueta: etiquetaDisplay,
+          unidad: metricaUso.sufijoCorto,
+          unidadUso: metricaUso.unidadUso,
+          semaforo: estadoActual || 'B',
         },
       });
       setObservaciones(observacionesGuardar);
@@ -492,7 +548,7 @@ export function ActividadCardAdvanced({
   };
 
   const handleGuardarObservaciones = async () => {
-    if (updateActividad.isPending) return;
+    if (isMutating) return;
 
     try {
       let valorAGuardar: string | null = null;
@@ -513,11 +569,8 @@ export function ActividadCardAdvanced({
         valorAGuardar = tieneContenido ? observaciones.trim() : null;
       }
 
-      await updateActividad.mutateAsync({
-        idActividad: actividad.id_actividad_ejecutada,
-        data: {
-          observaciones: valorAGuardar,
-        },
+      await persistActividadChange({
+        observaciones: valorAGuardar,
       });
       setShowObservaciones(false);
       setObservaciones(valorAGuardar || '');
@@ -544,9 +597,11 @@ export function ActividadCardAdvanced({
   return (
     <div
       className={cn(
-        'rounded-xl border-2 transition-all duration-200',
-        getEstadoBgColor(estadoActual),
+        'rounded-xl border-2 transition-all duration-500',
+        getEstadoBgColor(estadoActual, sinRegistro),
         isExpanded && 'ring-2 ring-blue-200',
+        isRecentlyUpdated &&
+          'ring-2 ring-emerald-400 border-emerald-400 bg-emerald-50/50 shadow-md shadow-emerald-100',
       )}
     >
       {/* ✅ Estilos del editor TipTap (sin sangrar; aplica a selectores globales) */}
@@ -554,19 +609,40 @@ export function ActividadCardAdvanced({
       {/* Header */}
       <div className="p-3 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
         <div className="flex items-start gap-3">
-          {/* Indicador de Estado */}
+          {/* Indicador de Estado (diferencia claramente Sin registro vs N/A) */}
           <div
             className={cn(
               'flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm shadow-sm',
               estadoConfig.color,
             )}
+            title={estadoConfig.label}
           >
-            {estadoActual ? estadoActual : 'N/A'}
+            {sinRegistro ? <Clock className="h-4 w-4 text-slate-400" /> : estadoConfig.short}
           </div>
 
           {/* Contenido */}
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-gray-900 text-sm leading-tight">{descripcion}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p
+                className={cn(
+                  'font-bold text-sm leading-tight',
+                  sinRegistro ? 'text-slate-600' : 'text-gray-900',
+                )}
+              >
+                {descripcion}
+              </p>
+              {sinRegistro && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-dashed border-slate-300">
+                  Sin registro
+                </span>
+              )}
+              {isRecentlyUpdated && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  En vivo
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {actividad.sistema && (
                 <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded uppercase">
@@ -912,12 +988,19 @@ export function ActividadCardAdvanced({
             ))}
 
           {/* Galería de Fotos ANTES/DURANTE/DESPUÉS */}
-          <GaleriaActividadFotos
-            idOrdenServicio={idOrdenServicio}
-            idActividadEjecutada={actividad.id_actividad_ejecutada}
-            idOrdenEquipo={actividad.id_orden_equipo ?? undefined}
-            nombreActividad={descripcion}
-          />
+          {actividad.id_actividad_ejecutada != null ? (
+            <GaleriaActividadFotos
+              idOrdenServicio={idOrdenServicio}
+              idActividadEjecutada={actividad.id_actividad_ejecutada}
+              idOrdenEquipo={actividad.id_orden_equipo ?? undefined}
+              nombreActividad={descripcion}
+            />
+          ) : (
+            <p className="text-[11px] text-slate-400 italic px-1">
+              Sin registro aún en campo. Selecciona un estado arriba si deseas registrarla desde el
+              portal o espera la sincronización del técnico.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -925,26 +1008,31 @@ export function ActividadCardAdvanced({
 }
 
 /**
- * Resumen de estados del checklist
+ * Resumen de estados del checklist (diferencia N/A de Sin registro)
  */
 export function ResumenEstados({ actividades }: { actividades: Actividad[] }) {
   const contadores = {
-    B: actividades.filter((a) => a.estado === 'B').length,
-    M: actividades.filter((a) => a.estado === 'M').length,
-    C: actividades.filter((a) => a.estado === 'C').length,
-    R: actividades.filter((a) => a.estado === 'R').length,
-    pendientes: actividades.filter((a) => !a.estado || !a.ejecutada).length,
+    B: actividades.filter((a) => !isActividadSinRegistro(a) && a.estado === 'B').length,
+    M: actividades.filter((a) => !isActividadSinRegistro(a) && a.estado === 'M').length,
+    C: actividades.filter((a) => !isActividadSinRegistro(a) && a.estado === 'C').length,
+    R: actividades.filter((a) => !isActividadSinRegistro(a) && a.estado === 'R').length,
+    NA: actividades.filter(
+      (a) => !isActividadSinRegistro(a) && (a.estado === 'NA' || a.estado === 'N/A'),
+    ).length,
+    sinRegistro: actividades.filter((a) => isActividadSinRegistro(a)).length,
   };
 
   const total = actividades.length;
-  const completadas = total - contadores.pendientes;
+  const completadas = total - contadores.sinRegistro;
   const porcentaje = total > 0 ? Math.round((completadas / total) * 100) : 0;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <h4 className="font-bold text-gray-900 text-sm">Resumen del Checklist</h4>
-        <span className="text-sm font-black text-blue-600">{porcentaje}%</span>
+        <span className="text-sm font-black text-blue-600">
+          {completadas}/{total} ({porcentaje}%)
+        </span>
       </div>
 
       {/* Barra de progreso */}
@@ -955,8 +1043,8 @@ export function ResumenEstados({ actividades }: { actividades: Actividad[] }) {
         />
       </div>
 
-      {/* Contadores */}
-      <div className="grid grid-cols-5 gap-2">
+      {/* Contadores (6 categorías semánticas claras) */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
         <div className="text-center p-2 bg-green-50 rounded-lg border border-green-100">
           <p className="text-lg font-black text-green-600">{contadores.B}</p>
           <p className="text-[9px] font-bold text-green-700 uppercase">Bueno</p>
@@ -973,9 +1061,13 @@ export function ResumenEstados({ actividades }: { actividades: Actividad[] }) {
           <p className="text-lg font-black text-yellow-600">{contadores.R}</p>
           <p className="text-[9px] font-bold text-yellow-700 uppercase">Regular</p>
         </div>
-        <div className="text-center p-2 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-lg font-black text-gray-600">{contadores.pendientes}</p>
-          <p className="text-[9px] font-bold text-gray-500 uppercase">Pendiente</p>
+        <div className="text-center p-2 bg-slate-100 rounded-lg border border-slate-200">
+          <p className="text-lg font-black text-slate-600">{contadores.NA}</p>
+          <p className="text-[9px] font-bold text-slate-600 uppercase">N/A</p>
+        </div>
+        <div className="text-center p-2 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+          <p className="text-lg font-black text-slate-500">{contadores.sinRegistro}</p>
+          <p className="text-[9px] font-bold text-slate-500 uppercase">Sin registro</p>
         </div>
       </div>
     </div>

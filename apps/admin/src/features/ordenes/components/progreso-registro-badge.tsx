@@ -50,7 +50,10 @@ export function ProgresoRegistroBadge({
   } = progreso;
 
   const esFinalizada =
-    estadoOrden === 'COMPLETADA' || estadoOrden === 'APROBADA' || estado_conexion === 'COMPLETADO';
+    estadoOrden === 'COMPLETADA' ||
+    estadoOrden === 'CERRADA' ||
+    estadoOrden === 'CANCELADA' ||
+    estado_conexion === 'COMPLETADO';
 
   // Formatear texto de inactividad
   const getInactividadTexto = () => {

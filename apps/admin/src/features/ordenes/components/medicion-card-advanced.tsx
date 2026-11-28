@@ -77,6 +77,7 @@ interface Medicion {
 interface MedicionCardAdvancedProps {
   medicion: Medicion;
   idOrdenServicio: number;
+  isRecentlyUpdated?: boolean;
   onUpdate?: () => void;
 }
 
@@ -180,15 +181,22 @@ function RangoVisual({
 export function MedicionCardAdvanced({
   medicion,
   idOrdenServicio,
+  isRecentlyUpdated = false,
   onUpdate,
 }: MedicionCardAdvancedProps) {
   const updateMedicion = useUpdateMedicion();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [valorNumerico, setValorNumerico] = useState<string>(
+  const [valorNumericoDraft, setValorNumericoDraft] = useState<string>(
     medicion.valor_numerico?.toString() ?? '',
   );
-  const [observaciones, setObservaciones] = useState(medicion.observaciones || '');
+  const [observacionesDraft, setObservacionesDraft] = useState(medicion.observaciones || '');
+  const valorNumerico = isEditing
+    ? valorNumericoDraft
+    : (medicion.valor_numerico?.toString() ?? '');
+  const observaciones = isEditing ? observacionesDraft : medicion.observaciones || '';
+  const setValorNumerico = (v: string) => setValorNumericoDraft(v);
+  const setObservaciones = (v: string) => setObservacionesDraft(v);
 
   const parametro = medicion.parametros_medicion;
   const nombreParametro = parametro?.nombre_parametro || 'Parámetro desconocido';
@@ -244,9 +252,11 @@ export function MedicionCardAdvanced({
   return (
     <div
       className={cn(
-        'rounded-xl border-2 transition-all duration-200',
+        'rounded-xl border-2 transition-all duration-500',
         colors.bg,
         isExpanded && 'ring-2 ring-blue-200',
+        isRecentlyUpdated &&
+          'ring-2 ring-emerald-400 border-emerald-400 shadow-md shadow-emerald-100',
       )}
     >
       {/* Header */}
@@ -268,6 +278,12 @@ export function MedicionCardAdvanced({
               <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider truncate">
                 {nombreParametro}
               </p>
+              {isRecentlyUpdated && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  En vivo
+                </span>
+              )}
               {parametro?.es_personalizado_equipo && (
                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-violet-100 text-violet-800 border border-violet-200 shrink-0">
                   <Zap className="h-2.5 w-2.5" />
@@ -292,10 +308,8 @@ export function MedicionCardAdvanced({
                       const val = medicion.valor_numerico;
                       const minN = parametro?.valorMinimoNormal ?? parametro?.valor_minimo_normal;
                       const maxN = parametro?.valorMaximoNormal ?? parametro?.valor_maximo_normal;
-                      const minC =
-                        parametro?.valorMinimoCritico ?? parametro?.valor_minimo_critico;
-                      const maxC =
-                        parametro?.valorMaximoCritico ?? parametro?.valor_maximo_critico;
+                      const minC = parametro?.valorMinimoCritico ?? parametro?.valor_minimo_critico;
+                      const maxC = parametro?.valorMaximoCritico ?? parametro?.valor_maximo_critico;
                       const u = unidad ? ` ${unidad}` : '';
                       if (val != null) {
                         if (minC != null && val < minC) {
