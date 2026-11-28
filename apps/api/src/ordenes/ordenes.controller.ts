@@ -50,6 +50,7 @@ import { CreateOrdenDto } from './dto/create-orden.dto';
 import { FinalizarOrdenCompletoDto } from './dto/finalizar-orden-completo.dto';
 import { AddActividadPlanDto, UpdateActividadPlanDto } from './dto/plan-actividades.dto';
 import { ProgramarOrdenDto } from './dto/programar-orden.dto';
+import { PrepareEvidenciasUploadDto, SyncDeltaDto } from './dto/sync-delta.dto';
 import {
   PreviewTransferenciaOrdenDto,
   TransferirDatosOrdenDto,
@@ -72,6 +73,7 @@ import {
   ProgresoRegistroService,
   HeartbeatProgresoDto,
 } from './services/progreso-registro.service';
+import { SyncDeltaService } from './services/sync-delta.service';
 import { TransferenciaOrdenService } from './services/transferencia-orden.service';
 
 // Decorators
@@ -116,6 +118,7 @@ export class OrdenesController {
     private readonly inventarioService: InventarioService,
     private readonly transferenciaService: TransferenciaOrdenService,
     @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
+    @Optional() private readonly syncDeltaService?: SyncDeltaService,
   ) {}
 
   /**
@@ -194,6 +197,68 @@ export class OrdenesController {
     @Body() dto: HeartbeatProgresoDto,
   ) {
     return await this.progresoService.registrarHeartbeat(id, dto);
+  }
+
+  /**
+   * POST /api/ordenes/:id/sync-delta (FASE 1 · Carril 1 Metadatos Idempotentes)
+   * Upsert monotónico transaccional: ordenPatch -> actividades/pendientes -> mediciones -> evidenciasMeta -> firmas.
+   */
+  @Post(':id/sync-delta')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Sincronización delta incremental idempotente de orden de servicio (Carril 1)',
+    description:
+      'Aplica deltas monotónicos de checks, pendientes, mediciones, observaciones, metadatos de evidencias y firmas en orden transaccional estricto.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: Number })
+  async syncDeltaOrden(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SyncDeltaDto,
+    @CurrentUser()
+    user: { id: number; idEmpleado?: number | null; esAdmin?: boolean; rol?: string },
+  ) {
+    if (!this.syncDeltaService) {
+      throw new InternalServerErrorException('SyncDeltaService no disponible');
+    }
+    const esAdmin =
+      user?.esAdmin === true ||
+      ['ADMIN', 'GERENTE', 'SUPERVISOR'].includes((user?.rol || '').toUpperCase());
+    return await this.syncDeltaService.syncDelta(id, dto, {
+      id: user?.id ?? 1,
+      idEmpleado: user?.idEmpleado ?? null,
+      esAdmin,
+    });
+  }
+
+  /**
+   * POST /api/ordenes/:id/evidencias/prepare-upload (FASE 1 · Carril 2 Media Directa Firmada)
+   * Deduplicación SHA-256 + firma Just-In-Time Cloudinary (o R2-Ready) sin Base64.
+   */
+  @Post(':id/evidencias/prepare-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Prepara firma directa Just-In-Time (Cloudinary/R2) con dedup SHA-256 (Carril 2)',
+    description:
+      'Verifica si cada evidencia ya existe por clientUuid/SHA-256 (0 bytes) o genera firma directa para subida binaria desde móvil.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: Number })
+  async prepareEvidenciasUpload(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: PrepareEvidenciasUploadDto,
+    @CurrentUser()
+    user: { id: number; idEmpleado?: number | null; esAdmin?: boolean; rol?: string },
+  ) {
+    if (!this.syncDeltaService) {
+      throw new InternalServerErrorException('SyncDeltaService no disponible');
+    }
+    const esAdmin =
+      user?.esAdmin === true ||
+      ['ADMIN', 'GERENTE', 'SUPERVISOR'].includes((user?.rol || '').toUpperCase());
+    return await this.syncDeltaService.prepareEvidenciasUpload(id, dto, {
+      id: user?.id ?? 1,
+      idEmpleado: user?.idEmpleado ?? null,
+      esAdmin,
+    });
   }
 
   @Get(':id/plan-actividades')

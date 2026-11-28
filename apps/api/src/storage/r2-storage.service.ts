@@ -1,4 +1,10 @@
-import { CopyObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  CopyObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Readable } from 'node:stream';
@@ -33,9 +39,12 @@ export class R2StorageService implements OnModuleInit {
   constructor() {
     // 1. Configurar perfil Primario (canónico R2_* y retrocompatible R2_PLANTAS_*)
     const endpointPlantas = process.env.R2_ENDPOINT || process.env.R2_PLANTAS_ENDPOINT;
-    const accessKeyIdPlantas = process.env.R2_ACCESS_KEY_ID || process.env.R2_PLANTAS_ACCESS_KEY_ID || '';
-    const secretAccessKeyPlantas = process.env.R2_SECRET_ACCESS_KEY || process.env.R2_PLANTAS_SECRET_ACCESS_KEY || '';
-    this.bucketPlantas = process.env.R2_BUCKET_NAME || process.env.R2_PLANTAS_BUCKET_NAME || 'eam-storage';
+    const accessKeyIdPlantas =
+      process.env.R2_ACCESS_KEY_ID || process.env.R2_PLANTAS_ACCESS_KEY_ID || '';
+    const secretAccessKeyPlantas =
+      process.env.R2_SECRET_ACCESS_KEY || process.env.R2_PLANTAS_SECRET_ACCESS_KEY || '';
+    this.bucketPlantas =
+      process.env.R2_BUCKET_NAME || process.env.R2_PLANTAS_BUCKET_NAME || 'eam-storage';
 
     this.configuredPlantas = !!(endpointPlantas && accessKeyIdPlantas && secretAccessKeyPlantas);
 
@@ -70,37 +79,51 @@ export class R2StorageService implements OnModuleInit {
     }
 
     // 3. Cliente por defecto (retrocompatibilidad)
-    this.s3Client = this.s3ClientPlantas || this.s3ClientBombas || new S3Client({
-      region: 'auto',
-      endpoint: endpointPlantas || 'https://r2.cloudflarestorage.com',
-      credentials: {
-        accessKeyId: accessKeyIdPlantas,
-        secretAccessKey: secretAccessKeyPlantas,
-      },
-    });
+    this.s3Client =
+      this.s3ClientPlantas ||
+      this.s3ClientBombas ||
+      new S3Client({
+        region: 'auto',
+        endpoint: endpointPlantas || 'https://r2.cloudflarestorage.com',
+        credentials: {
+          accessKeyId: accessKeyIdPlantas,
+          secretAccessKey: secretAccessKeyPlantas,
+        },
+      });
     this.bucketName = this.configuredPlantas ? this.bucketPlantas : this.bucketBombas;
     this.configured = this.configuredPlantas || this.configuredBombas;
   }
 
   onModuleInit() {
     this.logger.log('🔧 [R2StorageService] Verificando configuración...');
-    this.logger.log(`   R2 PLANTAS: ${this.configuredPlantas ? `✅ Configurado (${this.bucketPlantas})` : '❌ NO CONFIGURADO'}`);
-    this.logger.log(`   R2 BOMBAS:  ${this.configuredBombas ? `✅ Configurado (${this.bucketBombas})` : '❌ NO CONFIGURADO'}`);
+    this.logger.log(
+      `   R2 PLANTAS: ${this.configuredPlantas ? `✅ Configurado (${this.bucketPlantas})` : '❌ NO CONFIGURADO'}`,
+    );
+    this.logger.log(
+      `   R2 BOMBAS:  ${this.configuredBombas ? `✅ Configurado (${this.bucketBombas})` : '❌ NO CONFIGURADO'}`,
+    );
     this.logger.log(`   R2_PUBLIC_URL: ${process.env.R2_PUBLIC_URL || '❌ NO CONFIGURADO'}`);
 
     if (this.configured) {
       this.logger.log('✅ [R2StorageService] Inicialización completa');
     } else {
-      this.logger.warn('⚠️ [R2StorageService] Configuración incompleta - Los PDFs NO se subirán a R2');
+      this.logger.warn(
+        '⚠️ [R2StorageService] Configuración incompleta - Los PDFs NO se subirán a R2',
+      );
     }
   }
 
   /**
    * Resuelve el cliente S3 y el bucket adecuado según la cuenta o la clave
    */
-  private resolveClientAndBucket(key?: string, account?: R2Account): { client: S3Client; bucket: string; account: R2Account } {
+  private resolveClientAndBucket(
+    key?: string,
+    account?: R2Account,
+  ): { client: S3Client; bucket: string; account: R2Account } {
     if (!this.configured) {
-      throw new Error('R2 Storage no está configurado. Verifique R2_ENDPOINT o R2_PLANTAS_ENDPOINT.');
+      throw new Error(
+        'R2 Storage no está configurado. Verifique R2_ENDPOINT o R2_PLANTAS_ENDPOINT.',
+      );
     }
 
     if (account === 'BOMBAS' && this.configuredBombas && this.s3ClientBombas) {
@@ -112,7 +135,12 @@ export class R2StorageService implements OnModuleInit {
     }
 
     // Heurística si no se especificó cuenta
-    if (key && (key.toLowerCase().includes('bomba') || key.includes('BOMBAS')) && this.configuredBombas && this.s3ClientBombas) {
+    if (
+      key &&
+      (key.toLowerCase().includes('bomba') || key.includes('BOMBAS')) &&
+      this.configuredBombas &&
+      this.s3ClientBombas
+    ) {
       return { client: this.s3ClientBombas, bucket: this.bucketBombas, account: 'BOMBAS' };
     }
 
@@ -141,7 +169,9 @@ export class R2StorageService implements OnModuleInit {
   ): Promise<string> {
     if (!this.configured) {
       this.logger.warn('⚠️ R2 no configurado - No se puede subir el PDF');
-      throw new Error('R2 Storage no está configurado. Configure R2_ENDPOINT o R2_PLANTAS_ENDPOINT en el entorno.');
+      throw new Error(
+        'R2 Storage no está configurado. Configure R2_ENDPOINT o R2_PLANTAS_ENDPOINT en el entorno.',
+      );
     }
 
     const { client, bucket } = this.resolveClientAndBucket(filename, options?.account);
@@ -180,7 +210,6 @@ export class R2StorageService implements OnModuleInit {
       });
       const signedUrl = await getSignedUrl(client, getCommand, { expiresIn: 604800 });
       return signedUrl;
-
     } catch (error) {
       this.logger.error(`❌ Error subiendo PDF a R2: ${error}`);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -232,13 +261,18 @@ export class R2StorageService implements OnModuleInit {
       return await this.fetchObjectBuffer(primary.client, primary.bucket, key);
     } catch (error: unknown) {
       // Fallback zero-trust a la cuenta alterna si está disponible
-      const isNotFound = error instanceof Error && (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey'));
+      const isNotFound =
+        error instanceof Error &&
+        (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey'));
       if (isNotFound && !options?.account) {
         const fallbackAccount: R2Account = primary.account === 'PLANTAS' ? 'BOMBAS' : 'PLANTAS';
-        const isFallbackConfigured = fallbackAccount === 'BOMBAS' ? this.configuredBombas : this.configuredPlantas;
+        const isFallbackConfigured =
+          fallbackAccount === 'BOMBAS' ? this.configuredBombas : this.configuredPlantas;
         if (isFallbackConfigured) {
           const secondary = this.resolveClientAndBucket(key, fallbackAccount);
-          this.logger.debug(`Reintentando descarga en bucket secundario ${secondary.bucket} para ${key}`);
+          this.logger.debug(
+            `Reintentando descarga en bucket secundario ${secondary.bucket} para ${key}`,
+          );
           return await this.fetchObjectBuffer(secondary.client, secondary.bucket, key);
         }
       }
@@ -246,7 +280,11 @@ export class R2StorageService implements OnModuleInit {
     }
   }
 
-  private async fetchObjectBuffer(client: S3Client, bucket: string, key: string): Promise<{ buffer: Buffer; contentType: string }> {
+  private async fetchObjectBuffer(
+    client: S3Client,
+    bucket: string,
+    key: string,
+  ): Promise<{ buffer: Buffer; contentType: string }> {
     const command = new GetObjectCommand({
       Bucket: bucket,
       Key: key,
@@ -256,7 +294,9 @@ export class R2StorageService implements OnModuleInit {
     const stream = response.Body as NodeJS.ReadableStream;
     const chunks: Buffer[] = [];
     for await (const chunk of stream) {
-      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk as Uint8Array));
+      chunks.push(
+        typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk as Uint8Array),
+      );
     }
     return {
       buffer: Buffer.concat(chunks),
@@ -282,13 +322,18 @@ export class R2StorageService implements OnModuleInit {
     try {
       return await this.fetchObjectStream(primary.client, primary.bucket, key);
     } catch (error: unknown) {
-      const isNotFound = error instanceof Error && (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey'));
+      const isNotFound =
+        error instanceof Error &&
+        (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey'));
       if (isNotFound && !options?.account) {
         const fallbackAccount: R2Account = primary.account === 'PLANTAS' ? 'BOMBAS' : 'PLANTAS';
-        const isFallbackConfigured = fallbackAccount === 'BOMBAS' ? this.configuredBombas : this.configuredPlantas;
+        const isFallbackConfigured =
+          fallbackAccount === 'BOMBAS' ? this.configuredBombas : this.configuredPlantas;
         if (isFallbackConfigured) {
           const secondary = this.resolveClientAndBucket(key, fallbackAccount);
-          this.logger.debug(`Reintentando streaming en bucket secundario ${secondary.bucket} para ${key}`);
+          this.logger.debug(
+            `Reintentando streaming en bucket secundario ${secondary.bucket} para ${key}`,
+          );
           return await this.fetchObjectStream(secondary.client, secondary.bucket, key);
         }
       }
@@ -296,7 +341,11 @@ export class R2StorageService implements OnModuleInit {
     }
   }
 
-  private async fetchObjectStream(client: S3Client, bucket: string, key: string): Promise<{ stream: Readable; contentType: string; contentLength?: number }> {
+  private async fetchObjectStream(
+    client: S3Client,
+    bucket: string,
+    key: string,
+  ): Promise<{ stream: Readable; contentType: string; contentLength?: number }> {
     const command = new GetObjectCommand({
       Bucket: bucket,
       Key: key,
@@ -325,11 +374,14 @@ export class R2StorageService implements OnModuleInit {
     } catch {
       if (!options?.account) {
         const fallbackAccount: R2Account = primary.account === 'PLANTAS' ? 'BOMBAS' : 'PLANTAS';
-        const isFallbackConfigured = fallbackAccount === 'BOMBAS' ? this.configuredBombas : this.configuredPlantas;
+        const isFallbackConfigured =
+          fallbackAccount === 'BOMBAS' ? this.configuredBombas : this.configuredPlantas;
         if (isFallbackConfigured) {
           try {
             const secondary = this.resolveClientAndBucket(key, fallbackAccount);
-            await secondary.client.send(new HeadObjectCommand({ Bucket: secondary.bucket, Key: key }));
+            await secondary.client.send(
+              new HeadObjectCommand({ Bucket: secondary.bucket, Key: key }),
+            );
             return true;
           } catch {
             return false;
@@ -344,16 +396,18 @@ export class R2StorageService implements OnModuleInit {
    * Construye el header Content-Disposition compatible con RFC 5987.
    */
   private buildContentDispositionHeader(filename: string): string {
-    const asciiSafe = filename
-      .replace(/"/g, '')
-      .replace(/[^\x20-\x7E]/g, '');
+    const asciiSafe = filename.replace(/"/g, '').replace(/[^\x20-\x7E]/g, '');
     return `attachment; filename="${asciiSafe}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
   }
 
   /**
    * Genera una URL firmada con expiración
    */
-  async getSignedURL(filename: string, expiresIn: number = 604800, options?: { account?: R2Account }): Promise<string> {
+  async getSignedURL(
+    filename: string,
+    expiresIn: number = 604800,
+    options?: { account?: R2Account },
+  ): Promise<string> {
     const key = `ordenes/pdfs/${filename}`;
     const { client, bucket } = this.resolveClientAndBucket(key, options?.account);
 
@@ -376,7 +430,11 @@ export class R2StorageService implements OnModuleInit {
    * Genera una URL firmada de previsualización (Content-Disposition: inline).
    * El navegador mostrará el PDF directamente sin descargarlo.
    */
-  async getSignedPreviewUrl(key: string, expiresIn: number = 3600, options?: { account?: R2Account }): Promise<string> {
+  async getSignedPreviewUrl(
+    key: string,
+    expiresIn: number = 3600,
+    options?: { account?: R2Account },
+  ): Promise<string> {
     if (!this.configured) {
       throw new Error('R2 Storage no está configurado.');
     }
@@ -401,12 +459,73 @@ export class R2StorageService implements OnModuleInit {
   }
 
   /**
+   * Genera una URL presigned PUT Just-In-Time para subida binaria directa a R2 (estrategia R2-Ready).
+   */
+  async createPresignedDirectUpload(params: {
+    numeroOrden: string;
+    hashSha256: string;
+    mimeType?: string;
+    expiresIn?: number;
+    account?: R2Account;
+  }): Promise<{
+    provider: 'R2';
+    strategy: 'R2_PUT';
+    uploadUrl: string;
+    storageKey: string;
+    publicUrl: string;
+    expiresAt: string;
+    headers: Record<string, string>;
+    alreadyExistsInStorage: boolean;
+  }> {
+    if (!this.configured) {
+      throw new Error('R2 Storage no está configurado.');
+    }
+
+    const safeOrder = params.numeroOrden.replace(/[^A-Za-z0-9_-]/g, '_');
+    const cleanHash = params.hashSha256
+      .toLowerCase()
+      .replace(/[^a-f0-9]/g, '')
+      .slice(0, 64);
+    const mimeType = params.mimeType || 'image/jpeg';
+    const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+    const storageKey = `ordenes/${safeOrder}/evidencias/sha256_${cleanHash}.${ext}`;
+    const expiresIn = params.expiresIn ?? 900;
+
+    const alreadyExistsInStorage = await this.existsObject(storageKey, { account: params.account });
+    const { client, bucket } = this.resolveClientAndBucket(storageKey, params.account);
+
+    const putCommand = new PutObjectCommand({
+      Bucket: bucket,
+      Key: storageKey,
+      ContentType: mimeType,
+    });
+    const uploadUrl = await getSignedUrl(client, putCommand, { expiresIn });
+    const publicUrl = process.env.R2_PUBLIC_URL
+      ? `${process.env.R2_PUBLIC_URL.replace(/\/+$/, '')}/${storageKey}`
+      : uploadUrl.split('?')[0];
+
+    return {
+      provider: 'R2',
+      strategy: 'R2_PUT',
+      uploadUrl,
+      storageKey,
+      publicUrl,
+      expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+      headers: {
+        'Content-Type': mimeType,
+      },
+      alreadyExistsInStorage,
+    };
+  }
+
+  /**
    * Verifica la configuración del servicio
    */
   isConfigured(): boolean {
     const endpointPlantas = process.env.R2_ENDPOINT || process.env.R2_PLANTAS_ENDPOINT;
     const accessKeyIdPlantas = process.env.R2_ACCESS_KEY_ID || process.env.R2_PLANTAS_ACCESS_KEY_ID;
-    const secretAccessKeyPlantas = process.env.R2_SECRET_ACCESS_KEY || process.env.R2_PLANTAS_SECRET_ACCESS_KEY;
+    const secretAccessKeyPlantas =
+      process.env.R2_SECRET_ACCESS_KEY || process.env.R2_PLANTAS_SECRET_ACCESS_KEY;
     const plantasOk = !!(endpointPlantas && accessKeyIdPlantas && secretAccessKeyPlantas);
 
     const endpointBombas = process.env.R2_BOMBAS_ENDPOINT;

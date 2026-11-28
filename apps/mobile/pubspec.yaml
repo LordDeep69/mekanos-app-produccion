@@ -31,6 +31,10 @@ dependencies:
   
   # Conectividad
   connectivity_plus: ^5.0.2
+
+  # Delta Sync Outbox (Fase 1: hashing SHA-256 e identidad UUID determinista)
+  crypto: ^3.0.3
+  uuid: ^4.4.0
   
   # Cámara y Fotos
   image_picker: ^1.0.7

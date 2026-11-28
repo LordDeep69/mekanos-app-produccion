@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Estado de conectividad de la aplicación
@@ -72,6 +73,40 @@ class ConnectivityService {
   Future<bool> checkConnection() async {
     await _checkConnectivity();
     return isOnline;
+  }
+
+  /// Verifica conectividad REAL extremo a extremo contra el backend (`HEAD /health`),
+  /// evitando falsos positivos de Wi-Fi cautivo o señal fantasma antes de solicitar
+  /// firmas Just-In-Time de Cloudinary o enviar lotes delta.
+  Future<bool> hasRealServerReachability(
+    Dio dio, {
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    final hasInterface = await checkConnection();
+    if (!hasInterface) return false;
+
+    try {
+      final res = await dio.head(
+        '/health',
+        options: Options(
+          sendTimeout: timeout,
+          receiveTimeout: timeout,
+          validateStatus: (code) => code != null && code < 500,
+        ),
+      );
+      if (res.statusCode == 200 || res.statusCode == 204) return true;
+      // Fallback GET si un proxy corporativo bloquea HEAD
+      if (res.statusCode == 405) {
+        final getRes = await dio.get(
+          '/health',
+          options: Options(sendTimeout: timeout, receiveTimeout: timeout),
+        );
+        return getRes.statusCode == 200;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Limpia recursos

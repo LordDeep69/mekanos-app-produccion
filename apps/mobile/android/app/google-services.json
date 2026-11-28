@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "127697283913",
+    "project_id": "mekanos-field-sync",
+    "storage_bucket": "mekanos-field-sync.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:127697283913:android:1c2361cfc680c8ffd7c898",
+        "android_client_info": {
+          "package_name": "com.mekanos.mekanos_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB_0MAHP-YlOH9-av6_qn8S4S9bZ3V5voQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

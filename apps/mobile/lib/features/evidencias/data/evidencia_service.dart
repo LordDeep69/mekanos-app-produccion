@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -9,6 +10,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/storage/account_scope.dart';
+import '../../../core/sync/delta_outbox_service.dart';
 
 /// ============================================================================
 /// EVIDENCIA SERVICE - RUTA 7
@@ -58,11 +60,13 @@ class CapturaEvidenciaResult {
 /// Provider del servicio de evidencias
 final evidenciaServiceProvider = Provider<EvidenciaService>((ref) {
   final db = ref.watch(databaseProvider);
-  return EvidenciaService(db);
+  final outbox = ref.watch(deltaOutboxServiceProvider);
+  return EvidenciaService(db, outbox: outbox);
 });
 
 class EvidenciaService {
   final AppDatabase _db;
+  final DeltaOutboxService? _outbox;
   final ImagePicker _picker = ImagePicker();
 
   // ============================================================================
@@ -72,7 +76,7 @@ class EvidenciaService {
   static const int _maxHeight = 1080; // Full HD
   static const int _imageQuality = 80; // Balance calidad/tamaño
 
-  EvidenciaService(this._db);
+  EvidenciaService(this._db, {DeltaOutboxService? outbox}) : _outbox = outbox;
 
   /// Obtiene o crea el directorio permanente de evidencias aislado por cuenta
   /// (`Documents/media/user_<userId>/evidencias/`). Nunca usa carpeta temporal/cache.
@@ -159,6 +163,10 @@ class EvidenciaService {
         ),
       );
 
+      if (_outbox != null) {
+        unawaited(_outbox.enqueueEvidenciaCaptured(idEvidencia));
+      }
+
       return CapturaEvidenciaResult(
         exito: true,
         rutaArchivo: rutaDestino,
@@ -226,6 +234,10 @@ class EvidenciaService {
         ),
       );
 
+      if (_outbox != null) {
+        unawaited(_outbox.enqueueEvidenciaCaptured(idEvidencia));
+      }
+
       return CapturaEvidenciaResult(
         exito: true,
         rutaArchivo: rutaDestino,
@@ -289,6 +301,10 @@ class EvidenciaService {
               idOrdenEquipo: Value(idOrdenEquipo),
             ),
           );
+
+          if (_outbox != null) {
+            unawaited(_outbox.enqueueEvidenciaCaptured(idEvidencia));
+          }
 
           resultados.add(
             CapturaEvidenciaResult(
@@ -486,6 +502,10 @@ class EvidenciaService {
         _db.evidencias,
       )..where((e) => e.idLocal.equals(idEvidencia))).go();
 
+      if (_outbox != null) {
+        unawaited(_outbox.enqueueEvidenciaDeleteSnapshot(evidencia));
+      }
+
       return true;
     } catch (e) {
       return false;
@@ -510,6 +530,10 @@ class EvidenciaService {
           isDirty: const Value(true),
         ),
       );
+
+      if (_outbox != null) {
+        unawaited(_outbox.enqueueEvidenciaMetaUpdate(idEvidencia));
+      }
 
       return true;
     } catch (e) {

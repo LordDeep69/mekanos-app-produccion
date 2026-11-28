@@ -26,6 +26,7 @@ import { PrismaOrdenServicioRepository } from './infrastructure/prisma-orden-ser
 // Services
 import { FinalizacionOrdenService } from './services/finalizacion-orden.service';
 import { ProgresoRegistroService } from './services/progreso-registro.service';
+import { SyncDeltaService } from './services/sync-delta.service';
 import { TransferenciaOrdenService } from './services/transferencia-orden.service';
 
 // Módulos externos (para FinalizarOrden)
@@ -38,7 +39,7 @@ import { StorageModule } from '../storage/storage.module';
 /**
  * OrdenesModule - FASE 3 COMPLETA
  * Módulo completo de Órdenes de Servicio con CQRS
- * 
+ *
  * FEATURES:
  * - CRUD completo con Prisma
  * - Workflow de 7 estados (PROGRAMADA → APROBADA)
@@ -53,9 +54,9 @@ import { StorageModule } from '../storage/storage.module';
   imports: [
     CqrsModule,
     DatabaseModule, // Prisma
-    PdfModule,      // Generación de PDFs
-    EmailModule,    // Envío de emails
-    StorageModule,  // R2 + Cloudinary
+    PdfModule, // Generación de PDFs
+    EmailModule, // Envío de emails
+    StorageModule, // R2 + Cloudinary
     ConfigParametrosModule, // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades dinámicas
     InventarioModule, // ✅ INTEGRACIÓN BIDIRECCIONAL WMS ⇄ ÓRDENES DE SERVICIO
   ],
@@ -76,18 +77,24 @@ import { StorageModule } from '../storage/storage.module';
     AsignarTecnicoHandler,
     IniciarOrdenHandler,
     CambiarEstadoOrdenHandler, // ✅ FSM unificado + historial automático
-    FinalizarOrdenHandler,     // ✅ HABILITADO: PDF + R2 + Email integrados
+    FinalizarOrdenHandler, // ✅ HABILITADO: PDF + R2 + Email integrados
     AprobarOrdenHandler,
 
     // Query Handlers (2 queries)
     GetOrdenByIdHandler,
     GetOrdenesHandler,
 
-    // Services (Finalizacion Completa, Telemetría y Transferencia Inteligente)
+    // Services (Finalizacion Completa, Delta Sync, Telemetría y Transferencia Inteligente)
     FinalizacionOrdenService,
     ProgresoRegistroService,
+    SyncDeltaService,
     TransferenciaOrdenService,
   ],
-  exports: ['IOrdenServicioRepository', ProgresoRegistroService, TransferenciaOrdenService], // Export usando el token y servicio
+  exports: [
+    'IOrdenServicioRepository',
+    ProgresoRegistroService,
+    SyncDeltaService,
+    TransferenciaOrdenService,
+  ], // Export usando el token y servicios
 })
-export class OrdenesModule { }
+export class OrdenesModule {}

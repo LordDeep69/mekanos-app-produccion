@@ -29,6 +29,16 @@ export interface UploadResult {
   error?: string;
 }
 
+export interface SignedDirectUploadResult {
+  provider: 'CLOUDINARY';
+  strategy: 'CLOUDINARY_MULTIPART';
+  account: CloudinaryAccount;
+  uploadUrl: string;
+  storageKey: string;
+  expiresAt: string;
+  fields: Record<string, string>;
+}
+
 export interface EvidenciaUpload {
   buffer: Buffer;
   filename: string;
@@ -42,9 +52,7 @@ export class CloudinaryService implements OnModuleInit {
   private readonly logger = new Logger(CloudinaryService.name);
   private configuredAccounts: Set<CloudinaryAccount> = new Set();
 
-  constructor(
-    @Optional() private readonly configOrgService?: ConfiguracionOrganizacionService,
-  ) {}
+  constructor(@Optional() private readonly configOrgService?: ConfiguracionOrganizacionService) {}
 
   private async resolveDefaultFolder(): Promise<string> {
     const ctx = await this.configOrgService?.getContext().catch(() => null);
@@ -114,9 +122,10 @@ export class CloudinaryService implements OnModuleInit {
       tags?: string[];
     } = {},
   ): Promise<UploadResult> {
-    const account = options.account && this.configuredAccounts.has(options.account)
-      ? options.account
-      : this.getDefaultAccount();
+    const account =
+      options.account && this.configuredAccounts.has(options.account)
+        ? options.account
+        : this.getDefaultAccount();
 
     if (!this.configuredAccounts.has(account)) {
       return {
@@ -234,9 +243,10 @@ export class CloudinaryService implements OnModuleInit {
       tags?: string[];
     } = {},
   ): Promise<UploadResult> {
-    const account = options.account && this.configuredAccounts.has(options.account)
-      ? options.account
-      : this.getDefaultAccount();
+    const account =
+      options.account && this.configuredAccounts.has(options.account)
+        ? options.account
+        : this.getDefaultAccount();
 
     if (!this.configuredAccounts.has(account)) {
       return {
@@ -364,6 +374,78 @@ export class CloudinaryService implements OnModuleInit {
       this.logger.error(`Error deleting image: ${error}`);
       return false;
     }
+  }
+
+  /**
+   * Genera una firma criptográfica Just-In-Time (`api_sign_request`) para subida binaria directa
+   * desde el móvil a Cloudinary sin mutar el singleton global `cloudinary.config()` (100% seguro bajo concurrencia).
+   *
+   * Usa `public_id = sha256_<hash>` + `overwrite = false` para deduplicación determinista e idempotencia.
+   */
+  async createSignedDirectUpload(params: {
+    numeroOrden: string;
+    hashSha256: string;
+    tipoEvidencia?: string;
+    account?: CloudinaryAccount;
+    tags?: string[];
+  }): Promise<SignedDirectUploadResult> {
+    const requestedAccount = params.account;
+    const account =
+      requestedAccount && this.isAccountConfigured(requestedAccount)
+        ? requestedAccount
+        : this.getDefaultAccount();
+
+    const creds = this.getCredentials(account);
+    if (!creds.cloud_name || !creds.api_key || !creds.api_secret) {
+      throw new Error(`Cuenta Cloudinary ${account} no configurada para subida directa firmada`);
+    }
+
+    const baseFolder = (await this.resolveDefaultFolder()).replace(/\/evidencias$/i, '');
+    const safeOrderSegment = params.numeroOrden.replace(/[^A-Za-z0-9_-]/g, '_');
+    const folder = `${baseFolder}/ordenes/${safeOrderSegment}/evidencias`;
+    const cleanHash = params.hashSha256
+      .toLowerCase()
+      .replace(/[^a-f0-9]/g, '')
+      .slice(0, 64);
+    const publicId = `sha256_${cleanHash}`;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const tags = Array.from(
+      new Set([
+        'evidencia',
+        'delta_sync',
+        params.tipoEvidencia || 'GENERAL',
+        safeOrderSegment,
+        ...(params.tags || []),
+      ]),
+    ).join(',');
+
+    const paramsToSign: Record<string, string | number> = {
+      folder,
+      overwrite: 'false',
+      public_id: publicId,
+      tags,
+      timestamp,
+    };
+
+    const signature = cloudinary.utils.api_sign_request(paramsToSign, creds.api_secret);
+
+    return {
+      provider: 'CLOUDINARY',
+      strategy: 'CLOUDINARY_MULTIPART',
+      account,
+      uploadUrl: `https://api.cloudinary.com/v1_1/${creds.cloud_name}/image/upload`,
+      storageKey: `${folder}/${publicId}`,
+      expiresAt: new Date((timestamp + 3600) * 1000).toISOString(),
+      fields: {
+        api_key: creds.api_key,
+        timestamp: String(timestamp),
+        signature,
+        folder,
+        public_id: publicId,
+        overwrite: 'false',
+        tags,
+      },
+    };
   }
 
   /**

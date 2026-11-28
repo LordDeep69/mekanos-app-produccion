@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 import '../../../core/errors/user_friendly_error.dart';
+import '../../../core/sync/delta_outbox_service.dart';
 import '../../../core/sync/sync_progress.dart';
 import '../../../core/sync/sync_upload_service.dart';
 import '../../auth/data/auth_provider.dart';
@@ -249,6 +252,9 @@ class _ResumenFinalizacionScreenState
         updatedAt: Value(DateTime.now()),
         isDirty: const Value(true),
       ),
+    );
+    unawaited(
+      ref.read(deltaOutboxServiceProvider).enqueueObservacionesOrden(widget.idOrdenLocal),
     );
   }
 

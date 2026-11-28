@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 import '../../../core/errors/error_feedback.dart';
 import '../../../core/errors/user_friendly_error.dart';
+import '../../../core/sync/delta_outbox_service.dart';
 import '../../../core/sync/smart_sync_service.dart';
 import '../../../core/sync/sync_upload_service.dart'
     show SyncUploadResult, syncUploadServiceProvider;
@@ -1190,6 +1192,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         isDirty: const Value(true),
       ),
     );
+    unawaited(ref.read(deltaOutboxServiceProvider).enqueueActividadUpsert(idLocal));
 
     // ✅ Actualizar UI local con el nuevo campo observacionTecnico
     for (final sistema in _actividadesPorSistema.keys) {
@@ -2389,6 +2392,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         fechaEjecucion: Value(DateTime.now()),
         isDirty: const Value(true),
       ),
+    );
+    unawaited(
+      ref.read(deltaOutboxServiceProvider).enqueueActividadUpsert(idActividadLocal),
     );
 
     // ✅ FIX: Crear nueva copia del mapa para forzar reconstrucción
@@ -3725,6 +3731,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         updatedAt: Value(DateTime.now()),
         isDirty: const Value(true),
       ),
+    );
+    unawaited(
+      ref.read(deltaOutboxServiceProvider).enqueueObservacionesOrden(widget.idOrdenLocal),
     );
   }
 

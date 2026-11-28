@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/sync/delta_outbox_service.dart';
 
 /// Widget interactivo y ergonómico para gestión de Pendientes Técnicos por Orden
 /// Diseñado para máxima comodidad táctil en campo y trazabilidad multi-equipo
@@ -93,7 +96,8 @@ class _PendientesOrdenWidgetState
       fechaCreacion: Value(DateTime.now()),
       isDirty: const Value(true),
     );
-    await db.insertOrdenPendiente(nuevo);
+    final idLocalPend = await db.insertOrdenPendiente(nuevo);
+    unawaited(ref.read(deltaOutboxServiceProvider).enqueuePendienteUpsert(idLocalPend));
     await _cargarDatos();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -303,6 +307,7 @@ class _PendientesOrdenWidgetState
 
     final db = ref.read(databaseProvider);
     await db.deleteOrdenPendiente(p.idLocal);
+    unawaited(ref.read(deltaOutboxServiceProvider).enqueuePendienteDeleteSnapshot(p));
     await _cargarDatos();
     widget.onPendientesChanged?.call();
 
@@ -869,7 +874,8 @@ class _ModalGestionPendientesState
       isDirty: const Value(true),
     );
 
-    await db.insertOrdenPendiente(nuevo);
+    final idLocalPend = await db.insertOrdenPendiente(nuevo);
+    unawaited(ref.read(deltaOutboxServiceProvider).enqueuePendienteUpsert(idLocalPend));
     widget.onCambio();
 
     if (mounted) {
@@ -911,7 +917,8 @@ class _ModalGestionPendientesState
         isDirty: const Value(true),
       );
 
-      await db.insertOrdenPendiente(nuevo);
+      final idLocalPend = await db.insertOrdenPendiente(nuevo);
+      unawaited(ref.read(deltaOutboxServiceProvider).enqueuePendienteUpsert(idLocalPend));
       _descCustomController.clear();
       _obsCustomController.clear();
       widget.onCambio();

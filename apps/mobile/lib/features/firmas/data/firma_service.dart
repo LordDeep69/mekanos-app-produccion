@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -7,11 +8,13 @@ import 'package:path/path.dart' as p;
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 import '../../../core/storage/account_scope.dart';
+import '../../../core/sync/delta_outbox_service.dart';
 
 /// Provider para el servicio de firmas
 final firmaServiceProvider = Provider<FirmaService>((ref) {
   final db = ref.watch(databaseProvider);
-  return FirmaService(db);
+  final outbox = ref.watch(deltaOutboxServiceProvider);
+  return FirmaService(db, outbox: outbox);
 });
 
 /// Servicio de Firmas Digitales - RUTA 8
@@ -22,8 +25,9 @@ final firmaServiceProvider = Provider<FirmaService>((ref) {
 /// - Consulta de firmas existentes
 class FirmaService {
   final AppDatabase _db;
+  final DeltaOutboxService? _outbox;
 
-  FirmaService(this._db);
+  FirmaService(this._db, {DeltaOutboxService? outbox}) : _outbox = outbox;
 
   /// Guarda una firma digital
   ///
@@ -71,6 +75,10 @@ class FirmaService {
         ),
       );
 
+      if (_outbox != null) {
+        unawaited(_outbox.enqueueFirmaUpsert(idFirma));
+      }
+
       return idFirma;
     } catch (_) {
       return null;
@@ -117,6 +125,9 @@ class FirmaService {
         nombreFirmante: nombreLimpio,
         cargoFirmante: cargoLimpio,
       );
+      if (rows > 0 && _outbox != null) {
+        unawaited(_outbox.enqueueFirmaUpsert(idFirma, soloMetadatos: true));
+      }
       return rows > 0;
     } catch (_) {
       return false;
@@ -143,6 +154,10 @@ class FirmaService {
       await (_db.delete(
         _db.firmas,
       )..where((f) => f.idLocal.equals(idFirma))).go();
+
+      if (_outbox != null) {
+        unawaited(_outbox.enqueueFirmaDeleteSnapshot(firma));
+      }
 
       return true;
     } catch (_) {

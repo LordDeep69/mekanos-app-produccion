@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,13 +7,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/sync/delta_outbox_service.dart';
 import 'parametro_override_resolver.dart';
 
 /// Provider para el servicio de ejecución
 final ejecucionServiceProvider = Provider<EjecucionService>((ref) {
   final db = ref.watch(databaseProvider);
   final apiClient = ref.watch(apiClientProvider);
-  return EjecucionService(db, apiClient);
+  final outbox = ref.watch(deltaOutboxServiceProvider);
+  return EjecucionService(db, apiClient, outbox: outbox);
 });
 
 /// Servicio de Ejecución - RUTA 6
@@ -20,8 +24,10 @@ final ejecucionServiceProvider = Provider<EjecucionService>((ref) {
 class EjecucionService {
   final AppDatabase _db;
   final ApiClient _apiClient;
+  final DeltaOutboxService? _outbox;
 
-  EjecucionService(this._db, this._apiClient);
+  EjecucionService(this._db, this._apiClient, {DeltaOutboxService? outbox})
+      : _outbox = outbox;
 
   /// Inicia la ejecución de una orden
   ///
@@ -379,9 +385,10 @@ class EjecucionService {
           ),
         );
 
-        // ✅ v3.3 INTELLIGENT SYNC: Notificar al backend de inmediato si hay red
-        // No bloqueamos el flujo principal si falla (el isDirty garantiza el sync posterior)
-        if (orden.idBackend != null) {
+        // ✅ FASE 1 DELTA SYNC: Encolar inicio duradero en sync_outbox (flush inmediato)
+        if (_outbox != null) {
+          unawaited(_outbox.enqueueOrdenInicio(idOrdenLocal));
+        } else if (orden.idBackend != null) {
           _notificarInicioBackend(orden.idBackend!);
         }
       }
@@ -422,6 +429,10 @@ class EjecucionService {
 
   /// Elimina una actividad del plan local y sus dependencias
   Future<void> eliminarActividadLocal(int idActividadLocal) async {
+    final snapshot = await (_db.select(
+      _db.actividadesEjecutadas,
+    )..where((a) => a.idLocal.equals(idActividadLocal))).getSingleOrNull();
+
     await _db.transaction(() async {
       await (_db.delete(
         _db.evidencias,
@@ -433,6 +444,10 @@ class EjecucionService {
         _db.actividadesEjecutadas,
       )..where((a) => a.idLocal.equals(idActividadLocal))).go();
     });
+
+    if (snapshot != null && _outbox != null) {
+      unawaited(_outbox.enqueueActividadDeleteSnapshot(snapshot));
+    }
   }
 
   /// Adds a dynamic activity to the execution plan
@@ -563,6 +578,9 @@ class EjecucionService {
           isDirty: const Value(true),
         ),
       );
+      if (_outbox != null) {
+        unawaited(_outbox.enqueueActividadUpsert(idActividadLocal));
+      }
       return true;
     } catch (e) {
       return false;
@@ -595,6 +613,9 @@ class EjecucionService {
           isDirty: const Value(true),
         ),
       );
+      if (_outbox != null) {
+        unawaited(_outbox.enqueueMedicionUpsert(idMedicion));
+      }
       return true;
     } catch (e) {
       return false;
@@ -615,6 +636,9 @@ class EjecucionService {
           isDirty: Value(true),
         ),
       );
+      if (_outbox != null) {
+        unawaited(_outbox.enqueueMedicionUpsert(idMedicion));
+      }
       return true;
     } catch (e) {
       return false;

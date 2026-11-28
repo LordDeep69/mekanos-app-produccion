@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Head, HttpCode, HttpStatus } from '@nestjs/common';
 import * as os from 'os';
 import { Public } from '../auth/decorators/public.decorator';
 import { GIT_COMMIT } from '../common/git-commit';
@@ -29,6 +29,13 @@ export class HealthController {
    * GET /api/health
    * Response: { status: 'ok', timestamp: '2025-11-13T...' }
    */
+  @Public()
+  @Head()
+  @HttpCode(HttpStatus.OK)
+  headCheck() {
+    return;
+  }
+
   @Public()
   @Get()
   check() {
@@ -107,8 +114,7 @@ export class HealthController {
     try {
       const parsed = new URL(rawUrl);
       const port = parsed.port ? parseInt(parsed.port, 10) : 5432;
-      const isPgBouncer =
-        parsed.searchParams.get('pgbouncer') === 'true' || port === 6543;
+      const isPgBouncer = parsed.searchParams.get('pgbouncer') === 'true' || port === 6543;
       return {
         host: parsed.hostname || 'localhost',
         port,
