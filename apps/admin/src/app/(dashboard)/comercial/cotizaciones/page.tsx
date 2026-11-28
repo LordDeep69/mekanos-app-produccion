@@ -3,6 +3,7 @@
 import { CotizacionPdfPreviewModal } from '@/components/comercial/cotizacion-pdf-preview-modal';
 import { PlantillasCotizacionManager } from '@/components/comercial/plantillas-cotizacion-manager';
 import { resolveTipoOfertaLabel } from '@/components/comercial/tipos-oferta-manager-modal';
+import { useSidebar } from '@/components/layout/sidebar-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -29,6 +30,7 @@ import {
 } from '@/features/comercial/hooks/use-comercial';
 import { useClientesSelector } from '@/features/ordenes/hooks/use-catalogos';
 import { useOrgFormatters } from '@/hooks/use-org-formatters';
+import { cn } from '@/lib/utils';
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -67,6 +69,7 @@ function CotizacionesPageContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { formatCurrency, formatDate } = useOrgFormatters();
+  const { isCollapsed } = useSidebar();
 
   // Hidratación y sincronización en tiempo real desde Query Params de URL
   const rawTab = searchParams.get('tab');
@@ -263,20 +266,20 @@ function CotizacionesPageContent() {
   }, [cotizaciones]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2.5">
-            <FileText className="h-7 w-7 text-primary" />
-            Hub Comercial de Cotizaciones (CPQ)
+            <FileText className="h-7 w-7 text-primary shrink-0" />
+            <span className="truncate">Hub Comercial de Cotizaciones (CPQ)</span>
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Ofertas multi-equipo, plantillas estándar inteligentes, logística/viáticos/pólizas,
             rentabilidad y conversión directa a Orden de Servicio.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw className="h-4 w-4 mr-1.5" />
             Actualizar
@@ -391,10 +394,10 @@ function CotizacionesPageContent() {
 
       {/* TAB 1: LISTADO GENERAL */}
       {tab === 'listado' && (
-        <Card className="border-slate-200">
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[240px]">
+        <Card className="border-slate-200 min-w-0">
+          <CardHeader className="pb-3 px-4 sm:px-5">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <Input
                   value={search}
@@ -414,7 +417,7 @@ function CotizacionesPageContent() {
                 )}
               </div>
               <Select value={estadoFiltro} onValueChange={setEstadoFiltro}>
-                <SelectTrigger className="w-48 bg-white">
+                <SelectTrigger className="w-44 lg:w-48 bg-white">
                   <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
@@ -427,7 +430,7 @@ function CotizacionesPageContent() {
                 </SelectContent>
               </Select>
               <Select value={tipoFiltro} onValueChange={setTipoFiltro}>
-                <SelectTrigger className="w-52 bg-white">
+                <SelectTrigger className="w-48 lg:w-52 bg-white">
                   <SelectValue placeholder="Todos los tipos" />
                 </SelectTrigger>
                 <SelectContent>
@@ -454,7 +457,7 @@ function CotizacionesPageContent() {
             </div>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="px-4 sm:px-5">
             {isLoading ? (
               <div className="py-12 flex justify-center">
                 <Loader2 className="h-7 w-7 animate-spin text-primary" />
@@ -474,16 +477,58 @@ function CotizacionesPageContent() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
+                <table className="w-full min-w-[820px] table-fixed text-sm text-left">
                   <thead className="bg-slate-50 text-[11px] uppercase text-slate-500 border-b">
                     <tr>
-                      <th className="py-3 px-3">Número / Tipo</th>
-                      <th className="py-3 px-3">Cliente / Equipos</th>
-                      <th className="py-3 px-3">Asunto</th>
-                      <th className="py-3 px-3">Fechas</th>
-                      <th className="py-3 px-3">Estado</th>
-                      <th className="py-3 px-3 text-right">Total / Margen</th>
-                      <th className="py-3 px-3 text-right">Acciones</th>
+                      <th
+                        className={cn(
+                          'py-3',
+                          isCollapsed ? 'px-3 w-[164px]' : 'px-2 2xl:px-3 w-[136px] 2xl:w-[164px]',
+                        )}
+                      >
+                        Número / Tipo
+                      </th>
+                      <th
+                        className={cn(
+                          'py-3',
+                          isCollapsed ? 'px-3 w-[20%]' : 'px-2 2xl:px-3 w-[18%] 2xl:w-[20%]',
+                        )}
+                      >
+                        Cliente / Equipos
+                      </th>
+                      <th className={cn('py-3', isCollapsed ? 'px-3' : 'px-2 2xl:px-3')}>Asunto</th>
+                      <th
+                        className={cn(
+                          'py-3',
+                          isCollapsed ? 'px-3 w-[142px]' : 'px-2 2xl:px-3 w-[124px] 2xl:w-[142px]',
+                        )}
+                      >
+                        Fechas
+                      </th>
+                      <th
+                        className={cn(
+                          'py-3',
+                          isCollapsed ? 'px-3 w-[128px]' : 'px-2 2xl:px-3 w-[112px] 2xl:w-[128px]',
+                        )}
+                      >
+                        Estado
+                      </th>
+                      <th
+                        className={cn(
+                          'py-3 text-right',
+                          isCollapsed ? 'px-3 w-[116px]' : 'px-2 2xl:px-3 w-[98px] 2xl:w-[116px]',
+                        )}
+                      >
+                        Total / Margen
+                      </th>
+                      <th
+                        className={cn(
+                          'py-3 text-right',
+                          isCollapsed ? 'px-3 w-[180px]' : 'px-2 2xl:px-3 w-[150px] 2xl:w-[180px]',
+                        )}
+                      >
+                        Acciones
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -492,81 +537,111 @@ function CotizacionesPageContent() {
                       const eqCount = c.equipos_vinculados?.length || (c.id_equipo ? 1 : 0);
                       const tieneCosto = Number(c.costo_total_estimado || 0) > 0;
                       const margen = Number(c.margen_bruto_porcentaje || 0);
+                      const clienteNombre = getClienteNombre(c);
+                      const tipoLabel = resolveTipoOfertaLabel(
+                        c.tipo_cotizacion,
+                        tiposOfertaCatalogo,
+                      );
+                      const cellPad = isCollapsed ? 'py-3 px-3' : 'py-2.5 px-2 2xl:py-3 2xl:px-3';
 
                       return (
                         <tr
                           key={c.id_cotizacion}
                           className="hover:bg-slate-50/70 transition-colors"
                         >
-                          <td className="py-3 px-3 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
+                          <td className={cn(cellPad, 'align-middle')}>
+                            <div className="flex items-center gap-1 min-w-0">
                               <Link
                                 href={`/comercial/cotizaciones/${c.id_cotizacion}`}
-                                className="font-mono font-bold text-slate-900 hover:text-primary"
+                                className="font-mono font-bold text-[13px] text-slate-900 hover:text-primary truncate"
+                                title={c.numero_cotizacion}
                               >
                                 {c.numero_cotizacion}
                               </Link>
                               {(c.version || 1) >= 2 && (
                                 <Badge
                                   variant="outline"
-                                  className="px-1.5 py-0 h-5 font-mono text-[10px] font-bold bg-amber-100 text-amber-800 border-amber-200 inline-flex items-center gap-0.5"
+                                  className="px-1 py-0 h-4 font-mono text-[9px] font-bold bg-amber-100 text-amber-800 border-amber-200 inline-flex items-center gap-0.5 shrink-0"
                                   title={`Versión ${c.version} — derivada de una negociación previa`}
                                 >
                                   <History className="h-2.5 w-2.5 shrink-0" />v{c.version}
                                 </Badge>
                               )}
                             </div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[10px] font-semibold text-slate-500">
-                                {resolveTipoOfertaLabel(c.tipo_cotizacion, tiposOfertaCatalogo)}
+                            <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                              <span
+                                className="text-[10px] font-semibold text-slate-500 truncate"
+                                title={tipoLabel}
+                              >
+                                {tipoLabel}
                               </span>
                               {c.usa_aiu && (
-                                <span className="px-1 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold">
+                                <span className="px-1 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold shrink-0">
                                   AIU
                                 </span>
                               )}
                             </div>
                           </td>
 
-                          <td className="py-3 px-3 max-w-[230px]">
-                            <p className="font-medium text-slate-800 truncate">
-                              {getClienteNombre(c)}
+                          <td className={cn(cellPad, 'align-middle')}>
+                            <p
+                              className="font-medium text-[13px] text-slate-800 truncate"
+                              title={clienteNombre}
+                            >
+                              {clienteNombre}
                             </p>
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
-                              <Cpu className="h-3 w-3 text-slate-400" />
-                              <span>
+                            <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5 min-w-0">
+                              <Cpu className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span className="shrink-0">
                                 {eqCount > 0
                                   ? `${eqCount} equipo${eqCount > 1 ? 's' : ''}`
                                   : 'Sin equipo asignado'}
                               </span>
                               {c.orden_compra_cliente && (
-                                <span className="font-mono text-[10px] text-emerald-700 font-semibold">
+                                <span
+                                  className="font-mono text-[10px] text-emerald-700 font-semibold truncate"
+                                  title={`PO ${c.orden_compra_cliente}`}
+                                >
                                   · PO {c.orden_compra_cliente}
                                 </span>
                               )}
                             </div>
                           </td>
 
-                          <td className="py-3 px-3 max-w-[260px]">
-                            <p className="text-slate-800 truncate font-medium">{c.asunto}</p>
+                          <td className={cn(cellPad, 'align-middle')}>
+                            <p
+                              className="text-[13px] text-slate-800 truncate font-medium"
+                              title={c.asunto}
+                            >
+                              {c.asunto}
+                            </p>
                             {c.plantilla_origen && (
-                              <span className="text-[10px] text-primary">
+                              <p
+                                className="text-[10px] text-primary truncate"
+                                title={`Plantilla: ${c.plantilla_origen.nombre}`}
+                              >
                                 Plantilla: {c.plantilla_origen.nombre}
-                              </span>
+                              </p>
                             )}
                           </td>
 
-                          <td className="py-3 px-3 whitespace-nowrap text-xs">
-                            <div className="text-slate-700">{formatDate(c.fecha_cotizacion)}</div>
-                            <div className="text-slate-400">
+                          <td className={cn(cellPad, 'align-middle text-[11px] whitespace-nowrap')}>
+                            <div className="text-slate-700 truncate">
+                              {formatDate(c.fecha_cotizacion)}
+                            </div>
+                            <div className="text-slate-400 truncate">
                               Vence: {formatDate(c.fecha_vencimiento)}
                             </div>
                           </td>
 
-                          <td className="py-3 px-3 whitespace-nowrap">
+                          <td className={cn(cellPad, 'align-middle whitespace-nowrap')}>
                             <Badge
                               variant="outline"
-                              className={ESTADO_STYLE[estCode] || 'bg-slate-100 text-slate-700'}
+                              className={cn(
+                                'text-[11px]',
+                                !isCollapsed && 'px-1.5 py-0.5 2xl:px-2.5',
+                                ESTADO_STYLE[estCode] || 'bg-slate-100 text-slate-700',
+                              )}
                             >
                               {ESTADO_LABELS_COTIZACION[estCode] || estCode}
                             </Badge>
@@ -582,8 +657,8 @@ function CotizacionesPageContent() {
                             )}
                           </td>
 
-                          <td className="py-3 px-3 text-right whitespace-nowrap">
-                            <div className="font-mono font-bold text-slate-900">
+                          <td className={cn(cellPad, 'align-middle text-right whitespace-nowrap')}>
+                            <div className="font-mono font-bold text-[13px] text-slate-900">
                               {formatCurrency(c.total_cotizacion || 0)}
                             </div>
                             {tieneCosto && (
@@ -601,18 +676,38 @@ function CotizacionesPageContent() {
                             )}
                           </td>
 
-                          <td className="py-3 px-3 text-right whitespace-nowrap">
-                            <div className="inline-flex items-center gap-1">
-                              <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+                          <td className={cn(cellPad, 'align-middle text-right whitespace-nowrap')}>
+                            <div
+                              className={cn(
+                                'inline-flex items-center justify-end',
+                                isCollapsed ? 'gap-1' : 'gap-0.5 2xl:gap-1',
+                              )}
+                            >
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                  'text-xs',
+                                  isCollapsed ? 'h-8 px-2.5' : 'h-7 px-2 2xl:h-8 2xl:px-2.5',
+                                )}
+                                title="Abrir Studio de cotización"
+                                asChild
+                              >
                                 <Link href={`/comercial/cotizaciones/${c.id_cotizacion}`}>
-                                  Abrir Studio
+                                  <span className={isCollapsed ? 'inline' : 'hidden 2xl:inline'}>
+                                    Abrir&nbsp;
+                                  </span>
+                                  Studio
                                   <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
                                 </Link>
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 w-8 p-0"
+                                className={cn(
+                                  'p-0',
+                                  isCollapsed ? 'h-8 w-8' : 'h-7 w-7 2xl:h-8 2xl:w-8',
+                                )}
                                 title="Duplicar cotización"
                                 onClick={async () => {
                                   const copia = await workflow.duplicar.mutateAsync(
@@ -628,7 +723,10 @@ function CotizacionesPageContent() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 w-8 p-0"
+                                className={cn(
+                                  'p-0',
+                                  isCollapsed ? 'h-8 w-8' : 'h-7 w-7 2xl:h-8 2xl:w-8',
+                                )}
                                 title="Previsualizar y descargar PDF corporativo"
                                 onClick={() =>
                                   setPdfPreviewTarget({

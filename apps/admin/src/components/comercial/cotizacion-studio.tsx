@@ -4563,17 +4563,17 @@ function CotizacionStudioEditor({
         {/* ═══════════════════════════════════════════════════════════════════════ */}
         {/* COLUMNA DERECHA STICKY (4): RESUMEN ECONÓMICO + RENTABILIDAD PRIVADA   */}
         {/* ═══════════════════════════════════════════════════════════════════════ */}
-        <div className="xl:col-span-4 space-y-3.5 xl:sticky xl:top-20">
+        <div className="xl:col-span-4 space-y-3 xl:sticky xl:top-[76px] xl:max-h-[calc(100vh-5.5rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
           {/* Resumen Económico Cliente */}
-          <Card className="border-primary/30 shadow-md overflow-hidden">
-            <div className="px-4 py-3 bg-primary text-white flex items-center justify-between">
+          <Card className="border-primary/30 shadow-md overflow-hidden py-0 gap-0">
+            <div className="px-4 py-2.5 bg-primary text-white flex items-center justify-between">
               <span className="text-sm font-bold">Resumen Económico</span>
               <span className="text-xs font-mono opacity-90">
                 {cotizacion?.moneda || orgConfig?.codigo_moneda || 'COP'}
               </span>
             </div>
-            <CardContent className="p-4 space-y-3 text-sm">
-              <div className="space-y-1.5 text-xs">
+            <CardContent className="p-3.5 space-y-2.5 text-sm">
+              <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
                   <span className="text-slate-600">Subtotal Servicios</span>
                   <span className="font-mono font-semibold">
@@ -4601,7 +4601,7 @@ function CotizacionStudioEditor({
               </div>
 
               {/* Descuento Global */}
-              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
                 <span className="text-xs text-slate-600">Descuento Global (%)</span>
                 <div className="flex items-center gap-2">
                   <div className="w-20">
@@ -4625,7 +4625,7 @@ function CotizacionStudioEditor({
               </div>
 
               {/* Switch AIU Opcional */}
-              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+              <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
                 <label className="flex items-center justify-between text-xs font-semibold text-slate-800 cursor-pointer">
                   <span>Estructura AIU (Opcional)</span>
                   <input
@@ -4637,7 +4637,7 @@ function CotizacionStudioEditor({
                   />
                 </label>
                 {usaAiu && (
-                  <div className="space-y-2 pt-1">
+                  <div className="space-y-1.5 pt-1">
                     <div className="grid grid-cols-3 gap-1.5">
                       <div>
                         <span className="text-[10px] text-slate-500">Admin %</span>
@@ -4723,11 +4723,11 @@ function CotizacionStudioEditor({
               </div>
 
               {/* TOTAL CLIENTE */}
-              <div className="p-3 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-between">
+              <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase text-primary">
                   Total Oferta Cliente
                 </span>
-                <span className="text-xl font-extrabold font-mono text-primary">
+                <span className="text-lg font-extrabold font-mono text-primary">
                   {formatCurrency(resumenFinanciero.totalCotizacion)}
                 </span>
               </div>
@@ -4742,7 +4742,7 @@ function CotizacionStudioEditor({
               )}
 
               {/* Preferencia de presentación PDF */}
-              <div className="pt-2.5 border-t border-slate-100">
+              <div className="pt-2 border-t border-slate-100">
                 <label className="flex items-start gap-2 cursor-pointer text-xs text-slate-700 select-none">
                   <input
                     type="checkbox"
@@ -4767,8 +4767,8 @@ function CotizacionStudioEditor({
           </Card>
 
           {/* TARJETA PRIVADA DE RENTABILIDAD & GOBERNANZA (NUNCA SALE EN PDF) */}
-          <Card className="border-slate-200 bg-slate-900 text-slate-100">
-            <CardHeader className="pb-2">
+          <Card className="border-slate-200 bg-slate-900 text-slate-100 py-0 gap-0">
+            <CardHeader className="px-4 pt-3 pb-1.5">
               <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <Lock className="h-3.5 w-3.5 text-amber-400" />
@@ -4790,7 +4790,7 @@ function CotizacionStudioEditor({
                 </Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-xs">
+            <CardContent className="px-4 pb-3 pt-0 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-300">
                 <span>Costo Directo + Logística</span>
                 <span className="font-mono font-semibold">
