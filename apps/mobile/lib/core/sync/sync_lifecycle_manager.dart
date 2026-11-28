@@ -252,8 +252,10 @@ class SyncLifecycleManager with WidgetsBindingObserver {
 /// final manager = ref.watch(syncLifecycleManagerProvider(tecnicoId));
 /// manager.initialize();
 /// ```
+/// Provider persistente para el SyncLifecycleManager (Fase 0: sin autoDispose
+/// para evitar que Riverpod destruya el observer en el microtask siguiente a `ref.read`).
 final syncLifecycleManagerProvider =
-    Provider.autoDispose.family<SyncLifecycleManager, int>((ref, tecnicoId) {
+    Provider.family<SyncLifecycleManager, int>((ref, tecnicoId) {
       final manager = SyncLifecycleManager(ref, tecnicoId);
 
       ref.onDispose(() {

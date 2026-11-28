@@ -1,8 +1,16 @@
 import { PrismaService } from '@mekanos/database';
 import { Prisma } from '@prisma/client';
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { createHash } from 'crypto';
+import { OrdenPlanSeederService } from '../../common/services/orden-plan-seeder.service';
 import {
   formatCorrelativeCode,
   reserveNextSequenceCounter,
@@ -36,13 +44,18 @@ import { CotizacionCalculoService } from './cotizacion-calculo.service';
 export class CotizacionesCpqService {
   private readonly logger = new Logger(CotizacionesCpqService.name);
 
+  private readonly planSeeder: OrdenPlanSeederService;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly calculoService: CotizacionCalculoService,
     private readonly commandBus: CommandBus,
     @Inject('CotizacionesRepository')
     private readonly cotizacionesRepository: CotizacionesRepository,
-  ) {}
+    @Optional() planSeeder?: OrdenPlanSeederService,
+  ) {
+    this.planSeeder = planSeeder ?? new OrdenPlanSeederService(prisma);
+  }
 
   private async assertBorrador(idCotizacion: number) {
     const cot = await this.prisma.cotizaciones.findUnique({
@@ -1598,6 +1611,14 @@ export class CotizacionesCpqService {
           estado: 'PENDIENTE',
           creado_por: userId,
         })),
+      });
+
+      // Sembrar plan de actividades esperado de forma idempotente (Fase 0)
+      await this.planSeeder.sembrarPlanParaOrden(tx, {
+        idOrdenServicio: os.id_orden_servicio,
+        idTipoServicio,
+        creadoPor: userId,
+        origen: 'ADMIN',
       });
 
       // Enlazar la cotización con la orden generada

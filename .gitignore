@@ -76,3 +76,11 @@ scratch/
 *.sql.gz
 *.bak
 backups/
+
+# Firebase Admin private credentials & local CLI cache (NEVER commit private keys)
+*firebase-adminsdk*.json
+serviceAccountKey*.json
+*service-account*.json
+firebase-credentials*.json
+firebase-private-key*.json
+.firebase/

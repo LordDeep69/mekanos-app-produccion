@@ -5454,6 +5454,41 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _localVersionMeta = const VerificationMeta(
+    'localVersion',
+  );
+  @override
+  late final GeneratedColumn<int> localVersion = GeneratedColumn<int>(
+    'local_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _syncedVersionMeta = const VerificationMeta(
+    'syncedVersion',
+  );
+  @override
+  late final GeneratedColumn<int> syncedVersion = GeneratedColumn<int>(
+    'synced_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _executionSyncVersionMeta =
+      const VerificationMeta('executionSyncVersion');
+  @override
+  late final GeneratedColumn<int> executionSyncVersion = GeneratedColumn<int>(
+    'execution_sync_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _isDirtyMeta = const VerificationMeta(
     'isDirty',
   );
@@ -5537,6 +5572,9 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
     horaSalidaTexto,
     razonFalla,
     permiteEdicionTecnico,
+    localVersion,
+    syncedVersion,
+    executionSyncVersion,
     isDirty,
     lastSyncedAt,
     createdAt,
@@ -5813,6 +5851,33 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
         ),
       );
     }
+    if (data.containsKey('local_version')) {
+      context.handle(
+        _localVersionMeta,
+        localVersion.isAcceptableOrUnknown(
+          data['local_version']!,
+          _localVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_version')) {
+      context.handle(
+        _syncedVersionMeta,
+        syncedVersion.isAcceptableOrUnknown(
+          data['synced_version']!,
+          _syncedVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('execution_sync_version')) {
+      context.handle(
+        _executionSyncVersionMeta,
+        executionSyncVersion.isAcceptableOrUnknown(
+          data['execution_sync_version']!,
+          _executionSyncVersionMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_dirty')) {
       context.handle(
         _isDirtyMeta,
@@ -5973,6 +6038,18 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
         DriftSqlType.bool,
         data['${effectivePrefix}permite_edicion_tecnico'],
       )!,
+      localVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}local_version'],
+      )!,
+      syncedVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}synced_version'],
+      )!,
+      executionSyncVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}execution_sync_version'],
+      )!,
       isDirty: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_dirty'],
@@ -6030,6 +6107,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
   final String? horaSalidaTexto;
   final String? razonFalla;
   final bool permiteEdicionTecnico;
+  final int localVersion;
+  final int syncedVersion;
+  final int executionSyncVersion;
   final bool isDirty;
   final DateTime? lastSyncedAt;
   final DateTime createdAt;
@@ -6066,6 +6146,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
     this.horaSalidaTexto,
     this.razonFalla,
     required this.permiteEdicionTecnico,
+    required this.localVersion,
+    required this.syncedVersion,
+    required this.executionSyncVersion,
     required this.isDirty,
     this.lastSyncedAt,
     required this.createdAt,
@@ -6127,6 +6210,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       map['razon_falla'] = Variable<String>(razonFalla);
     }
     map['permite_edicion_tecnico'] = Variable<bool>(permiteEdicionTecnico);
+    map['local_version'] = Variable<int>(localVersion);
+    map['synced_version'] = Variable<int>(syncedVersion);
+    map['execution_sync_version'] = Variable<int>(executionSyncVersion);
     map['is_dirty'] = Variable<bool>(isDirty);
     if (!nullToAbsent || lastSyncedAt != null) {
       map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
@@ -6191,6 +6277,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
           ? const Value.absent()
           : Value(razonFalla),
       permiteEdicionTecnico: Value(permiteEdicionTecnico),
+      localVersion: Value(localVersion),
+      syncedVersion: Value(syncedVersion),
+      executionSyncVersion: Value(executionSyncVersion),
       isDirty: Value(isDirty),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -6247,6 +6336,11 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       permiteEdicionTecnico: serializer.fromJson<bool>(
         json['permiteEdicionTecnico'],
       ),
+      localVersion: serializer.fromJson<int>(json['localVersion']),
+      syncedVersion: serializer.fromJson<int>(json['syncedVersion']),
+      executionSyncVersion: serializer.fromJson<int>(
+        json['executionSyncVersion'],
+      ),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -6288,6 +6382,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       'horaSalidaTexto': serializer.toJson<String?>(horaSalidaTexto),
       'razonFalla': serializer.toJson<String?>(razonFalla),
       'permiteEdicionTecnico': serializer.toJson<bool>(permiteEdicionTecnico),
+      'localVersion': serializer.toJson<int>(localVersion),
+      'syncedVersion': serializer.toJson<int>(syncedVersion),
+      'executionSyncVersion': serializer.toJson<int>(executionSyncVersion),
       'isDirty': serializer.toJson<bool>(isDirty),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -6327,6 +6424,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
     Value<String?> horaSalidaTexto = const Value.absent(),
     Value<String?> razonFalla = const Value.absent(),
     bool? permiteEdicionTecnico,
+    int? localVersion,
+    int? syncedVersion,
+    int? executionSyncVersion,
     bool? isDirty,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
     DateTime? createdAt,
@@ -6375,6 +6475,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
         : this.horaSalidaTexto,
     razonFalla: razonFalla.present ? razonFalla.value : this.razonFalla,
     permiteEdicionTecnico: permiteEdicionTecnico ?? this.permiteEdicionTecnico,
+    localVersion: localVersion ?? this.localVersion,
+    syncedVersion: syncedVersion ?? this.syncedVersion,
+    executionSyncVersion: executionSyncVersion ?? this.executionSyncVersion,
     isDirty: isDirty ?? this.isDirty,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -6457,6 +6560,15 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       permiteEdicionTecnico: data.permiteEdicionTecnico.present
           ? data.permiteEdicionTecnico.value
           : this.permiteEdicionTecnico,
+      localVersion: data.localVersion.present
+          ? data.localVersion.value
+          : this.localVersion,
+      syncedVersion: data.syncedVersion.present
+          ? data.syncedVersion.value
+          : this.syncedVersion,
+      executionSyncVersion: data.executionSyncVersion.present
+          ? data.executionSyncVersion.value
+          : this.executionSyncVersion,
       isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
       lastSyncedAt: data.lastSyncedAt.present
           ? data.lastSyncedAt.value
@@ -6500,6 +6612,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
           ..write('horaSalidaTexto: $horaSalidaTexto, ')
           ..write('razonFalla: $razonFalla, ')
           ..write('permiteEdicionTecnico: $permiteEdicionTecnico, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('executionSyncVersion: $executionSyncVersion, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -6541,6 +6656,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
     horaSalidaTexto,
     razonFalla,
     permiteEdicionTecnico,
+    localVersion,
+    syncedVersion,
+    executionSyncVersion,
     isDirty,
     lastSyncedAt,
     createdAt,
@@ -6581,6 +6699,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
           other.horaSalidaTexto == this.horaSalidaTexto &&
           other.razonFalla == this.razonFalla &&
           other.permiteEdicionTecnico == this.permiteEdicionTecnico &&
+          other.localVersion == this.localVersion &&
+          other.syncedVersion == this.syncedVersion &&
+          other.executionSyncVersion == this.executionSyncVersion &&
           other.isDirty == this.isDirty &&
           other.lastSyncedAt == this.lastSyncedAt &&
           other.createdAt == this.createdAt &&
@@ -6619,6 +6740,9 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
   final Value<String?> horaSalidaTexto;
   final Value<String?> razonFalla;
   final Value<bool> permiteEdicionTecnico;
+  final Value<int> localVersion;
+  final Value<int> syncedVersion;
+  final Value<int> executionSyncVersion;
   final Value<bool> isDirty;
   final Value<DateTime?> lastSyncedAt;
   final Value<DateTime> createdAt;
@@ -6655,6 +6779,9 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     this.horaSalidaTexto = const Value.absent(),
     this.razonFalla = const Value.absent(),
     this.permiteEdicionTecnico = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.executionSyncVersion = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -6692,6 +6819,9 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     this.horaSalidaTexto = const Value.absent(),
     this.razonFalla = const Value.absent(),
     this.permiteEdicionTecnico = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.executionSyncVersion = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -6733,6 +6863,9 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     Expression<String>? horaSalidaTexto,
     Expression<String>? razonFalla,
     Expression<bool>? permiteEdicionTecnico,
+    Expression<int>? localVersion,
+    Expression<int>? syncedVersion,
+    Expression<int>? executionSyncVersion,
     Expression<bool>? isDirty,
     Expression<DateTime>? lastSyncedAt,
     Expression<DateTime>? createdAt,
@@ -6774,6 +6907,10 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
       if (razonFalla != null) 'razon_falla': razonFalla,
       if (permiteEdicionTecnico != null)
         'permite_edicion_tecnico': permiteEdicionTecnico,
+      if (localVersion != null) 'local_version': localVersion,
+      if (syncedVersion != null) 'synced_version': syncedVersion,
+      if (executionSyncVersion != null)
+        'execution_sync_version': executionSyncVersion,
       if (isDirty != null) 'is_dirty': isDirty,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -6813,6 +6950,9 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     Value<String?>? horaSalidaTexto,
     Value<String?>? razonFalla,
     Value<bool>? permiteEdicionTecnico,
+    Value<int>? localVersion,
+    Value<int>? syncedVersion,
+    Value<int>? executionSyncVersion,
     Value<bool>? isDirty,
     Value<DateTime?>? lastSyncedAt,
     Value<DateTime>? createdAt,
@@ -6853,6 +6993,9 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
       razonFalla: razonFalla ?? this.razonFalla,
       permiteEdicionTecnico:
           permiteEdicionTecnico ?? this.permiteEdicionTecnico,
+      localVersion: localVersion ?? this.localVersion,
+      syncedVersion: syncedVersion ?? this.syncedVersion,
+      executionSyncVersion: executionSyncVersion ?? this.executionSyncVersion,
       isDirty: isDirty ?? this.isDirty,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -6964,6 +7107,15 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
         permiteEdicionTecnico.value,
       );
     }
+    if (localVersion.present) {
+      map['local_version'] = Variable<int>(localVersion.value);
+    }
+    if (syncedVersion.present) {
+      map['synced_version'] = Variable<int>(syncedVersion.value);
+    }
+    if (executionSyncVersion.present) {
+      map['execution_sync_version'] = Variable<int>(executionSyncVersion.value);
+    }
     if (isDirty.present) {
       map['is_dirty'] = Variable<bool>(isDirty.value);
     }
@@ -7013,6 +7165,9 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
           ..write('horaSalidaTexto: $horaSalidaTexto, ')
           ..write('razonFalla: $razonFalla, ')
           ..write('permiteEdicionTecnico: $permiteEdicionTecnico, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('executionSyncVersion: $executionSyncVersion, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -7708,6 +7863,90 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _clientUuidMeta = const VerificationMeta(
+    'clientUuid',
+  );
+  @override
+  late final GeneratedColumn<String> clientUuid = GeneratedColumn<String>(
+    'client_uuid',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _localVersionMeta = const VerificationMeta(
+    'localVersion',
+  );
+  @override
+  late final GeneratedColumn<int> localVersion = GeneratedColumn<int>(
+    'local_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _inflightVersionMeta = const VerificationMeta(
+    'inflightVersion',
+  );
+  @override
+  late final GeneratedColumn<int> inflightVersion = GeneratedColumn<int>(
+    'inflight_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _syncedVersionMeta = const VerificationMeta(
+    'syncedVersion',
+  );
+  @override
+  late final GeneratedColumn<int> syncedVersion = GeneratedColumn<int>(
+    'synced_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _payloadHashMeta = const VerificationMeta(
+    'payloadHash',
+  );
+  @override
+  late final GeneratedColumn<String> payloadHash = GeneratedColumn<String>(
+    'payload_hash',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncedPayloadHashMeta = const VerificationMeta(
+    'syncedPayloadHash',
+  );
+  @override
+  late final GeneratedColumn<String> syncedPayloadHash =
+      GeneratedColumn<String>(
+        'synced_payload_hash',
+        aliasedName,
+        true,
+        additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isDirtyMeta = const VerificationMeta(
     'isDirty',
   );
@@ -7764,6 +8003,13 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
     observacionTecnico,
     respuestaJson,
     fechaEjecucion,
+    clientUuid,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    payloadHash,
+    syncedPayloadHash,
+    deletedAt,
     isDirty,
     lastSyncedAt,
     createdAt,
@@ -7914,6 +8160,63 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
         ),
       );
     }
+    if (data.containsKey('client_uuid')) {
+      context.handle(
+        _clientUuidMeta,
+        clientUuid.isAcceptableOrUnknown(data['client_uuid']!, _clientUuidMeta),
+      );
+    }
+    if (data.containsKey('local_version')) {
+      context.handle(
+        _localVersionMeta,
+        localVersion.isAcceptableOrUnknown(
+          data['local_version']!,
+          _localVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inflight_version')) {
+      context.handle(
+        _inflightVersionMeta,
+        inflightVersion.isAcceptableOrUnknown(
+          data['inflight_version']!,
+          _inflightVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_version')) {
+      context.handle(
+        _syncedVersionMeta,
+        syncedVersion.isAcceptableOrUnknown(
+          data['synced_version']!,
+          _syncedVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payload_hash')) {
+      context.handle(
+        _payloadHashMeta,
+        payloadHash.isAcceptableOrUnknown(
+          data['payload_hash']!,
+          _payloadHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_payload_hash')) {
+      context.handle(
+        _syncedPayloadHashMeta,
+        syncedPayloadHash.isAcceptableOrUnknown(
+          data['synced_payload_hash']!,
+          _syncedPayloadHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
     if (data.containsKey('is_dirty')) {
       context.handle(
         _isDirtyMeta,
@@ -8008,6 +8311,34 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
         DriftSqlType.dateTime,
         data['${effectivePrefix}fecha_ejecucion'],
       ),
+      clientUuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}client_uuid'],
+      ),
+      localVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}local_version'],
+      )!,
+      inflightVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inflight_version'],
+      )!,
+      syncedVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}synced_version'],
+      )!,
+      payloadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload_hash'],
+      ),
+      syncedPayloadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}synced_payload_hash'],
+      ),
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
       isDirty: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_dirty'],
@@ -8047,6 +8378,13 @@ class ActividadesEjecutada extends DataClass
   final String? observacionTecnico;
   final String? respuestaJson;
   final DateTime? fechaEjecucion;
+  final String? clientUuid;
+  final int localVersion;
+  final int inflightVersion;
+  final int syncedVersion;
+  final String? payloadHash;
+  final String? syncedPayloadHash;
+  final DateTime? deletedAt;
   final bool isDirty;
   final DateTime? lastSyncedAt;
   final DateTime createdAt;
@@ -8067,6 +8405,13 @@ class ActividadesEjecutada extends DataClass
     this.observacionTecnico,
     this.respuestaJson,
     this.fechaEjecucion,
+    this.clientUuid,
+    required this.localVersion,
+    required this.inflightVersion,
+    required this.syncedVersion,
+    this.payloadHash,
+    this.syncedPayloadHash,
+    this.deletedAt,
     required this.isDirty,
     this.lastSyncedAt,
     required this.createdAt,
@@ -8107,6 +8452,21 @@ class ActividadesEjecutada extends DataClass
     }
     if (!nullToAbsent || fechaEjecucion != null) {
       map['fecha_ejecucion'] = Variable<DateTime>(fechaEjecucion);
+    }
+    if (!nullToAbsent || clientUuid != null) {
+      map['client_uuid'] = Variable<String>(clientUuid);
+    }
+    map['local_version'] = Variable<int>(localVersion);
+    map['inflight_version'] = Variable<int>(inflightVersion);
+    map['synced_version'] = Variable<int>(syncedVersion);
+    if (!nullToAbsent || payloadHash != null) {
+      map['payload_hash'] = Variable<String>(payloadHash);
+    }
+    if (!nullToAbsent || syncedPayloadHash != null) {
+      map['synced_payload_hash'] = Variable<String>(syncedPayloadHash);
+    }
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
     map['is_dirty'] = Variable<bool>(isDirty);
     if (!nullToAbsent || lastSyncedAt != null) {
@@ -8152,6 +8512,21 @@ class ActividadesEjecutada extends DataClass
       fechaEjecucion: fechaEjecucion == null && nullToAbsent
           ? const Value.absent()
           : Value(fechaEjecucion),
+      clientUuid: clientUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(clientUuid),
+      localVersion: Value(localVersion),
+      inflightVersion: Value(inflightVersion),
+      syncedVersion: Value(syncedVersion),
+      payloadHash: payloadHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(payloadHash),
+      syncedPayloadHash: syncedPayloadHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncedPayloadHash),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
       isDirty: Value(isDirty),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -8188,6 +8563,15 @@ class ActividadesEjecutada extends DataClass
       ),
       respuestaJson: serializer.fromJson<String?>(json['respuestaJson']),
       fechaEjecucion: serializer.fromJson<DateTime?>(json['fechaEjecucion']),
+      clientUuid: serializer.fromJson<String?>(json['clientUuid']),
+      localVersion: serializer.fromJson<int>(json['localVersion']),
+      inflightVersion: serializer.fromJson<int>(json['inflightVersion']),
+      syncedVersion: serializer.fromJson<int>(json['syncedVersion']),
+      payloadHash: serializer.fromJson<String?>(json['payloadHash']),
+      syncedPayloadHash: serializer.fromJson<String?>(
+        json['syncedPayloadHash'],
+      ),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -8213,6 +8597,13 @@ class ActividadesEjecutada extends DataClass
       'observacionTecnico': serializer.toJson<String?>(observacionTecnico),
       'respuestaJson': serializer.toJson<String?>(respuestaJson),
       'fechaEjecucion': serializer.toJson<DateTime?>(fechaEjecucion),
+      'clientUuid': serializer.toJson<String?>(clientUuid),
+      'localVersion': serializer.toJson<int>(localVersion),
+      'inflightVersion': serializer.toJson<int>(inflightVersion),
+      'syncedVersion': serializer.toJson<int>(syncedVersion),
+      'payloadHash': serializer.toJson<String?>(payloadHash),
+      'syncedPayloadHash': serializer.toJson<String?>(syncedPayloadHash),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'isDirty': serializer.toJson<bool>(isDirty),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -8236,6 +8627,13 @@ class ActividadesEjecutada extends DataClass
     Value<String?> observacionTecnico = const Value.absent(),
     Value<String?> respuestaJson = const Value.absent(),
     Value<DateTime?> fechaEjecucion = const Value.absent(),
+    Value<String?> clientUuid = const Value.absent(),
+    int? localVersion,
+    int? inflightVersion,
+    int? syncedVersion,
+    Value<String?> payloadHash = const Value.absent(),
+    Value<String?> syncedPayloadHash = const Value.absent(),
+    Value<DateTime?> deletedAt = const Value.absent(),
     bool? isDirty,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
     DateTime? createdAt,
@@ -8266,6 +8664,15 @@ class ActividadesEjecutada extends DataClass
     fechaEjecucion: fechaEjecucion.present
         ? fechaEjecucion.value
         : this.fechaEjecucion,
+    clientUuid: clientUuid.present ? clientUuid.value : this.clientUuid,
+    localVersion: localVersion ?? this.localVersion,
+    inflightVersion: inflightVersion ?? this.inflightVersion,
+    syncedVersion: syncedVersion ?? this.syncedVersion,
+    payloadHash: payloadHash.present ? payloadHash.value : this.payloadHash,
+    syncedPayloadHash: syncedPayloadHash.present
+        ? syncedPayloadHash.value
+        : this.syncedPayloadHash,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     isDirty: isDirty ?? this.isDirty,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -8312,6 +8719,25 @@ class ActividadesEjecutada extends DataClass
       fechaEjecucion: data.fechaEjecucion.present
           ? data.fechaEjecucion.value
           : this.fechaEjecucion,
+      clientUuid: data.clientUuid.present
+          ? data.clientUuid.value
+          : this.clientUuid,
+      localVersion: data.localVersion.present
+          ? data.localVersion.value
+          : this.localVersion,
+      inflightVersion: data.inflightVersion.present
+          ? data.inflightVersion.value
+          : this.inflightVersion,
+      syncedVersion: data.syncedVersion.present
+          ? data.syncedVersion.value
+          : this.syncedVersion,
+      payloadHash: data.payloadHash.present
+          ? data.payloadHash.value
+          : this.payloadHash,
+      syncedPayloadHash: data.syncedPayloadHash.present
+          ? data.syncedPayloadHash.value
+          : this.syncedPayloadHash,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
       lastSyncedAt: data.lastSyncedAt.present
           ? data.lastSyncedAt.value
@@ -8339,6 +8765,13 @@ class ActividadesEjecutada extends DataClass
           ..write('observacionTecnico: $observacionTecnico, ')
           ..write('respuestaJson: $respuestaJson, ')
           ..write('fechaEjecucion: $fechaEjecucion, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('payloadHash: $payloadHash, ')
+          ..write('syncedPayloadHash: $syncedPayloadHash, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt')
@@ -8347,7 +8780,7 @@ class ActividadesEjecutada extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     idLocal,
     idBackend,
     idOrden,
@@ -8364,10 +8797,17 @@ class ActividadesEjecutada extends DataClass
     observacionTecnico,
     respuestaJson,
     fechaEjecucion,
+    clientUuid,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    payloadHash,
+    syncedPayloadHash,
+    deletedAt,
     isDirty,
     lastSyncedAt,
     createdAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -8388,6 +8828,13 @@ class ActividadesEjecutada extends DataClass
           other.observacionTecnico == this.observacionTecnico &&
           other.respuestaJson == this.respuestaJson &&
           other.fechaEjecucion == this.fechaEjecucion &&
+          other.clientUuid == this.clientUuid &&
+          other.localVersion == this.localVersion &&
+          other.inflightVersion == this.inflightVersion &&
+          other.syncedVersion == this.syncedVersion &&
+          other.payloadHash == this.payloadHash &&
+          other.syncedPayloadHash == this.syncedPayloadHash &&
+          other.deletedAt == this.deletedAt &&
           other.isDirty == this.isDirty &&
           other.lastSyncedAt == this.lastSyncedAt &&
           other.createdAt == this.createdAt);
@@ -8411,6 +8858,13 @@ class ActividadesEjecutadasCompanion
   final Value<String?> observacionTecnico;
   final Value<String?> respuestaJson;
   final Value<DateTime?> fechaEjecucion;
+  final Value<String?> clientUuid;
+  final Value<int> localVersion;
+  final Value<int> inflightVersion;
+  final Value<int> syncedVersion;
+  final Value<String?> payloadHash;
+  final Value<String?> syncedPayloadHash;
+  final Value<DateTime?> deletedAt;
   final Value<bool> isDirty;
   final Value<DateTime?> lastSyncedAt;
   final Value<DateTime> createdAt;
@@ -8431,6 +8885,13 @@ class ActividadesEjecutadasCompanion
     this.observacionTecnico = const Value.absent(),
     this.respuestaJson = const Value.absent(),
     this.fechaEjecucion = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.payloadHash = const Value.absent(),
+    this.syncedPayloadHash = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -8452,6 +8913,13 @@ class ActividadesEjecutadasCompanion
     this.observacionTecnico = const Value.absent(),
     this.respuestaJson = const Value.absent(),
     this.fechaEjecucion = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.payloadHash = const Value.absent(),
+    this.syncedPayloadHash = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -8476,6 +8944,13 @@ class ActividadesEjecutadasCompanion
     Expression<String>? observacionTecnico,
     Expression<String>? respuestaJson,
     Expression<DateTime>? fechaEjecucion,
+    Expression<String>? clientUuid,
+    Expression<int>? localVersion,
+    Expression<int>? inflightVersion,
+    Expression<int>? syncedVersion,
+    Expression<String>? payloadHash,
+    Expression<String>? syncedPayloadHash,
+    Expression<DateTime>? deletedAt,
     Expression<bool>? isDirty,
     Expression<DateTime>? lastSyncedAt,
     Expression<DateTime>? createdAt,
@@ -8499,6 +8974,13 @@ class ActividadesEjecutadasCompanion
       if (observacionTecnico != null) 'observacion_tecnico': observacionTecnico,
       if (respuestaJson != null) 'respuesta_json': respuestaJson,
       if (fechaEjecucion != null) 'fecha_ejecucion': fechaEjecucion,
+      if (clientUuid != null) 'client_uuid': clientUuid,
+      if (localVersion != null) 'local_version': localVersion,
+      if (inflightVersion != null) 'inflight_version': inflightVersion,
+      if (syncedVersion != null) 'synced_version': syncedVersion,
+      if (payloadHash != null) 'payload_hash': payloadHash,
+      if (syncedPayloadHash != null) 'synced_payload_hash': syncedPayloadHash,
+      if (deletedAt != null) 'deleted_at': deletedAt,
       if (isDirty != null) 'is_dirty': isDirty,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -8522,6 +9004,13 @@ class ActividadesEjecutadasCompanion
     Value<String?>? observacionTecnico,
     Value<String?>? respuestaJson,
     Value<DateTime?>? fechaEjecucion,
+    Value<String?>? clientUuid,
+    Value<int>? localVersion,
+    Value<int>? inflightVersion,
+    Value<int>? syncedVersion,
+    Value<String?>? payloadHash,
+    Value<String?>? syncedPayloadHash,
+    Value<DateTime?>? deletedAt,
     Value<bool>? isDirty,
     Value<DateTime?>? lastSyncedAt,
     Value<DateTime>? createdAt,
@@ -8543,6 +9032,13 @@ class ActividadesEjecutadasCompanion
       observacionTecnico: observacionTecnico ?? this.observacionTecnico,
       respuestaJson: respuestaJson ?? this.respuestaJson,
       fechaEjecucion: fechaEjecucion ?? this.fechaEjecucion,
+      clientUuid: clientUuid ?? this.clientUuid,
+      localVersion: localVersion ?? this.localVersion,
+      inflightVersion: inflightVersion ?? this.inflightVersion,
+      syncedVersion: syncedVersion ?? this.syncedVersion,
+      payloadHash: payloadHash ?? this.payloadHash,
+      syncedPayloadHash: syncedPayloadHash ?? this.syncedPayloadHash,
+      deletedAt: deletedAt ?? this.deletedAt,
       isDirty: isDirty ?? this.isDirty,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -8600,6 +9096,27 @@ class ActividadesEjecutadasCompanion
     if (fechaEjecucion.present) {
       map['fecha_ejecucion'] = Variable<DateTime>(fechaEjecucion.value);
     }
+    if (clientUuid.present) {
+      map['client_uuid'] = Variable<String>(clientUuid.value);
+    }
+    if (localVersion.present) {
+      map['local_version'] = Variable<int>(localVersion.value);
+    }
+    if (inflightVersion.present) {
+      map['inflight_version'] = Variable<int>(inflightVersion.value);
+    }
+    if (syncedVersion.present) {
+      map['synced_version'] = Variable<int>(syncedVersion.value);
+    }
+    if (payloadHash.present) {
+      map['payload_hash'] = Variable<String>(payloadHash.value);
+    }
+    if (syncedPayloadHash.present) {
+      map['synced_payload_hash'] = Variable<String>(syncedPayloadHash.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
     if (isDirty.present) {
       map['is_dirty'] = Variable<bool>(isDirty.value);
     }
@@ -8631,6 +9148,13 @@ class ActividadesEjecutadasCompanion
           ..write('observacionTecnico: $observacionTecnico, ')
           ..write('respuestaJson: $respuestaJson, ')
           ..write('fechaEjecucion: $fechaEjecucion, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('payloadHash: $payloadHash, ')
+          ..write('syncedPayloadHash: $syncedPayloadHash, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt')
@@ -8840,6 +9364,90 @@ class $MedicionesTable extends Mediciones
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _clientUuidMeta = const VerificationMeta(
+    'clientUuid',
+  );
+  @override
+  late final GeneratedColumn<String> clientUuid = GeneratedColumn<String>(
+    'client_uuid',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _localVersionMeta = const VerificationMeta(
+    'localVersion',
+  );
+  @override
+  late final GeneratedColumn<int> localVersion = GeneratedColumn<int>(
+    'local_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _inflightVersionMeta = const VerificationMeta(
+    'inflightVersion',
+  );
+  @override
+  late final GeneratedColumn<int> inflightVersion = GeneratedColumn<int>(
+    'inflight_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _syncedVersionMeta = const VerificationMeta(
+    'syncedVersion',
+  );
+  @override
+  late final GeneratedColumn<int> syncedVersion = GeneratedColumn<int>(
+    'synced_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _payloadHashMeta = const VerificationMeta(
+    'payloadHash',
+  );
+  @override
+  late final GeneratedColumn<String> payloadHash = GeneratedColumn<String>(
+    'payload_hash',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncedPayloadHashMeta = const VerificationMeta(
+    'syncedPayloadHash',
+  );
+  @override
+  late final GeneratedColumn<String> syncedPayloadHash =
+      GeneratedColumn<String>(
+        'synced_payload_hash',
+        aliasedName,
+        true,
+        additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isDirtyMeta = const VerificationMeta(
     'isDirty',
   );
@@ -8884,6 +9492,13 @@ class $MedicionesTable extends Mediciones
     estadoValor,
     observacion,
     fechaMedicion,
+    clientUuid,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    payloadHash,
+    syncedPayloadHash,
+    deletedAt,
     isDirty,
     lastSyncedAt,
   ];
@@ -9039,6 +9654,63 @@ class $MedicionesTable extends Mediciones
         ),
       );
     }
+    if (data.containsKey('client_uuid')) {
+      context.handle(
+        _clientUuidMeta,
+        clientUuid.isAcceptableOrUnknown(data['client_uuid']!, _clientUuidMeta),
+      );
+    }
+    if (data.containsKey('local_version')) {
+      context.handle(
+        _localVersionMeta,
+        localVersion.isAcceptableOrUnknown(
+          data['local_version']!,
+          _localVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inflight_version')) {
+      context.handle(
+        _inflightVersionMeta,
+        inflightVersion.isAcceptableOrUnknown(
+          data['inflight_version']!,
+          _inflightVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_version')) {
+      context.handle(
+        _syncedVersionMeta,
+        syncedVersion.isAcceptableOrUnknown(
+          data['synced_version']!,
+          _syncedVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payload_hash')) {
+      context.handle(
+        _payloadHashMeta,
+        payloadHash.isAcceptableOrUnknown(
+          data['payload_hash']!,
+          _payloadHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_payload_hash')) {
+      context.handle(
+        _syncedPayloadHashMeta,
+        syncedPayloadHash.isAcceptableOrUnknown(
+          data['synced_payload_hash']!,
+          _syncedPayloadHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
     if (data.containsKey('is_dirty')) {
       context.handle(
         _isDirtyMeta,
@@ -9127,6 +9799,34 @@ class $MedicionesTable extends Mediciones
         DriftSqlType.dateTime,
         data['${effectivePrefix}fecha_medicion'],
       ),
+      clientUuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}client_uuid'],
+      ),
+      localVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}local_version'],
+      )!,
+      inflightVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inflight_version'],
+      )!,
+      syncedVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}synced_version'],
+      )!,
+      payloadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload_hash'],
+      ),
+      syncedPayloadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}synced_payload_hash'],
+      ),
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
       isDirty: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_dirty'],
@@ -9161,6 +9861,13 @@ class Medicione extends DataClass implements Insertable<Medicione> {
   final String? estadoValor;
   final String? observacion;
   final DateTime? fechaMedicion;
+  final String? clientUuid;
+  final int localVersion;
+  final int inflightVersion;
+  final int syncedVersion;
+  final String? payloadHash;
+  final String? syncedPayloadHash;
+  final DateTime? deletedAt;
   final bool isDirty;
   final DateTime? lastSyncedAt;
   const Medicione({
@@ -9180,6 +9887,13 @@ class Medicione extends DataClass implements Insertable<Medicione> {
     this.estadoValor,
     this.observacion,
     this.fechaMedicion,
+    this.clientUuid,
+    required this.localVersion,
+    required this.inflightVersion,
+    required this.syncedVersion,
+    this.payloadHash,
+    this.syncedPayloadHash,
+    this.deletedAt,
     required this.isDirty,
     this.lastSyncedAt,
   });
@@ -9223,6 +9937,21 @@ class Medicione extends DataClass implements Insertable<Medicione> {
     }
     if (!nullToAbsent || fechaMedicion != null) {
       map['fecha_medicion'] = Variable<DateTime>(fechaMedicion);
+    }
+    if (!nullToAbsent || clientUuid != null) {
+      map['client_uuid'] = Variable<String>(clientUuid);
+    }
+    map['local_version'] = Variable<int>(localVersion);
+    map['inflight_version'] = Variable<int>(inflightVersion);
+    map['synced_version'] = Variable<int>(syncedVersion);
+    if (!nullToAbsent || payloadHash != null) {
+      map['payload_hash'] = Variable<String>(payloadHash);
+    }
+    if (!nullToAbsent || syncedPayloadHash != null) {
+      map['synced_payload_hash'] = Variable<String>(syncedPayloadHash);
+    }
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
     map['is_dirty'] = Variable<bool>(isDirty);
     if (!nullToAbsent || lastSyncedAt != null) {
@@ -9271,6 +10000,21 @@ class Medicione extends DataClass implements Insertable<Medicione> {
       fechaMedicion: fechaMedicion == null && nullToAbsent
           ? const Value.absent()
           : Value(fechaMedicion),
+      clientUuid: clientUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(clientUuid),
+      localVersion: Value(localVersion),
+      inflightVersion: Value(inflightVersion),
+      syncedVersion: Value(syncedVersion),
+      payloadHash: payloadHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(payloadHash),
+      syncedPayloadHash: syncedPayloadHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncedPayloadHash),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
       isDirty: Value(isDirty),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -9310,6 +10054,15 @@ class Medicione extends DataClass implements Insertable<Medicione> {
       estadoValor: serializer.fromJson<String?>(json['estadoValor']),
       observacion: serializer.fromJson<String?>(json['observacion']),
       fechaMedicion: serializer.fromJson<DateTime?>(json['fechaMedicion']),
+      clientUuid: serializer.fromJson<String?>(json['clientUuid']),
+      localVersion: serializer.fromJson<int>(json['localVersion']),
+      inflightVersion: serializer.fromJson<int>(json['inflightVersion']),
+      syncedVersion: serializer.fromJson<int>(json['syncedVersion']),
+      payloadHash: serializer.fromJson<String?>(json['payloadHash']),
+      syncedPayloadHash: serializer.fromJson<String?>(
+        json['syncedPayloadHash'],
+      ),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
     );
@@ -9334,6 +10087,13 @@ class Medicione extends DataClass implements Insertable<Medicione> {
       'estadoValor': serializer.toJson<String?>(estadoValor),
       'observacion': serializer.toJson<String?>(observacion),
       'fechaMedicion': serializer.toJson<DateTime?>(fechaMedicion),
+      'clientUuid': serializer.toJson<String?>(clientUuid),
+      'localVersion': serializer.toJson<int>(localVersion),
+      'inflightVersion': serializer.toJson<int>(inflightVersion),
+      'syncedVersion': serializer.toJson<int>(syncedVersion),
+      'payloadHash': serializer.toJson<String?>(payloadHash),
+      'syncedPayloadHash': serializer.toJson<String?>(syncedPayloadHash),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'isDirty': serializer.toJson<bool>(isDirty),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
     };
@@ -9356,6 +10116,13 @@ class Medicione extends DataClass implements Insertable<Medicione> {
     Value<String?> estadoValor = const Value.absent(),
     Value<String?> observacion = const Value.absent(),
     Value<DateTime?> fechaMedicion = const Value.absent(),
+    Value<String?> clientUuid = const Value.absent(),
+    int? localVersion,
+    int? inflightVersion,
+    int? syncedVersion,
+    Value<String?> payloadHash = const Value.absent(),
+    Value<String?> syncedPayloadHash = const Value.absent(),
+    Value<DateTime?> deletedAt = const Value.absent(),
     bool? isDirty,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
   }) => Medicione(
@@ -9389,6 +10156,15 @@ class Medicione extends DataClass implements Insertable<Medicione> {
     fechaMedicion: fechaMedicion.present
         ? fechaMedicion.value
         : this.fechaMedicion,
+    clientUuid: clientUuid.present ? clientUuid.value : this.clientUuid,
+    localVersion: localVersion ?? this.localVersion,
+    inflightVersion: inflightVersion ?? this.inflightVersion,
+    syncedVersion: syncedVersion ?? this.syncedVersion,
+    payloadHash: payloadHash.present ? payloadHash.value : this.payloadHash,
+    syncedPayloadHash: syncedPayloadHash.present
+        ? syncedPayloadHash.value
+        : this.syncedPayloadHash,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     isDirty: isDirty ?? this.isDirty,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
   );
@@ -9434,6 +10210,25 @@ class Medicione extends DataClass implements Insertable<Medicione> {
       fechaMedicion: data.fechaMedicion.present
           ? data.fechaMedicion.value
           : this.fechaMedicion,
+      clientUuid: data.clientUuid.present
+          ? data.clientUuid.value
+          : this.clientUuid,
+      localVersion: data.localVersion.present
+          ? data.localVersion.value
+          : this.localVersion,
+      inflightVersion: data.inflightVersion.present
+          ? data.inflightVersion.value
+          : this.inflightVersion,
+      syncedVersion: data.syncedVersion.present
+          ? data.syncedVersion.value
+          : this.syncedVersion,
+      payloadHash: data.payloadHash.present
+          ? data.payloadHash.value
+          : this.payloadHash,
+      syncedPayloadHash: data.syncedPayloadHash.present
+          ? data.syncedPayloadHash.value
+          : this.syncedPayloadHash,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
       lastSyncedAt: data.lastSyncedAt.present
           ? data.lastSyncedAt.value
@@ -9460,6 +10255,13 @@ class Medicione extends DataClass implements Insertable<Medicione> {
           ..write('estadoValor: $estadoValor, ')
           ..write('observacion: $observacion, ')
           ..write('fechaMedicion: $fechaMedicion, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('payloadHash: $payloadHash, ')
+          ..write('syncedPayloadHash: $syncedPayloadHash, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt')
           ..write(')'))
@@ -9467,7 +10269,7 @@ class Medicione extends DataClass implements Insertable<Medicione> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     idLocal,
     idBackend,
     idOrden,
@@ -9484,9 +10286,16 @@ class Medicione extends DataClass implements Insertable<Medicione> {
     estadoValor,
     observacion,
     fechaMedicion,
+    clientUuid,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    payloadHash,
+    syncedPayloadHash,
+    deletedAt,
     isDirty,
     lastSyncedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -9507,6 +10316,13 @@ class Medicione extends DataClass implements Insertable<Medicione> {
           other.estadoValor == this.estadoValor &&
           other.observacion == this.observacion &&
           other.fechaMedicion == this.fechaMedicion &&
+          other.clientUuid == this.clientUuid &&
+          other.localVersion == this.localVersion &&
+          other.inflightVersion == this.inflightVersion &&
+          other.syncedVersion == this.syncedVersion &&
+          other.payloadHash == this.payloadHash &&
+          other.syncedPayloadHash == this.syncedPayloadHash &&
+          other.deletedAt == this.deletedAt &&
           other.isDirty == this.isDirty &&
           other.lastSyncedAt == this.lastSyncedAt);
 }
@@ -9528,6 +10344,13 @@ class MedicionesCompanion extends UpdateCompanion<Medicione> {
   final Value<String?> estadoValor;
   final Value<String?> observacion;
   final Value<DateTime?> fechaMedicion;
+  final Value<String?> clientUuid;
+  final Value<int> localVersion;
+  final Value<int> inflightVersion;
+  final Value<int> syncedVersion;
+  final Value<String?> payloadHash;
+  final Value<String?> syncedPayloadHash;
+  final Value<DateTime?> deletedAt;
   final Value<bool> isDirty;
   final Value<DateTime?> lastSyncedAt;
   const MedicionesCompanion({
@@ -9547,6 +10370,13 @@ class MedicionesCompanion extends UpdateCompanion<Medicione> {
     this.estadoValor = const Value.absent(),
     this.observacion = const Value.absent(),
     this.fechaMedicion = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.payloadHash = const Value.absent(),
+    this.syncedPayloadHash = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
   });
@@ -9567,6 +10397,13 @@ class MedicionesCompanion extends UpdateCompanion<Medicione> {
     this.estadoValor = const Value.absent(),
     this.observacion = const Value.absent(),
     this.fechaMedicion = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.payloadHash = const Value.absent(),
+    this.syncedPayloadHash = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
   }) : idOrden = Value(idOrden),
@@ -9590,6 +10427,13 @@ class MedicionesCompanion extends UpdateCompanion<Medicione> {
     Expression<String>? estadoValor,
     Expression<String>? observacion,
     Expression<DateTime>? fechaMedicion,
+    Expression<String>? clientUuid,
+    Expression<int>? localVersion,
+    Expression<int>? inflightVersion,
+    Expression<int>? syncedVersion,
+    Expression<String>? payloadHash,
+    Expression<String>? syncedPayloadHash,
+    Expression<DateTime>? deletedAt,
     Expression<bool>? isDirty,
     Expression<DateTime>? lastSyncedAt,
   }) {
@@ -9613,6 +10457,13 @@ class MedicionesCompanion extends UpdateCompanion<Medicione> {
       if (estadoValor != null) 'estado_valor': estadoValor,
       if (observacion != null) 'observacion': observacion,
       if (fechaMedicion != null) 'fecha_medicion': fechaMedicion,
+      if (clientUuid != null) 'client_uuid': clientUuid,
+      if (localVersion != null) 'local_version': localVersion,
+      if (inflightVersion != null) 'inflight_version': inflightVersion,
+      if (syncedVersion != null) 'synced_version': syncedVersion,
+      if (payloadHash != null) 'payload_hash': payloadHash,
+      if (syncedPayloadHash != null) 'synced_payload_hash': syncedPayloadHash,
+      if (deletedAt != null) 'deleted_at': deletedAt,
       if (isDirty != null) 'is_dirty': isDirty,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
     });
@@ -9635,6 +10486,13 @@ class MedicionesCompanion extends UpdateCompanion<Medicione> {
     Value<String?>? estadoValor,
     Value<String?>? observacion,
     Value<DateTime?>? fechaMedicion,
+    Value<String?>? clientUuid,
+    Value<int>? localVersion,
+    Value<int>? inflightVersion,
+    Value<int>? syncedVersion,
+    Value<String?>? payloadHash,
+    Value<String?>? syncedPayloadHash,
+    Value<DateTime?>? deletedAt,
     Value<bool>? isDirty,
     Value<DateTime?>? lastSyncedAt,
   }) {
@@ -9655,6 +10513,13 @@ class MedicionesCompanion extends UpdateCompanion<Medicione> {
       estadoValor: estadoValor ?? this.estadoValor,
       observacion: observacion ?? this.observacion,
       fechaMedicion: fechaMedicion ?? this.fechaMedicion,
+      clientUuid: clientUuid ?? this.clientUuid,
+      localVersion: localVersion ?? this.localVersion,
+      inflightVersion: inflightVersion ?? this.inflightVersion,
+      syncedVersion: syncedVersion ?? this.syncedVersion,
+      payloadHash: payloadHash ?? this.payloadHash,
+      syncedPayloadHash: syncedPayloadHash ?? this.syncedPayloadHash,
+      deletedAt: deletedAt ?? this.deletedAt,
       isDirty: isDirty ?? this.isDirty,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
     );
@@ -9711,6 +10576,27 @@ class MedicionesCompanion extends UpdateCompanion<Medicione> {
     if (fechaMedicion.present) {
       map['fecha_medicion'] = Variable<DateTime>(fechaMedicion.value);
     }
+    if (clientUuid.present) {
+      map['client_uuid'] = Variable<String>(clientUuid.value);
+    }
+    if (localVersion.present) {
+      map['local_version'] = Variable<int>(localVersion.value);
+    }
+    if (inflightVersion.present) {
+      map['inflight_version'] = Variable<int>(inflightVersion.value);
+    }
+    if (syncedVersion.present) {
+      map['synced_version'] = Variable<int>(syncedVersion.value);
+    }
+    if (payloadHash.present) {
+      map['payload_hash'] = Variable<String>(payloadHash.value);
+    }
+    if (syncedPayloadHash.present) {
+      map['synced_payload_hash'] = Variable<String>(syncedPayloadHash.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
     if (isDirty.present) {
       map['is_dirty'] = Variable<bool>(isDirty.value);
     }
@@ -9739,6 +10625,13 @@ class MedicionesCompanion extends UpdateCompanion<Medicione> {
           ..write('estadoValor: $estadoValor, ')
           ..write('observacion: $observacion, ')
           ..write('fechaMedicion: $fechaMedicion, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('payloadHash: $payloadHash, ')
+          ..write('syncedPayloadHash: $syncedPayloadHash, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt')
           ..write(')'))
@@ -9876,6 +10769,126 @@ class $EvidenciasTable extends Evidencias
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _clientUuidMeta = const VerificationMeta(
+    'clientUuid',
+  );
+  @override
+  late final GeneratedColumn<String> clientUuid = GeneratedColumn<String>(
+    'client_uuid',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _hashSha256Meta = const VerificationMeta(
+    'hashSha256',
+  );
+  @override
+  late final GeneratedColumn<String> hashSha256 = GeneratedColumn<String>(
+    'hash_sha256',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _storageProviderMeta = const VerificationMeta(
+    'storageProvider',
+  );
+  @override
+  late final GeneratedColumn<String> storageProvider = GeneratedColumn<String>(
+    'storage_provider',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 20),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _storageKeyMeta = const VerificationMeta(
+    'storageKey',
+  );
+  @override
+  late final GeneratedColumn<String> storageKey = GeneratedColumn<String>(
+    'storage_key',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 500),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _localVersionMeta = const VerificationMeta(
+    'localVersion',
+  );
+  @override
+  late final GeneratedColumn<int> localVersion = GeneratedColumn<int>(
+    'local_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _inflightVersionMeta = const VerificationMeta(
+    'inflightVersion',
+  );
+  @override
+  late final GeneratedColumn<int> inflightVersion = GeneratedColumn<int>(
+    'inflight_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _syncedVersionMeta = const VerificationMeta(
+    'syncedVersion',
+  );
+  @override
+  late final GeneratedColumn<int> syncedVersion = GeneratedColumn<int>(
+    'synced_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _payloadHashMeta = const VerificationMeta(
+    'payloadHash',
+  );
+  @override
+  late final GeneratedColumn<String> payloadHash = GeneratedColumn<String>(
+    'payload_hash',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncedPayloadHashMeta = const VerificationMeta(
+    'syncedPayloadHash',
+  );
+  @override
+  late final GeneratedColumn<String> syncedPayloadHash =
+      GeneratedColumn<String>(
+        'synced_payload_hash',
+        aliasedName,
+        true,
+        additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isDirtyMeta = const VerificationMeta(
     'isDirty',
   );
@@ -9927,6 +10940,16 @@ class $EvidenciasTable extends Evidencias
     tipoEvidencia,
     descripcion,
     fechaCaptura,
+    clientUuid,
+    hashSha256,
+    storageProvider,
+    storageKey,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    payloadHash,
+    syncedPayloadHash,
+    deletedAt,
     isDirty,
     subida,
     lastSyncedAt,
@@ -10024,6 +11047,84 @@ class $EvidenciasTable extends Evidencias
         ),
       );
     }
+    if (data.containsKey('client_uuid')) {
+      context.handle(
+        _clientUuidMeta,
+        clientUuid.isAcceptableOrUnknown(data['client_uuid']!, _clientUuidMeta),
+      );
+    }
+    if (data.containsKey('hash_sha256')) {
+      context.handle(
+        _hashSha256Meta,
+        hashSha256.isAcceptableOrUnknown(data['hash_sha256']!, _hashSha256Meta),
+      );
+    }
+    if (data.containsKey('storage_provider')) {
+      context.handle(
+        _storageProviderMeta,
+        storageProvider.isAcceptableOrUnknown(
+          data['storage_provider']!,
+          _storageProviderMeta,
+        ),
+      );
+    }
+    if (data.containsKey('storage_key')) {
+      context.handle(
+        _storageKeyMeta,
+        storageKey.isAcceptableOrUnknown(data['storage_key']!, _storageKeyMeta),
+      );
+    }
+    if (data.containsKey('local_version')) {
+      context.handle(
+        _localVersionMeta,
+        localVersion.isAcceptableOrUnknown(
+          data['local_version']!,
+          _localVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inflight_version')) {
+      context.handle(
+        _inflightVersionMeta,
+        inflightVersion.isAcceptableOrUnknown(
+          data['inflight_version']!,
+          _inflightVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_version')) {
+      context.handle(
+        _syncedVersionMeta,
+        syncedVersion.isAcceptableOrUnknown(
+          data['synced_version']!,
+          _syncedVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payload_hash')) {
+      context.handle(
+        _payloadHashMeta,
+        payloadHash.isAcceptableOrUnknown(
+          data['payload_hash']!,
+          _payloadHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_payload_hash')) {
+      context.handle(
+        _syncedPayloadHashMeta,
+        syncedPayloadHash.isAcceptableOrUnknown(
+          data['synced_payload_hash']!,
+          _syncedPayloadHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
     if (data.containsKey('is_dirty')) {
       context.handle(
         _isDirtyMeta,
@@ -10094,6 +11195,46 @@ class $EvidenciasTable extends Evidencias
         DriftSqlType.dateTime,
         data['${effectivePrefix}fecha_captura'],
       )!,
+      clientUuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}client_uuid'],
+      ),
+      hashSha256: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}hash_sha256'],
+      ),
+      storageProvider: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}storage_provider'],
+      ),
+      storageKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}storage_key'],
+      ),
+      localVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}local_version'],
+      )!,
+      inflightVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inflight_version'],
+      )!,
+      syncedVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}synced_version'],
+      )!,
+      payloadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload_hash'],
+      ),
+      syncedPayloadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}synced_payload_hash'],
+      ),
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
       isDirty: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_dirty'],
@@ -10126,6 +11267,16 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
   final String tipoEvidencia;
   final String? descripcion;
   final DateTime fechaCaptura;
+  final String? clientUuid;
+  final String? hashSha256;
+  final String? storageProvider;
+  final String? storageKey;
+  final int localVersion;
+  final int inflightVersion;
+  final int syncedVersion;
+  final String? payloadHash;
+  final String? syncedPayloadHash;
+  final DateTime? deletedAt;
   final bool isDirty;
   final bool subida;
   final DateTime? lastSyncedAt;
@@ -10140,6 +11291,16 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
     required this.tipoEvidencia,
     this.descripcion,
     required this.fechaCaptura,
+    this.clientUuid,
+    this.hashSha256,
+    this.storageProvider,
+    this.storageKey,
+    required this.localVersion,
+    required this.inflightVersion,
+    required this.syncedVersion,
+    this.payloadHash,
+    this.syncedPayloadHash,
+    this.deletedAt,
     required this.isDirty,
     required this.subida,
     this.lastSyncedAt,
@@ -10167,6 +11328,30 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
       map['descripcion'] = Variable<String>(descripcion);
     }
     map['fecha_captura'] = Variable<DateTime>(fechaCaptura);
+    if (!nullToAbsent || clientUuid != null) {
+      map['client_uuid'] = Variable<String>(clientUuid);
+    }
+    if (!nullToAbsent || hashSha256 != null) {
+      map['hash_sha256'] = Variable<String>(hashSha256);
+    }
+    if (!nullToAbsent || storageProvider != null) {
+      map['storage_provider'] = Variable<String>(storageProvider);
+    }
+    if (!nullToAbsent || storageKey != null) {
+      map['storage_key'] = Variable<String>(storageKey);
+    }
+    map['local_version'] = Variable<int>(localVersion);
+    map['inflight_version'] = Variable<int>(inflightVersion);
+    map['synced_version'] = Variable<int>(syncedVersion);
+    if (!nullToAbsent || payloadHash != null) {
+      map['payload_hash'] = Variable<String>(payloadHash);
+    }
+    if (!nullToAbsent || syncedPayloadHash != null) {
+      map['synced_payload_hash'] = Variable<String>(syncedPayloadHash);
+    }
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
     map['is_dirty'] = Variable<bool>(isDirty);
     map['subida'] = Variable<bool>(subida);
     if (!nullToAbsent || lastSyncedAt != null) {
@@ -10197,6 +11382,30 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
           ? const Value.absent()
           : Value(descripcion),
       fechaCaptura: Value(fechaCaptura),
+      clientUuid: clientUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(clientUuid),
+      hashSha256: hashSha256 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(hashSha256),
+      storageProvider: storageProvider == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storageProvider),
+      storageKey: storageKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storageKey),
+      localVersion: Value(localVersion),
+      inflightVersion: Value(inflightVersion),
+      syncedVersion: Value(syncedVersion),
+      payloadHash: payloadHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(payloadHash),
+      syncedPayloadHash: syncedPayloadHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncedPayloadHash),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
       isDirty: Value(isDirty),
       subida: Value(subida),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
@@ -10223,6 +11432,18 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
       tipoEvidencia: serializer.fromJson<String>(json['tipoEvidencia']),
       descripcion: serializer.fromJson<String?>(json['descripcion']),
       fechaCaptura: serializer.fromJson<DateTime>(json['fechaCaptura']),
+      clientUuid: serializer.fromJson<String?>(json['clientUuid']),
+      hashSha256: serializer.fromJson<String?>(json['hashSha256']),
+      storageProvider: serializer.fromJson<String?>(json['storageProvider']),
+      storageKey: serializer.fromJson<String?>(json['storageKey']),
+      localVersion: serializer.fromJson<int>(json['localVersion']),
+      inflightVersion: serializer.fromJson<int>(json['inflightVersion']),
+      syncedVersion: serializer.fromJson<int>(json['syncedVersion']),
+      payloadHash: serializer.fromJson<String?>(json['payloadHash']),
+      syncedPayloadHash: serializer.fromJson<String?>(
+        json['syncedPayloadHash'],
+      ),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       subida: serializer.fromJson<bool>(json['subida']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
@@ -10242,6 +11463,16 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
       'tipoEvidencia': serializer.toJson<String>(tipoEvidencia),
       'descripcion': serializer.toJson<String?>(descripcion),
       'fechaCaptura': serializer.toJson<DateTime>(fechaCaptura),
+      'clientUuid': serializer.toJson<String?>(clientUuid),
+      'hashSha256': serializer.toJson<String?>(hashSha256),
+      'storageProvider': serializer.toJson<String?>(storageProvider),
+      'storageKey': serializer.toJson<String?>(storageKey),
+      'localVersion': serializer.toJson<int>(localVersion),
+      'inflightVersion': serializer.toJson<int>(inflightVersion),
+      'syncedVersion': serializer.toJson<int>(syncedVersion),
+      'payloadHash': serializer.toJson<String?>(payloadHash),
+      'syncedPayloadHash': serializer.toJson<String?>(syncedPayloadHash),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'isDirty': serializer.toJson<bool>(isDirty),
       'subida': serializer.toJson<bool>(subida),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
@@ -10259,6 +11490,16 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
     String? tipoEvidencia,
     Value<String?> descripcion = const Value.absent(),
     DateTime? fechaCaptura,
+    Value<String?> clientUuid = const Value.absent(),
+    Value<String?> hashSha256 = const Value.absent(),
+    Value<String?> storageProvider = const Value.absent(),
+    Value<String?> storageKey = const Value.absent(),
+    int? localVersion,
+    int? inflightVersion,
+    int? syncedVersion,
+    Value<String?> payloadHash = const Value.absent(),
+    Value<String?> syncedPayloadHash = const Value.absent(),
+    Value<DateTime?> deletedAt = const Value.absent(),
     bool? isDirty,
     bool? subida,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -10277,6 +11518,20 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
     tipoEvidencia: tipoEvidencia ?? this.tipoEvidencia,
     descripcion: descripcion.present ? descripcion.value : this.descripcion,
     fechaCaptura: fechaCaptura ?? this.fechaCaptura,
+    clientUuid: clientUuid.present ? clientUuid.value : this.clientUuid,
+    hashSha256: hashSha256.present ? hashSha256.value : this.hashSha256,
+    storageProvider: storageProvider.present
+        ? storageProvider.value
+        : this.storageProvider,
+    storageKey: storageKey.present ? storageKey.value : this.storageKey,
+    localVersion: localVersion ?? this.localVersion,
+    inflightVersion: inflightVersion ?? this.inflightVersion,
+    syncedVersion: syncedVersion ?? this.syncedVersion,
+    payloadHash: payloadHash.present ? payloadHash.value : this.payloadHash,
+    syncedPayloadHash: syncedPayloadHash.present
+        ? syncedPayloadHash.value
+        : this.syncedPayloadHash,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     isDirty: isDirty ?? this.isDirty,
     subida: subida ?? this.subida,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
@@ -10303,6 +11558,34 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
       fechaCaptura: data.fechaCaptura.present
           ? data.fechaCaptura.value
           : this.fechaCaptura,
+      clientUuid: data.clientUuid.present
+          ? data.clientUuid.value
+          : this.clientUuid,
+      hashSha256: data.hashSha256.present
+          ? data.hashSha256.value
+          : this.hashSha256,
+      storageProvider: data.storageProvider.present
+          ? data.storageProvider.value
+          : this.storageProvider,
+      storageKey: data.storageKey.present
+          ? data.storageKey.value
+          : this.storageKey,
+      localVersion: data.localVersion.present
+          ? data.localVersion.value
+          : this.localVersion,
+      inflightVersion: data.inflightVersion.present
+          ? data.inflightVersion.value
+          : this.inflightVersion,
+      syncedVersion: data.syncedVersion.present
+          ? data.syncedVersion.value
+          : this.syncedVersion,
+      payloadHash: data.payloadHash.present
+          ? data.payloadHash.value
+          : this.payloadHash,
+      syncedPayloadHash: data.syncedPayloadHash.present
+          ? data.syncedPayloadHash.value
+          : this.syncedPayloadHash,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
       subida: data.subida.present ? data.subida.value : this.subida,
       lastSyncedAt: data.lastSyncedAt.present
@@ -10324,6 +11607,16 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
           ..write('tipoEvidencia: $tipoEvidencia, ')
           ..write('descripcion: $descripcion, ')
           ..write('fechaCaptura: $fechaCaptura, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('hashSha256: $hashSha256, ')
+          ..write('storageProvider: $storageProvider, ')
+          ..write('storageKey: $storageKey, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('payloadHash: $payloadHash, ')
+          ..write('syncedPayloadHash: $syncedPayloadHash, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('isDirty: $isDirty, ')
           ..write('subida: $subida, ')
           ..write('lastSyncedAt: $lastSyncedAt')
@@ -10332,7 +11625,7 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     idLocal,
     idBackend,
     idOrden,
@@ -10343,10 +11636,20 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
     tipoEvidencia,
     descripcion,
     fechaCaptura,
+    clientUuid,
+    hashSha256,
+    storageProvider,
+    storageKey,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    payloadHash,
+    syncedPayloadHash,
+    deletedAt,
     isDirty,
     subida,
     lastSyncedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -10361,6 +11664,16 @@ class Evidencia extends DataClass implements Insertable<Evidencia> {
           other.tipoEvidencia == this.tipoEvidencia &&
           other.descripcion == this.descripcion &&
           other.fechaCaptura == this.fechaCaptura &&
+          other.clientUuid == this.clientUuid &&
+          other.hashSha256 == this.hashSha256 &&
+          other.storageProvider == this.storageProvider &&
+          other.storageKey == this.storageKey &&
+          other.localVersion == this.localVersion &&
+          other.inflightVersion == this.inflightVersion &&
+          other.syncedVersion == this.syncedVersion &&
+          other.payloadHash == this.payloadHash &&
+          other.syncedPayloadHash == this.syncedPayloadHash &&
+          other.deletedAt == this.deletedAt &&
           other.isDirty == this.isDirty &&
           other.subida == this.subida &&
           other.lastSyncedAt == this.lastSyncedAt);
@@ -10377,6 +11690,16 @@ class EvidenciasCompanion extends UpdateCompanion<Evidencia> {
   final Value<String> tipoEvidencia;
   final Value<String?> descripcion;
   final Value<DateTime> fechaCaptura;
+  final Value<String?> clientUuid;
+  final Value<String?> hashSha256;
+  final Value<String?> storageProvider;
+  final Value<String?> storageKey;
+  final Value<int> localVersion;
+  final Value<int> inflightVersion;
+  final Value<int> syncedVersion;
+  final Value<String?> payloadHash;
+  final Value<String?> syncedPayloadHash;
+  final Value<DateTime?> deletedAt;
   final Value<bool> isDirty;
   final Value<bool> subida;
   final Value<DateTime?> lastSyncedAt;
@@ -10391,6 +11714,16 @@ class EvidenciasCompanion extends UpdateCompanion<Evidencia> {
     this.tipoEvidencia = const Value.absent(),
     this.descripcion = const Value.absent(),
     this.fechaCaptura = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.hashSha256 = const Value.absent(),
+    this.storageProvider = const Value.absent(),
+    this.storageKey = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.payloadHash = const Value.absent(),
+    this.syncedPayloadHash = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.subida = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -10406,6 +11739,16 @@ class EvidenciasCompanion extends UpdateCompanion<Evidencia> {
     required String tipoEvidencia,
     this.descripcion = const Value.absent(),
     this.fechaCaptura = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.hashSha256 = const Value.absent(),
+    this.storageProvider = const Value.absent(),
+    this.storageKey = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.payloadHash = const Value.absent(),
+    this.syncedPayloadHash = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.subida = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -10423,6 +11766,16 @@ class EvidenciasCompanion extends UpdateCompanion<Evidencia> {
     Expression<String>? tipoEvidencia,
     Expression<String>? descripcion,
     Expression<DateTime>? fechaCaptura,
+    Expression<String>? clientUuid,
+    Expression<String>? hashSha256,
+    Expression<String>? storageProvider,
+    Expression<String>? storageKey,
+    Expression<int>? localVersion,
+    Expression<int>? inflightVersion,
+    Expression<int>? syncedVersion,
+    Expression<String>? payloadHash,
+    Expression<String>? syncedPayloadHash,
+    Expression<DateTime>? deletedAt,
     Expression<bool>? isDirty,
     Expression<bool>? subida,
     Expression<DateTime>? lastSyncedAt,
@@ -10439,6 +11792,16 @@ class EvidenciasCompanion extends UpdateCompanion<Evidencia> {
       if (tipoEvidencia != null) 'tipo_evidencia': tipoEvidencia,
       if (descripcion != null) 'descripcion': descripcion,
       if (fechaCaptura != null) 'fecha_captura': fechaCaptura,
+      if (clientUuid != null) 'client_uuid': clientUuid,
+      if (hashSha256 != null) 'hash_sha256': hashSha256,
+      if (storageProvider != null) 'storage_provider': storageProvider,
+      if (storageKey != null) 'storage_key': storageKey,
+      if (localVersion != null) 'local_version': localVersion,
+      if (inflightVersion != null) 'inflight_version': inflightVersion,
+      if (syncedVersion != null) 'synced_version': syncedVersion,
+      if (payloadHash != null) 'payload_hash': payloadHash,
+      if (syncedPayloadHash != null) 'synced_payload_hash': syncedPayloadHash,
+      if (deletedAt != null) 'deleted_at': deletedAt,
       if (isDirty != null) 'is_dirty': isDirty,
       if (subida != null) 'subida': subida,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
@@ -10456,6 +11819,16 @@ class EvidenciasCompanion extends UpdateCompanion<Evidencia> {
     Value<String>? tipoEvidencia,
     Value<String?>? descripcion,
     Value<DateTime>? fechaCaptura,
+    Value<String?>? clientUuid,
+    Value<String?>? hashSha256,
+    Value<String?>? storageProvider,
+    Value<String?>? storageKey,
+    Value<int>? localVersion,
+    Value<int>? inflightVersion,
+    Value<int>? syncedVersion,
+    Value<String?>? payloadHash,
+    Value<String?>? syncedPayloadHash,
+    Value<DateTime?>? deletedAt,
     Value<bool>? isDirty,
     Value<bool>? subida,
     Value<DateTime?>? lastSyncedAt,
@@ -10471,6 +11844,16 @@ class EvidenciasCompanion extends UpdateCompanion<Evidencia> {
       tipoEvidencia: tipoEvidencia ?? this.tipoEvidencia,
       descripcion: descripcion ?? this.descripcion,
       fechaCaptura: fechaCaptura ?? this.fechaCaptura,
+      clientUuid: clientUuid ?? this.clientUuid,
+      hashSha256: hashSha256 ?? this.hashSha256,
+      storageProvider: storageProvider ?? this.storageProvider,
+      storageKey: storageKey ?? this.storageKey,
+      localVersion: localVersion ?? this.localVersion,
+      inflightVersion: inflightVersion ?? this.inflightVersion,
+      syncedVersion: syncedVersion ?? this.syncedVersion,
+      payloadHash: payloadHash ?? this.payloadHash,
+      syncedPayloadHash: syncedPayloadHash ?? this.syncedPayloadHash,
+      deletedAt: deletedAt ?? this.deletedAt,
       isDirty: isDirty ?? this.isDirty,
       subida: subida ?? this.subida,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
@@ -10510,6 +11893,36 @@ class EvidenciasCompanion extends UpdateCompanion<Evidencia> {
     if (fechaCaptura.present) {
       map['fecha_captura'] = Variable<DateTime>(fechaCaptura.value);
     }
+    if (clientUuid.present) {
+      map['client_uuid'] = Variable<String>(clientUuid.value);
+    }
+    if (hashSha256.present) {
+      map['hash_sha256'] = Variable<String>(hashSha256.value);
+    }
+    if (storageProvider.present) {
+      map['storage_provider'] = Variable<String>(storageProvider.value);
+    }
+    if (storageKey.present) {
+      map['storage_key'] = Variable<String>(storageKey.value);
+    }
+    if (localVersion.present) {
+      map['local_version'] = Variable<int>(localVersion.value);
+    }
+    if (inflightVersion.present) {
+      map['inflight_version'] = Variable<int>(inflightVersion.value);
+    }
+    if (syncedVersion.present) {
+      map['synced_version'] = Variable<int>(syncedVersion.value);
+    }
+    if (payloadHash.present) {
+      map['payload_hash'] = Variable<String>(payloadHash.value);
+    }
+    if (syncedPayloadHash.present) {
+      map['synced_payload_hash'] = Variable<String>(syncedPayloadHash.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
     if (isDirty.present) {
       map['is_dirty'] = Variable<bool>(isDirty.value);
     }
@@ -10535,6 +11948,16 @@ class EvidenciasCompanion extends UpdateCompanion<Evidencia> {
           ..write('tipoEvidencia: $tipoEvidencia, ')
           ..write('descripcion: $descripcion, ')
           ..write('fechaCaptura: $fechaCaptura, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('hashSha256: $hashSha256, ')
+          ..write('storageProvider: $storageProvider, ')
+          ..write('storageKey: $storageKey, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('payloadHash: $payloadHash, ')
+          ..write('syncedPayloadHash: $syncedPayloadHash, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('isDirty: $isDirty, ')
           ..write('subida: $subida, ')
           ..write('lastSyncedAt: $lastSyncedAt')
@@ -10668,6 +12091,77 @@ class $FirmasTable extends Firmas with TableInfo<$FirmasTable, Firma> {
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _clientUuidMeta = const VerificationMeta(
+    'clientUuid',
+  );
+  @override
+  late final GeneratedColumn<String> clientUuid = GeneratedColumn<String>(
+    'client_uuid',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _hashSha256Meta = const VerificationMeta(
+    'hashSha256',
+  );
+  @override
+  late final GeneratedColumn<String> hashSha256 = GeneratedColumn<String>(
+    'hash_sha256',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _localVersionMeta = const VerificationMeta(
+    'localVersion',
+  );
+  @override
+  late final GeneratedColumn<int> localVersion = GeneratedColumn<int>(
+    'local_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _inflightVersionMeta = const VerificationMeta(
+    'inflightVersion',
+  );
+  @override
+  late final GeneratedColumn<int> inflightVersion = GeneratedColumn<int>(
+    'inflight_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _syncedVersionMeta = const VerificationMeta(
+    'syncedVersion',
+  );
+  @override
+  late final GeneratedColumn<int> syncedVersion = GeneratedColumn<int>(
+    'synced_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isDirtyMeta = const VerificationMeta(
     'isDirty',
   );
@@ -10719,6 +12213,12 @@ class $FirmasTable extends Firmas with TableInfo<$FirmasTable, Firma> {
     cargoFirmante,
     documentoFirmante,
     fechaFirma,
+    clientUuid,
+    hashSha256,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    deletedAt,
     isDirty,
     subida,
     lastSyncedAt,
@@ -10810,6 +12310,51 @@ class $FirmasTable extends Firmas with TableInfo<$FirmasTable, Firma> {
         fechaFirma.isAcceptableOrUnknown(data['fecha_firma']!, _fechaFirmaMeta),
       );
     }
+    if (data.containsKey('client_uuid')) {
+      context.handle(
+        _clientUuidMeta,
+        clientUuid.isAcceptableOrUnknown(data['client_uuid']!, _clientUuidMeta),
+      );
+    }
+    if (data.containsKey('hash_sha256')) {
+      context.handle(
+        _hashSha256Meta,
+        hashSha256.isAcceptableOrUnknown(data['hash_sha256']!, _hashSha256Meta),
+      );
+    }
+    if (data.containsKey('local_version')) {
+      context.handle(
+        _localVersionMeta,
+        localVersion.isAcceptableOrUnknown(
+          data['local_version']!,
+          _localVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inflight_version')) {
+      context.handle(
+        _inflightVersionMeta,
+        inflightVersion.isAcceptableOrUnknown(
+          data['inflight_version']!,
+          _inflightVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_version')) {
+      context.handle(
+        _syncedVersionMeta,
+        syncedVersion.isAcceptableOrUnknown(
+          data['synced_version']!,
+          _syncedVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
     if (data.containsKey('is_dirty')) {
       context.handle(
         _isDirtyMeta,
@@ -10880,6 +12425,30 @@ class $FirmasTable extends Firmas with TableInfo<$FirmasTable, Firma> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}fecha_firma'],
       )!,
+      clientUuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}client_uuid'],
+      ),
+      hashSha256: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}hash_sha256'],
+      ),
+      localVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}local_version'],
+      )!,
+      inflightVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inflight_version'],
+      )!,
+      syncedVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}synced_version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
       isDirty: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_dirty'],
@@ -10912,6 +12481,12 @@ class Firma extends DataClass implements Insertable<Firma> {
   final String? cargoFirmante;
   final String? documentoFirmante;
   final DateTime fechaFirma;
+  final String? clientUuid;
+  final String? hashSha256;
+  final int localVersion;
+  final int inflightVersion;
+  final int syncedVersion;
+  final DateTime? deletedAt;
   final bool isDirty;
   final bool subida;
   final DateTime? lastSyncedAt;
@@ -10926,6 +12501,12 @@ class Firma extends DataClass implements Insertable<Firma> {
     this.cargoFirmante,
     this.documentoFirmante,
     required this.fechaFirma,
+    this.clientUuid,
+    this.hashSha256,
+    required this.localVersion,
+    required this.inflightVersion,
+    required this.syncedVersion,
+    this.deletedAt,
     required this.isDirty,
     required this.subida,
     this.lastSyncedAt,
@@ -10953,6 +12534,18 @@ class Firma extends DataClass implements Insertable<Firma> {
       map['documento_firmante'] = Variable<String>(documentoFirmante);
     }
     map['fecha_firma'] = Variable<DateTime>(fechaFirma);
+    if (!nullToAbsent || clientUuid != null) {
+      map['client_uuid'] = Variable<String>(clientUuid);
+    }
+    if (!nullToAbsent || hashSha256 != null) {
+      map['hash_sha256'] = Variable<String>(hashSha256);
+    }
+    map['local_version'] = Variable<int>(localVersion);
+    map['inflight_version'] = Variable<int>(inflightVersion);
+    map['synced_version'] = Variable<int>(syncedVersion);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
     map['is_dirty'] = Variable<bool>(isDirty);
     map['subida'] = Variable<bool>(subida);
     if (!nullToAbsent || lastSyncedAt != null) {
@@ -10983,6 +12576,18 @@ class Firma extends DataClass implements Insertable<Firma> {
           ? const Value.absent()
           : Value(documentoFirmante),
       fechaFirma: Value(fechaFirma),
+      clientUuid: clientUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(clientUuid),
+      hashSha256: hashSha256 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(hashSha256),
+      localVersion: Value(localVersion),
+      inflightVersion: Value(inflightVersion),
+      syncedVersion: Value(syncedVersion),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
       isDirty: Value(isDirty),
       subida: Value(subida),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
@@ -11009,6 +12614,12 @@ class Firma extends DataClass implements Insertable<Firma> {
         json['documentoFirmante'],
       ),
       fechaFirma: serializer.fromJson<DateTime>(json['fechaFirma']),
+      clientUuid: serializer.fromJson<String?>(json['clientUuid']),
+      hashSha256: serializer.fromJson<String?>(json['hashSha256']),
+      localVersion: serializer.fromJson<int>(json['localVersion']),
+      inflightVersion: serializer.fromJson<int>(json['inflightVersion']),
+      syncedVersion: serializer.fromJson<int>(json['syncedVersion']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       subida: serializer.fromJson<bool>(json['subida']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
@@ -11028,6 +12639,12 @@ class Firma extends DataClass implements Insertable<Firma> {
       'cargoFirmante': serializer.toJson<String?>(cargoFirmante),
       'documentoFirmante': serializer.toJson<String?>(documentoFirmante),
       'fechaFirma': serializer.toJson<DateTime>(fechaFirma),
+      'clientUuid': serializer.toJson<String?>(clientUuid),
+      'hashSha256': serializer.toJson<String?>(hashSha256),
+      'localVersion': serializer.toJson<int>(localVersion),
+      'inflightVersion': serializer.toJson<int>(inflightVersion),
+      'syncedVersion': serializer.toJson<int>(syncedVersion),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'isDirty': serializer.toJson<bool>(isDirty),
       'subida': serializer.toJson<bool>(subida),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
@@ -11045,6 +12662,12 @@ class Firma extends DataClass implements Insertable<Firma> {
     Value<String?> cargoFirmante = const Value.absent(),
     Value<String?> documentoFirmante = const Value.absent(),
     DateTime? fechaFirma,
+    Value<String?> clientUuid = const Value.absent(),
+    Value<String?> hashSha256 = const Value.absent(),
+    int? localVersion,
+    int? inflightVersion,
+    int? syncedVersion,
+    Value<DateTime?> deletedAt = const Value.absent(),
     bool? isDirty,
     bool? subida,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -11065,6 +12688,12 @@ class Firma extends DataClass implements Insertable<Firma> {
         ? documentoFirmante.value
         : this.documentoFirmante,
     fechaFirma: fechaFirma ?? this.fechaFirma,
+    clientUuid: clientUuid.present ? clientUuid.value : this.clientUuid,
+    hashSha256: hashSha256.present ? hashSha256.value : this.hashSha256,
+    localVersion: localVersion ?? this.localVersion,
+    inflightVersion: inflightVersion ?? this.inflightVersion,
+    syncedVersion: syncedVersion ?? this.syncedVersion,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     isDirty: isDirty ?? this.isDirty,
     subida: subida ?? this.subida,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
@@ -11089,6 +12718,22 @@ class Firma extends DataClass implements Insertable<Firma> {
       fechaFirma: data.fechaFirma.present
           ? data.fechaFirma.value
           : this.fechaFirma,
+      clientUuid: data.clientUuid.present
+          ? data.clientUuid.value
+          : this.clientUuid,
+      hashSha256: data.hashSha256.present
+          ? data.hashSha256.value
+          : this.hashSha256,
+      localVersion: data.localVersion.present
+          ? data.localVersion.value
+          : this.localVersion,
+      inflightVersion: data.inflightVersion.present
+          ? data.inflightVersion.value
+          : this.inflightVersion,
+      syncedVersion: data.syncedVersion.present
+          ? data.syncedVersion.value
+          : this.syncedVersion,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
       subida: data.subida.present ? data.subida.value : this.subida,
       lastSyncedAt: data.lastSyncedAt.present
@@ -11110,6 +12755,12 @@ class Firma extends DataClass implements Insertable<Firma> {
           ..write('cargoFirmante: $cargoFirmante, ')
           ..write('documentoFirmante: $documentoFirmante, ')
           ..write('fechaFirma: $fechaFirma, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('hashSha256: $hashSha256, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('isDirty: $isDirty, ')
           ..write('subida: $subida, ')
           ..write('lastSyncedAt: $lastSyncedAt')
@@ -11129,6 +12780,12 @@ class Firma extends DataClass implements Insertable<Firma> {
     cargoFirmante,
     documentoFirmante,
     fechaFirma,
+    clientUuid,
+    hashSha256,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    deletedAt,
     isDirty,
     subida,
     lastSyncedAt,
@@ -11147,6 +12804,12 @@ class Firma extends DataClass implements Insertable<Firma> {
           other.cargoFirmante == this.cargoFirmante &&
           other.documentoFirmante == this.documentoFirmante &&
           other.fechaFirma == this.fechaFirma &&
+          other.clientUuid == this.clientUuid &&
+          other.hashSha256 == this.hashSha256 &&
+          other.localVersion == this.localVersion &&
+          other.inflightVersion == this.inflightVersion &&
+          other.syncedVersion == this.syncedVersion &&
+          other.deletedAt == this.deletedAt &&
           other.isDirty == this.isDirty &&
           other.subida == this.subida &&
           other.lastSyncedAt == this.lastSyncedAt);
@@ -11163,6 +12826,12 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
   final Value<String?> cargoFirmante;
   final Value<String?> documentoFirmante;
   final Value<DateTime> fechaFirma;
+  final Value<String?> clientUuid;
+  final Value<String?> hashSha256;
+  final Value<int> localVersion;
+  final Value<int> inflightVersion;
+  final Value<int> syncedVersion;
+  final Value<DateTime?> deletedAt;
   final Value<bool> isDirty;
   final Value<bool> subida;
   final Value<DateTime?> lastSyncedAt;
@@ -11177,6 +12846,12 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
     this.cargoFirmante = const Value.absent(),
     this.documentoFirmante = const Value.absent(),
     this.fechaFirma = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.hashSha256 = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.subida = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -11192,6 +12867,12 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
     this.cargoFirmante = const Value.absent(),
     this.documentoFirmante = const Value.absent(),
     this.fechaFirma = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.hashSha256 = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.subida = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -11209,6 +12890,12 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
     Expression<String>? cargoFirmante,
     Expression<String>? documentoFirmante,
     Expression<DateTime>? fechaFirma,
+    Expression<String>? clientUuid,
+    Expression<String>? hashSha256,
+    Expression<int>? localVersion,
+    Expression<int>? inflightVersion,
+    Expression<int>? syncedVersion,
+    Expression<DateTime>? deletedAt,
     Expression<bool>? isDirty,
     Expression<bool>? subida,
     Expression<DateTime>? lastSyncedAt,
@@ -11224,6 +12911,12 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
       if (cargoFirmante != null) 'cargo_firmante': cargoFirmante,
       if (documentoFirmante != null) 'documento_firmante': documentoFirmante,
       if (fechaFirma != null) 'fecha_firma': fechaFirma,
+      if (clientUuid != null) 'client_uuid': clientUuid,
+      if (hashSha256 != null) 'hash_sha256': hashSha256,
+      if (localVersion != null) 'local_version': localVersion,
+      if (inflightVersion != null) 'inflight_version': inflightVersion,
+      if (syncedVersion != null) 'synced_version': syncedVersion,
+      if (deletedAt != null) 'deleted_at': deletedAt,
       if (isDirty != null) 'is_dirty': isDirty,
       if (subida != null) 'subida': subida,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
@@ -11241,6 +12934,12 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
     Value<String?>? cargoFirmante,
     Value<String?>? documentoFirmante,
     Value<DateTime>? fechaFirma,
+    Value<String?>? clientUuid,
+    Value<String?>? hashSha256,
+    Value<int>? localVersion,
+    Value<int>? inflightVersion,
+    Value<int>? syncedVersion,
+    Value<DateTime?>? deletedAt,
     Value<bool>? isDirty,
     Value<bool>? subida,
     Value<DateTime?>? lastSyncedAt,
@@ -11256,6 +12955,12 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
       cargoFirmante: cargoFirmante ?? this.cargoFirmante,
       documentoFirmante: documentoFirmante ?? this.documentoFirmante,
       fechaFirma: fechaFirma ?? this.fechaFirma,
+      clientUuid: clientUuid ?? this.clientUuid,
+      hashSha256: hashSha256 ?? this.hashSha256,
+      localVersion: localVersion ?? this.localVersion,
+      inflightVersion: inflightVersion ?? this.inflightVersion,
+      syncedVersion: syncedVersion ?? this.syncedVersion,
+      deletedAt: deletedAt ?? this.deletedAt,
       isDirty: isDirty ?? this.isDirty,
       subida: subida ?? this.subida,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
@@ -11295,6 +13000,24 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
     if (fechaFirma.present) {
       map['fecha_firma'] = Variable<DateTime>(fechaFirma.value);
     }
+    if (clientUuid.present) {
+      map['client_uuid'] = Variable<String>(clientUuid.value);
+    }
+    if (hashSha256.present) {
+      map['hash_sha256'] = Variable<String>(hashSha256.value);
+    }
+    if (localVersion.present) {
+      map['local_version'] = Variable<int>(localVersion.value);
+    }
+    if (inflightVersion.present) {
+      map['inflight_version'] = Variable<int>(inflightVersion.value);
+    }
+    if (syncedVersion.present) {
+      map['synced_version'] = Variable<int>(syncedVersion.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
     if (isDirty.present) {
       map['is_dirty'] = Variable<bool>(isDirty.value);
     }
@@ -11320,6 +13043,12 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
           ..write('cargoFirmante: $cargoFirmante, ')
           ..write('documentoFirmante: $documentoFirmante, ')
           ..write('fechaFirma: $fechaFirma, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('hashSha256: $hashSha256, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('isDirty: $isDirty, ')
           ..write('subida: $subida, ')
           ..write('lastSyncedAt: $lastSyncedAt')
@@ -11486,6 +13215,90 @@ class $OrdenesPendientesTable extends OrdenesPendientes
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _clientUuidMeta = const VerificationMeta(
+    'clientUuid',
+  );
+  @override
+  late final GeneratedColumn<String> clientUuid = GeneratedColumn<String>(
+    'client_uuid',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _localVersionMeta = const VerificationMeta(
+    'localVersion',
+  );
+  @override
+  late final GeneratedColumn<int> localVersion = GeneratedColumn<int>(
+    'local_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _inflightVersionMeta = const VerificationMeta(
+    'inflightVersion',
+  );
+  @override
+  late final GeneratedColumn<int> inflightVersion = GeneratedColumn<int>(
+    'inflight_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _syncedVersionMeta = const VerificationMeta(
+    'syncedVersion',
+  );
+  @override
+  late final GeneratedColumn<int> syncedVersion = GeneratedColumn<int>(
+    'synced_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _payloadHashMeta = const VerificationMeta(
+    'payloadHash',
+  );
+  @override
+  late final GeneratedColumn<String> payloadHash = GeneratedColumn<String>(
+    'payload_hash',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncedPayloadHashMeta = const VerificationMeta(
+    'syncedPayloadHash',
+  );
+  @override
+  late final GeneratedColumn<String> syncedPayloadHash =
+      GeneratedColumn<String>(
+        'synced_payload_hash',
+        aliasedName,
+        true,
+        additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _fechaCreacionMeta = const VerificationMeta(
     'fechaCreacion',
   );
@@ -11540,6 +13353,13 @@ class $OrdenesPendientesTable extends OrdenesPendientes
     prioridad,
     estado,
     observaciones,
+    clientUuid,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    payloadHash,
+    syncedPayloadHash,
+    deletedAt,
     fechaCreacion,
     isDirty,
     lastSyncedAt,
@@ -11653,6 +13473,63 @@ class $OrdenesPendientesTable extends OrdenesPendientes
         ),
       );
     }
+    if (data.containsKey('client_uuid')) {
+      context.handle(
+        _clientUuidMeta,
+        clientUuid.isAcceptableOrUnknown(data['client_uuid']!, _clientUuidMeta),
+      );
+    }
+    if (data.containsKey('local_version')) {
+      context.handle(
+        _localVersionMeta,
+        localVersion.isAcceptableOrUnknown(
+          data['local_version']!,
+          _localVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inflight_version')) {
+      context.handle(
+        _inflightVersionMeta,
+        inflightVersion.isAcceptableOrUnknown(
+          data['inflight_version']!,
+          _inflightVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_version')) {
+      context.handle(
+        _syncedVersionMeta,
+        syncedVersion.isAcceptableOrUnknown(
+          data['synced_version']!,
+          _syncedVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payload_hash')) {
+      context.handle(
+        _payloadHashMeta,
+        payloadHash.isAcceptableOrUnknown(
+          data['payload_hash']!,
+          _payloadHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('synced_payload_hash')) {
+      context.handle(
+        _syncedPayloadHashMeta,
+        syncedPayloadHash.isAcceptableOrUnknown(
+          data['synced_payload_hash']!,
+          _syncedPayloadHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
     if (data.containsKey('fecha_creacion')) {
       context.handle(
         _fechaCreacionMeta,
@@ -11738,6 +13615,34 @@ class $OrdenesPendientesTable extends OrdenesPendientes
         DriftSqlType.string,
         data['${effectivePrefix}observaciones'],
       ),
+      clientUuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}client_uuid'],
+      ),
+      localVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}local_version'],
+      )!,
+      inflightVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inflight_version'],
+      )!,
+      syncedVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}synced_version'],
+      )!,
+      payloadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload_hash'],
+      ),
+      syncedPayloadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}synced_payload_hash'],
+      ),
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
       fechaCreacion: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}fecha_creacion'],
@@ -11774,6 +13679,13 @@ class OrdenesPendiente extends DataClass
   final String prioridad;
   final String estado;
   final String? observaciones;
+  final String? clientUuid;
+  final int localVersion;
+  final int inflightVersion;
+  final int syncedVersion;
+  final String? payloadHash;
+  final String? syncedPayloadHash;
+  final DateTime? deletedAt;
   final DateTime fechaCreacion;
   final bool isDirty;
   final DateTime? lastSyncedAt;
@@ -11791,6 +13703,13 @@ class OrdenesPendiente extends DataClass
     required this.prioridad,
     required this.estado,
     this.observaciones,
+    this.clientUuid,
+    required this.localVersion,
+    required this.inflightVersion,
+    required this.syncedVersion,
+    this.payloadHash,
+    this.syncedPayloadHash,
+    this.deletedAt,
     required this.fechaCreacion,
     required this.isDirty,
     this.lastSyncedAt,
@@ -11824,6 +13743,21 @@ class OrdenesPendiente extends DataClass
     map['estado'] = Variable<String>(estado);
     if (!nullToAbsent || observaciones != null) {
       map['observaciones'] = Variable<String>(observaciones);
+    }
+    if (!nullToAbsent || clientUuid != null) {
+      map['client_uuid'] = Variable<String>(clientUuid);
+    }
+    map['local_version'] = Variable<int>(localVersion);
+    map['inflight_version'] = Variable<int>(inflightVersion);
+    map['synced_version'] = Variable<int>(syncedVersion);
+    if (!nullToAbsent || payloadHash != null) {
+      map['payload_hash'] = Variable<String>(payloadHash);
+    }
+    if (!nullToAbsent || syncedPayloadHash != null) {
+      map['synced_payload_hash'] = Variable<String>(syncedPayloadHash);
+    }
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
     map['fecha_creacion'] = Variable<DateTime>(fechaCreacion);
     map['is_dirty'] = Variable<bool>(isDirty);
@@ -11862,6 +13796,21 @@ class OrdenesPendiente extends DataClass
       observaciones: observaciones == null && nullToAbsent
           ? const Value.absent()
           : Value(observaciones),
+      clientUuid: clientUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(clientUuid),
+      localVersion: Value(localVersion),
+      inflightVersion: Value(inflightVersion),
+      syncedVersion: Value(syncedVersion),
+      payloadHash: payloadHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(payloadHash),
+      syncedPayloadHash: syncedPayloadHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncedPayloadHash),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
       fechaCreacion: Value(fechaCreacion),
       isDirty: Value(isDirty),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
@@ -11891,6 +13840,15 @@ class OrdenesPendiente extends DataClass
       prioridad: serializer.fromJson<String>(json['prioridad']),
       estado: serializer.fromJson<String>(json['estado']),
       observaciones: serializer.fromJson<String?>(json['observaciones']),
+      clientUuid: serializer.fromJson<String?>(json['clientUuid']),
+      localVersion: serializer.fromJson<int>(json['localVersion']),
+      inflightVersion: serializer.fromJson<int>(json['inflightVersion']),
+      syncedVersion: serializer.fromJson<int>(json['syncedVersion']),
+      payloadHash: serializer.fromJson<String?>(json['payloadHash']),
+      syncedPayloadHash: serializer.fromJson<String?>(
+        json['syncedPayloadHash'],
+      ),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       fechaCreacion: serializer.fromJson<DateTime>(json['fechaCreacion']),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
@@ -11913,6 +13871,13 @@ class OrdenesPendiente extends DataClass
       'prioridad': serializer.toJson<String>(prioridad),
       'estado': serializer.toJson<String>(estado),
       'observaciones': serializer.toJson<String?>(observaciones),
+      'clientUuid': serializer.toJson<String?>(clientUuid),
+      'localVersion': serializer.toJson<int>(localVersion),
+      'inflightVersion': serializer.toJson<int>(inflightVersion),
+      'syncedVersion': serializer.toJson<int>(syncedVersion),
+      'payloadHash': serializer.toJson<String?>(payloadHash),
+      'syncedPayloadHash': serializer.toJson<String?>(syncedPayloadHash),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'fechaCreacion': serializer.toJson<DateTime>(fechaCreacion),
       'isDirty': serializer.toJson<bool>(isDirty),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
@@ -11933,6 +13898,13 @@ class OrdenesPendiente extends DataClass
     String? prioridad,
     String? estado,
     Value<String?> observaciones = const Value.absent(),
+    Value<String?> clientUuid = const Value.absent(),
+    int? localVersion,
+    int? inflightVersion,
+    int? syncedVersion,
+    Value<String?> payloadHash = const Value.absent(),
+    Value<String?> syncedPayloadHash = const Value.absent(),
+    Value<DateTime?> deletedAt = const Value.absent(),
     DateTime? fechaCreacion,
     bool? isDirty,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -11958,6 +13930,15 @@ class OrdenesPendiente extends DataClass
     observaciones: observaciones.present
         ? observaciones.value
         : this.observaciones,
+    clientUuid: clientUuid.present ? clientUuid.value : this.clientUuid,
+    localVersion: localVersion ?? this.localVersion,
+    inflightVersion: inflightVersion ?? this.inflightVersion,
+    syncedVersion: syncedVersion ?? this.syncedVersion,
+    payloadHash: payloadHash.present ? payloadHash.value : this.payloadHash,
+    syncedPayloadHash: syncedPayloadHash.present
+        ? syncedPayloadHash.value
+        : this.syncedPayloadHash,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     fechaCreacion: fechaCreacion ?? this.fechaCreacion,
     isDirty: isDirty ?? this.isDirty,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
@@ -11987,6 +13968,25 @@ class OrdenesPendiente extends DataClass
       observaciones: data.observaciones.present
           ? data.observaciones.value
           : this.observaciones,
+      clientUuid: data.clientUuid.present
+          ? data.clientUuid.value
+          : this.clientUuid,
+      localVersion: data.localVersion.present
+          ? data.localVersion.value
+          : this.localVersion,
+      inflightVersion: data.inflightVersion.present
+          ? data.inflightVersion.value
+          : this.inflightVersion,
+      syncedVersion: data.syncedVersion.present
+          ? data.syncedVersion.value
+          : this.syncedVersion,
+      payloadHash: data.payloadHash.present
+          ? data.payloadHash.value
+          : this.payloadHash,
+      syncedPayloadHash: data.syncedPayloadHash.present
+          ? data.syncedPayloadHash.value
+          : this.syncedPayloadHash,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       fechaCreacion: data.fechaCreacion.present
           ? data.fechaCreacion.value
           : this.fechaCreacion,
@@ -12013,6 +14013,13 @@ class OrdenesPendiente extends DataClass
           ..write('prioridad: $prioridad, ')
           ..write('estado: $estado, ')
           ..write('observaciones: $observaciones, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('payloadHash: $payloadHash, ')
+          ..write('syncedPayloadHash: $syncedPayloadHash, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('fechaCreacion: $fechaCreacion, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt')
@@ -12021,7 +14028,7 @@ class OrdenesPendiente extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     idLocal,
     idBackend,
     idOrden,
@@ -12035,10 +14042,17 @@ class OrdenesPendiente extends DataClass
     prioridad,
     estado,
     observaciones,
+    clientUuid,
+    localVersion,
+    inflightVersion,
+    syncedVersion,
+    payloadHash,
+    syncedPayloadHash,
+    deletedAt,
     fechaCreacion,
     isDirty,
     lastSyncedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -12056,6 +14070,13 @@ class OrdenesPendiente extends DataClass
           other.prioridad == this.prioridad &&
           other.estado == this.estado &&
           other.observaciones == this.observaciones &&
+          other.clientUuid == this.clientUuid &&
+          other.localVersion == this.localVersion &&
+          other.inflightVersion == this.inflightVersion &&
+          other.syncedVersion == this.syncedVersion &&
+          other.payloadHash == this.payloadHash &&
+          other.syncedPayloadHash == this.syncedPayloadHash &&
+          other.deletedAt == this.deletedAt &&
           other.fechaCreacion == this.fechaCreacion &&
           other.isDirty == this.isDirty &&
           other.lastSyncedAt == this.lastSyncedAt);
@@ -12075,6 +14096,13 @@ class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
   final Value<String> prioridad;
   final Value<String> estado;
   final Value<String?> observaciones;
+  final Value<String?> clientUuid;
+  final Value<int> localVersion;
+  final Value<int> inflightVersion;
+  final Value<int> syncedVersion;
+  final Value<String?> payloadHash;
+  final Value<String?> syncedPayloadHash;
+  final Value<DateTime?> deletedAt;
   final Value<DateTime> fechaCreacion;
   final Value<bool> isDirty;
   final Value<DateTime?> lastSyncedAt;
@@ -12092,6 +14120,13 @@ class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
     this.prioridad = const Value.absent(),
     this.estado = const Value.absent(),
     this.observaciones = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.payloadHash = const Value.absent(),
+    this.syncedPayloadHash = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.fechaCreacion = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -12110,6 +14145,13 @@ class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
     this.prioridad = const Value.absent(),
     this.estado = const Value.absent(),
     this.observaciones = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.localVersion = const Value.absent(),
+    this.inflightVersion = const Value.absent(),
+    this.syncedVersion = const Value.absent(),
+    this.payloadHash = const Value.absent(),
+    this.syncedPayloadHash = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.fechaCreacion = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -12129,6 +14171,13 @@ class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
     Expression<String>? prioridad,
     Expression<String>? estado,
     Expression<String>? observaciones,
+    Expression<String>? clientUuid,
+    Expression<int>? localVersion,
+    Expression<int>? inflightVersion,
+    Expression<int>? syncedVersion,
+    Expression<String>? payloadHash,
+    Expression<String>? syncedPayloadHash,
+    Expression<DateTime>? deletedAt,
     Expression<DateTime>? fechaCreacion,
     Expression<bool>? isDirty,
     Expression<DateTime>? lastSyncedAt,
@@ -12148,6 +14197,13 @@ class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
       if (prioridad != null) 'prioridad': prioridad,
       if (estado != null) 'estado': estado,
       if (observaciones != null) 'observaciones': observaciones,
+      if (clientUuid != null) 'client_uuid': clientUuid,
+      if (localVersion != null) 'local_version': localVersion,
+      if (inflightVersion != null) 'inflight_version': inflightVersion,
+      if (syncedVersion != null) 'synced_version': syncedVersion,
+      if (payloadHash != null) 'payload_hash': payloadHash,
+      if (syncedPayloadHash != null) 'synced_payload_hash': syncedPayloadHash,
+      if (deletedAt != null) 'deleted_at': deletedAt,
       if (fechaCreacion != null) 'fecha_creacion': fechaCreacion,
       if (isDirty != null) 'is_dirty': isDirty,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
@@ -12168,6 +14224,13 @@ class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
     Value<String>? prioridad,
     Value<String>? estado,
     Value<String?>? observaciones,
+    Value<String?>? clientUuid,
+    Value<int>? localVersion,
+    Value<int>? inflightVersion,
+    Value<int>? syncedVersion,
+    Value<String?>? payloadHash,
+    Value<String?>? syncedPayloadHash,
+    Value<DateTime?>? deletedAt,
     Value<DateTime>? fechaCreacion,
     Value<bool>? isDirty,
     Value<DateTime?>? lastSyncedAt,
@@ -12186,6 +14249,13 @@ class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
       prioridad: prioridad ?? this.prioridad,
       estado: estado ?? this.estado,
       observaciones: observaciones ?? this.observaciones,
+      clientUuid: clientUuid ?? this.clientUuid,
+      localVersion: localVersion ?? this.localVersion,
+      inflightVersion: inflightVersion ?? this.inflightVersion,
+      syncedVersion: syncedVersion ?? this.syncedVersion,
+      payloadHash: payloadHash ?? this.payloadHash,
+      syncedPayloadHash: syncedPayloadHash ?? this.syncedPayloadHash,
+      deletedAt: deletedAt ?? this.deletedAt,
       fechaCreacion: fechaCreacion ?? this.fechaCreacion,
       isDirty: isDirty ?? this.isDirty,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
@@ -12234,6 +14304,27 @@ class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
     if (observaciones.present) {
       map['observaciones'] = Variable<String>(observaciones.value);
     }
+    if (clientUuid.present) {
+      map['client_uuid'] = Variable<String>(clientUuid.value);
+    }
+    if (localVersion.present) {
+      map['local_version'] = Variable<int>(localVersion.value);
+    }
+    if (inflightVersion.present) {
+      map['inflight_version'] = Variable<int>(inflightVersion.value);
+    }
+    if (syncedVersion.present) {
+      map['synced_version'] = Variable<int>(syncedVersion.value);
+    }
+    if (payloadHash.present) {
+      map['payload_hash'] = Variable<String>(payloadHash.value);
+    }
+    if (syncedPayloadHash.present) {
+      map['synced_payload_hash'] = Variable<String>(syncedPayloadHash.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
     if (fechaCreacion.present) {
       map['fecha_creacion'] = Variable<DateTime>(fechaCreacion.value);
     }
@@ -12262,6 +14353,13 @@ class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
           ..write('prioridad: $prioridad, ')
           ..write('estado: $estado, ')
           ..write('observaciones: $observaciones, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('localVersion: $localVersion, ')
+          ..write('inflightVersion: $inflightVersion, ')
+          ..write('syncedVersion: $syncedVersion, ')
+          ..write('payloadHash: $payloadHash, ')
+          ..write('syncedPayloadHash: $syncedPayloadHash, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('fechaCreacion: $fechaCreacion, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt')
@@ -13296,6 +15394,873 @@ class OrdenesPendientesSyncCompanion
   }
 }
 
+class $SyncOutboxTable extends SyncOutbox
+    with TableInfo<$SyncOutboxTable, SyncOutboxData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncOutboxTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _idOrdenLocalMeta = const VerificationMeta(
+    'idOrdenLocal',
+  );
+  @override
+  late final GeneratedColumn<int> idOrdenLocal = GeneratedColumn<int>(
+    'id_orden_local',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES ordenes (id_local)',
+    ),
+  );
+  static const VerificationMeta _idOrdenBackendMeta = const VerificationMeta(
+    'idOrdenBackend',
+  );
+  @override
+  late final GeneratedColumn<int> idOrdenBackend = GeneratedColumn<int>(
+    'id_orden_backend',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _laneMeta = const VerificationMeta('lane');
+  @override
+  late final GeneratedColumn<String> lane = GeneratedColumn<String>(
+    'lane',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 20),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityTypeMeta = const VerificationMeta(
+    'entityType',
+  );
+  @override
+  late final GeneratedColumn<String> entityType = GeneratedColumn<String>(
+    'entity_type',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 40),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityClientUuidMeta = const VerificationMeta(
+    'entityClientUuid',
+  );
+  @override
+  late final GeneratedColumn<String> entityClientUuid = GeneratedColumn<String>(
+    'entity_client_uuid',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 64),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _operationMeta = const VerificationMeta(
+    'operation',
+  );
+  @override
+  late final GeneratedColumn<String> operation = GeneratedColumn<String>(
+    'operation',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 20),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('UPSERT'),
+  );
+  static const VerificationMeta _targetVersionMeta = const VerificationMeta(
+    'targetVersion',
+  );
+  @override
+  late final GeneratedColumn<int> targetVersion = GeneratedColumn<int>(
+    'target_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _payloadJsonMeta = const VerificationMeta(
+    'payloadJson',
+  );
+  @override
+  late final GeneratedColumn<String> payloadJson = GeneratedColumn<String>(
+    'payload_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 20),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('PENDING'),
+  );
+  static const VerificationMeta _attemptsMeta = const VerificationMeta(
+    'attempts',
+  );
+  @override
+  late final GeneratedColumn<int> attempts = GeneratedColumn<int>(
+    'attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextRetryAtMeta = const VerificationMeta(
+    'nextRetryAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextRetryAt = GeneratedColumn<DateTime>(
+    'next_retry_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    idOrdenLocal,
+    idOrdenBackend,
+    lane,
+    entityType,
+    entityClientUuid,
+    operation,
+    targetVersion,
+    payloadJson,
+    status,
+    attempts,
+    nextRetryAt,
+    lastError,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_outbox';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncOutboxData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('id_orden_local')) {
+      context.handle(
+        _idOrdenLocalMeta,
+        idOrdenLocal.isAcceptableOrUnknown(
+          data['id_orden_local']!,
+          _idOrdenLocalMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_idOrdenLocalMeta);
+    }
+    if (data.containsKey('id_orden_backend')) {
+      context.handle(
+        _idOrdenBackendMeta,
+        idOrdenBackend.isAcceptableOrUnknown(
+          data['id_orden_backend']!,
+          _idOrdenBackendMeta,
+        ),
+      );
+    }
+    if (data.containsKey('lane')) {
+      context.handle(
+        _laneMeta,
+        lane.isAcceptableOrUnknown(data['lane']!, _laneMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_laneMeta);
+    }
+    if (data.containsKey('entity_type')) {
+      context.handle(
+        _entityTypeMeta,
+        entityType.isAcceptableOrUnknown(data['entity_type']!, _entityTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityTypeMeta);
+    }
+    if (data.containsKey('entity_client_uuid')) {
+      context.handle(
+        _entityClientUuidMeta,
+        entityClientUuid.isAcceptableOrUnknown(
+          data['entity_client_uuid']!,
+          _entityClientUuidMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_entityClientUuidMeta);
+    }
+    if (data.containsKey('operation')) {
+      context.handle(
+        _operationMeta,
+        operation.isAcceptableOrUnknown(data['operation']!, _operationMeta),
+      );
+    }
+    if (data.containsKey('target_version')) {
+      context.handle(
+        _targetVersionMeta,
+        targetVersion.isAcceptableOrUnknown(
+          data['target_version']!,
+          _targetVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payload_json')) {
+      context.handle(
+        _payloadJsonMeta,
+        payloadJson.isAcceptableOrUnknown(
+          data['payload_json']!,
+          _payloadJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadJsonMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('attempts')) {
+      context.handle(
+        _attemptsMeta,
+        attempts.isAcceptableOrUnknown(data['attempts']!, _attemptsMeta),
+      );
+    }
+    if (data.containsKey('next_retry_at')) {
+      context.handle(
+        _nextRetryAtMeta,
+        nextRetryAt.isAcceptableOrUnknown(
+          data['next_retry_at']!,
+          _nextRetryAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SyncOutboxData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncOutboxData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      idOrdenLocal: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_orden_local'],
+      )!,
+      idOrdenBackend: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_orden_backend'],
+      ),
+      lane: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}lane'],
+      )!,
+      entityType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_type'],
+      )!,
+      entityClientUuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_client_uuid'],
+      )!,
+      operation: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation'],
+      )!,
+      targetVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}target_version'],
+      )!,
+      payloadJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload_json'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      attempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempts'],
+      )!,
+      nextRetryAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_retry_at'],
+      ),
+      lastError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncOutboxTable createAlias(String alias) {
+    return $SyncOutboxTable(attachedDatabase, alias);
+  }
+}
+
+class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
+  final int id;
+  final int idOrdenLocal;
+  final int? idOrdenBackend;
+  final String lane;
+  final String entityType;
+  final String entityClientUuid;
+  final String operation;
+  final int targetVersion;
+  final String payloadJson;
+  final String status;
+  final int attempts;
+  final DateTime? nextRetryAt;
+  final String? lastError;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const SyncOutboxData({
+    required this.id,
+    required this.idOrdenLocal,
+    this.idOrdenBackend,
+    required this.lane,
+    required this.entityType,
+    required this.entityClientUuid,
+    required this.operation,
+    required this.targetVersion,
+    required this.payloadJson,
+    required this.status,
+    required this.attempts,
+    this.nextRetryAt,
+    this.lastError,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['id_orden_local'] = Variable<int>(idOrdenLocal);
+    if (!nullToAbsent || idOrdenBackend != null) {
+      map['id_orden_backend'] = Variable<int>(idOrdenBackend);
+    }
+    map['lane'] = Variable<String>(lane);
+    map['entity_type'] = Variable<String>(entityType);
+    map['entity_client_uuid'] = Variable<String>(entityClientUuid);
+    map['operation'] = Variable<String>(operation);
+    map['target_version'] = Variable<int>(targetVersion);
+    map['payload_json'] = Variable<String>(payloadJson);
+    map['status'] = Variable<String>(status);
+    map['attempts'] = Variable<int>(attempts);
+    if (!nullToAbsent || nextRetryAt != null) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt);
+    }
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  SyncOutboxCompanion toCompanion(bool nullToAbsent) {
+    return SyncOutboxCompanion(
+      id: Value(id),
+      idOrdenLocal: Value(idOrdenLocal),
+      idOrdenBackend: idOrdenBackend == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idOrdenBackend),
+      lane: Value(lane),
+      entityType: Value(entityType),
+      entityClientUuid: Value(entityClientUuid),
+      operation: Value(operation),
+      targetVersion: Value(targetVersion),
+      payloadJson: Value(payloadJson),
+      status: Value(status),
+      attempts: Value(attempts),
+      nextRetryAt: nextRetryAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextRetryAt),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory SyncOutboxData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncOutboxData(
+      id: serializer.fromJson<int>(json['id']),
+      idOrdenLocal: serializer.fromJson<int>(json['idOrdenLocal']),
+      idOrdenBackend: serializer.fromJson<int?>(json['idOrdenBackend']),
+      lane: serializer.fromJson<String>(json['lane']),
+      entityType: serializer.fromJson<String>(json['entityType']),
+      entityClientUuid: serializer.fromJson<String>(json['entityClientUuid']),
+      operation: serializer.fromJson<String>(json['operation']),
+      targetVersion: serializer.fromJson<int>(json['targetVersion']),
+      payloadJson: serializer.fromJson<String>(json['payloadJson']),
+      status: serializer.fromJson<String>(json['status']),
+      attempts: serializer.fromJson<int>(json['attempts']),
+      nextRetryAt: serializer.fromJson<DateTime?>(json['nextRetryAt']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'idOrdenLocal': serializer.toJson<int>(idOrdenLocal),
+      'idOrdenBackend': serializer.toJson<int?>(idOrdenBackend),
+      'lane': serializer.toJson<String>(lane),
+      'entityType': serializer.toJson<String>(entityType),
+      'entityClientUuid': serializer.toJson<String>(entityClientUuid),
+      'operation': serializer.toJson<String>(operation),
+      'targetVersion': serializer.toJson<int>(targetVersion),
+      'payloadJson': serializer.toJson<String>(payloadJson),
+      'status': serializer.toJson<String>(status),
+      'attempts': serializer.toJson<int>(attempts),
+      'nextRetryAt': serializer.toJson<DateTime?>(nextRetryAt),
+      'lastError': serializer.toJson<String?>(lastError),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  SyncOutboxData copyWith({
+    int? id,
+    int? idOrdenLocal,
+    Value<int?> idOrdenBackend = const Value.absent(),
+    String? lane,
+    String? entityType,
+    String? entityClientUuid,
+    String? operation,
+    int? targetVersion,
+    String? payloadJson,
+    String? status,
+    int? attempts,
+    Value<DateTime?> nextRetryAt = const Value.absent(),
+    Value<String?> lastError = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => SyncOutboxData(
+    id: id ?? this.id,
+    idOrdenLocal: idOrdenLocal ?? this.idOrdenLocal,
+    idOrdenBackend: idOrdenBackend.present
+        ? idOrdenBackend.value
+        : this.idOrdenBackend,
+    lane: lane ?? this.lane,
+    entityType: entityType ?? this.entityType,
+    entityClientUuid: entityClientUuid ?? this.entityClientUuid,
+    operation: operation ?? this.operation,
+    targetVersion: targetVersion ?? this.targetVersion,
+    payloadJson: payloadJson ?? this.payloadJson,
+    status: status ?? this.status,
+    attempts: attempts ?? this.attempts,
+    nextRetryAt: nextRetryAt.present ? nextRetryAt.value : this.nextRetryAt,
+    lastError: lastError.present ? lastError.value : this.lastError,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  SyncOutboxData copyWithCompanion(SyncOutboxCompanion data) {
+    return SyncOutboxData(
+      id: data.id.present ? data.id.value : this.id,
+      idOrdenLocal: data.idOrdenLocal.present
+          ? data.idOrdenLocal.value
+          : this.idOrdenLocal,
+      idOrdenBackend: data.idOrdenBackend.present
+          ? data.idOrdenBackend.value
+          : this.idOrdenBackend,
+      lane: data.lane.present ? data.lane.value : this.lane,
+      entityType: data.entityType.present
+          ? data.entityType.value
+          : this.entityType,
+      entityClientUuid: data.entityClientUuid.present
+          ? data.entityClientUuid.value
+          : this.entityClientUuid,
+      operation: data.operation.present ? data.operation.value : this.operation,
+      targetVersion: data.targetVersion.present
+          ? data.targetVersion.value
+          : this.targetVersion,
+      payloadJson: data.payloadJson.present
+          ? data.payloadJson.value
+          : this.payloadJson,
+      status: data.status.present ? data.status.value : this.status,
+      attempts: data.attempts.present ? data.attempts.value : this.attempts,
+      nextRetryAt: data.nextRetryAt.present
+          ? data.nextRetryAt.value
+          : this.nextRetryAt,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncOutboxData(')
+          ..write('id: $id, ')
+          ..write('idOrdenLocal: $idOrdenLocal, ')
+          ..write('idOrdenBackend: $idOrdenBackend, ')
+          ..write('lane: $lane, ')
+          ..write('entityType: $entityType, ')
+          ..write('entityClientUuid: $entityClientUuid, ')
+          ..write('operation: $operation, ')
+          ..write('targetVersion: $targetVersion, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('status: $status, ')
+          ..write('attempts: $attempts, ')
+          ..write('nextRetryAt: $nextRetryAt, ')
+          ..write('lastError: $lastError, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    idOrdenLocal,
+    idOrdenBackend,
+    lane,
+    entityType,
+    entityClientUuid,
+    operation,
+    targetVersion,
+    payloadJson,
+    status,
+    attempts,
+    nextRetryAt,
+    lastError,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncOutboxData &&
+          other.id == this.id &&
+          other.idOrdenLocal == this.idOrdenLocal &&
+          other.idOrdenBackend == this.idOrdenBackend &&
+          other.lane == this.lane &&
+          other.entityType == this.entityType &&
+          other.entityClientUuid == this.entityClientUuid &&
+          other.operation == this.operation &&
+          other.targetVersion == this.targetVersion &&
+          other.payloadJson == this.payloadJson &&
+          other.status == this.status &&
+          other.attempts == this.attempts &&
+          other.nextRetryAt == this.nextRetryAt &&
+          other.lastError == this.lastError &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
+  final Value<int> id;
+  final Value<int> idOrdenLocal;
+  final Value<int?> idOrdenBackend;
+  final Value<String> lane;
+  final Value<String> entityType;
+  final Value<String> entityClientUuid;
+  final Value<String> operation;
+  final Value<int> targetVersion;
+  final Value<String> payloadJson;
+  final Value<String> status;
+  final Value<int> attempts;
+  final Value<DateTime?> nextRetryAt;
+  final Value<String?> lastError;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const SyncOutboxCompanion({
+    this.id = const Value.absent(),
+    this.idOrdenLocal = const Value.absent(),
+    this.idOrdenBackend = const Value.absent(),
+    this.lane = const Value.absent(),
+    this.entityType = const Value.absent(),
+    this.entityClientUuid = const Value.absent(),
+    this.operation = const Value.absent(),
+    this.targetVersion = const Value.absent(),
+    this.payloadJson = const Value.absent(),
+    this.status = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.nextRetryAt = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  SyncOutboxCompanion.insert({
+    this.id = const Value.absent(),
+    required int idOrdenLocal,
+    this.idOrdenBackend = const Value.absent(),
+    required String lane,
+    required String entityType,
+    required String entityClientUuid,
+    this.operation = const Value.absent(),
+    this.targetVersion = const Value.absent(),
+    required String payloadJson,
+    this.status = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.nextRetryAt = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : idOrdenLocal = Value(idOrdenLocal),
+       lane = Value(lane),
+       entityType = Value(entityType),
+       entityClientUuid = Value(entityClientUuid),
+       payloadJson = Value(payloadJson);
+  static Insertable<SyncOutboxData> custom({
+    Expression<int>? id,
+    Expression<int>? idOrdenLocal,
+    Expression<int>? idOrdenBackend,
+    Expression<String>? lane,
+    Expression<String>? entityType,
+    Expression<String>? entityClientUuid,
+    Expression<String>? operation,
+    Expression<int>? targetVersion,
+    Expression<String>? payloadJson,
+    Expression<String>? status,
+    Expression<int>? attempts,
+    Expression<DateTime>? nextRetryAt,
+    Expression<String>? lastError,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (idOrdenLocal != null) 'id_orden_local': idOrdenLocal,
+      if (idOrdenBackend != null) 'id_orden_backend': idOrdenBackend,
+      if (lane != null) 'lane': lane,
+      if (entityType != null) 'entity_type': entityType,
+      if (entityClientUuid != null) 'entity_client_uuid': entityClientUuid,
+      if (operation != null) 'operation': operation,
+      if (targetVersion != null) 'target_version': targetVersion,
+      if (payloadJson != null) 'payload_json': payloadJson,
+      if (status != null) 'status': status,
+      if (attempts != null) 'attempts': attempts,
+      if (nextRetryAt != null) 'next_retry_at': nextRetryAt,
+      if (lastError != null) 'last_error': lastError,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  SyncOutboxCompanion copyWith({
+    Value<int>? id,
+    Value<int>? idOrdenLocal,
+    Value<int?>? idOrdenBackend,
+    Value<String>? lane,
+    Value<String>? entityType,
+    Value<String>? entityClientUuid,
+    Value<String>? operation,
+    Value<int>? targetVersion,
+    Value<String>? payloadJson,
+    Value<String>? status,
+    Value<int>? attempts,
+    Value<DateTime?>? nextRetryAt,
+    Value<String?>? lastError,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return SyncOutboxCompanion(
+      id: id ?? this.id,
+      idOrdenLocal: idOrdenLocal ?? this.idOrdenLocal,
+      idOrdenBackend: idOrdenBackend ?? this.idOrdenBackend,
+      lane: lane ?? this.lane,
+      entityType: entityType ?? this.entityType,
+      entityClientUuid: entityClientUuid ?? this.entityClientUuid,
+      operation: operation ?? this.operation,
+      targetVersion: targetVersion ?? this.targetVersion,
+      payloadJson: payloadJson ?? this.payloadJson,
+      status: status ?? this.status,
+      attempts: attempts ?? this.attempts,
+      nextRetryAt: nextRetryAt ?? this.nextRetryAt,
+      lastError: lastError ?? this.lastError,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (idOrdenLocal.present) {
+      map['id_orden_local'] = Variable<int>(idOrdenLocal.value);
+    }
+    if (idOrdenBackend.present) {
+      map['id_orden_backend'] = Variable<int>(idOrdenBackend.value);
+    }
+    if (lane.present) {
+      map['lane'] = Variable<String>(lane.value);
+    }
+    if (entityType.present) {
+      map['entity_type'] = Variable<String>(entityType.value);
+    }
+    if (entityClientUuid.present) {
+      map['entity_client_uuid'] = Variable<String>(entityClientUuid.value);
+    }
+    if (operation.present) {
+      map['operation'] = Variable<String>(operation.value);
+    }
+    if (targetVersion.present) {
+      map['target_version'] = Variable<int>(targetVersion.value);
+    }
+    if (payloadJson.present) {
+      map['payload_json'] = Variable<String>(payloadJson.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (attempts.present) {
+      map['attempts'] = Variable<int>(attempts.value);
+    }
+    if (nextRetryAt.present) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncOutboxCompanion(')
+          ..write('id: $id, ')
+          ..write('idOrdenLocal: $idOrdenLocal, ')
+          ..write('idOrdenBackend: $idOrdenBackend, ')
+          ..write('lane: $lane, ')
+          ..write('entityType: $entityType, ')
+          ..write('entityClientUuid: $entityClientUuid, ')
+          ..write('operation: $operation, ')
+          ..write('targetVersion: $targetVersion, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('status: $status, ')
+          ..write('attempts: $attempts, ')
+          ..write('nextRetryAt: $nextRetryAt, ')
+          ..write('lastError: $lastError, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -13325,6 +16290,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $SyncStatusEntriesTable(this);
   late final $OrdenesPendientesSyncTable ordenesPendientesSync =
       $OrdenesPendientesSyncTable(this);
+  late final $SyncOutboxTable syncOutbox = $SyncOutboxTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -13347,6 +16313,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ordenesPendientes,
     syncStatusEntries,
     ordenesPendientesSync,
+    syncOutbox,
   ];
 }
 
@@ -17500,6 +20467,9 @@ typedef $$OrdenesTableCreateCompanionBuilder =
       Value<String?> horaSalidaTexto,
       Value<String?> razonFalla,
       Value<bool> permiteEdicionTecnico,
+      Value<int> localVersion,
+      Value<int> syncedVersion,
+      Value<int> executionSyncVersion,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
@@ -17538,6 +20508,9 @@ typedef $$OrdenesTableUpdateCompanionBuilder =
       Value<String?> horaSalidaTexto,
       Value<String?> razonFalla,
       Value<bool> permiteEdicionTecnico,
+      Value<int> localVersion,
+      Value<int> syncedVersion,
+      Value<int> executionSyncVersion,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
@@ -17752,6 +20725,26 @@ final class $$OrdenesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$SyncOutboxTable, List<SyncOutboxData>>
+  _syncOutboxRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.syncOutbox,
+    aliasName: $_aliasNameGenerator(
+      db.ordenes.idLocal,
+      db.syncOutbox.idOrdenLocal,
+    ),
+  );
+
+  $$SyncOutboxTableProcessedTableManager get syncOutboxRefs {
+    final manager = $$SyncOutboxTableTableManager($_db, $_db.syncOutbox).filter(
+      (f) => f.idOrdenLocal.idLocal.sqlEquals($_itemColumn<int>('id_local')!),
+    );
+
+    final cache = $_typedResult.readTableOrNull(_syncOutboxRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$OrdenesTableFilterComposer
@@ -17895,6 +20888,21 @@ class $$OrdenesTableFilterComposer
 
   ColumnFilters<bool> get permiteEdicionTecnico => $composableBuilder(
     column: $table.permiteEdicionTecnico,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get executionSyncVersion => $composableBuilder(
+    column: $table.executionSyncVersion,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18160,6 +21168,31 @@ class $$OrdenesTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> syncOutboxRefs(
+    Expression<bool> Function($$SyncOutboxTableFilterComposer f) f,
+  ) {
+    final $$SyncOutboxTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.idLocal,
+      referencedTable: $db.syncOutbox,
+      getReferencedColumn: (t) => t.idOrdenLocal,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SyncOutboxTableFilterComposer(
+            $db: $db,
+            $table: $db.syncOutbox,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$OrdenesTableOrderingComposer
@@ -18303,6 +21336,21 @@ class $$OrdenesTableOrderingComposer
 
   ColumnOrderings<bool> get permiteEdicionTecnico => $composableBuilder(
     column: $table.permiteEdicionTecnico,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get executionSyncVersion => $composableBuilder(
+    column: $table.executionSyncVersion,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -18548,6 +21596,21 @@ class $$OrdenesTableAnnotationComposer
 
   GeneratedColumn<bool> get permiteEdicionTecnico => $composableBuilder(
     column: $table.permiteEdicionTecnico,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get executionSyncVersion => $composableBuilder(
+    column: $table.executionSyncVersion,
     builder: (column) => column,
   );
 
@@ -18808,6 +21871,31 @@ class $$OrdenesTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> syncOutboxRefs<T extends Object>(
+    Expression<T> Function($$SyncOutboxTableAnnotationComposer a) f,
+  ) {
+    final $$SyncOutboxTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.idLocal,
+      referencedTable: $db.syncOutbox,
+      getReferencedColumn: (t) => t.idOrdenLocal,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SyncOutboxTableAnnotationComposer(
+            $db: $db,
+            $table: $db.syncOutbox,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$OrdenesTableTableManager
@@ -18834,6 +21922,7 @@ class $$OrdenesTableTableManager
             bool evidenciasRefs,
             bool firmasRefs,
             bool ordenesPendientesRefs,
+            bool syncOutboxRefs,
           })
         > {
   $$OrdenesTableTableManager(_$AppDatabase db, $OrdenesTable table)
@@ -18880,6 +21969,9 @@ class $$OrdenesTableTableManager
                 Value<String?> horaSalidaTexto = const Value.absent(),
                 Value<String?> razonFalla = const Value.absent(),
                 Value<bool> permiteEdicionTecnico = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<int> executionSyncVersion = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -18916,6 +22008,9 @@ class $$OrdenesTableTableManager
                 horaSalidaTexto: horaSalidaTexto,
                 razonFalla: razonFalla,
                 permiteEdicionTecnico: permiteEdicionTecnico,
+                localVersion: localVersion,
+                syncedVersion: syncedVersion,
+                executionSyncVersion: executionSyncVersion,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
@@ -18954,6 +22049,9 @@ class $$OrdenesTableTableManager
                 Value<String?> horaSalidaTexto = const Value.absent(),
                 Value<String?> razonFalla = const Value.absent(),
                 Value<bool> permiteEdicionTecnico = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<int> executionSyncVersion = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -18990,6 +22088,9 @@ class $$OrdenesTableTableManager
                 horaSalidaTexto: horaSalidaTexto,
                 razonFalla: razonFalla,
                 permiteEdicionTecnico: permiteEdicionTecnico,
+                localVersion: localVersion,
+                syncedVersion: syncedVersion,
+                executionSyncVersion: executionSyncVersion,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
@@ -19015,6 +22116,7 @@ class $$OrdenesTableTableManager
                 evidenciasRefs = false,
                 firmasRefs = false,
                 ordenesPendientesRefs = false,
+                syncOutboxRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -19025,6 +22127,7 @@ class $$OrdenesTableTableManager
                     if (evidenciasRefs) db.evidencias,
                     if (firmasRefs) db.firmas,
                     if (ordenesPendientesRefs) db.ordenesPendientes,
+                    if (syncOutboxRefs) db.syncOutbox,
                   ],
                   addJoins:
                       <
@@ -19221,6 +22324,27 @@ class $$OrdenesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (syncOutboxRefs)
+                        await $_getPrefetchedData<
+                          Ordene,
+                          $OrdenesTable,
+                          SyncOutboxData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$OrdenesTableReferences
+                              ._syncOutboxRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$OrdenesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).syncOutboxRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.idOrdenLocal == item.idLocal,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -19252,6 +22376,7 @@ typedef $$OrdenesTableProcessedTableManager =
         bool evidenciasRefs,
         bool firmasRefs,
         bool ordenesPendientesRefs,
+        bool syncOutboxRefs,
       })
     >;
 typedef $$ActividadesPlanTableCreateCompanionBuilder =
@@ -19739,6 +22864,13 @@ typedef $$ActividadesEjecutadasTableCreateCompanionBuilder =
       Value<String?> observacionTecnico,
       Value<String?> respuestaJson,
       Value<DateTime?> fechaEjecucion,
+      Value<String?> clientUuid,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<String?> payloadHash,
+      Value<String?> syncedPayloadHash,
+      Value<DateTime?> deletedAt,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
@@ -19761,6 +22893,13 @@ typedef $$ActividadesEjecutadasTableUpdateCompanionBuilder =
       Value<String?> observacionTecnico,
       Value<String?> respuestaJson,
       Value<DateTime?> fechaEjecucion,
+      Value<String?> clientUuid,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<String?> payloadHash,
+      Value<String?> syncedPayloadHash,
+      Value<DateTime?> deletedAt,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
@@ -19962,6 +23101,41 @@ class $$ActividadesEjecutadasTableFilterComposer
 
   ColumnFilters<DateTime> get fechaEjecucion => $composableBuilder(
     column: $table.fechaEjecucion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -20174,6 +23348,41 @@ class $$ActividadesEjecutadasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDirty => $composableBuilder(
     column: $table.isDirty,
     builder: (column) => ColumnOrderings(column),
@@ -20327,6 +23536,39 @@ class $$ActividadesEjecutadasTableAnnotationComposer
     column: $table.fechaEjecucion,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 
   GeneratedColumn<bool> get isDirty =>
       $composableBuilder(column: $table.isDirty, builder: (column) => column);
@@ -20521,6 +23763,13 @@ class $$ActividadesEjecutadasTableTableManager
                 Value<String?> observacionTecnico = const Value.absent(),
                 Value<String?> respuestaJson = const Value.absent(),
                 Value<DateTime?> fechaEjecucion = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<String?> payloadHash = const Value.absent(),
+                Value<String?> syncedPayloadHash = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -20541,6 +23790,13 @@ class $$ActividadesEjecutadasTableTableManager
                 observacionTecnico: observacionTecnico,
                 respuestaJson: respuestaJson,
                 fechaEjecucion: fechaEjecucion,
+                clientUuid: clientUuid,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                payloadHash: payloadHash,
+                syncedPayloadHash: syncedPayloadHash,
+                deletedAt: deletedAt,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
@@ -20563,6 +23819,13 @@ class $$ActividadesEjecutadasTableTableManager
                 Value<String?> observacionTecnico = const Value.absent(),
                 Value<String?> respuestaJson = const Value.absent(),
                 Value<DateTime?> fechaEjecucion = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<String?> payloadHash = const Value.absent(),
+                Value<String?> syncedPayloadHash = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -20583,6 +23846,13 @@ class $$ActividadesEjecutadasTableTableManager
                 observacionTecnico: observacionTecnico,
                 respuestaJson: respuestaJson,
                 fechaEjecucion: fechaEjecucion,
+                clientUuid: clientUuid,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                payloadHash: payloadHash,
+                syncedPayloadHash: syncedPayloadHash,
+                deletedAt: deletedAt,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
@@ -20765,6 +24035,13 @@ typedef $$MedicionesTableCreateCompanionBuilder =
       Value<String?> estadoValor,
       Value<String?> observacion,
       Value<DateTime?> fechaMedicion,
+      Value<String?> clientUuid,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<String?> payloadHash,
+      Value<String?> syncedPayloadHash,
+      Value<DateTime?> deletedAt,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
     });
@@ -20786,6 +24063,13 @@ typedef $$MedicionesTableUpdateCompanionBuilder =
       Value<String?> estadoValor,
       Value<String?> observacion,
       Value<DateTime?> fechaMedicion,
+      Value<String?> clientUuid,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<String?> payloadHash,
+      Value<String?> syncedPayloadHash,
+      Value<DateTime?> deletedAt,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
     });
@@ -20949,6 +24233,41 @@ class $$MedicionesTableFilterComposer
 
   ColumnFilters<DateTime> get fechaMedicion => $composableBuilder(
     column: $table.fechaMedicion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21125,6 +24444,41 @@ class $$MedicionesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDirty => $composableBuilder(
     column: $table.isDirty,
     builder: (column) => ColumnOrderings(column),
@@ -21292,6 +24646,39 @@ class $$MedicionesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
   GeneratedColumn<bool> get isDirty =>
       $composableBuilder(column: $table.isDirty, builder: (column) => column);
 
@@ -21444,6 +24831,13 @@ class $$MedicionesTableTableManager
                 Value<String?> estadoValor = const Value.absent(),
                 Value<String?> observacion = const Value.absent(),
                 Value<DateTime?> fechaMedicion = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<String?> payloadHash = const Value.absent(),
+                Value<String?> syncedPayloadHash = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
               }) => MedicionesCompanion(
@@ -21463,6 +24857,13 @@ class $$MedicionesTableTableManager
                 estadoValor: estadoValor,
                 observacion: observacion,
                 fechaMedicion: fechaMedicion,
+                clientUuid: clientUuid,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                payloadHash: payloadHash,
+                syncedPayloadHash: syncedPayloadHash,
+                deletedAt: deletedAt,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
               ),
@@ -21484,6 +24885,13 @@ class $$MedicionesTableTableManager
                 Value<String?> estadoValor = const Value.absent(),
                 Value<String?> observacion = const Value.absent(),
                 Value<DateTime?> fechaMedicion = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<String?> payloadHash = const Value.absent(),
+                Value<String?> syncedPayloadHash = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
               }) => MedicionesCompanion.insert(
@@ -21503,6 +24911,13 @@ class $$MedicionesTableTableManager
                 estadoValor: estadoValor,
                 observacion: observacion,
                 fechaMedicion: fechaMedicion,
+                clientUuid: clientUuid,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                payloadHash: payloadHash,
+                syncedPayloadHash: syncedPayloadHash,
+                deletedAt: deletedAt,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
               ),
@@ -21639,6 +25054,16 @@ typedef $$EvidenciasTableCreateCompanionBuilder =
       required String tipoEvidencia,
       Value<String?> descripcion,
       Value<DateTime> fechaCaptura,
+      Value<String?> clientUuid,
+      Value<String?> hashSha256,
+      Value<String?> storageProvider,
+      Value<String?> storageKey,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<String?> payloadHash,
+      Value<String?> syncedPayloadHash,
+      Value<DateTime?> deletedAt,
       Value<bool> isDirty,
       Value<bool> subida,
       Value<DateTime?> lastSyncedAt,
@@ -21655,6 +25080,16 @@ typedef $$EvidenciasTableUpdateCompanionBuilder =
       Value<String> tipoEvidencia,
       Value<String?> descripcion,
       Value<DateTime> fechaCaptura,
+      Value<String?> clientUuid,
+      Value<String?> hashSha256,
+      Value<String?> storageProvider,
+      Value<String?> storageKey,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<String?> payloadHash,
+      Value<String?> syncedPayloadHash,
+      Value<DateTime?> deletedAt,
       Value<bool> isDirty,
       Value<bool> subida,
       Value<DateTime?> lastSyncedAt,
@@ -21772,6 +25207,56 @@ class $$EvidenciasTableFilterComposer
 
   ColumnFilters<DateTime> get fechaCaptura => $composableBuilder(
     column: $table.fechaCaptura,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hashSha256 => $composableBuilder(
+    column: $table.hashSha256,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storageProvider => $composableBuilder(
+    column: $table.storageProvider,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storageKey => $composableBuilder(
+    column: $table.storageKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21905,6 +25390,56 @@ class $$EvidenciasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get hashSha256 => $composableBuilder(
+    column: $table.hashSha256,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get storageProvider => $composableBuilder(
+    column: $table.storageProvider,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get storageKey => $composableBuilder(
+    column: $table.storageKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDirty => $composableBuilder(
     column: $table.isDirty,
     builder: (column) => ColumnOrderings(column),
@@ -22026,6 +25561,54 @@ class $$EvidenciasTableAnnotationComposer
     column: $table.fechaCaptura,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get hashSha256 => $composableBuilder(
+    column: $table.hashSha256,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get storageProvider => $composableBuilder(
+    column: $table.storageProvider,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get storageKey => $composableBuilder(
+    column: $table.storageKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 
   GeneratedColumn<bool> get isDirty =>
       $composableBuilder(column: $table.isDirty, builder: (column) => column);
@@ -22151,6 +25734,16 @@ class $$EvidenciasTableTableManager
                 Value<String> tipoEvidencia = const Value.absent(),
                 Value<String?> descripcion = const Value.absent(),
                 Value<DateTime> fechaCaptura = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<String?> hashSha256 = const Value.absent(),
+                Value<String?> storageProvider = const Value.absent(),
+                Value<String?> storageKey = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<String?> payloadHash = const Value.absent(),
+                Value<String?> syncedPayloadHash = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<bool> subida = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -22165,6 +25758,16 @@ class $$EvidenciasTableTableManager
                 tipoEvidencia: tipoEvidencia,
                 descripcion: descripcion,
                 fechaCaptura: fechaCaptura,
+                clientUuid: clientUuid,
+                hashSha256: hashSha256,
+                storageProvider: storageProvider,
+                storageKey: storageKey,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                payloadHash: payloadHash,
+                syncedPayloadHash: syncedPayloadHash,
+                deletedAt: deletedAt,
                 isDirty: isDirty,
                 subida: subida,
                 lastSyncedAt: lastSyncedAt,
@@ -22181,6 +25784,16 @@ class $$EvidenciasTableTableManager
                 required String tipoEvidencia,
                 Value<String?> descripcion = const Value.absent(),
                 Value<DateTime> fechaCaptura = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<String?> hashSha256 = const Value.absent(),
+                Value<String?> storageProvider = const Value.absent(),
+                Value<String?> storageKey = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<String?> payloadHash = const Value.absent(),
+                Value<String?> syncedPayloadHash = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<bool> subida = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -22195,6 +25808,16 @@ class $$EvidenciasTableTableManager
                 tipoEvidencia: tipoEvidencia,
                 descripcion: descripcion,
                 fechaCaptura: fechaCaptura,
+                clientUuid: clientUuid,
+                hashSha256: hashSha256,
+                storageProvider: storageProvider,
+                storageKey: storageKey,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                payloadHash: payloadHash,
+                syncedPayloadHash: syncedPayloadHash,
+                deletedAt: deletedAt,
                 isDirty: isDirty,
                 subida: subida,
                 lastSyncedAt: lastSyncedAt,
@@ -22316,6 +25939,12 @@ typedef $$FirmasTableCreateCompanionBuilder =
       Value<String?> cargoFirmante,
       Value<String?> documentoFirmante,
       Value<DateTime> fechaFirma,
+      Value<String?> clientUuid,
+      Value<String?> hashSha256,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<DateTime?> deletedAt,
       Value<bool> isDirty,
       Value<bool> subida,
       Value<DateTime?> lastSyncedAt,
@@ -22332,6 +25961,12 @@ typedef $$FirmasTableUpdateCompanionBuilder =
       Value<String?> cargoFirmante,
       Value<String?> documentoFirmante,
       Value<DateTime> fechaFirma,
+      Value<String?> clientUuid,
+      Value<String?> hashSha256,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<DateTime?> deletedAt,
       Value<bool> isDirty,
       Value<bool> subida,
       Value<DateTime?> lastSyncedAt,
@@ -22410,6 +26045,36 @@ class $$FirmasTableFilterComposer
 
   ColumnFilters<DateTime> get fechaFirma => $composableBuilder(
     column: $table.fechaFirma,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hashSha256 => $composableBuilder(
+    column: $table.hashSha256,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -22506,6 +26171,36 @@ class $$FirmasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get hashSha256 => $composableBuilder(
+    column: $table.hashSha256,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDirty => $composableBuilder(
     column: $table.isDirty,
     builder: (column) => ColumnOrderings(column),
@@ -22589,6 +26284,34 @@ class $$FirmasTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get hashSha256 => $composableBuilder(
+    column: $table.hashSha256,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
   GeneratedColumn<bool> get isDirty =>
       $composableBuilder(column: $table.isDirty, builder: (column) => column);
 
@@ -22662,6 +26385,12 @@ class $$FirmasTableTableManager
                 Value<String?> cargoFirmante = const Value.absent(),
                 Value<String?> documentoFirmante = const Value.absent(),
                 Value<DateTime> fechaFirma = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<String?> hashSha256 = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<bool> subida = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -22676,6 +26405,12 @@ class $$FirmasTableTableManager
                 cargoFirmante: cargoFirmante,
                 documentoFirmante: documentoFirmante,
                 fechaFirma: fechaFirma,
+                clientUuid: clientUuid,
+                hashSha256: hashSha256,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                deletedAt: deletedAt,
                 isDirty: isDirty,
                 subida: subida,
                 lastSyncedAt: lastSyncedAt,
@@ -22692,6 +26427,12 @@ class $$FirmasTableTableManager
                 Value<String?> cargoFirmante = const Value.absent(),
                 Value<String?> documentoFirmante = const Value.absent(),
                 Value<DateTime> fechaFirma = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<String?> hashSha256 = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<bool> subida = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -22706,6 +26447,12 @@ class $$FirmasTableTableManager
                 cargoFirmante: cargoFirmante,
                 documentoFirmante: documentoFirmante,
                 fechaFirma: fechaFirma,
+                clientUuid: clientUuid,
+                hashSha256: hashSha256,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                deletedAt: deletedAt,
                 isDirty: isDirty,
                 subida: subida,
                 lastSyncedAt: lastSyncedAt,
@@ -22790,6 +26537,13 @@ typedef $$OrdenesPendientesTableCreateCompanionBuilder =
       Value<String> prioridad,
       Value<String> estado,
       Value<String?> observaciones,
+      Value<String?> clientUuid,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<String?> payloadHash,
+      Value<String?> syncedPayloadHash,
+      Value<DateTime?> deletedAt,
       Value<DateTime> fechaCreacion,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
@@ -22809,6 +26563,13 @@ typedef $$OrdenesPendientesTableUpdateCompanionBuilder =
       Value<String> prioridad,
       Value<String> estado,
       Value<String?> observaciones,
+      Value<String?> clientUuid,
+      Value<int> localVersion,
+      Value<int> inflightVersion,
+      Value<int> syncedVersion,
+      Value<String?> payloadHash,
+      Value<String?> syncedPayloadHash,
+      Value<DateTime?> deletedAt,
       Value<DateTime> fechaCreacion,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
@@ -22913,6 +26674,41 @@ class $$OrdenesPendientesTableFilterComposer
 
   ColumnFilters<String> get observaciones => $composableBuilder(
     column: $table.observaciones,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -23024,6 +26820,41 @@ class $$OrdenesPendientesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get fechaCreacion => $composableBuilder(
     column: $table.fechaCreacion,
     builder: (column) => ColumnOrderings(column),
@@ -23118,6 +26949,39 @@ class $$OrdenesPendientesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get clientUuid => $composableBuilder(
+    column: $table.clientUuid,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get localVersion => $composableBuilder(
+    column: $table.localVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get inflightVersion => $composableBuilder(
+    column: $table.inflightVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get syncedVersion => $composableBuilder(
+    column: $table.syncedVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payloadHash => $composableBuilder(
+    column: $table.payloadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncedPayloadHash => $composableBuilder(
+    column: $table.syncedPayloadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get fechaCreacion => $composableBuilder(
     column: $table.fechaCreacion,
     builder: (column) => column,
@@ -23201,6 +27065,13 @@ class $$OrdenesPendientesTableTableManager
                 Value<String> prioridad = const Value.absent(),
                 Value<String> estado = const Value.absent(),
                 Value<String?> observaciones = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<String?> payloadHash = const Value.absent(),
+                Value<String?> syncedPayloadHash = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<DateTime> fechaCreacion = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -23218,6 +27089,13 @@ class $$OrdenesPendientesTableTableManager
                 prioridad: prioridad,
                 estado: estado,
                 observaciones: observaciones,
+                clientUuid: clientUuid,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                payloadHash: payloadHash,
+                syncedPayloadHash: syncedPayloadHash,
+                deletedAt: deletedAt,
                 fechaCreacion: fechaCreacion,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
@@ -23237,6 +27115,13 @@ class $$OrdenesPendientesTableTableManager
                 Value<String> prioridad = const Value.absent(),
                 Value<String> estado = const Value.absent(),
                 Value<String?> observaciones = const Value.absent(),
+                Value<String?> clientUuid = const Value.absent(),
+                Value<int> localVersion = const Value.absent(),
+                Value<int> inflightVersion = const Value.absent(),
+                Value<int> syncedVersion = const Value.absent(),
+                Value<String?> payloadHash = const Value.absent(),
+                Value<String?> syncedPayloadHash = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<DateTime> fechaCreacion = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -23254,6 +27139,13 @@ class $$OrdenesPendientesTableTableManager
                 prioridad: prioridad,
                 estado: estado,
                 observaciones: observaciones,
+                clientUuid: clientUuid,
+                localVersion: localVersion,
+                inflightVersion: inflightVersion,
+                syncedVersion: syncedVersion,
+                payloadHash: payloadHash,
+                syncedPayloadHash: syncedPayloadHash,
+                deletedAt: deletedAt,
                 fechaCreacion: fechaCreacion,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
@@ -23860,6 +27752,521 @@ typedef $$OrdenesPendientesSyncTableProcessedTableManager =
       OrdenesPendientesSyncData,
       PrefetchHooks Function()
     >;
+typedef $$SyncOutboxTableCreateCompanionBuilder =
+    SyncOutboxCompanion Function({
+      Value<int> id,
+      required int idOrdenLocal,
+      Value<int?> idOrdenBackend,
+      required String lane,
+      required String entityType,
+      required String entityClientUuid,
+      Value<String> operation,
+      Value<int> targetVersion,
+      required String payloadJson,
+      Value<String> status,
+      Value<int> attempts,
+      Value<DateTime?> nextRetryAt,
+      Value<String?> lastError,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$SyncOutboxTableUpdateCompanionBuilder =
+    SyncOutboxCompanion Function({
+      Value<int> id,
+      Value<int> idOrdenLocal,
+      Value<int?> idOrdenBackend,
+      Value<String> lane,
+      Value<String> entityType,
+      Value<String> entityClientUuid,
+      Value<String> operation,
+      Value<int> targetVersion,
+      Value<String> payloadJson,
+      Value<String> status,
+      Value<int> attempts,
+      Value<DateTime?> nextRetryAt,
+      Value<String?> lastError,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$SyncOutboxTableReferences
+    extends BaseReferences<_$AppDatabase, $SyncOutboxTable, SyncOutboxData> {
+  $$SyncOutboxTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $OrdenesTable _idOrdenLocalTable(_$AppDatabase db) =>
+      db.ordenes.createAlias(
+        $_aliasNameGenerator(db.syncOutbox.idOrdenLocal, db.ordenes.idLocal),
+      );
+
+  $$OrdenesTableProcessedTableManager get idOrdenLocal {
+    final $_column = $_itemColumn<int>('id_orden_local')!;
+
+    final manager = $$OrdenesTableTableManager(
+      $_db,
+      $_db.ordenes,
+    ).filter((f) => f.idLocal.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_idOrdenLocalTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SyncOutboxTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncOutboxTable> {
+  $$SyncOutboxTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get idOrdenBackend => $composableBuilder(
+    column: $table.idOrdenBackend,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lane => $composableBuilder(
+    column: $table.lane,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityClientUuid => $composableBuilder(
+    column: $table.entityClientUuid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get operation => $composableBuilder(
+    column: $table.operation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get targetVersion => $composableBuilder(
+    column: $table.targetVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextRetryAt => $composableBuilder(
+    column: $table.nextRetryAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$OrdenesTableFilterComposer get idOrdenLocal {
+    final $$OrdenesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.idOrdenLocal,
+      referencedTable: $db.ordenes,
+      getReferencedColumn: (t) => t.idLocal,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdenesTableFilterComposer(
+            $db: $db,
+            $table: $db.ordenes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SyncOutboxTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncOutboxTable> {
+  $$SyncOutboxTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get idOrdenBackend => $composableBuilder(
+    column: $table.idOrdenBackend,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lane => $composableBuilder(
+    column: $table.lane,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityClientUuid => $composableBuilder(
+    column: $table.entityClientUuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get operation => $composableBuilder(
+    column: $table.operation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get targetVersion => $composableBuilder(
+    column: $table.targetVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextRetryAt => $composableBuilder(
+    column: $table.nextRetryAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$OrdenesTableOrderingComposer get idOrdenLocal {
+    final $$OrdenesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.idOrdenLocal,
+      referencedTable: $db.ordenes,
+      getReferencedColumn: (t) => t.idLocal,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdenesTableOrderingComposer(
+            $db: $db,
+            $table: $db.ordenes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SyncOutboxTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncOutboxTable> {
+  $$SyncOutboxTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get idOrdenBackend => $composableBuilder(
+    column: $table.idOrdenBackend,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lane =>
+      $composableBuilder(column: $table.lane, builder: (column) => column);
+
+  GeneratedColumn<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityClientUuid => $composableBuilder(
+    column: $table.entityClientUuid,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get operation =>
+      $composableBuilder(column: $table.operation, builder: (column) => column);
+
+  GeneratedColumn<int> get targetVersion => $composableBuilder(
+    column: $table.targetVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get attempts =>
+      $composableBuilder(column: $table.attempts, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get nextRetryAt => $composableBuilder(
+    column: $table.nextRetryAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$OrdenesTableAnnotationComposer get idOrdenLocal {
+    final $$OrdenesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.idOrdenLocal,
+      referencedTable: $db.ordenes,
+      getReferencedColumn: (t) => t.idLocal,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdenesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.ordenes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SyncOutboxTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncOutboxTable,
+          SyncOutboxData,
+          $$SyncOutboxTableFilterComposer,
+          $$SyncOutboxTableOrderingComposer,
+          $$SyncOutboxTableAnnotationComposer,
+          $$SyncOutboxTableCreateCompanionBuilder,
+          $$SyncOutboxTableUpdateCompanionBuilder,
+          (SyncOutboxData, $$SyncOutboxTableReferences),
+          SyncOutboxData,
+          PrefetchHooks Function({bool idOrdenLocal})
+        > {
+  $$SyncOutboxTableTableManager(_$AppDatabase db, $SyncOutboxTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncOutboxTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncOutboxTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncOutboxTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> idOrdenLocal = const Value.absent(),
+                Value<int?> idOrdenBackend = const Value.absent(),
+                Value<String> lane = const Value.absent(),
+                Value<String> entityType = const Value.absent(),
+                Value<String> entityClientUuid = const Value.absent(),
+                Value<String> operation = const Value.absent(),
+                Value<int> targetVersion = const Value.absent(),
+                Value<String> payloadJson = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<DateTime?> nextRetryAt = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => SyncOutboxCompanion(
+                id: id,
+                idOrdenLocal: idOrdenLocal,
+                idOrdenBackend: idOrdenBackend,
+                lane: lane,
+                entityType: entityType,
+                entityClientUuid: entityClientUuid,
+                operation: operation,
+                targetVersion: targetVersion,
+                payloadJson: payloadJson,
+                status: status,
+                attempts: attempts,
+                nextRetryAt: nextRetryAt,
+                lastError: lastError,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int idOrdenLocal,
+                Value<int?> idOrdenBackend = const Value.absent(),
+                required String lane,
+                required String entityType,
+                required String entityClientUuid,
+                Value<String> operation = const Value.absent(),
+                Value<int> targetVersion = const Value.absent(),
+                required String payloadJson,
+                Value<String> status = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<DateTime?> nextRetryAt = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => SyncOutboxCompanion.insert(
+                id: id,
+                idOrdenLocal: idOrdenLocal,
+                idOrdenBackend: idOrdenBackend,
+                lane: lane,
+                entityType: entityType,
+                entityClientUuid: entityClientUuid,
+                operation: operation,
+                targetVersion: targetVersion,
+                payloadJson: payloadJson,
+                status: status,
+                attempts: attempts,
+                nextRetryAt: nextRetryAt,
+                lastError: lastError,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SyncOutboxTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({idOrdenLocal = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (idOrdenLocal) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.idOrdenLocal,
+                                referencedTable: $$SyncOutboxTableReferences
+                                    ._idOrdenLocalTable(db),
+                                referencedColumn: $$SyncOutboxTableReferences
+                                    ._idOrdenLocalTable(db)
+                                    .idLocal,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SyncOutboxTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncOutboxTable,
+      SyncOutboxData,
+      $$SyncOutboxTableFilterComposer,
+      $$SyncOutboxTableOrderingComposer,
+      $$SyncOutboxTableAnnotationComposer,
+      $$SyncOutboxTableCreateCompanionBuilder,
+      $$SyncOutboxTableUpdateCompanionBuilder,
+      (SyncOutboxData, $$SyncOutboxTableReferences),
+      SyncOutboxData,
+      PrefetchHooks Function({bool idOrdenLocal})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -23898,4 +28305,6 @@ class $AppDatabaseManager {
       $$SyncStatusEntriesTableTableManager(_db, _db.syncStatusEntries);
   $$OrdenesPendientesSyncTableTableManager get ordenesPendientesSync =>
       $$OrdenesPendientesSyncTableTableManager(_db, _db.ordenesPendientesSync);
+  $$SyncOutboxTableTableManager get syncOutbox =>
+      $$SyncOutboxTableTableManager(_db, _db.syncOutbox);
 }

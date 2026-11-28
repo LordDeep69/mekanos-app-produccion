@@ -1040,7 +1040,20 @@ class DataLifecycleManager {
         }
       }
 
-      // 3. Eliminar registros de BD (en orden por FK)
+      // 3. Eliminar registros de BD (en orden estricto por FK)
+      await (_db.delete(
+        _db.syncOutbox,
+      )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).go();
+
+      await (_db.delete(
+        _db.ordenesPendientes,
+      )..where((p) => p.idOrden.equals(idOrdenLocal))).go();
+      if (idBackend != null) {
+        await (_db.delete(
+          _db.ordenesPendientes,
+        )..where((p) => p.idOrdenBackend.equals(idBackend))).go();
+      }
+
       await (_db.delete(
         _db.evidencias,
       )..where((e) => e.idOrden.equals(idOrdenLocal))).go();

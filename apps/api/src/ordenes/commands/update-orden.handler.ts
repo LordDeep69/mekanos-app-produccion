@@ -1,5 +1,11 @@
-import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { OrdenPlanSeederService } from '../../common/services/orden-plan-seeder.service';
 import { observacionesCierreEquivalentes } from '../domain/observaciones-cierre-audit';
 import { permiteEdicion, validarTransicion } from '../domain/workflow-estados';
 import { PrismaOrdenServicioRepository } from '../infrastructure/prisma-orden-servicio.repository';
@@ -19,7 +25,7 @@ const ESTADOS_QUE_EXIGEN_TECNICO = ['EN_PROCESO', 'EN_ESPERA_REPUESTO'] as const
 
 /**
  * Handler: Actualizar orden de servicio
- * 
+ *
  * LÓGICA DE NEGOCIO:
  * 1. Verificar que la orden existe
  * 2. Para campos de documentación (observaciones_cierre, trabajo_realizado, etc.):
@@ -28,14 +34,15 @@ const ESTADOS_QUE_EXIGEN_TECNICO = ['EN_PROCESO', 'EN_ESPERA_REPUESTO'] as const
  * 3. Para campos de workflow (fecha, técnico, prioridad):
  *    - Validar que el estado permite edición
  * 4. Retornar orden actualizada
- * 
+ *
  * NOTA: Este handler soporta edición desde Portal Admin
  */
 @CommandHandler(UpdateOrdenCommand)
 export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
   constructor(
     private readonly repository: PrismaOrdenServicioRepository,
-  ) { }
+    @Optional() private readonly planSeeder?: OrdenPlanSeederService,
+  ) {}
 
   async execute(command: UpdateOrdenCommand): Promise<any> {
     const { ordenId, dto, userId } = command;
@@ -55,8 +62,8 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
     if (!estadoCodigo) {
       throw new InternalServerErrorException(
         `Orden ${ordenId} tiene id_estado_actual=${ordenExistente.id_estado_actual} ` +
-        `sin relación válida en estados_orden. No se puede validar la edición. ` +
-        `Verifique integridad referencial de la orden ${ordenExistente.numero_orden}.`,
+          `sin relación válida en estados_orden. No se puede validar la edición. ` +
+          `Verifique integridad referencial de la orden ${ordenExistente.numero_orden}.`,
       );
     }
 
@@ -78,14 +85,14 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
     // la protección de estado, por eso se exige al menos una clave.
     const clavesDto = Object.keys(dto);
     const soloDocumentacion =
-      clavesDto.length > 0 && clavesDto.every(key => camposDocumentacion.includes(key));
+      clavesDto.length > 0 && clavesDto.every((key) => camposDocumentacion.includes(key));
 
     // 3. Si es edición de campos de workflow y estado no permite, bloquear
     // EXCEPCIÓN: COMPLETADA permite edición de documentación (para Portal Admin)
     if (!soloDocumentacion && !permiteEdicion(estadoCodigo)) {
       throw new BadRequestException(
         `No se puede editar campos de workflow en estado ${estadoCodigo}. ` +
-        `Los estados finales (APROBADA, CANCELADA) no permiten modificaciones de workflow.`,
+          `Los estados finales (APROBADA, CANCELADA) no permiten modificaciones de workflow.`,
       );
     }
 
@@ -93,14 +100,13 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
     // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
     const estadosBloqueados = ['CANCELADA'];
     if (estadosBloqueados.includes(estadoCodigo)) {
-      throw new BadRequestException(
-        `La orden en estado ${estadoCodigo} no puede ser modificada.`,
-      );
+      throw new BadRequestException(`La orden en estado ${estadoCodigo} no puede ser modificada.`);
     }
 
     // 4. Manejo inteligente y atómico de asignación/reasignación de técnico
     const tecnicoAnteriorId = ordenExistente.id_tecnico_asignado;
-    const cambioTecnico = dto.id_tecnico_asignado !== undefined && dto.id_tecnico_asignado !== tecnicoAnteriorId;
+    const cambioTecnico =
+      dto.id_tecnico_asignado !== undefined && dto.id_tecnico_asignado !== tecnicoAnteriorId;
 
     let nuevoEstadoId = ordenExistente.id_estado_actual;
     let fechaAsignacion = ordenExistente.fecha_asignacion;
@@ -126,7 +132,7 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
           // EN_PROCESO / EN_ESPERA_REPUESTO no admiten quedarse sin técnico.
           throw new BadRequestException(
             `No se puede desasignar el técnico: la orden está en estado ${estadoCodigo}, ` +
-            `que requiere un técnico responsable. Cancele la orden o reasigne a otro técnico.`,
+              `que requiere un técnico responsable. Cancele la orden o reasigne a otro técnico.`,
           );
         }
       }
@@ -139,7 +145,7 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
         if (!estadoDestino) {
           throw new InternalServerErrorException(
             `El estado '${codigoEstadoObjetivo}' no existe en la tabla estados_orden ` +
-            `(o está inactivo). No se puede completar la reasignación de la orden ${ordenId}.`,
+              `(o está inactivo). No se puede completar la reasignación de la orden ${ordenId}.`,
           );
         }
         nuevoEstadoId = estadoDestino.id_estado;
@@ -160,7 +166,9 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
         id_orden_servicio: ordenId,
         id_estado_anterior: ordenExistente.id_estado_actual,
         id_estado_nuevo: nuevoEstadoId,
-        motivo_cambio: dto.id_tecnico_asignado ? 'Asignación de técnico' : 'Desasignación de técnico',
+        motivo_cambio: dto.id_tecnico_asignado
+          ? 'Asignación de técnico'
+          : 'Desasignación de técnico',
         observaciones:
           `Técnico: ${tecnicoAnteriorId ?? 'Ninguno'} → ${dto.id_tecnico_asignado ?? 'Sin asignar'}` +
           (codigoEstadoObjetivo ? ` | Estado: ${estadoCodigo} → ${codigoEstadoObjetivo}` : ''),
@@ -179,21 +187,46 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
         dto.observaciones_cierre,
       );
 
-    return await this.repository.save(
+    const ordenActualizada = await this.repository.save(
       {
         id_orden_servicio: ordenId,
         id_sede: dto.id_sede !== undefined ? dto.id_sede : ordenExistente.id_sede,
-        id_tipo_servicio: dto.id_tipo_servicio !== undefined ? dto.id_tipo_servicio : ordenExistente.id_tipo_servicio,
-        fecha_programada: dto.fecha_programada !== undefined ? dto.fecha_programada : ordenExistente.fecha_programada,
-        hora_programada: dto.hora_programada !== undefined ? dto.hora_programada : ordenExistente.hora_programada,
+        id_tipo_servicio:
+          dto.id_tipo_servicio !== undefined
+            ? dto.id_tipo_servicio
+            : ordenExistente.id_tipo_servicio,
+        fecha_programada:
+          dto.fecha_programada !== undefined
+            ? dto.fecha_programada
+            : ordenExistente.fecha_programada,
+        hora_programada:
+          dto.hora_programada !== undefined ? dto.hora_programada : ordenExistente.hora_programada,
         prioridad: dto.prioridad || ordenExistente.prioridad,
         origen_solicitud: dto.origen_solicitud || ordenExistente.origen_solicitud,
-        descripcion_inicial: dto.descripcion_inicial !== undefined ? dto.descripcion_inicial : ordenExistente.descripcion_inicial,
-        trabajo_realizado: dto.trabajo_realizado !== undefined ? dto.trabajo_realizado : ordenExistente.trabajo_realizado,
-        observaciones_tecnico: dto.observaciones_tecnico !== undefined ? dto.observaciones_tecnico : ordenExistente.observaciones_tecnico,
-        observaciones_cierre: dto.observaciones_cierre !== undefined ? dto.observaciones_cierre : ordenExistente.observaciones_cierre,
-        requiere_firma_cliente: dto.requiere_firma_cliente !== undefined ? dto.requiere_firma_cliente : ordenExistente.requiere_firma_cliente,
-        id_tecnico_asignado: dto.id_tecnico_asignado !== undefined ? dto.id_tecnico_asignado : ordenExistente.id_tecnico_asignado,
+        descripcion_inicial:
+          dto.descripcion_inicial !== undefined
+            ? dto.descripcion_inicial
+            : ordenExistente.descripcion_inicial,
+        trabajo_realizado:
+          dto.trabajo_realizado !== undefined
+            ? dto.trabajo_realizado
+            : ordenExistente.trabajo_realizado,
+        observaciones_tecnico:
+          dto.observaciones_tecnico !== undefined
+            ? dto.observaciones_tecnico
+            : ordenExistente.observaciones_tecnico,
+        observaciones_cierre:
+          dto.observaciones_cierre !== undefined
+            ? dto.observaciones_cierre
+            : ordenExistente.observaciones_cierre,
+        requiere_firma_cliente:
+          dto.requiere_firma_cliente !== undefined
+            ? dto.requiere_firma_cliente
+            : ordenExistente.requiere_firma_cliente,
+        id_tecnico_asignado:
+          dto.id_tecnico_asignado !== undefined
+            ? dto.id_tecnico_asignado
+            : ordenExistente.id_tecnico_asignado,
         fecha_asignacion: fechaAsignacion,
         id_estado_actual: nuevoEstadoId,
         modificado_por: userId,
@@ -210,5 +243,21 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
           }
         : undefined,
     );
+
+    // 6. Re-siembra segura del plan de actividades si cambió el tipo de servicio y aún no hay ejecución en campo
+    if (
+      this.planSeeder &&
+      dto.id_tipo_servicio !== undefined &&
+      dto.id_tipo_servicio !== ordenExistente.id_tipo_servicio
+    ) {
+      await this.planSeeder.resembrarPlanSiCambioTipoServicio(undefined, {
+        idOrdenServicio: ordenId,
+        idTipoServicioAnterior: ordenExistente.id_tipo_servicio,
+        idTipoServicioNuevo: dto.id_tipo_servicio,
+        creadoPor: userId,
+      });
+    }
+
+    return ordenActualizada;
   }
 }

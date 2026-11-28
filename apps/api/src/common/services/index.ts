@@ -2,9 +2,9 @@
  * ============================================================================
  * COMMON SERVICES - Barrel Export
  * ============================================================================
- * 
+ *
  * Exporta todos los servicios comunes reutilizables:
- * 
+ *
  * - CommonServicesModule: Módulo global con todos los servicios
  * - NumeracionService: Generación de códigos automáticos
  * - MekanosFacadeService: Fachada unificada de servicios core (PDF, Email, Storage)
@@ -22,5 +22,5 @@
 export * from './common-services.module';
 export * from './mekanos-facade.service';
 export * from './numeracion.service';
+export * from './orden-plan-seeder.service';
 export * from './programacion-facade.service';
-

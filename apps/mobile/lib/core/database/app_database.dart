@@ -341,7 +341,11 @@ class Ordenes extends Table {
   BoolColumn get permiteEdicionTecnico =>
       boolean().withDefault(const Constant(false))();
 
-  // Sync control - CRÍTICO para offline-first
+  // Sync control - CRÍTICO para offline-first (v20: control monotónico incremental)
+  IntColumn get localVersion => integer().withDefault(const Constant(0))();
+  IntColumn get syncedVersion => integer().withDefault(const Constant(0))();
+  IntColumn get executionSyncVersion =>
+      integer().withDefault(const Constant(0))();
   BoolColumn get isDirty => boolean().withDefault(const Constant(false))();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -390,7 +394,14 @@ class ActividadesEjecutadas extends Table {
 
   DateTimeColumn get fechaEjecucion => dateTime().nullable()();
 
-  // Sync control
+  // Sync control (v20: identidad determinista + versionado monotónico + tombstones)
+  TextColumn get clientUuid => text().withLength(max: 64).nullable()();
+  IntColumn get localVersion => integer().withDefault(const Constant(1))();
+  IntColumn get inflightVersion => integer().withDefault(const Constant(0))();
+  IntColumn get syncedVersion => integer().withDefault(const Constant(0))();
+  TextColumn get payloadHash => text().withLength(max: 64).nullable()();
+  TextColumn get syncedPayloadHash => text().withLength(max: 64).nullable()();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
   BoolColumn get isDirty => boolean().withDefault(const Constant(false))();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -438,7 +449,14 @@ class Mediciones extends Table {
   DateTimeColumn get fechaMedicion =>
       dateTime().nullable()(); // Null hasta que se mida
 
-  // Sync control
+  // Sync control (v20: identidad determinista + versionado monotónico + tombstones)
+  TextColumn get clientUuid => text().withLength(max: 64).nullable()();
+  IntColumn get localVersion => integer().withDefault(const Constant(1))();
+  IntColumn get inflightVersion => integer().withDefault(const Constant(0))();
+  IntColumn get syncedVersion => integer().withDefault(const Constant(0))();
+  TextColumn get payloadHash => text().withLength(max: 64).nullable()();
+  TextColumn get syncedPayloadHash => text().withLength(max: 64).nullable()();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
   BoolColumn get isDirty => boolean().withDefault(const Constant(false))();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
 }
@@ -471,7 +489,17 @@ class Evidencias extends Table {
   DateTimeColumn get fechaCaptura =>
       dateTime().withDefault(currentDateAndTime)();
 
-  // Sync control
+  // Sync control (v20: identidad + dedup SHA-256 + proveedor agnóstico CLOUDINARY/R2)
+  TextColumn get clientUuid => text().withLength(max: 64).nullable()();
+  TextColumn get hashSha256 => text().withLength(max: 64).nullable()();
+  TextColumn get storageProvider => text().withLength(max: 20).nullable()();
+  TextColumn get storageKey => text().withLength(max: 500).nullable()();
+  IntColumn get localVersion => integer().withDefault(const Constant(1))();
+  IntColumn get inflightVersion => integer().withDefault(const Constant(0))();
+  IntColumn get syncedVersion => integer().withDefault(const Constant(0))();
+  TextColumn get payloadHash => text().withLength(max: 64).nullable()();
+  TextColumn get syncedPayloadHash => text().withLength(max: 64).nullable()();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
   BoolColumn get isDirty =>
       boolean().withDefault(const Constant(true))(); // Por defecto dirty
   BoolColumn get subida => boolean().withDefault(const Constant(false))();
@@ -495,7 +523,13 @@ class Firmas extends Table {
   TextColumn get documentoFirmante => text().nullable()();
   DateTimeColumn get fechaFirma => dateTime().withDefault(currentDateAndTime)();
 
-  // Sync control
+  // Sync control (v20: identidad + hash SHA-256 + versionado)
+  TextColumn get clientUuid => text().withLength(max: 64).nullable()();
+  TextColumn get hashSha256 => text().withLength(max: 64).nullable()();
+  IntColumn get localVersion => integer().withDefault(const Constant(1))();
+  IntColumn get inflightVersion => integer().withDefault(const Constant(0))();
+  IntColumn get syncedVersion => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
   BoolColumn get isDirty => boolean().withDefault(const Constant(true))();
   BoolColumn get subida => boolean().withDefault(const Constant(false))();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
@@ -524,7 +558,14 @@ class OrdenesPendientes extends Table {
       text().withLength(max: 20).withDefault(const Constant('PENDIENTE'))(); // PENDIENTE, EN_GESTION, RESUELTO, CANCELADO
   TextColumn get observaciones => text().nullable()();
 
-  // Timestamps y sincronización
+  // Timestamps y sincronización (v20: identidad determinista + versionado + tombstones)
+  TextColumn get clientUuid => text().withLength(max: 64).nullable()();
+  IntColumn get localVersion => integer().withDefault(const Constant(1))();
+  IntColumn get inflightVersion => integer().withDefault(const Constant(0))();
+  IntColumn get syncedVersion => integer().withDefault(const Constant(0))();
+  TextColumn get payloadHash => text().withLength(max: 64).nullable()();
+  TextColumn get syncedPayloadHash => text().withLength(max: 64).nullable()();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
   DateTimeColumn get fechaCreacion =>
       dateTime().withDefault(currentDateAndTime)();
   BoolColumn get isDirty => boolean().withDefault(const Constant(true))();
@@ -581,6 +622,38 @@ class OrdenesPendientesSync extends Table {
   ];
 }
 
+/// Tabla transaccional Outbox para Delta Sync incremental (v20)
+///
+/// Garantiza atomicidad local + coalescing por (entityType, entityClientUuid)
+/// y separación estricta en 3 carriles: METADATA (JSON), MEDIA (binario directo)
+/// y COMMIT (finalización atómica).
+class SyncOutbox extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get idOrdenLocal => integer().references(Ordenes, #idLocal)();
+  IntColumn get idOrdenBackend => integer().nullable()();
+
+  // METADATA | MEDIA | COMMIT
+  TextColumn get lane => text().withLength(max: 20)();
+  // ORDEN_INICIAR | ACTIVIDAD | MEDICION | OBSERVACION | PENDIENTE |
+  // EVIDENCIA_MEDIA | EVIDENCIA_META | FIRMA | ORDEN_FINALIZAR
+  TextColumn get entityType => text().withLength(max: 40)();
+  TextColumn get entityClientUuid => text().withLength(max: 64)();
+  // UPSERT | DELETE
+  TextColumn get operation =>
+      text().withLength(max: 20).withDefault(const Constant('UPSERT'))();
+  IntColumn get targetVersion => integer().withDefault(const Constant(1))();
+  TextColumn get payloadJson => text()();
+
+  // PENDING | IN_FLIGHT | FAILED
+  TextColumn get status =>
+      text().withLength(max: 20).withDefault(const Constant('PENDING'))();
+  IntColumn get attempts => integer().withDefault(const Constant(0))();
+  DateTimeColumn get nextRetryAt => dateTime().nullable()();
+  TextColumn get lastError => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
 // ============================================================================
 // DATABASE CLASS
 // ============================================================================
@@ -608,6 +681,7 @@ class OrdenesPendientesSync extends Table {
     // Control
     SyncStatusEntries,
     OrdenesPendientesSync,
+    SyncOutbox, // ✅ v20: Cola transaccional Delta Sync (Fase 0)
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -617,11 +691,46 @@ class AppDatabase extends _$AppDatabase {
       : super(executor ?? _openConnection(scopedUserId));
 
   @override
-  int get schemaVersion => 19; // v19: inputs declarativos // v18: autorizacion de edicion tecnica por orden // v17: Sistema Inteligente de Pendientes Técnicos
+  int get schemaVersion => 20; // v20: WAL + sync_outbox + control incremental // v19: inputs declarativos
+
+  /// Helper idempotente para agregar columnas en migraciones sin fallar si ya existen.
+  Future<void> _addColumnIfNotExists(
+    String tableName,
+    String columnName,
+    String sqlTypeAndDefault,
+  ) async {
+    final cols = await customSelect('PRAGMA table_info($tableName)').get();
+    final exists = cols.any((row) => row.read<String>('name') == columnName);
+    if (!exists) {
+      await customStatement(
+        'ALTER TABLE $tableName ADD COLUMN $columnName $sqlTypeAndDefault',
+      );
+    }
+  }
+
+  /// Crea los índices únicos y operativos requeridos tanto en instalaciones frescas
+  /// (`onCreate`) como en migraciones (`onUpgrade`).
+  Future<void> _ensureSyncIndexes() async {
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_ordenes_id_backend_unique ON ordenes(id_backend)',
+    );
+    await customStatement(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_outbox_pending_entity ON sync_outbox(entity_type, entity_client_uuid) WHERE status = 'PENDING'",
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sync_outbox_lane_status ON sync_outbox(lane, status, next_retry_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sync_outbox_orden_status ON sync_outbox(id_orden_local, status)',
+    );
+  }
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (Migrator m) => m.createAll(),
+    onCreate: (Migrator m) async {
+      await m.createAll();
+      await _ensureSyncIndexes();
+    },
     onUpgrade: (Migrator m, int from, int to) async {
       // En desarrollo: borrar y recrear tablas afectadas
       if (from < 2) {
@@ -800,9 +909,106 @@ class AppDatabase extends _$AppDatabase {
           'ALTER TABLE actividades_ejecutadas ADD COLUMN respuesta_json TEXT',
         );
       }
+      if (from < 20) {
+        // v20 (Fase 0): Cimientos Delta Sync Outbox + control incremental por ítem
+        // 1. Ordenes
+        await _addColumnIfNotExists('ordenes', 'local_version', 'INTEGER NOT NULL DEFAULT 0');
+        await _addColumnIfNotExists('ordenes', 'synced_version', 'INTEGER NOT NULL DEFAULT 0');
+        await _addColumnIfNotExists(
+          'ordenes',
+          'execution_sync_version',
+          'INTEGER NOT NULL DEFAULT 0',
+        );
+
+        // 2. ActividadesEjecutadas
+        await _addColumnIfNotExists('actividades_ejecutadas', 'client_uuid', 'TEXT');
+        await _addColumnIfNotExists(
+          'actividades_ejecutadas',
+          'local_version',
+          'INTEGER NOT NULL DEFAULT 1',
+        );
+        await _addColumnIfNotExists(
+          'actividades_ejecutadas',
+          'inflight_version',
+          'INTEGER NOT NULL DEFAULT 0',
+        );
+        await _addColumnIfNotExists(
+          'actividades_ejecutadas',
+          'synced_version',
+          'INTEGER NOT NULL DEFAULT 0',
+        );
+        await _addColumnIfNotExists('actividades_ejecutadas', 'payload_hash', 'TEXT');
+        await _addColumnIfNotExists('actividades_ejecutadas', 'synced_payload_hash', 'TEXT');
+        await _addColumnIfNotExists('actividades_ejecutadas', 'deleted_at', 'INTEGER');
+
+        // 3. Mediciones
+        await _addColumnIfNotExists('mediciones', 'client_uuid', 'TEXT');
+        await _addColumnIfNotExists('mediciones', 'local_version', 'INTEGER NOT NULL DEFAULT 1');
+        await _addColumnIfNotExists(
+          'mediciones',
+          'inflight_version',
+          'INTEGER NOT NULL DEFAULT 0',
+        );
+        await _addColumnIfNotExists('mediciones', 'synced_version', 'INTEGER NOT NULL DEFAULT 0');
+        await _addColumnIfNotExists('mediciones', 'payload_hash', 'TEXT');
+        await _addColumnIfNotExists('mediciones', 'synced_payload_hash', 'TEXT');
+        await _addColumnIfNotExists('mediciones', 'deleted_at', 'INTEGER');
+
+        // 4. Evidencias
+        await _addColumnIfNotExists('evidencias', 'client_uuid', 'TEXT');
+        await _addColumnIfNotExists('evidencias', 'hash_sha256', 'TEXT');
+        await _addColumnIfNotExists('evidencias', 'storage_provider', 'TEXT');
+        await _addColumnIfNotExists('evidencias', 'storage_key', 'TEXT');
+        await _addColumnIfNotExists('evidencias', 'local_version', 'INTEGER NOT NULL DEFAULT 1');
+        await _addColumnIfNotExists(
+          'evidencias',
+          'inflight_version',
+          'INTEGER NOT NULL DEFAULT 0',
+        );
+        await _addColumnIfNotExists('evidencias', 'synced_version', 'INTEGER NOT NULL DEFAULT 0');
+        await _addColumnIfNotExists('evidencias', 'payload_hash', 'TEXT');
+        await _addColumnIfNotExists('evidencias', 'synced_payload_hash', 'TEXT');
+        await _addColumnIfNotExists('evidencias', 'deleted_at', 'INTEGER');
+
+        // 5. Firmas
+        await _addColumnIfNotExists('firmas', 'client_uuid', 'TEXT');
+        await _addColumnIfNotExists('firmas', 'hash_sha256', 'TEXT');
+        await _addColumnIfNotExists('firmas', 'local_version', 'INTEGER NOT NULL DEFAULT 1');
+        await _addColumnIfNotExists('firmas', 'inflight_version', 'INTEGER NOT NULL DEFAULT 0');
+        await _addColumnIfNotExists('firmas', 'synced_version', 'INTEGER NOT NULL DEFAULT 0');
+        await _addColumnIfNotExists('firmas', 'deleted_at', 'INTEGER');
+
+        // 6. OrdenesPendientes
+        await _addColumnIfNotExists('ordenes_pendientes', 'client_uuid', 'TEXT');
+        await _addColumnIfNotExists(
+          'ordenes_pendientes',
+          'local_version',
+          'INTEGER NOT NULL DEFAULT 1',
+        );
+        await _addColumnIfNotExists(
+          'ordenes_pendientes',
+          'inflight_version',
+          'INTEGER NOT NULL DEFAULT 0',
+        );
+        await _addColumnIfNotExists(
+          'ordenes_pendientes',
+          'synced_version',
+          'INTEGER NOT NULL DEFAULT 0',
+        );
+        await _addColumnIfNotExists('ordenes_pendientes', 'payload_hash', 'TEXT');
+        await _addColumnIfNotExists('ordenes_pendientes', 'synced_payload_hash', 'TEXT');
+        await _addColumnIfNotExists('ordenes_pendientes', 'deleted_at', 'INTEGER');
+
+        // 7. Nueva tabla transaccional sync_outbox + índices seguros (incl. fix fresh-install)
+        await m.createTable(syncOutbox);
+        await _ensureSyncIndexes();
+      }
     },
     beforeOpen: (details) async {
-      // Habilitar foreign keys
+      // ✅ FASE 0: Blindaje multi-isolate SQLite (WAL + busy_timeout 10s + foreign_keys)
+      await customStatement('PRAGMA journal_mode = WAL');
+      await customStatement('PRAGMA synchronous = NORMAL');
+      await customStatement('PRAGMA busy_timeout = 10000');
       await customStatement('PRAGMA foreign_keys = ON');
 
       // ✅ FIX: Limpiar dato corrupto si existe (datetime guardado como TEXT en lugar de INT)
@@ -1655,6 +1861,9 @@ class AppDatabase extends _$AppDatabase {
       final backendId = idBackend ??
           (await (select(ordenes)..where((o) => o.idLocal.equals(idLocal))).getSingleOrNull())?.idBackend;
 
+      // 0. Eliminar mutaciones pendientes en sync_outbox (FK -> ordenes)
+      await (delete(syncOutbox)..where((o) => o.idOrdenLocal.equals(idLocal))).go();
+
       // 1. Eliminar pendientes técnicos
       await (delete(ordenesPendientes)..where((p) => p.idOrden.equals(idLocal))).go();
       if (backendId != null) {
@@ -1693,11 +1902,103 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ============================================================================
+  // MÉTODOS DE ACCESO - SYNC OUTBOX (v20 · DELTA SYNC)
+  // ============================================================================
+
+  /// Indica si la orden tiene al menos una mutación pendiente/en vuelo/fallida en sync_outbox.
+  Future<bool> hasPendingOutboxForOrden(int idOrdenLocal) async {
+    final rows = await (select(syncOutbox)
+          ..where((o) => o.idOrdenLocal.equals(idOrdenLocal))
+          ..limit(1))
+        .get();
+    return rows.isNotEmpty;
+  }
+
+  /// Cuenta mutaciones en cola para una orden local.
+  Future<int> countPendingOutboxByOrden(int idOrdenLocal) async {
+    final rows = await (select(syncOutbox)
+          ..where((o) => o.idOrdenLocal.equals(idOrdenLocal)))
+        .get();
+    return rows.length;
+  }
+
+  /// Obtiene todas las mutaciones en cola de una orden local ordenadas FIFO.
+  Future<List<SyncOutboxData>> getOutboxByOrden(int idOrdenLocal) {
+    return (select(syncOutbox)
+          ..where((o) => o.idOrdenLocal.equals(idOrdenLocal))
+          ..orderBy([(o) => OrderingTerm.asc(o.id)]))
+        .get();
+  }
+
+  /// Encola o realiza coalescing atómico de una mutación PENDING para (entityType, entityClientUuid).
+  Future<int> enqueueOrCoalesceOutbox({
+    required int idOrdenLocal,
+    int? idOrdenBackend,
+    required String lane,
+    required String entityType,
+    required String entityClientUuid,
+    String operation = 'UPSERT',
+    int targetVersion = 1,
+    required String payloadJson,
+  }) async {
+    return transaction(() async {
+      final existing = await (select(syncOutbox)
+            ..where(
+              (o) =>
+                  o.entityType.equals(entityType) &
+                  o.entityClientUuid.equals(entityClientUuid) &
+                  o.status.equals('PENDING'),
+            )
+            ..limit(1))
+          .getSingleOrNull();
+
+      final now = DateTime.now();
+      if (existing != null) {
+        await (update(syncOutbox)..where((o) => o.id.equals(existing.id))).write(
+          SyncOutboxCompanion(
+            idOrdenBackend: Value(idOrdenBackend ?? existing.idOrdenBackend),
+            lane: Value(lane),
+            operation: Value(operation),
+            targetVersion: Value(targetVersion),
+            payloadJson: Value(payloadJson),
+            nextRetryAt: const Value(null),
+            lastError: const Value(null),
+            updatedAt: Value(now),
+          ),
+        );
+        return existing.id;
+      }
+
+      return into(syncOutbox).insert(
+        SyncOutboxCompanion.insert(
+          idOrdenLocal: idOrdenLocal,
+          idOrdenBackend: Value(idOrdenBackend),
+          lane: lane,
+          entityType: entityType,
+          entityClientUuid: entityClientUuid,
+          operation: Value(operation),
+          targetVersion: Value(targetVersion),
+          payloadJson: payloadJson,
+          createdAt: Value(now),
+          updatedAt: Value(now),
+        ),
+      );
+    });
+  }
+
+  /// Limpia entradas de sync_outbox de una orden local.
+  Future<int> clearOutboxByOrden(int idOrdenLocal) {
+    return (delete(syncOutbox)..where((o) => o.idOrdenLocal.equals(idOrdenLocal)))
+        .go();
+  }
+
+  // ============================================================================
   // UTILIDADES
   // ============================================================================
 
   /// Limpiar toda la base de datos (para logout o reset)
   Future<void> clearAllData() async {
+    await delete(syncOutbox).go();
     await delete(ordenesPendientesSync).go();
     await delete(ordenesPendientes).go();
     await delete(firmas).go();

@@ -144,6 +144,10 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
     final authState = ref.watch(authStateProvider);
     final branding = ref.watch(brandingProvider);
     final user = authState.user;
+    if (user != null) {
+      // Mantener vivo el SyncLifecycleManager mientras el técnico esté autenticado
+      ref.watch(syncLifecycleManagerProvider(user.syncId));
+    }
     final syncState = ref.watch(syncStateProvider);
     final statsAsync = ref.watch(quickStatsProvider);
     final theme = Theme.of(context);

@@ -18,6 +18,7 @@ import 'core/api/api_client.dart';
 import 'core/config/branding_provider.dart';
 import 'core/config/supabase_config.dart';
 import 'core/errors/user_friendly_error.dart';
+import 'core/lifecycle/lifecycle.dart';
 import 'core/sync/sync_notification_service.dart';
 import 'features/auth/data/auth_models.dart';
 import 'features/auth/data/auth_provider.dart';
@@ -151,31 +152,33 @@ class _EamMobileAppState extends ConsumerState<EamMobileApp> {
       }
     });
 
-    return MaterialApp(
-      title: branding.nombreComercial,
-      debugShowCheckedModeBanner: false,
-      scaffoldMessengerKey:
-          scaffoldMessengerKey, // ✅ ENTERPRISE: Key global para SnackBars
-      // Localizaciones para DatePicker y otros widgets Material
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('es', 'CO'), // Español Colombia
-        Locale('es', 'MX'),
-        Locale('es', ''), // Español genérico
-        Locale('en', 'US'),
-        Locale('en', ''), // Inglés fallback
-      ],
-      locale: branding.materialLocale,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: branding.colorPrimario),
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(centerTitle: true, elevation: 2),
+    return LifecycleObserverWrapper(
+      child: MaterialApp(
+        title: branding.nombreComercial,
+        debugShowCheckedModeBanner: false,
+        scaffoldMessengerKey:
+            scaffoldMessengerKey, // ✅ ENTERPRISE: Key global para SnackBars
+        // Localizaciones para DatePicker y otros widgets Material
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('es', 'CO'), // Español Colombia
+          Locale('es', 'MX'),
+          Locale('es', ''), // Español genérico
+          Locale('en', 'US'),
+          Locale('en', ''), // Inglés fallback
+        ],
+        locale: branding.materialLocale,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: branding.colorPrimario),
+          useMaterial3: true,
+          appBarTheme: const AppBarTheme(centerTitle: true, elevation: 2),
+        ),
+        home: const AuthWrapper(),
       ),
-      home: const AuthWrapper(),
     );
   }
 }

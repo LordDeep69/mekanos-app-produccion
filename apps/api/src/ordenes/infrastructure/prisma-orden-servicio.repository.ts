@@ -1,5 +1,6 @@
 import { PrismaService } from '@mekanos/database';
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
+import { OrdenPlanSeederService } from '../../common/services/orden-plan-seeder.service';
 import { reserveNextSequenceCounter } from '../../common/utils/sequence-counter.helper';
 import {
   ACCION_MODIFICAR_OBSERVACIONES_CIERRE,
@@ -19,7 +20,14 @@ import {
  */
 @Injectable()
 export class PrismaOrdenServicioRepository {
-  constructor(private prisma: PrismaService) {}
+  private readonly planSeeder: OrdenPlanSeederService;
+
+  constructor(
+    private prisma: PrismaService,
+    @Optional() planSeeder?: OrdenPlanSeederService,
+  ) {
+    this.planSeeder = planSeeder ?? new OrdenPlanSeederService(prisma);
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 🔤 NORMALIZACIÓN DE TEXTO PARA BÚSQUEDAS (19-SEP-2026)
@@ -850,38 +858,20 @@ export class PrismaOrdenServicioRepository {
   }
 
   /**
-   * Auto-siembra el plan de actividades inicial para la orden si el tipo de servicio tiene catálogo activo.
+   * Auto-siembra el plan de actividades inicial para la orden delegando al servicio unificado OrdenPlanSeederService.
    */
   private async autoSembrarPlanActividades(
     tx: any,
     idOrdenServicio: number,
     idTipoServicio: number | null | undefined,
+    creadoPor?: number | null,
   ): Promise<void> {
-    if (!idTipoServicio) return;
-    try {
-      const actividadesBase = await tx.catalogo_actividades.findMany({
-        where: {
-          id_tipo_servicio: Number(idTipoServicio),
-          activo: true,
-        },
-        orderBy: { orden_ejecucion: 'asc' },
-      });
-
-      if (actividadesBase.length > 0) {
-        await tx.ordenes_actividades_plan.createMany({
-          data: actividadesBase.map((act: any, idx: number) => ({
-            id_orden_servicio: idOrdenServicio,
-            id_actividad_catalogo: act.id_actividad_catalogo,
-            orden_secuencia: act.orden_ejecucion ?? idx + 1,
-            origen: 'ADMIN',
-            es_obligatoria: act.es_obligatoria ?? true,
-          })),
-          skipDuplicates: true,
-        });
-      }
-    } catch (errPlan) {
-      // Fallback silencioso para no bloquear creación de orden
-    }
+    await this.planSeeder.sembrarPlanParaOrden(tx, {
+      idOrdenServicio,
+      idTipoServicio,
+      creadoPor,
+      origen: 'ADMIN',
+    });
   }
 
   /**
@@ -1091,8 +1081,8 @@ export class PrismaOrdenServicioRepository {
 
       return ordenActualizada;
     } else {
-      // CREATE: Nueva orden
-      return this.prisma.ordenes_servicio.create({
+      // CREATE: Nueva orden (transaccional con siembra automática del plan de actividades)
+      const createdOrden = await this.prisma.ordenes_servicio.create({
         data: {
           numero_orden: dbData.numero_orden,
           id_cliente: dbData.id_cliente,
@@ -1115,6 +1105,17 @@ export class PrismaOrdenServicioRepository {
         },
         // ❌ ELIMINADO include pesado - evita timeout en CREATE
       });
+
+      if (createdOrden?.id_orden_servicio && dbData.id_tipo_servicio) {
+        await this.autoSembrarPlanActividades(
+          this.prisma,
+          createdOrden.id_orden_servicio,
+          dbData.id_tipo_servicio,
+          dbData.creado_por,
+        );
+      }
+
+      return createdOrden;
     }
   }
 

@@ -16,9 +16,16 @@
  */
 
 import { PrismaService } from '@mekanos/database';
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { criterio_intervalo_enum, estado_contrato_enum, periodicidad_enum } from '@prisma/client';
 import { DocumentType, NumeracionService } from './numeracion.service';
+import { OrdenPlanSeederService } from './orden-plan-seeder.service';
 
 // ==================== TIPOS DE ENTRADA ====================
 
@@ -129,10 +136,15 @@ export class ProgramacionFacadeService {
     return error instanceof Error ? error.message : String(error);
   }
 
+  private readonly planSeeder: OrdenPlanSeederService;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly numeracionService: NumeracionService,
-  ) {}
+    @Optional() planSeeder?: OrdenPlanSeederService,
+  ) {
+    this.planSeeder = planSeeder ?? new OrdenPlanSeederService(prisma);
+  }
 
   // ==================== FSM CONTRATOS ====================
 
@@ -606,6 +618,14 @@ export class ProgramacionFacadeService {
             fecha_programada: cronograma.fecha_prevista,
             creado_por: 1, // Sistema
           },
+        });
+
+        // Sembrar plan de actividades esperado de forma idempotente (Fase 0)
+        await this.planSeeder.sembrarPlanParaOrden(this.prisma, {
+          idOrdenServicio: orden.id_orden_servicio,
+          idTipoServicio: cronograma.tipo_servicio_programado,
+          creadoPor: 1,
+          origen: 'ADMIN',
         });
 
         // Actualizar cronograma

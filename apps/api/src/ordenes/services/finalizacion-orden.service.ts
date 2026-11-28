@@ -643,6 +643,44 @@ export class FinalizacionOrdenService {
 
       const commitOutcome = await this.prisma.$transaction(
         async (tx) => {
+          // 0. 🛡️ BLINDAJE ANTI-TOCTOU (Fase 0): Lock pesimista a nivel de fila `FOR UPDATE OF o`
+          // Serializa finalizaciones concurrentes sobre la misma orden antes de cualquier escritura o limpieza.
+          if (typeof (tx as any).$queryRaw === 'function') {
+            const lockedRows = await (tx as any).$queryRaw<
+              Array<{
+                id_estado_actual: number;
+                edicion_tecnico_habilitada: boolean;
+                codigo_estado: string;
+              }>
+            >`
+              SELECT o.id_estado_actual, o.edicion_tecnico_habilitada, e.codigo_estado
+              FROM ordenes_servicio o
+              INNER JOIN estados_orden e ON e.id_estado = o.id_estado_actual
+              WHERE o.id_orden_servicio = ${orden.id_orden_servicio}
+              FOR UPDATE OF o
+            `;
+            const locked = lockedRows?.[0];
+            if (locked) {
+              const esResubidaLock =
+                locked.codigo_estado === 'COMPLETADA' && locked.edicion_tecnico_habilitada === true;
+              if (
+                (locked.codigo_estado === 'COMPLETADA' || locked.codigo_estado === 'APROBADA') &&
+                !esResubidaLock
+              ) {
+                this.logger.warn(
+                  `🔒 [ANTI-TOCTOU] Orden ${orden.numero_orden} ya finalizada concurrentemente (${locked.codigo_estado}). Omitiendo commit duplicado.`,
+                );
+                return {
+                  alreadyCompleted: true as const,
+                  estadoActual: locked.codigo_estado,
+                  evidencias: [] as Array<{ id: number; tipo: string; url: string }>,
+                  firmas: [] as Array<{ id: number; tipo: string }>,
+                  documento: null as { id: number } | null,
+                };
+              }
+            }
+          }
+
           // 1. Limpieza de residuales previos (segura dentro de tx: si algo falla, se revierte)
           await this.limpiarDatosPreviosOrden(orden, tx);
 
@@ -738,6 +776,8 @@ export class FinalizacionOrdenService {
           );
 
           return {
+            alreadyCompleted: false as const,
+            estadoActual: 'COMPLETADA',
             evidencias: evDb,
             firmas: frmDb,
             documento: docDb,
@@ -745,6 +785,51 @@ export class FinalizacionOrdenService {
         },
         { timeout: 30000 },
       );
+
+      if (commitOutcome.alreadyCompleted) {
+        const estadoFinal = commitOutcome.estadoActual || 'COMPLETADA';
+        emitProgress(
+          'actualizando_estado',
+          'completed',
+          `La orden ya se encuentra ${estadoFinal.toLowerCase()}`,
+          94,
+        );
+        emitProgress(
+          'completado',
+          'completed',
+          `La orden ${orden.numero_orden} ya se encuentra ${estadoFinal.toLowerCase()} en el servidor`,
+          100,
+          {
+            tiempoTotal: Date.now() - startTime,
+            ordenId: orden.id_orden_servicio,
+            numeroOrden: orden.numero_orden,
+            numeroVisitaCaso: (orden as any).numero_visita_caso || 1,
+            tipoVisita: (orden as any).tipo_visita || 'INICIAL',
+            numeroOrdenPadre: (orden as any).orden_padre?.numero_orden || undefined,
+            modo: dto.modo || 'COMPLETO',
+          },
+        );
+        return {
+          success: true,
+          mensaje: `La orden ${orden.numero_orden} ya se encuentra ${estadoFinal.toLowerCase()} en el servidor`,
+          datos: {
+            orden: {
+              id: orden.id_orden_servicio,
+              numero: orden.numero_orden,
+              estado: estadoFinal,
+            },
+            evidencias: [],
+            firmas: [],
+            documento: null,
+            email: {
+              enviado: false,
+              destinatario: '',
+            },
+            modo: dto.modo || 'COMPLETO',
+          },
+          tiempoTotal: Date.now() - startTime,
+        };
+      }
 
       evidenciasResultado = commitOutcome.evidencias;
       firmasResultado = commitOutcome.firmas;

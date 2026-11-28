@@ -1,6 +1,7 @@
 import { PrismaService } from '@mekanos/database';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, Optional } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { OrdenPlanSeederService } from '../../../common/services/orden-plan-seeder.service';
 import { ConvertirPropuestaOrdenCommand } from './convertir-propuesta-orden.command';
 
 /**
@@ -19,7 +20,14 @@ import { ConvertirPropuestaOrdenCommand } from './convertir-propuesta-orden.comm
 export class ConvertirPropuestaOrdenHandler
   implements ICommandHandler<ConvertirPropuestaOrdenCommand>
 {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly planSeeder: OrdenPlanSeederService;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() planSeeder?: OrdenPlanSeederService,
+  ) {
+    this.planSeeder = planSeeder ?? new OrdenPlanSeederService(prisma);
+  }
 
   async execute(command: ConvertirPropuestaOrdenCommand) {
     const { idPropuesta, convertidaPor } = command;
@@ -112,6 +120,21 @@ export class ConvertirPropuestaOrdenHandler
 
     // PASO 6: Crear orden servicio + actualizar propuesta en transacción
     const result = await this.prisma.$transaction(async (prisma) => {
+      // 6.0. Resolver tipo de servicio correctivo (o heredar el de la orden origen)
+      const tipoServicioCorrectivo = await prisma.tipos_servicio.findFirst({
+        where: {
+          activo: true,
+          OR: [
+            { codigo_tipo: { contains: 'CORR', mode: 'insensitive' } },
+            { nombre_tipo: { contains: 'CORRECTIVO', mode: 'insensitive' } },
+          ],
+        },
+        select: { id_tipo_servicio: true },
+        orderBy: { id_tipo_servicio: 'asc' },
+      });
+      const idTipoServicioTarget =
+        tipoServicioCorrectivo?.id_tipo_servicio ?? ordenOrigen.id_tipo_servicio ?? null;
+
       // 6.1. Crear orden servicio desde propuesta
       const idEquipoTarget = propuesta.id_equipo ?? ordenOrigen.id_equipo;
       const ordenServicio = await prisma.ordenes_servicio.create({
@@ -120,6 +143,7 @@ export class ConvertirPropuestaOrdenHandler
           id_cliente: propuesta.id_cliente,
           id_sede: ordenOrigen.id_sede,
           id_equipo: idEquipoTarget,
+          id_tipo_servicio: idTipoServicioTarget,
           id_estado_actual: estadoProgramada.id_estado,
           descripcion_inicial: propuesta.solucion_propuesta,
           prioridad: propuesta.prioridad || 'NORMAL',
@@ -138,6 +162,16 @@ export class ConvertirPropuestaOrdenHandler
             id_equipo: idEquipoTarget,
             orden_secuencia: 1,
           },
+        });
+      }
+
+      // 6.1.c Sembrar plan de actividades esperado de forma idempotente (Fase 0)
+      if (idTipoServicioTarget) {
+        await this.planSeeder.sembrarPlanParaOrden(prisma, {
+          idOrdenServicio: ordenServicio.id_orden_servicio,
+          idTipoServicio: idTipoServicioTarget,
+          creadoPor: convertidaPor,
+          origen: 'ADMIN',
         });
       }
 

@@ -366,10 +366,32 @@ class SmartSyncService {
           continue;
         }
 
-        // (3) Órdenes activas: lógica histórica de comparación.
+        // (3) Órdenes activas: proteger trabajo offline local (isDirty / POR_SUBIR / outbox pendiente).
+        final tieneTrabajoLocalPendiente =
+            ordenLocal.isDirty ||
+            ordenLocal.idEstado == -1 ||
+            await _db.hasPendingOutboxForOrden(ordenLocal.idLocal);
+
         final idEstadoLocalEsperado = estadosMap[ordenServidor.estadoCodigo];
 
-        if (idEstadoLocalEsperado != null &&
+        if (tieneTrabajoLocalPendiente) {
+          // Nunca pisar estado local (ej. EN_PROCESO iniciado offline o POR_SUBIR) con ASIGNADA del servidor.
+          if (ordenServidor.idCliente != null &&
+              ordenServidor.nombreCliente != null) {
+            await _db.upsertCliente(
+              ClientesCompanion(
+                id: Value(ordenServidor.idCliente!),
+                nombre: Value(ordenServidor.nombreCliente!),
+                lastSyncedAt: Value(DateTime.now()),
+              ),
+            );
+          }
+          debugPrint(
+            '   🛡️ ${ordenServidor.numeroOrden}: Protegida contra sobrescritura '
+            '(isDirty=${ordenLocal.isDirty}, idEstado=${ordenLocal.idEstado})',
+          );
+          omitidas++;
+        } else if (idEstadoLocalEsperado != null &&
             ordenLocal.idEstado != idEstadoLocalEsperado) {
           // Estado diferente → DESCARGAR
           debugPrint(
@@ -566,6 +588,17 @@ class SmartSyncService {
           final idEstadoLocal = estadosMap[ordenResumen.estadoCodigo];
 
           if (ordenLocal != null && idEstadoLocal != null) {
+            final tieneTrabajoLocal =
+                ordenLocal.isDirty ||
+                ordenLocal.idEstado == -1 ||
+                await _db.hasPendingOutboxForOrden(ordenLocal.idLocal);
+            if (tieneTrabajoLocal && !ordenResumen.esEstadoFinal) {
+              debugPrint(
+                '   🛡️ ${ordenResumen.numeroOrden}: Omitiendo updateOrdenEstadoYPdf por trabajo local pendiente',
+              );
+              omitidas++;
+              continue;
+            }
             // ORDEN EXISTENTE: Solo actualizar estado y PDF (sin HTTP)
             // ✅ LOGGING: Verificar si urlPdf viene del servidor
             debugPrint(
@@ -860,23 +893,93 @@ class SmartSyncService {
 
     // Verificar si ya existe
     final existente = ordenesExistentes[idBackend];
+    late final int idOrdenLocalFinal;
 
     if (existente != null) {
-      // Actualizar existente
-      await _db.updateOrden(ordenCompanion, existente.idLocal);
+      final tieneTrabajoLocal =
+          existente.isDirty ||
+          existente.idEstado == -1 ||
+          await _db.hasPendingOutboxForOrden(existente.idLocal);
+      if (tieneTrabajoLocal) {
+        // Proteger estado y campos editados localmente mientras sincronizan sus deltas
+        final ordenProtegida = ordenCompanion.copyWith(
+          idEstado: Value(existente.idEstado),
+          isDirty: const Value(true),
+          fechaInicio: existente.fechaInicio != null
+              ? Value(existente.fechaInicio)
+              : ordenCompanion.fechaInicio,
+          horaEntradaTexto: existente.horaEntradaTexto != null
+              ? Value(existente.horaEntradaTexto)
+              : ordenCompanion.horaEntradaTexto,
+          observacionesTecnico: existente.observacionesTecnico != null
+              ? Value(existente.observacionesTecnico)
+              : ordenCompanion.observacionesTecnico,
+          trabajoRealizado: existente.trabajoRealizado != null
+              ? Value(existente.trabajoRealizado)
+              : ordenCompanion.trabajoRealizado,
+          razonFalla: existente.razonFalla != null
+              ? Value(existente.razonFalla)
+              : ordenCompanion.razonFalla,
+        );
+        await _db.updateOrden(ordenProtegida, existente.idLocal);
+      } else {
+        await _db.updateOrden(ordenCompanion, existente.idLocal);
+      }
+      idOrdenLocalFinal = existente.idLocal;
     } else {
       // Insertar nueva
-      await _db.insertOrdenFromSync(ordenCompanion);
+      idOrdenLocalFinal = await _db.insertOrdenFromSync(ordenCompanion);
     }
+
+    // ✅ FASE 0: Guardar plan de actividades de la orden (paridad con SyncService)
+    final planData = ordenData['actividadesPlan'] as List?;
+    await _guardarPlanActividades(idOrdenLocalFinal, planData);
 
     // ✅ FIX 28-ENE-2026: Guardar equipos de la orden (multi-equipos)
     // CRÍTICO: Este paso faltaba, causando que órdenes multiequipo
     // no se renderizaran correctamente cuando se sincronizaban via Smart Sync
     final equiposData = ordenData['ordenesEquipos'] as List?;
     debugPrint(
-      '🔧 [SMART SYNC] Orden ${ordenData['numeroOrden']} (ID $idBackend) - ordenesEquipos: ${equiposData?.length ?? 0}',
+      '🔧 [SMART SYNC] Orden ${ordenData['numeroOrden']} (ID $idBackend) - ordenesEquipos: ${equiposData?.length ?? 0}, actividadesPlan: ${planData?.length ?? 0}',
     );
     await _guardarOrdenesEquipos(idBackend, equiposData);
+  }
+
+  /// ✅ FASE 0: Persiste `actividadesPlan` en SmartSync con validación FK segura
+  Future<void> _guardarPlanActividades(int idOrdenLocal, List? planData) async {
+    if (planData == null || planData.isEmpty) {
+      await _db.clearPlanActividades(idOrdenLocal);
+      return;
+    }
+
+    // Verificar qué actividades existen en el catálogo local para evitar fallo FK
+    final catalogoLocal = await _db.getAllActividadesCatalogo();
+    final idsCatalogoValidos = catalogoLocal.map((a) => a.id).toSet();
+
+    await _db.clearPlanActividades(idOrdenLocal);
+    int insertadas = 0;
+    for (final item in planData) {
+      if (item is! Map) continue;
+      final idActividadCatalogo = item['idActividadCatalogo'] as int?;
+      if (idActividadCatalogo == null) continue;
+      if (!idsCatalogoValidos.contains(idActividadCatalogo)) {
+        debugPrint(
+          '⚠️ [SMART SYNC] Omitiendo actividad plan $idActividadCatalogo (aún no presente en catalogo local)',
+        );
+        continue;
+      }
+      await _db.insertActividadPlan(
+        ActividadesPlanCompanion(
+          idOrden: Value(idOrdenLocal),
+          idActividadCatalogo: Value(idActividadCatalogo),
+          ordenSecuencia: Value(item['ordenSecuencia'] as int? ?? (insertadas + 1)),
+          origen: Value(item['origen'] as String? ?? 'ADMIN'),
+          esObligatoria: Value(item['esObligatoria'] as bool? ?? true),
+          lastSyncedAt: Value(DateTime.now()),
+        ),
+      );
+      insertadas++;
+    }
   }
 
   /// Parsea DateTime de string ISO o null
@@ -1101,7 +1204,20 @@ class SmartSyncService {
         } catch (_) {}
       }
 
-      // 3. Eliminar registros de BD (en orden por FK)
+      // 3. Eliminar registros de BD (en orden estricto por FK)
+      await (_db.delete(
+        _db.syncOutbox,
+      )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).go();
+
+      await (_db.delete(
+        _db.ordenesPendientes,
+      )..where((p) => p.idOrden.equals(idOrdenLocal))).go();
+      if (idBackend != null) {
+        await (_db.delete(
+          _db.ordenesPendientes,
+        )..where((p) => p.idOrdenBackend.equals(idBackend))).go();
+      }
+
       await (_db.delete(
         _db.evidencias,
       )..where((e) => e.idOrden.equals(idOrdenLocal))).go();

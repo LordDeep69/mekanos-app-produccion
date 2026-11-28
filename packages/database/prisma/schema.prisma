@@ -30,6 +30,11 @@ model actividades_ejecutadas {
   id_orden_equipo          Int?
   excluido_pdf             Boolean                   @default(false)
   respuesta_json           Json?
+  client_uuid              String?                   @unique(map: "uq_actividades_ejecutadas_client_uuid") @db.Uuid
+  sync_version             Int                       @default(1)
+  payload_hash             String?                   @db.VarChar(64)
+  updated_by_device_at     DateTime?                 @db.Timestamp(6)
+  deleted_at               DateTime?                 @db.Timestamp(6)
   empleados                empleados?                @relation(fields: [ejecutada_por], references: [id_empleado])
   catalogo_actividades     catalogo_actividades?     @relation(fields: [id_actividad_catalogo], references: [id_actividad_catalogo])
   ordenes_equipos          ordenes_equipos?          @relation(fields: [id_orden_equipo], references: [id_orden_equipo])
@@ -781,6 +786,7 @@ model empleados {
   propuestas_correctivo                                            propuestas_correctivo[]
   ordenes_pendientes_creados                                       ordenes_pendientes[]         @relation("ordenes_pendientes_creado_porToempleados")
   ordenes_pendientes_resueltos                                     ordenes_pendientes[]         @relation("ordenes_pendientes_resuelto_porToempleados")
+  dispositivos_push_tecnicos                                       dispositivos_push_tecnicos[]
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -1114,6 +1120,12 @@ model evidencias_fotograficas {
   fecha_registro         DateTime?               @default(now()) @db.Timestamp(6)
   id_orden_equipo        Int?
   id_lote_galeria        Int?
+  client_uuid            String?                 @unique(map: "uq_evidencias_fotograficas_client_uuid") @db.Uuid
+  sync_version           Int                     @default(1)
+  payload_hash           String?                 @db.VarChar(64)
+  storage_provider       String                  @default("CLOUDINARY") @db.VarChar(20)
+  storage_key            String?                 @db.VarChar(500)
+  deleted_at             DateTime?               @db.Timestamp(6)
   empleados              empleados?              @relation(fields: [capturada_por], references: [id_empleado])
   actividades_ejecutadas actividades_ejecutadas? @relation(fields: [id_actividad_ejecutada], references: [id_actividad_ejecutada])
   ordenes_equipos        ordenes_equipos?        @relation(fields: [id_orden_equipo], references: [id_orden_equipo])
@@ -1505,6 +1517,10 @@ model mediciones_servicio {
   fecha_registro        DateTime?           @default(now()) @db.Timestamp(6)
   id_orden_equipo       Int?
   excluido_pdf          Boolean             @default(false)
+  client_uuid           String?             @unique(map: "uq_mediciones_servicio_client_uuid") @db.Uuid
+  sync_version          Int                 @default(1)
+  payload_hash          String?             @db.VarChar(64)
+  deleted_at            DateTime?           @db.Timestamp(6)
   ordenes_equipos       ordenes_equipos?    @relation(fields: [id_orden_equipo], references: [id_orden_equipo])
   ordenes_servicio      ordenes_servicio    @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
   parametros_medicion   parametros_medicion @relation(fields: [id_parametro_medicion], references: [id_parametro_medicion], onDelete: NoAction)
@@ -1614,6 +1630,7 @@ model ordenes_actividades_plan {
   catalogo_actividades    catalogo_actividades        @relation(fields: [id_actividad_catalogo], references: [id_actividad_catalogo], onDelete: NoAction, map: "fk_plan_actividad")
   ordenes_servicio        ordenes_servicio            @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade, map: "fk_plan_orden")
 
+  @@unique([id_orden_servicio, id_actividad_catalogo], map: "uq_ordenes_actividades_plan_orden_act")
   @@index([id_orden_servicio, orden_secuencia], map: "idx_plan_orden_secuencia")
 }
 
@@ -1717,6 +1734,8 @@ model ordenes_servicio {
   numero_visita_caso                                                                       Int?                        @default(1)
   nombre_caso                                                                              String?                     @db.VarChar(250)
   estado_caso                                                                              String?                     @default("ABIERTO") @db.VarChar(30)
+  execution_sync_version                                                                   Int                         @default(0)
+  ultima_actividad_tecnico_at                                                              DateTime?                   @db.Timestamp(6)
   actividades_ejecutadas                                                                   actividades_ejecutadas[]
   componentes_usados                                                                       componentes_usados[]
   cotizaciones                                                                             cotizaciones[]
@@ -1758,6 +1777,7 @@ model ordenes_servicio {
   @@index([id_firma_tecnico], map: "idx_ordenes_firma_tecnico")
   @@index([prioridad, id_estado_actual], map: "idx_ordenes_prioridad_estado")
   @@index([id_orden_padre], map: "idx_os_orden_padre")
+  @@index([ultima_actividad_tecnico_at(sort: Desc)], map: "idx_os_ultima_actividad_tecnico")
 }
 
 model historial_emails_enviados {
@@ -2304,6 +2324,7 @@ model usuarios {
   persona                                              personas             @relation(fields: [id_persona], references: [id_persona], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuarios_persona")
   usuarios_roles                                       usuarios_roles[]
   historial_costos_compra                              historial_costos_compra[]
+  dispositivos_push_tecnicos                           dispositivos_push_tecnicos[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -3126,6 +3147,10 @@ model ordenes_pendientes {
   fecha_resolucion                                            DateTime?                    @db.Timestamp(6)
   resuelto_por                                                Int?
   observaciones_resolucion                                    String?
+  client_uuid                                                 String?                      @unique(map: "uq_ordenes_pendientes_client_uuid") @db.Uuid
+  sync_version                                                Int                          @default(1)
+  payload_hash                                                String?                      @db.VarChar(64)
+  deleted_at                                                  DateTime?                    @db.Timestamp(6)
   catalogo_pendientes                                         catalogo_pendientes?         @relation(fields: [id_pendiente_catalogo], references: [id_pendiente_catalogo])
   clientes                                                    clientes                     @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
   equipos                                                     equipos?                     @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
@@ -3717,4 +3742,27 @@ model tipos_oferta_cotizacion {
   fecha_modificacion DateTime @default(now()) @updatedAt @db.Timestamp(6)
 
   @@map("tipos_oferta_cotizacion")
+}
+
+/// Dispositivos móviles registrados para recibir pings silenciosos FCM (data-only WAKE_SYNC)
+/// sin exponer datos sensibles de negocio en servidores de terceros.
+model dispositivos_push_tecnicos {
+  id             Int        @id @default(autoincrement())
+  id_usuario     Int
+  id_empleado    Int?
+  fcm_token      String     @unique(map: "uq_dispositivos_push_fcm_token") @db.VarChar(500)
+  plataforma     String     @db.VarChar(20)
+  device_id      String?    @db.VarChar(150)
+  app_version    String?    @db.VarChar(50)
+  activo         Boolean    @default(true)
+  ultimo_ping_at DateTime?  @db.Timestamp(6)
+  created_at     DateTime   @default(now()) @db.Timestamp(6)
+  updated_at     DateTime   @default(now()) @updatedAt @db.Timestamp(6)
+  usuarios       usuarios   @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade, map: "fk_dispositivos_push_usuario")
+  empleados      empleados? @relation(fields: [id_empleado], references: [id_empleado], onDelete: SetNull, map: "fk_dispositivos_push_empleado")
+
+  @@index([id_usuario, activo], map: "idx_dispositivos_push_usuario_activo")
+  @@index([id_empleado, activo], map: "idx_dispositivos_push_empleado_activo")
+  @@index([device_id], map: "idx_dispositivos_push_device_id")
+  @@map("dispositivos_push_tecnicos")
 }

@@ -8,6 +8,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// ✅ FASE 0 (FCM): Aplicar Google Services automáticamente apenas exista google-services.json
+// sin romper compilaciones locales/CI mientras el archivo de proyecto Firebase aún no está presente.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // ✅ 24-OCT-2026: Firma release estable y persistente.
 // key.properties vive en android/ y está excluido de Git junto con key.jks.
 // Si no existe (por ejemplo en otro equipo), se usa debug como fallback para
