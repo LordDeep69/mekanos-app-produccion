@@ -82,10 +82,20 @@ function isPropuestaAprobada(p?: PropuestaCorrectivoItem | null): boolean {
   );
 }
 
+const URGENCIA_TO_PRIORIDAD: Record<'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA', number> = {
+  BAJA: 2,
+  MEDIA: 3,
+  ALTA: 4,
+  CRITICA: 5,
+};
+
+type EstadoVistaPropuesta = 'PENDIENTES' | 'ESCALADAS' | 'CONVERTIDAS' | 'TODAS';
+
 export default function PropuestasCorrectivoPage() {
   const isHydrated = useIsHydrated();
   const { formatCurrency, formatDate } = useOrgFormatters();
 
+  const [estadoVista, setEstadoVista] = useState<EstadoVistaPropuesta>('PENDIENTES');
   const [tipoFiltro, setTipoFiltro] = useState<string>('TODOS');
   const [urgenciaFiltro, setUrgenciaFiltro] = useState<string>('TODOS');
   const [selectedPropuesta, setSelectedPropuesta] = useState<PropuestaCorrectivoItem | null>(null);
@@ -96,7 +106,6 @@ export default function PropuestasCorrectivoPage() {
     'CORRECTIVO',
   );
   const [urgencia, setUrgencia] = useState<'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA'>('ALTA');
-  const [prioridad, setPrioridad] = useState<string>('4');
   const [tiempoDias, setTiempoDias] = useState<string>('3');
   const [creadaPorId, setCreadaPorId] = useState<string>('');
   const [hallazgo, setHallazgo] = useState('');
@@ -105,6 +114,7 @@ export default function PropuestasCorrectivoPage() {
   const { data, isLoading, refetch } = usePropuestasPendientes({
     tipoPropuesta: tipoFiltro !== 'TODOS' ? tipoFiltro : undefined,
     urgencia: urgenciaFiltro !== 'TODOS' ? urgenciaFiltro : undefined,
+    estadoVista,
     take: 100,
   });
   const { data: ordenesData } = useOrdenes({ estado: 'EN_PROCESO', limit: 50 });
@@ -141,7 +151,7 @@ export default function PropuestasCorrectivoPage() {
         id_orden_servicio: Number(ordenId),
         tipo_propuesta: tipoPropuesta,
         urgencia_propuesta: urgencia,
-        prioridad: Number(prioridad) || 3,
+        prioridad: URGENCIA_TO_PRIORIDAD[urgencia],
         tiempo_estimado_ejecucion: Number(tiempoDias) || 1,
         creada_por: Number(creadaPorId),
         descripcion_hallazgo: hallazgo.trim(),
@@ -212,7 +222,30 @@ export default function PropuestasCorrectivoPage() {
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 space-y-3">
+          {/* Tabs de Ciclo de Vida */}
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 pb-3">
+            {(
+              [
+                { value: 'PENDIENTES', label: 'Pendientes' },
+                { value: 'ESCALADAS', label: 'Escaladas a COT' },
+                { value: 'CONVERTIDAS', label: 'Convertidas a OS' },
+                { value: 'TODAS', label: 'Todas' },
+              ] as const
+            ).map((item) => (
+              <Button
+                key={item.value}
+                type="button"
+                size="sm"
+                variant={estadoVista === item.value ? 'default' : 'ghost'}
+                className="h-8 text-xs"
+                onClick={() => setEstadoVista(item.value)}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-3">
             {isHydrated ? (
               <div className="flex flex-wrap gap-3">
@@ -388,6 +421,15 @@ export default function PropuestasCorrectivoPage() {
                               <ExternalLink className="h-3 w-3" />
                             </Link>
                           )}
+                          {p.orden_generada && (
+                            <Link
+                              href={`/ordenes/${p.orden_generada.id_orden_servicio}`}
+                              className="inline-flex items-center gap-1 mt-1 ml-1 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-[11px] font-mono font-semibold text-blue-700 hover:bg-blue-100"
+                            >
+                              {p.orden_generada.numero_orden}
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          )}
                         </td>
                         <td className="py-3 px-3 font-mono text-xs">
                           {p.orden_servicio?.numero_orden ? (
@@ -464,6 +506,9 @@ export default function PropuestasCorrectivoPage() {
                 <DialogDescription>
                   Orden origen: {selectedPropuesta?.orden_servicio?.numero_orden || '—'} • Estado:{' '}
                   {selectedPropuesta?.estado}
+                  {selectedPropuesta?.reportada_por
+                    ? ` • Reportada por: ${selectedPropuesta.reportada_por}`
+                    : ''}
                 </DialogDescription>
               </DialogHeader>
               {selectedPropuesta && (
@@ -543,7 +588,10 @@ export default function PropuestasCorrectivoPage() {
                     >
                       {escalarMut.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
                       <FilePlus2 className="h-4 w-4 mr-1.5" />
-                      Escalar a Cotización
+                      {selectedPropuesta.cotizaciones_derivadas &&
+                      selectedPropuesta.cotizaciones_derivadas.length > 0
+                        ? `Abrir ${selectedPropuesta.cotizaciones_derivadas[0].numero_cotizacion}`
+                        : 'Escalar a Cotización'}
                     </Button>
                     {isPropuestaAprobada(selectedPropuesta) && (
                       <Button
@@ -628,7 +676,7 @@ export default function PropuestasCorrectivoPage() {
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Urgencia</Label>
+                    <Label>Urgencia / Prioridad Operativa</Label>
                     <Select
                       value={urgencia}
                       onValueChange={(v) => setUrgencia(v as 'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA')}
@@ -637,28 +685,18 @@ export default function PropuestasCorrectivoPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="BAJA">BAJA</SelectItem>
-                        <SelectItem value="MEDIA">MEDIA</SelectItem>
-                        <SelectItem value="ALTA">ALTA</SelectItem>
-                        <SelectItem value="CRITICA">CRÍTICA</SelectItem>
+                        <SelectItem value="BAJA">Baja · Normal</SelectItem>
+                        <SelectItem value="MEDIA">Media · Alta</SelectItem>
+                        <SelectItem value="ALTA">Alta · Urgente</SelectItem>
+                        <SelectItem value="CRITICA">Crítica · Emergencia</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Prioridad (1-5)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={5}
-                      value={prioridad}
-                      onChange={(e) => setPrioridad(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Días Ejecución</Label>
+                    <Label>Días Estimados de Ejecución</Label>
                     <Input
                       type="number"
                       min={1}
@@ -667,7 +705,7 @@ export default function PropuestasCorrectivoPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Técnico / Creador *</Label>
+                    <Label>Técnico / Reportado por *</Label>
                     <Select value={creadaPorId} onValueChange={setCreadaPorId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Empleado" />

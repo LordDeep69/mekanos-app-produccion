@@ -1,21 +1,6 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseIntPipe,
-  Post,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiQuery,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ConvertirPropuestaOrdenCommand } from '../commands/propuestas/convertir-propuesta-orden.command';
@@ -54,21 +39,27 @@ export class PropuestasCorrectivoController {
       dto.urgencia_propuesta,
       dto.prioridad,
       dto.tiempo_estimado_ejecucion,
-      user.idEmpleado ?? dto.creada_por,
+      dto.creada_por ?? user.idEmpleado ?? 1,
     );
 
     return await this.commandBus.execute(command);
   }
 
   @Get('pendientes')
-  @ApiOperation({ summary: 'Listar propuestas pendientes aprobación (Dashboard supervisor/gerente)' })
+  @ApiOperation({ summary: 'Listar propuestas correctivas (Dashboard supervisor/gerente)' })
   @ApiQuery({ name: 'tipoPropuesta', required: false, enum: ['CORRECTIVO', 'MEJORA', 'REEMPLAZO'] })
   @ApiQuery({ name: 'urgencia', required: false, enum: ['BAJA', 'MEDIA', 'ALTA', 'CRITICA'] })
+  @ApiQuery({
+    name: 'estadoVista',
+    required: false,
+    enum: ['PENDIENTES', 'ESCALADAS', 'CONVERTIDAS', 'TODAS'],
+  })
   @ApiQuery({ name: 'skip', required: false, type: Number, example: 0 })
   @ApiQuery({ name: 'take', required: false, type: Number, example: 50 })
   async listarPropuestasPendientes(
     @Query('tipoPropuesta') tipoPropuesta?: string,
     @Query('urgencia') urgencia?: string,
+    @Query('estadoVista') estadoVista?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ) {
@@ -77,6 +68,7 @@ export class PropuestasCorrectivoController {
       urgencia,
       skip ? parseInt(skip, 10) : 0,
       take ? parseInt(take, 10) : 50,
+      estadoVista,
     );
 
     return await this.queryBus.execute(query);
@@ -84,7 +76,8 @@ export class PropuestasCorrectivoController {
 
   @Post(':id/convertir-a-cotizacion')
   @ApiOperation({
-    summary: 'Escalar propuesta técnica de correctivo a una Cotización Comercial formal en BORRADOR',
+    summary:
+      'Escalar propuesta técnica de correctivo a una Cotización Comercial formal en BORRADOR',
   })
   @ApiResponse({ status: 201, description: 'Cotización comercial creada desde propuesta' })
   async convertirACotizacion(
@@ -101,10 +94,7 @@ export class PropuestasCorrectivoController {
     @Body() body: { convertida_por?: number },
     @CurrentUser('id') userId?: number,
   ) {
-    const command = new ConvertirPropuestaOrdenCommand(
-      id,
-      userId ?? body?.convertida_por ?? 1,
-    );
+    const command = new ConvertirPropuestaOrdenCommand(id, userId ?? body?.convertida_por ?? 1);
 
     return await this.commandBus.execute(command);
   }

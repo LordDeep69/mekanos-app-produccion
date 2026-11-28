@@ -1141,15 +1141,90 @@ export class PdfAssemblerService {
       : new Date(fechaBase.getTime() + diasValidez * 86400000);
 
     const clientePersona = cot.clientes?.persona;
-    const clienteNombreBase =
-      snap.cliente?.razon_social ||
-      snap.cliente?.nombre_comercial ||
-      snap.cliente?.nombre_completo ||
+    const normClientText = (val?: string | null) =>
+      String(val || '')
+        .trim()
+        .toUpperCase();
+    const snapCli = snap.cliente && typeof snap.cliente === 'object' ? snap.cliente : null;
+    const snapCliName =
+      snapCli?.razon_social || snapCli?.nombre_comercial || snapCli?.nombre_completo || null;
+    const liveCliName =
       clientePersona?.razon_social ||
       clientePersona?.nombre_comercial ||
       clientePersona?.nombre_completo ||
+      null;
+    const sameClientAsLive =
+      !snapCli ||
+      (snapCli.id_cliente != null && Number(snapCli.id_cliente) === Number(cot.id_cliente)) ||
+      (snapCli.numero_identificacion &&
+        clientePersona?.numero_identificacion &&
+        normClientText(snapCli.numero_identificacion) ===
+          normClientText(clientePersona.numero_identificacion)) ||
+      (snapCli.id_cliente == null &&
+        (!snapCliName ||
+          !liveCliName ||
+          normClientText(snapCliName) === normClientText(liveCliName)));
+
+    // Si el cliente de la cotización activa cambió en versiones posteriores (ej. v5 != v1),
+    // jamás contaminar el snapshot histórico con NIT/dirección/correo del cliente nuevo.
+    let historicalPersonaFallback: any = null;
+    if (
+      !sameClientAsLive &&
+      snapCli &&
+      (!snapCli.direccion_principal || !snapCli.numero_identificacion) &&
+      typeof this.prisma.clientes?.findFirst === 'function'
+    ) {
+      try {
+        const whereHistorical: any = snapCli.id_cliente
+          ? { id_cliente: Number(snapCli.id_cliente) }
+          : snapCli.numero_identificacion
+            ? {
+                persona: {
+                  numero_identificacion: {
+                    equals: String(snapCli.numero_identificacion),
+                    mode: 'insensitive',
+                  },
+                },
+              }
+            : snapCliName
+              ? {
+                  persona: {
+                    OR: [
+                      { razon_social: { equals: String(snapCliName), mode: 'insensitive' } },
+                      { nombre_comercial: { equals: String(snapCliName), mode: 'insensitive' } },
+                      { nombre_completo: { equals: String(snapCliName), mode: 'insensitive' } },
+                    ],
+                  },
+                }
+              : null;
+
+        if (whereHistorical) {
+          const histCliente = await this.prisma.clientes.findFirst({
+            where: whereHistorical,
+            include: { persona: true },
+          });
+          historicalPersonaFallback = histCliente?.persona || null;
+        }
+      } catch {
+        // Fallback silencioso sin contaminar con datos del cliente actual
+      }
+    }
+
+    const personaFuente = sameClientAsLive ? clientePersona : historicalPersonaFallback;
+    const sedeSnap =
+      snap.sede_detalle && typeof snap.sede_detalle === 'object' ? snap.sede_detalle : null;
+    const sedeFuente = sedeSnap || (sameClientAsLive ? cot.sedes_cliente : null);
+
+    const clienteNombreBase =
+      snapCliName ||
+      personaFuente?.razon_social ||
+      personaFuente?.nombre_comercial ||
+      personaFuente?.nombre_completo ||
       'N/A';
-    const nombreSede = snap.sede || cot.sedes_cliente?.nombre_sede || cot.clientes?.nombre_sede;
+    const nombreSede =
+      sedeSnap?.nombre_sede ||
+      snap.sede ||
+      (sameClientAsLive ? cot.sedes_cliente?.nombre_sede || cot.clientes?.nombre_sede : undefined);
     const clienteNombre = nombreSede ? `${clienteNombreBase} - ${nombreSede}` : clienteNombreBase;
 
     const empleadoPersona = cot.empleados?.persona;
@@ -1219,19 +1294,25 @@ export class PdfAssemblerService {
       atencionACargo: atencionCargo,
       cliente: {
         nombre: clienteNombre,
-        nit:
-          snap.cliente?.numero_identificacion || clientePersona?.numero_identificacion || undefined,
+        nit: snapCli?.numero_identificacion || personaFuente?.numero_identificacion || undefined,
         direccion:
-          cot.sedes_cliente?.direccion_sede ||
-          clientePersona?.direccion_principal ||
+          sedeFuente?.direccion_sede ||
+          snapCli?.direccion_principal ||
+          personaFuente?.direccion_principal ||
           brand.ciudadDefecto ||
           'N/A',
         telefono:
-          cot.sedes_cliente?.telefono_sede ||
-          clientePersona?.telefono_principal ||
-          clientePersona?.celular ||
+          sedeFuente?.telefono_sede ||
+          snapCli?.telefono_principal ||
+          snapCli?.celular ||
+          personaFuente?.telefono_principal ||
+          personaFuente?.celular ||
           undefined,
-        email: cot.sedes_cliente?.email_sede || clientePersona?.email_principal || undefined,
+        email:
+          sedeFuente?.email_sede ||
+          snapCli?.email_principal ||
+          personaFuente?.email_principal ||
+          undefined,
         contacto: atencionNombre,
       },
       equipo: equipoUnico,

@@ -1912,6 +1912,15 @@ function CotizacionStudioEditor({
                   PO: {cotizacion.orden_compra_cliente}
                 </Badge>
               )}
+              {cotizacion?.propuesta_origen && (
+                <Link
+                  href="/comercial/propuestas"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors"
+                  title="Cotización escalada desde una Propuesta Correctiva"
+                >
+                  Origen: {cotizacion.propuesta_origen.numero_propuesta}
+                </Link>
+              )}
             </div>
             <p className="text-xs text-slate-500 truncate">
               {asunto || 'Configura cliente, parque de equipos, servicios, repuestos y logística'}

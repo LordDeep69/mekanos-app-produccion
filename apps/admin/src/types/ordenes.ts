@@ -147,6 +147,7 @@ export interface Orden {
   total_gastos?: number;
   total_componentes?: number;
   total_general?: number;
+  metadata?: Record<string, unknown> | null;
 
   // ✅ FIX 03-MAR-2026: Total de emails enviados para mostrar badge en lista
   total_emails_enviados?: number;

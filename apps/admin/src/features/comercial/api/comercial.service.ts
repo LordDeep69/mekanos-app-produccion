@@ -365,6 +365,11 @@ export interface CotizacionRecord {
     nombre: string;
     tipo_cotizacion?: string;
   } | null;
+  propuesta_origen?: {
+    id_propuesta: number;
+    numero_propuesta: string;
+    id_orden_servicio?: number | null;
+  } | null;
   items_servicios?: CotizacionItemServicio[];
   items_componentes?: CotizacionItemComponente[];
   items_otros?: CotizacionItemOtro[];
@@ -735,15 +740,23 @@ export interface PropuestaCorrectivoItem {
   total_propuesta?: number | string;
   estado?: string;
   estado_codigo?: string;
+  reportada_por?: string | null;
   orden_servicio?: {
+    id_orden_servicio: number;
+    numero_orden: string;
+  } | null;
+  orden_generada?: {
     id_orden_servicio: number;
     numero_orden: string;
   } | null;
   cliente?: string | null;
   equipo?: string | null;
+  convertida_a_orden?: boolean;
   cotizaciones_derivadas?: Array<{
     id_cotizacion: number;
     numero_cotizacion: string;
+    total_cotizacion?: number;
+    id_orden_servicio_generada?: number | null;
     estado_codigo?: string;
     estado_nombre?: string;
   }>;
@@ -1309,6 +1322,7 @@ export async function getMotivosRechazo(): Promise<MotivoRechazoItem[]> {
 export async function getPropuestasPendientes(params?: {
   tipoPropuesta?: string;
   urgencia?: string;
+  estadoVista?: string;
   skip?: number;
   take?: number;
 }): Promise<{

@@ -288,4 +288,91 @@ describe('Versionado v2+, Reapertura a BORRADOR, Marca de Agua y PDF Histórico'
     expect(html).toContain('Oferta v1 Original');
     expect(html).not.toContain('Viáticos absorbidos ocultos');
   });
+
+  it('assembleCotizacionVersionPdf preserva inmutabilidad del cliente histórico cuando la cotización activa cambia a otro cliente', async () => {
+    const prismaMock: any = {
+      configuracion_organizacion: {
+        findUnique: jest.fn().mockResolvedValue({
+          id_configuracion: 1,
+          nombre_comercial: 'Ingeniería & Potencia Global',
+          codigo_moneda: 'COP',
+          simbolo_moneda: '$',
+          locale_formato: 'es-CO',
+          ciudad_defecto: 'Cartagena de Indias',
+        }),
+      },
+      tipos_oferta_cotizacion: {
+        findUnique: jest.fn().mockResolvedValue({ nombre: 'Overhaul Turbo Especiales' }),
+      },
+      clientes: {
+        findFirst: jest.fn().mockResolvedValue({
+          id_cliente: 44,
+          persona: {
+            razon_social: 'COMFENALCO',
+            numero_identificacion: '890480023-7',
+            direccion_principal: 'Av. Pedro de Heredia #30-10',
+            telefono_principal: '6056600000',
+            email_principal: 'compras@comfenalco.com',
+          },
+        }),
+      },
+      versiones_cotizacion: {
+        findUnique: jest.fn().mockResolvedValue({
+          id_version: 21,
+          id_cotizacion: 12,
+          numero_version: 1,
+          fecha_version: new Date('2026-11-26T04:55:10.045Z'),
+          motivo_cambio: 'Renegociación inicial',
+          subtotal_version: 1000000,
+          total_version: 1190000,
+          datos_cotizacion: {
+            numero_cotizacion: 'COT-2026-0006',
+            estado: 'APROBADA_INTERNA',
+            asunto: 'Snapshot v1 COMFENALCO',
+            cliente: { razon_social: 'COMFENALCO' },
+            subtotal_general: 1000000,
+            iva_porcentaje: 19,
+            iva_valor: 190000,
+            total_cotizacion: 1190000,
+          },
+          items_servicios: [],
+          items_componentes: [],
+          cotizaciones: {
+            id_cotizacion: 12,
+            id_cliente: 99,
+            numero_cotizacion: 'COT-2026-0006',
+            version: 5,
+            clientes: {
+              persona: {
+                razon_social: 'Test Refac',
+                numero_identificacion: '900999888-1',
+                direccion_principal: 'Calle 100 #45-67',
+                telefono_principal: '6011234567',
+                email_principal: 'test@refac.com',
+              },
+            },
+            sedes_cliente: {
+              nombre_sede: 'Sede Test Refac',
+              direccion_sede: 'Calle 100 #45-67',
+              email_sede: 'sede@refac.com',
+            },
+            cotizaciones_equipos: [],
+            empleados: { persona: { nombre_completo: 'JAVIER HOYOS' } },
+          },
+        }),
+      },
+    };
+
+    const assembler = new PdfAssemblerService(prismaMock);
+    const res = await assembler.assembleCotizacionVersionPdf(21, true);
+
+    expect(res.datosCotizacion.cliente.nombre).toBe('COMFENALCO');
+    expect(res.datosCotizacion.cliente.nit).toBe('890480023-7');
+    expect(res.datosCotizacion.cliente.direccion).toBe('Av. Pedro de Heredia #30-10');
+    expect(res.datosCotizacion.cliente.email).toBe('compras@comfenalco.com');
+    // Jamás debe contaminar con datos del cliente activo Test Refac
+    expect(res.datosCotizacion.cliente.nit).not.toBe('900999888-1');
+    expect(res.datosCotizacion.cliente.email).not.toBe('test@refac.com');
+    expect(res.datosCotizacion.cliente.direccion).not.toContain('Calle 100');
+  });
 });

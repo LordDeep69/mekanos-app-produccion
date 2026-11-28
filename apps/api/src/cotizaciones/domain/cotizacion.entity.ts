@@ -109,6 +109,7 @@ export class Cotizacion {
   items_componentes?: any[];
   items_otros?: any[];
   plantilla_origen?: any;
+  propuesta_origen?: any;
   firma_asesor?: any;
   firma_cliente?: any;
   aprobaciones?: any[];

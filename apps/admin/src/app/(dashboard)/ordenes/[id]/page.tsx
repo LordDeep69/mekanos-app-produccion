@@ -352,6 +352,32 @@ function TabGeneral({
   // No mostrar para órdenes recién creadas o estados administrativos
   const servicioFinalizado = !!orden.fecha_fin_real;
 
+  // Trazabilidad Comercial (Quote-to-Order CPQ)
+  const metaCpq =
+    orden.metadata && typeof orden.metadata === 'object'
+      ? (orden.metadata as Record<string, unknown>)
+      : null;
+  const esOrigenCpq = metaCpq?.origen === 'COTIZACION_CPQ' && Boolean(metaCpq?.id_cotizacion);
+  const cpqCotId = esOrigenCpq ? Number(metaCpq?.id_cotizacion) : null;
+  const cpqCotNumero =
+    esOrigenCpq && typeof metaCpq?.numero_cotizacion === 'string'
+      ? metaCpq.numero_cotizacion
+      : cpqCotId
+        ? `COT #${cpqCotId}`
+        : null;
+  const cpqPoCliente =
+    esOrigenCpq &&
+    typeof metaCpq?.orden_compra_cliente === 'string' &&
+    metaCpq.orden_compra_cliente.trim()
+      ? metaCpq.orden_compra_cliente.trim()
+      : null;
+  const cpqPropNumero =
+    esOrigenCpq &&
+    typeof metaCpq?.numero_propuesta_origen === 'string' &&
+    metaCpq.numero_propuesta_origen.trim()
+      ? metaCpq.numero_propuesta_origen.trim()
+      : null;
+
   const hilo = orden.hilo_caso;
   const totalesCaso = hilo?.pendientes_totales ?? (orden.ordenes_pendientes?.length || 0);
   const resueltosCaso =
@@ -388,6 +414,51 @@ function TabGeneral({
               </a>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Trazabilidad Origen Comercial CPQ (Quote-to-Order) */}
+      {esOrigenCpq && cpqCotId && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-9 w-9 rounded-lg bg-emerald-100 border border-emerald-200 flex items-center justify-center shrink-0">
+              <FileText className="h-4.5 w-4.5 text-emerald-700" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                Origen Comercial (Quote-to-Order CPQ)
+              </p>
+              <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                <a
+                  href={`/comercial/cotizaciones/${cpqCotId}`}
+                  className="font-mono text-sm font-bold text-emerald-950 hover:text-emerald-700 inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                >
+                  {cpqCotNumero}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+                {cpqPoCliente && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono font-semibold bg-emerald-600 text-white">
+                    PO: {cpqPoCliente}
+                  </span>
+                )}
+                {cpqPropNumero && (
+                  <a
+                    href="/comercial/propuestas"
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-100"
+                  >
+                    Propuesta: {cpqPropNumero}
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+          <a
+            href={`/comercial/cotizaciones/${cpqCotId}`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors shrink-0"
+          >
+            Ver Cotización
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
         </div>
       )}
 

@@ -105,12 +105,26 @@ export class CreateVersionHandler implements ICommandHandler<CreateVersionComman
       mostrar_desglose_precios: Boolean(cotizacion.mostrar_desglose_precios ?? false),
       elaborado_por: elaboradoPorNombre,
       cliente: {
+        id_cliente: cotizacion.id_cliente,
         razon_social: cotizacion.clientes?.persona?.razon_social,
         nombre_comercial: cotizacion.clientes?.persona?.nombre_comercial,
         nombre_completo: cotizacion.clientes?.persona?.nombre_completo,
         numero_identificacion: cotizacion.clientes?.persona?.numero_identificacion,
+        direccion_principal: cotizacion.clientes?.persona?.direccion_principal,
+        telefono_principal: cotizacion.clientes?.persona?.telefono_principal,
+        celular: cotizacion.clientes?.persona?.celular,
+        email_principal: cotizacion.clientes?.persona?.email_principal,
       },
       sede: cotizacion.sedes_cliente?.nombre_sede,
+      sede_detalle: cotizacion.sedes_cliente
+        ? {
+            id_sede: cotizacion.sedes_cliente.id_sede,
+            nombre_sede: cotizacion.sedes_cliente.nombre_sede,
+            direccion_sede: cotizacion.sedes_cliente.direccion_sede,
+            telefono_sede: cotizacion.sedes_cliente.telefono_sede,
+            email_sede: cotizacion.sedes_cliente.email_sede,
+          }
+        : null,
       equipo: cotizacion.equipos?.nombre_equipo,
       equipos_vinculados: cotizacion.cotizaciones_equipos.map((ce) => ({
         id_equipo: ce.id_equipo,

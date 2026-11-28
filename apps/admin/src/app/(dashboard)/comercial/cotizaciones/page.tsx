@@ -219,7 +219,8 @@ function CotizacionesPageContent() {
         c.numero_cotizacion.toLowerCase().includes(q) ||
         (c.asunto || '').toLowerCase().includes(q) ||
         cliName.includes(q) ||
-        (c.orden_compra_cliente || '').toLowerCase().includes(q)
+        (c.orden_compra_cliente || '').toLowerCase().includes(q) ||
+        (c.propuesta_origen?.numero_propuesta || '').toLowerCase().includes(q)
       );
     });
   }, [cotizaciones, search, estadoFiltro, tipoFiltro, getClienteNombre]);
@@ -621,6 +622,14 @@ function CotizacionesPageContent() {
                                 title={`Plantilla: ${c.plantilla_origen.nombre}`}
                               >
                                 Plantilla: {c.plantilla_origen.nombre}
+                              </p>
+                            )}
+                            {c.propuesta_origen && (
+                              <p
+                                className="text-[10px] font-mono font-semibold text-amber-700 truncate"
+                                title={`Escalada desde propuesta ${c.propuesta_origen.numero_propuesta}`}
+                              >
+                                Desde {c.propuesta_origen.numero_propuesta}
                               </p>
                             )}
                           </td>

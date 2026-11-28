@@ -1430,6 +1430,9 @@ export class CotizacionesCpqService {
       include: {
         estados_cotizacion: true,
         clientes: { include: { persona: true } },
+        propuesta_origen: {
+          select: { id_propuesta: true, numero_propuesta: true },
+        },
         cotizaciones_equipos: {
           orderBy: { orden_secuencia: 'asc' },
           include: {
@@ -1579,6 +1582,8 @@ export class CotizacionesCpqService {
             id_cotizacion: cotizacion.id_cotizacion,
             numero_cotizacion: cotizacion.numero_cotizacion,
             orden_compra_cliente: cotizacion.orden_compra_cliente || null,
+            id_propuesta_origen: cotizacion.id_propuesta_origen || null,
+            numero_propuesta_origen: cotizacion.propuesta_origen?.numero_propuesta || null,
           },
           creado_por: userId,
         },
@@ -1605,6 +1610,22 @@ export class CotizacionesCpqService {
           fecha_modificacion: new Date(),
         },
       });
+
+      // Si la cotización nació de una Propuesta Correctiva, cerrar su ciclo de vida atómicamente
+      if (cotizacion.id_propuesta_origen) {
+        await tx.propuestas_correctivo.update({
+          where: { id_propuesta: cotizacion.id_propuesta_origen },
+          data: {
+            id_orden_servicio_generada: os.id_orden_servicio,
+            fecha_conversion_os: new Date(),
+            id_estado: 5, // APROBADA_CLIENTE / Cerrada con OS
+            fecha_cambio_estado: new Date(),
+            total_propuesta: cotizacion.total_cotizacion ?? 0,
+            modificado_por: userId,
+            fecha_modificacion: new Date(),
+          },
+        });
+      }
 
       this.logger.log(
         `Cotización ${cotizacion.numero_cotizacion} convertida en Orden de Servicio ${os.numero_orden} (${equiposIds.length} equipo(s))`,
@@ -1660,14 +1681,49 @@ export class CotizacionesCpqService {
       include: {
         items_propuesta: { orderBy: { orden_item: 'asc' } },
         ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio: {
-          select: { id_sede: true, id_equipo: true, numero_orden: true },
+          select: {
+            id_sede: true,
+            id_equipo: true,
+            numero_orden: true,
+            ordenes_equipos: {
+              orderBy: { orden_secuencia: 'asc' },
+              select: { id_equipo: true },
+            },
+          },
         },
         equipos: { select: { id_equipo: true, codigo_equipo: true, nombre_equipo: true } },
+        cotizaciones_derivadas: {
+          where: { id_estado: { notIn: [6, 7] } }, // Activas (no rechazadas ni vencidas)
+          orderBy: { id_cotizacion: 'desc' },
+          take: 1,
+          select: { id_cotizacion: true, numero_cotizacion: true },
+        },
       },
     });
 
     if (!propuesta) {
       throw new NotFoundException(`Propuesta correctiva ${idPropuesta} no encontrada`);
+    }
+
+    // Idempotencia anti-duplicados: si ya existe una cotización activa vinculada, devolverla
+    const cotExistente = propuesta.cotizaciones_derivadas?.[0];
+    if (cotExistente) {
+      const completaExistente = await this.cotizacionesRepository.findById(
+        cotExistente.id_cotizacion,
+        {
+          cliente: true,
+          sede: true,
+          equipo: true,
+          estado: true,
+          items_servicios: true,
+          items_componentes: true,
+        },
+      );
+      return {
+        message: `La propuesta ${propuesta.numero_propuesta} ya está escalada en ${cotExistente.numero_cotizacion}. Abriendo cotización existente.`,
+        ya_existia: true,
+        cotizacion: completaExistente,
+      };
     }
 
     const org = await this.prisma.configuracion_organizacion
@@ -1689,7 +1745,16 @@ export class CotizacionesCpqService {
     const vencimiento = new Date(hoy.getTime() + diasValidez * 86400_000);
     const ordenOrigen =
       propuesta.ordenes_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio;
-    const idEquipo = propuesta.id_equipo ?? ordenOrigen?.id_equipo ?? null;
+    const equiposOrdenIds = Array.from(
+      new Set<number>(
+        [
+          ...(propuesta.id_equipo ? [propuesta.id_equipo] : []),
+          ...(ordenOrigen?.ordenes_equipos || []).map((oe) => oe.id_equipo),
+          ...(ordenOrigen?.id_equipo ? [ordenOrigen.id_equipo] : []),
+        ].filter((id) => Number.isInteger(id) && id > 0),
+      ),
+    );
+    const idEquipo = equiposOrdenIds[0] ?? null;
 
     const cotizacion = await this.prisma.$transaction(async (tx) => {
       const creada = await tx.cotizaciones.create({
@@ -1721,13 +1786,13 @@ export class CotizacionesCpqService {
         },
       });
 
-      if (idEquipo) {
-        await tx.cotizaciones_equipos.create({
-          data: {
+      if (equiposOrdenIds.length > 0) {
+        await tx.cotizaciones_equipos.createMany({
+          data: equiposOrdenIds.map((eqId, idx) => ({
             id_cotizacion: creada.id_cotizacion,
-            id_equipo: idEquipo,
-            orden_secuencia: 1,
-          },
+            id_equipo: eqId,
+            orden_secuencia: idx + 1,
+          })),
         });
       }
 

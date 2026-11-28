@@ -90,6 +90,7 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
       items_componentes: c.items_cotizacion_componentes ?? c.items_componentes ?? undefined,
       items_otros: c.items_cotizacion_otros ?? c.items_otros ?? undefined,
       plantilla_origen: c.plantilla_origen ?? undefined,
+      propuesta_origen: c.propuesta_origen ?? undefined,
       firma_asesor: c.firma_asesor ?? undefined,
       firma_cliente: c.firma_cliente ?? undefined,
       aprobaciones: c.aprobaciones_cotizacion ?? c.aprobaciones ?? undefined,
@@ -255,6 +256,13 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
             codigo_plantilla: true,
             nombre: true,
             tipo_cotizacion: true,
+          },
+        },
+        propuesta_origen: {
+          select: {
+            id_propuesta: true,
+            numero_propuesta: true,
+            id_orden_servicio: true,
           },
         },
         firma_asesor: includeItems
@@ -429,7 +437,7 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
           subtotal_version: v.subtotal_version ? Number(v.subtotal_version) : 0,
           total_version: v.total_version ? Number(v.total_version) : 0,
           creada_por: v.creada_por,
-          asesor_nombre: elaboradorSnap || creadaPorNombre || elaboradorActualNombre,
+          asesor_nombre: elaboradorSnap || elaboradorActualNombre || creadaPorNombre,
           creada_por_nombre: creadaPorNombre,
           estado_codigo: typeof datos.estado === 'string' ? datos.estado : null,
           estado_nombre: typeof datos.estado_nombre === 'string' ? datos.estado_nombre : null,
@@ -494,6 +502,9 @@ export class PrismaCotizacionesRepository implements CotizacionesRepository {
           },
           plantilla_origen: {
             select: { id_plantilla: true, nombre: true, tipo_cotizacion: true },
+          },
+          propuesta_origen: {
+            select: { id_propuesta: true, numero_propuesta: true },
           },
         },
         orderBy: [{ fecha_cotizacion: 'desc' }, { id_cotizacion: 'desc' }],

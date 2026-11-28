@@ -595,6 +595,7 @@ export function useCotizacionFirmaActions(idCotizacion: number | null) {
 export function usePropuestasPendientes(params?: {
   tipoPropuesta?: string;
   urgencia?: string;
+  estadoVista?: string;
   skip?: number;
   take?: number;
 }) {
