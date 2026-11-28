@@ -14,6 +14,7 @@ import '../../auth/data/auth_provider.dart';
 import '../../evidencias/presentation/evidencias_screen.dart';
 import '../../firmas/data/firma_service.dart';
 import '../../firmas/presentation/firmas_section.dart';
+import '../../orders/presentation/home_production_screen.dart';
 import '../data/ejecucion_service.dart';
 import 'pendientes_orden_widget.dart';
 import 'time_picker_sheet.dart';
@@ -1189,7 +1190,12 @@ class _ResumenFinalizacionScreenState
       Navigator.of(context).pop(); // Cerrar loading
 
       if (resultado.success) {
-        _mostrarExitoOnline(resultado);
+        ref.invalidate(quickStatsProvider);
+        if (resultado.guardadoOffline) {
+          _mostrarGuardadoPorSubir(resultado.mensaje);
+        } else {
+          _mostrarExitoOnline(resultado);
+        }
       } else {
         final errorTexto = (resultado.error != null &&
                 resultado.error!.trim().isNotEmpty &&
@@ -1205,6 +1211,59 @@ class _ResumenFinalizacionScreenState
         mensajeAmigable(e, contexto: 'finalizar la orden'),
       );
     }
+  }
+
+  void _mostrarGuardadoPorSubir(String mensaje) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_upload_outlined, color: Colors.deepOrange, size: 28),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Guardado en Por Subir',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(mensaje, style: const TextStyle(fontSize: 14)),
+                const SizedBox(height: 16),
+                _buildResultadoItem(
+                  Icons.cloud_queue,
+                  'Estado local',
+                  'POR SUBIR (Editable)',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pop();
+              },
+              child: const Text('ENTENDIDO'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _mostrarExitoOnline(SyncUploadResult resultado) {

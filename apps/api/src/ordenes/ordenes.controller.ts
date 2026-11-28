@@ -53,6 +53,7 @@ import { GetOrdenesQuery } from './queries/get-ordenes.query';
 import { AsignarTecnicoDto } from './dto/asignar-tecnico.dto';
 import { CambiarEstadoOrdenDto } from './dto/cambiar-estado-orden.dto';
 import { CreateOrdenDto } from './dto/create-orden.dto';
+import { FinalizarCommitDto } from './dto/finalizar-commit.dto';
 import { FinalizarOrdenCompletoDto } from './dto/finalizar-orden-completo.dto';
 import { AddActividadPlanDto, UpdateActividadPlanDto } from './dto/plan-actividades.dto';
 import { ProgramarOrdenDto } from './dto/programar-orden.dto';
@@ -75,6 +76,7 @@ import { DespacharComponenteOrdenDto, InventarioService } from '../inventario/in
 import { extractR2KeyFromUrl } from '../pdf/pdf-naming.helper';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { FinalizacionOrdenService, ProgressEvent } from './services/finalizacion-orden.service';
+import { FinalizarCommitService } from './services/finalizar-commit.service';
 import { OrdenRealtimeBusService } from './services/orden-realtime-bus.service';
 import { OrdenesEspejoService, UpsertActividadAdminDto } from './services/ordenes-espejo.service';
 import {
@@ -129,6 +131,7 @@ export class OrdenesController {
     @Optional() private readonly syncDeltaService?: SyncDeltaService,
     @Optional() private readonly espejoService?: OrdenesEspejoService,
     @Optional() private readonly realtimeBus?: OrdenRealtimeBusService,
+    @Optional() private readonly finalizarCommitService?: FinalizarCommitService,
   ) {}
 
   /**
@@ -289,6 +292,43 @@ export class OrdenesController {
       user?.esAdmin === true ||
       ['ADMIN', 'GERENTE', 'SUPERVISOR'].includes((user?.rol || '').toUpperCase());
     return await this.syncDeltaService.syncDelta(id, dto, {
+      id: user?.id ?? 1,
+      idEmpleado: user?.idEmpleado ?? null,
+      esAdmin,
+    });
+  }
+
+  /**
+   * POST /api/ordenes/:id/finalizar-commit (FASE 3 · Cierre Final Armónico v2)
+   * Lock pesimista `FOR UPDATE OF o`, validación de manifest de `clientUuids`,
+   * consolidación NO destructiva (0 `deleteMany`) y emisión SSE `order_finalized`.
+   */
+  @Post(':id/finalizar-commit')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Cierre final armónico v2 tras drenado delta (sin Base64 ni deleteMany)',
+    description:
+      'Bloquea la orden con FOR UPDATE, valida el manifiesto de clientUuids sincronizados, cierra orden y equipos preservando registros existentes y emite evento SSE order_finalized.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: Number })
+  @ApiResponse({ status: 200, description: 'Orden consolidada y cerrada exitosamente' })
+  @ApiResponse({
+    status: 409,
+    description: 'Manifiesto incompleto (missingClientUuids) o estado no editable',
+  })
+  async finalizarCommitOrden(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: FinalizarCommitDto,
+    @CurrentUser()
+    user: { id: number; idEmpleado?: number | null; esAdmin?: boolean; rol?: string },
+  ) {
+    if (!this.finalizarCommitService) {
+      throw new InternalServerErrorException('FinalizarCommitService no disponible');
+    }
+    const esAdmin =
+      user?.esAdmin === true ||
+      ['ADMIN', 'GERENTE', 'SUPERVISOR'].includes((user?.rol || '').toUpperCase());
+    return await this.finalizarCommitService.finalizarCommit(id, dto, {
       id: user?.id ?? 1,
       idEmpleado: user?.idEmpleado ?? null,
       esAdmin,

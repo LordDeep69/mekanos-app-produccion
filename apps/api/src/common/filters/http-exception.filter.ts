@@ -10,7 +10,7 @@ import { Request, Response } from 'express';
 
 /**
  * AllExceptionsFilter - Filtro global de excepciones
- * 
+ *
  * Captura todas las excepciones no manejadas y devuelve
  * respuestas HTTP consistentes con formato estandarizado
  */
@@ -25,15 +25,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     // Determinar status code
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     // Extraer mensaje
     const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
+      exception instanceof HttpException ? exception.getResponse() : 'Internal server error';
+
+    // Preservar campos estructurados de contrato (ej. code='INCOMPLETE_MANIFEST', missingClientUuids)
+    const extraFields: Record<string, unknown> = {};
+    if (typeof message === 'object' && message !== null && !Array.isArray(message)) {
+      const payloadObj = message as Record<string, unknown>;
+      if (payloadObj.code !== undefined) {
+        extraFields.code = payloadObj.code;
+      }
+      if (payloadObj.missingClientUuids !== undefined) {
+        extraFields.missingClientUuids = payloadObj.missingClientUuids;
+      }
+    }
 
     // Formato de error estandarizado
     const errorResponse = {
@@ -41,10 +49,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
       method: request.method,
-      message:
-        typeof message === 'object'
-          ? (message as any).message || message
-          : message,
+      message: typeof message === 'object' ? (message as any).message || message : message,
+      ...extraFields,
     };
 
     // Log del error
@@ -74,12 +80,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (esPrismaValidation) {
         this.logger.warn(
           `[PRISMA-VALIDATION] ${request.method} ${request.url}: consulta con argumentos/schema inválidos. ` +
-          `Revisar nombres de campos y relaciones contra schema.prisma. Detalle: ${prismaError.message}`,
+            `Revisar nombres de campos y relaciones contra schema.prisma. Detalle: ${prismaError.message}`,
         );
         response.status(HttpStatus.BAD_REQUEST).json({
           ...errorResponse,
           statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Solicitud inválida: el servidor rechazó los datos enviados (error de esquema interno).',
+          message:
+            'Solicitud inválida: el servidor rechazó los datos enviados (error de esquema interno).',
           diagnostic: 'PRISMA_CLIENT_VALIDATION',
           prismaMessage: prismaError.message,
         });

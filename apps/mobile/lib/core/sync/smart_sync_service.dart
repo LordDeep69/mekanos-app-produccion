@@ -309,20 +309,21 @@ class SmartSyncService {
         final ordenLocal = mapaLocal[ordenServidor.id];
 
         if (ordenLocal == null) {
-          // ✅ 19-OCT-2026: una orden final sin fila local NO se descarga.
-          // El detalle de sync no reconstruye ejecución/evidencias y podría
-          // inducir una edición vacía. El lifecycle ya la purgó localmente.
-          if (ordenServidor.esEstadoFinal) {
+          // ✅ FASE 3 MULTI-DISPOSITIVO: Una orden final sin fila local SOLO se descarga
+          // si el administrador autorizó explícitamente su edición técnica (`permiteEdicionTecnico`).
+          // GET /api/sync/orden/:id ahora devuelve hidratación completa (actividades, mediciones,
+          // evidencias con URL+SHA256+clientUuid, pendientes y firmas).
+          if (ordenServidor.esEstadoFinal && !ordenServidor.permiteEdicionTecnico) {
             debugPrint(
-              '   ⏭️ ${ordenServidor.numeroOrden}: final sin fila local (purgada) → no descargar',
+              '   ⏭️ ${ordenServidor.numeroOrden}: final sin fila local ni permiso edición → no descargar',
             );
             omitidas++;
             continue;
           }
 
-          // Orden existe en servidor pero NO en local → DESCARGAR
+          // Orden existe en servidor pero NO en local (o COMPLETADA con permiso edición) → DESCARGAR
           debugPrint(
-            '   📥 ${ordenServidor.numeroOrden}: Nueva (no existe localmente)',
+            '   📥 ${ordenServidor.numeroOrden}: Nueva / Edición autorizada → descargar con hidratación',
           );
           aDescargar.add(ordenServidor);
           continue;
@@ -867,6 +868,8 @@ class SmartSyncService {
       fechaFin: Value(_parseDateTime(ordenData['fechaFinReal'])),
       horaEntradaTexto: Value(ordenData['horaEntrada'] as String?),
       horaSalidaTexto: Value(ordenData['horaSalida'] as String?),
+      razonFalla: Value(ordenData['razonFalla'] as String?),
+      executionSyncVersion: Value(ordenData['executionSyncVersion'] as int? ?? 0),
       // ✅ 19-OCT-2026: permiso administrativo de edición técnica.
       permiteEdicionTecnico: Value(
         ordenData['permiteEdicionTecnico'] as bool? ?? false,
@@ -943,6 +946,451 @@ class SmartSyncService {
       '🔧 [SMART SYNC] Orden ${ordenData['numeroOrden']} (ID $idBackend) - ordenesEquipos: ${equiposData?.length ?? 0}, actividadesPlan: ${planData?.length ?? 0}',
     );
     await _guardarOrdenesEquipos(idBackend, equiposData);
+
+    // ✅ FASE 3: Hidratación completa multi-dispositivo (actividades, mediciones, evidencias, pendientes, firmas)
+    // Respeta siempre registros locales sucios (`isDirty == true`) para cero pérdida de trabajo offline.
+    await _hidratarEjecucionDesdeServidor(idOrdenLocalFinal, idBackend, ordenData);
+  }
+
+  /// Descarga e hidrata explícitamente una orden completa desde `GET /api/sync/orden/:idBackend`
+  /// (soporte multi-dispositivo y edición autorizada `edicion_tecnico_habilitada`).
+  Future<bool> hidratarOrdenCompletaDesdeServidor(int idOrdenBackend) async {
+    final fullData = await _descargarOrdenCompleta(idOrdenBackend);
+    if (fullData == null) return false;
+
+    final estadosLocales = await _db.getAllEstadosOrden();
+    final estadosMap = <String, int>{
+      for (final e in estadosLocales) e.codigo: e.id,
+    };
+    final ordenesLocales = await _db.getAllOrdenes();
+    final mapaLocal = <int, Ordene>{
+      for (final o in ordenesLocales)
+        if (o.idBackend != null && o.idBackend! > 0) o.idBackend!: o,
+    };
+
+    await _guardarOrdenEnLocal(fullData, estadosMap, mapaLocal);
+    return true;
+  }
+
+  /// Hidrata actividades ejecutadas, mediciones, evidencias (con URL remota + SHA-256 + clientUuid
+  /// para evitar re-subidas binarias), pendientes técnicos y firmas desde la respuesta de `/sync/orden/:id`.
+  Future<void> _hidratarEjecucionDesdeServidor(
+    int idOrdenLocal,
+    int idOrdenBackend,
+    Map<String, dynamic> ordenData,
+  ) async {
+    final now = DateTime.now();
+    final actUuidToLocalId = <String, int>{};
+
+    // 1. Actividades ejecutadas
+    final actsRemote = ordenData['actividadesEjecutadas'] as List?;
+    if (actsRemote != null && actsRemote.isNotEmpty) {
+      final catalogoLocal = await _db.getAllActividadesCatalogo();
+      final catalogoIds = catalogoLocal.map((c) => c.id).toSet();
+
+      for (final raw in actsRemote) {
+        if (raw is! Map) continue;
+        final idCat = raw['idActividadCatalogo'] as int?;
+        if (idCat == null || !catalogoIds.contains(idCat)) continue;
+
+        final clientUuid = raw['clientUuid']?.toString();
+        final idOrdenEquipo = raw['idOrdenEquipo'] as int?;
+        final remoteVer = (raw['syncVersion'] as num?)?.toInt() ?? 1;
+        final idBackendAct = raw['idActividadEjecutada'] as int?;
+        final respRaw = raw['respuestaJson'];
+        final respStr = respRaw == null
+            ? null
+            : (respRaw is String ? respRaw : jsonEncode(respRaw));
+
+        ActividadesEjecutada? existing;
+        if (clientUuid != null && clientUuid.isNotEmpty) {
+          existing = await (_db.select(_db.actividadesEjecutadas)
+                ..where((a) => a.clientUuid.equals(clientUuid))
+                ..limit(1))
+              .getSingleOrNull();
+        }
+        existing ??= await (_db.select(_db.actividadesEjecutadas)
+              ..where(
+                (a) =>
+                    a.idOrden.equals(idOrdenLocal) &
+                    a.idActividadCatalogo.equals(idCat) &
+                    (idOrdenEquipo != null
+                        ? a.idOrdenEquipo.equals(idOrdenEquipo)
+                        : a.idOrdenEquipo.isNull()),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+
+        if (existing != null) {
+          if (clientUuid != null && clientUuid.isNotEmpty) {
+            actUuidToLocalId[clientUuid] = existing.idLocal;
+          }
+          // Anti-sobrescritura: nunca pisar edición local pendiente
+          if (existing.isDirty && existing.localVersion > remoteVer) {
+            continue;
+          }
+          await (_db.update(_db.actividadesEjecutadas)
+                ..where((a) => a.idLocal.equals(existing!.idLocal)))
+              .write(
+            ActividadesEjecutadasCompanion(
+              idBackend: idBackendAct != null ? Value(idBackendAct) : const Value.absent(),
+              clientUuid: clientUuid != null ? Value(clientUuid) : const Value.absent(),
+              simbologia: Value(raw['estado']?.toString()),
+              completada: Value(raw['ejecutada'] == true || raw['estado'] != null),
+              observacion: Value(raw['observaciones']?.toString()),
+              respuestaJson: Value(respStr),
+              fechaEjecucion: Value(_parseDateTime(raw['fechaEjecucion'])),
+              localVersion: Value(remoteVer),
+              syncedVersion: Value(remoteVer),
+              payloadHash: Value(raw['payloadHash']?.toString()),
+              syncedPayloadHash: Value(raw['payloadHash']?.toString()),
+              deletedAt: const Value(null),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+        } else {
+          final insertedId = await _db.into(_db.actividadesEjecutadas).insert(
+            ActividadesEjecutadasCompanion.insert(
+              idBackend: Value(idBackendAct),
+              idOrden: idOrdenLocal,
+              idActividadCatalogo: idCat,
+              idOrdenEquipo: Value(idOrdenEquipo),
+              descripcion: raw['descripcion']?.toString() ?? 'Actividad',
+              sistema: Value(raw['sistema']?.toString() ?? 'GENERAL'),
+              tipoActividad: 'INSPECCION',
+              ordenEjecucion: Value((raw['ordenSecuencia'] as num?)?.toInt() ?? 0),
+              simbologia: Value(raw['estado']?.toString()),
+              completada: Value(raw['ejecutada'] == true || raw['estado'] != null),
+              observacion: Value(raw['observaciones']?.toString()),
+              respuestaJson: Value(respStr),
+              fechaEjecucion: Value(_parseDateTime(raw['fechaEjecucion'])),
+              clientUuid: Value(clientUuid),
+              localVersion: Value(remoteVer),
+              syncedVersion: Value(remoteVer),
+              payloadHash: Value(raw['payloadHash']?.toString()),
+              syncedPayloadHash: Value(raw['payloadHash']?.toString()),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+          if (clientUuid != null && clientUuid.isNotEmpty) {
+            actUuidToLocalId[clientUuid] = insertedId;
+          }
+        }
+      }
+    }
+
+    // 2. Mediciones (preservando valorNumerico == 0.0!)
+    final medsRemote = ordenData['mediciones'] as List?;
+    if (medsRemote != null && medsRemote.isNotEmpty) {
+      final paramsLocal = await _db.select(_db.parametrosCatalogo).get();
+      final paramIds = paramsLocal.map((p) => p.id).toSet();
+
+      for (final raw in medsRemote) {
+        if (raw is! Map) continue;
+        final idParam = raw['idParametroMedicion'] as int?;
+        if (idParam == null || !paramIds.contains(idParam)) continue;
+
+        final clientUuid = raw['clientUuid']?.toString();
+        final idOrdenEquipo = raw['idOrdenEquipo'] as int?;
+        final remoteVer = (raw['syncVersion'] as num?)?.toInt() ?? 1;
+        final idBackendMed = raw['idMedicion'] as int?;
+        final valNum = (raw['valorNumerico'] as num?)?.toDouble();
+
+        Medicione? existing;
+        if (clientUuid != null && clientUuid.isNotEmpty) {
+          existing = await (_db.select(_db.mediciones)
+                ..where((m) => m.clientUuid.equals(clientUuid))
+                ..limit(1))
+              .getSingleOrNull();
+        }
+        existing ??= await (_db.select(_db.mediciones)
+              ..where(
+                (m) =>
+                    m.idOrden.equals(idOrdenLocal) &
+                    m.idParametro.equals(idParam) &
+                    (idOrdenEquipo != null
+                        ? m.idOrdenEquipo.equals(idOrdenEquipo)
+                        : m.idOrdenEquipo.isNull()),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+
+        if (existing != null) {
+          if (existing.isDirty && existing.localVersion > remoteVer) {
+            continue;
+          }
+          await (_db.update(_db.mediciones)
+                ..where((m) => m.idLocal.equals(existing!.idLocal)))
+              .write(
+            MedicionesCompanion(
+              idBackend: idBackendMed != null ? Value(idBackendMed) : const Value.absent(),
+              clientUuid: clientUuid != null ? Value(clientUuid) : const Value.absent(),
+              valor: Value(valNum),
+              estadoValor: Value(
+                raw['nivelAlerta']?.toString() == 'OK'
+                    ? 'NORMAL'
+                    : (raw['nivelAlerta']?.toString() ?? 'NORMAL'),
+              ),
+              observacion: Value(raw['observaciones']?.toString()),
+              fechaMedicion: Value(_parseDateTime(raw['fechaMedicion'])),
+              localVersion: Value(remoteVer),
+              syncedVersion: Value(remoteVer),
+              payloadHash: Value(raw['payloadHash']?.toString()),
+              syncedPayloadHash: Value(raw['payloadHash']?.toString()),
+              deletedAt: const Value(null),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+        } else {
+          await _db.into(_db.mediciones).insert(
+            MedicionesCompanion.insert(
+              idBackend: Value(idBackendMed),
+              idOrden: idOrdenLocal,
+              idParametro: idParam,
+              idOrdenEquipo: Value(idOrdenEquipo),
+              nombreParametro: raw['nombreParametro']?.toString() ?? 'Parámetro',
+              unidadMedida: raw['unidadMedida']?.toString() ?? '',
+              valor: Value(valNum),
+              estadoValor: Value(
+                raw['nivelAlerta']?.toString() == 'OK'
+                    ? 'NORMAL'
+                    : (raw['nivelAlerta']?.toString() ?? 'NORMAL'),
+              ),
+              observacion: Value(raw['observaciones']?.toString()),
+              fechaMedicion: Value(_parseDateTime(raw['fechaMedicion'])),
+              clientUuid: Value(clientUuid),
+              localVersion: Value(remoteVer),
+              syncedVersion: Value(remoteVer),
+              payloadHash: Value(raw['payloadHash']?.toString()),
+              syncedPayloadHash: Value(raw['payloadHash']?.toString()),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+        }
+      }
+    }
+
+    // 3. Evidencias fotográficas (URL remota + SHA-256 + clientUuid => 0 re-subidas en otro dispositivo!)
+    final evsRemote = ordenData['evidencias'] as List?;
+    if (evsRemote != null && evsRemote.isNotEmpty) {
+      for (final raw in evsRemote) {
+        if (raw is! Map) continue;
+        final clientUuid = raw['clientUuid']?.toString();
+        final hashSha256 = raw['hashSha256']?.toString();
+        final publicUrl = (raw['publicUrl'] ?? raw['rutaArchivo'])?.toString();
+        if (publicUrl == null || publicUrl.isEmpty) continue;
+
+        final remoteVer = (raw['syncVersion'] as num?)?.toInt() ?? 1;
+        final idBackendEv = raw['idEvidencia'] as int?;
+        final idOrdenEquipo = raw['idOrdenEquipo'] as int?;
+        final actClientUuid = raw['actividadClientUuid']?.toString();
+        final idActLocal = actClientUuid != null ? actUuidToLocalId[actClientUuid] : null;
+
+        Evidencia? existing;
+        if (clientUuid != null && clientUuid.isNotEmpty) {
+          existing = await (_db.select(_db.evidencias)
+                ..where((e) => e.clientUuid.equals(clientUuid))
+                ..limit(1))
+              .getSingleOrNull();
+        }
+        if (existing == null && hashSha256 != null && hashSha256.isNotEmpty) {
+          existing = await (_db.select(_db.evidencias)
+                ..where(
+                  (e) =>
+                      e.idOrden.equals(idOrdenLocal) &
+                      e.hashSha256.equals(hashSha256),
+                )
+                ..limit(1))
+              .getSingleOrNull();
+        }
+
+        if (existing != null) {
+          if (existing.isDirty && existing.localVersion > remoteVer) {
+            continue;
+          }
+          await (_db.update(_db.evidencias)
+                ..where((e) => e.idLocal.equals(existing!.idLocal)))
+              .write(
+            EvidenciasCompanion(
+              idBackend: idBackendEv != null ? Value(idBackendEv) : const Value.absent(),
+              clientUuid: clientUuid != null ? Value(clientUuid) : const Value.absent(),
+              idActividadEjecutada:
+                  idActLocal != null ? Value(idActLocal) : const Value.absent(),
+              urlRemota: Value(publicUrl),
+              hashSha256: hashSha256 != null ? Value(hashSha256) : const Value.absent(),
+              storageProvider: Value(raw['storageProvider']?.toString() ?? 'CLOUDINARY'),
+              storageKey: Value(raw['storageKey']?.toString()),
+              descripcion: Value(raw['descripcion']?.toString()),
+              localVersion: Value(remoteVer),
+              syncedVersion: Value(remoteVer),
+              subida: const Value(true),
+              deletedAt: const Value(null),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+        } else {
+          await _db.into(_db.evidencias).insert(
+            EvidenciasCompanion.insert(
+              idBackend: Value(idBackendEv),
+              idOrden: idOrdenLocal,
+              idActividadEjecutada: Value(idActLocal),
+              idOrdenEquipo: Value(idOrdenEquipo),
+              rutaLocal: publicUrl, // Referencia remota válida si se consulta desde otro dispositivo
+              urlRemota: Value(publicUrl),
+              tipoEvidencia: raw['tipoEvidencia']?.toString() ?? 'GENERAL',
+              descripcion: Value(raw['descripcion']?.toString()),
+              fechaCaptura: Value(_parseDateTime(raw['fechaCaptura']) ?? now),
+              clientUuid: Value(clientUuid),
+              hashSha256: Value(hashSha256),
+              storageProvider: Value(raw['storageProvider']?.toString() ?? 'CLOUDINARY'),
+              storageKey: Value(raw['storageKey']?.toString()),
+              localVersion: Value(remoteVer),
+              syncedVersion: Value(remoteVer),
+              subida: const Value(true),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+        }
+      }
+    }
+
+    // 4. Pendientes técnicos
+    final pendsRemote = ordenData['pendientes'] as List?;
+    if (pendsRemote != null && pendsRemote.isNotEmpty) {
+      for (final raw in pendsRemote) {
+        if (raw is! Map) continue;
+        final descripcion = raw['descripcion']?.toString() ?? '';
+        if (descripcion.trim().isEmpty) continue;
+
+        final clientUuid = raw['clientUuid']?.toString();
+        final idBackendPend = raw['idOrdenPendiente'] as int?;
+        final remoteVer = (raw['syncVersion'] as num?)?.toInt() ?? 1;
+
+        OrdenesPendiente? existing;
+        if (clientUuid != null && clientUuid.isNotEmpty) {
+          existing = await (_db.select(_db.ordenesPendientes)
+                ..where((p) => p.clientUuid.equals(clientUuid))
+                ..limit(1))
+              .getSingleOrNull();
+        }
+        if (existing == null && idBackendPend != null) {
+          existing = await (_db.select(_db.ordenesPendientes)
+                ..where((p) => p.idBackend.equals(idBackendPend))
+                ..limit(1))
+              .getSingleOrNull();
+        }
+
+        if (existing != null) {
+          if (existing.isDirty && existing.localVersion > remoteVer) {
+            continue;
+          }
+          await (_db.update(_db.ordenesPendientes)
+                ..where((p) => p.idLocal.equals(existing!.idLocal)))
+              .write(
+            OrdenesPendientesCompanion(
+              idBackend: idBackendPend != null ? Value(idBackendPend) : const Value.absent(),
+              clientUuid: clientUuid != null ? Value(clientUuid) : const Value.absent(),
+              descripcion: Value(descripcion),
+              origen: Value(raw['origen']?.toString() ?? 'MANUAL'),
+              prioridad: Value(raw['prioridad']?.toString() ?? 'NORMAL'),
+              estado: Value(raw['estado']?.toString() ?? 'PENDIENTE'),
+              observaciones: Value(raw['observaciones']?.toString()),
+              localVersion: Value(remoteVer),
+              syncedVersion: Value(remoteVer),
+              deletedAt: const Value(null),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+        } else {
+          await _db.into(_db.ordenesPendientes).insert(
+            OrdenesPendientesCompanion.insert(
+              idBackend: Value(idBackendPend),
+              idOrden: idOrdenLocal,
+              idOrdenBackend: Value(idOrdenBackend),
+              idEquipo: Value(raw['idEquipo'] as int?),
+              idOrdenEquipo: Value(raw['idOrdenEquipo'] as int?),
+              idPendienteCatalogo: Value(raw['idPendienteCatalogo'] as int?),
+              descripcion: descripcion,
+              origen: Value(raw['origen']?.toString() ?? 'MANUAL'),
+              prioridad: Value(raw['prioridad']?.toString() ?? 'NORMAL'),
+              estado: Value(raw['estado']?.toString() ?? 'PENDIENTE'),
+              observaciones: Value(raw['observaciones']?.toString()),
+              clientUuid: Value(clientUuid),
+              localVersion: Value(remoteVer),
+              syncedVersion: Value(remoteVer),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+        }
+      }
+    }
+
+    // 5. Firmas digitales (metadatos remotos para que otro dispositivo reconozca firmas existentes)
+    final firmasRemote = ordenData['firmas'];
+    if (firmasRemote is Map) {
+      for (final entry in [
+        ('TECNICO', firmasRemote['tecnico']),
+        ('CLIENTE', firmasRemote['cliente']),
+      ]) {
+        final tipo = entry.$1;
+        final raw = entry.$2;
+        if (raw is! Map) continue;
+
+        final existing = await (_db.select(_db.firmas)
+              ..where(
+                (f) => f.idOrden.equals(idOrdenLocal) & f.tipoFirma.equals(tipo),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+
+        final idBackendFirma = raw['idFirmaDigital'] as int?;
+        final hashSha256 = raw['hashSha256']?.toString();
+        if (existing != null) {
+          if (existing.isDirty) continue;
+          await (_db.update(_db.firmas)
+                ..where((f) => f.idLocal.equals(existing.idLocal)))
+              .write(
+            FirmasCompanion(
+              idBackend:
+                  idBackendFirma != null ? Value(idBackendFirma) : const Value.absent(),
+              hashSha256: hashSha256 != null ? Value(hashSha256) : const Value.absent(),
+              nombreFirmante: Value(raw['nombreFirmante']?.toString() ?? existing.nombreFirmante),
+              cargoFirmante: Value(raw['cargoFirmante']?.toString() ?? existing.cargoFirmante),
+              syncedVersion: const Value(1),
+              subida: const Value(true),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+        } else {
+          await _db.into(_db.firmas).insert(
+            FirmasCompanion.insert(
+              idBackend: Value(idBackendFirma),
+              idOrden: idOrdenLocal,
+              rutaLocal: 'remote://firma/$idOrdenBackend/$tipo',
+              tipoFirma: tipo,
+              nombreFirmante: Value(raw['nombreFirmante']?.toString()),
+              cargoFirmante: Value(raw['cargoFirmante']?.toString()),
+              fechaFirma: Value(_parseDateTime(raw['fechaCaptura']) ?? now),
+              hashSha256: Value(hashSha256),
+              localVersion: const Value(1),
+              syncedVersion: const Value(1),
+              subida: const Value(true),
+              isDirty: const Value(false),
+              lastSyncedAt: Value(now),
+            ),
+          );
+        }
+      }
+    }
   }
 
   /// ✅ FASE 0: Persiste `actividadesPlan` en SmartSync con validación FK segura

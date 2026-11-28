@@ -25,6 +25,7 @@ import { PrismaOrdenServicioRepository } from './infrastructure/prisma-orden-ser
 
 // Services
 import { FinalizacionOrdenService } from './services/finalizacion-orden.service';
+import { FinalizarCommitService } from './services/finalizar-commit.service';
 import { OrdenRealtimeBusService } from './services/orden-realtime-bus.service';
 import { OrdenesEspejoService } from './services/ordenes-espejo.service';
 import { ProgresoRegistroService } from './services/progreso-registro.service';
@@ -86,8 +87,9 @@ import { StorageModule } from '../storage/storage.module';
     GetOrdenByIdHandler,
     GetOrdenesHandler,
 
-    // Services (Finalizacion Completa, Delta Sync, Espejo Vivo SSE, Telemetría y Transferencia Inteligente)
+    // Services (Finalizacion Completa, Cierre Armonico v2, Delta Sync, Espejo Vivo SSE, Telemetría y Transferencia Inteligente)
     FinalizacionOrdenService,
+    FinalizarCommitService,
     OrdenRealtimeBusService,
     OrdenesEspejoService,
     ProgresoRegistroService,
@@ -96,6 +98,7 @@ import { StorageModule } from '../storage/storage.module';
   ],
   exports: [
     'IOrdenServicioRepository',
+    FinalizarCommitService,
     OrdenRealtimeBusService,
     OrdenesEspejoService,
     ProgresoRegistroService,

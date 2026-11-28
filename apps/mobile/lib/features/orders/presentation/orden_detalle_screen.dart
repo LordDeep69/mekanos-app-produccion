@@ -794,16 +794,56 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (_detalle?.estaPorSubir ?? false)
+              Container(
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Colors.deepOrange.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.deepOrange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.cloud_upload_outlined,
+                      color: Colors.deepOrange.shade700,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Estado POR SUBIR: puedes revisar o editar tus registros antes de sincronizar con el servidor.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.deepOrange.shade900,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             // Botón principal
             ElevatedButton.icon(
               onPressed: () => _iniciarYNavegar(),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text(
-                'INICIAR EJECUCIÓN',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              icon: Icon(
+                (_detalle?.estaPorSubir ?? false)
+                    ? Icons.edit_note_rounded
+                    : Icons.play_arrow,
+              ),
+              label: Text(
+                (_detalle?.estaPorSubir ?? false)
+                    ? 'EDITAR / REINTENTAR SUBIDA'
+                    : ((_detalle?.estaEnProceso ?? false)
+                        ? 'CONTINUAR EJECUCIÓN'
+                        : 'INICIAR EJECUCIÓN'),
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade600,
+                backgroundColor: (_detalle?.estaPorSubir ?? false)
+                    ? Colors.deepOrange.shade600
+                    : Colors.green.shade600,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 minimumSize: const Size(double.infinity, 56),

@@ -4683,7 +4683,11 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 : null;
           });
         }
-        await _mostrarExitoOnline(resultado);
+        if (resultado.guardadoOffline) {
+          await _mostrarGuardadoPorSubir(resultado.mensaje);
+        } else {
+          await _mostrarExitoOnline(resultado);
+        }
       } else {
         final errorTexto = (resultado.error != null &&
                 resultado.error!.trim().isNotEmpty &&
@@ -4699,6 +4703,46 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         mensajeAmigable(e, contexto: 'finalizar la orden'),
       );
     }
+  }
+
+  Future<void> _mostrarGuardadoPorSubir(String mensaje) async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_upload_outlined, color: Colors.deepOrange, size: 28),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Guardado en Por Subir',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: Text(mensaje, style: const TextStyle(fontSize: 14)),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pop();
+              },
+              child: const Text('ENTENDIDO'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Muestra diálogo de éxito cuando se sincronizó online

@@ -11,6 +11,7 @@ import '../database/app_database.dart';
 import '../database/database_service.dart';
 import '../errors/user_friendly_error.dart';
 import 'connectivity_service.dart';
+import 'delta_outbox_service.dart';
 import 'media_payload_codec.dart';
 import 'sync_progress.dart';
 import 'sse/sse_event_reader.dart';
@@ -44,6 +45,7 @@ class OfflineSyncService {
   final Dio _apiClient;
   final ConnectivityService _connectivity;
   final SyncProgressNotifier _progressNotifier;
+  final DeltaOutboxService? _deltaOutbox;
 
   // Máximo de reintentos antes de abandonar
   static const int maxIntentos = 5;
@@ -52,8 +54,9 @@ class OfflineSyncService {
     this._db,
     this._apiClient,
     this._connectivity,
-    this._progressNotifier,
-  );
+    this._progressNotifier, {
+    DeltaOutboxService? deltaOutbox,
+  }) : _deltaOutbox = deltaOutbox;
 
   /// Guarda una orden en la cola de sincronización pendiente
   ///
@@ -128,6 +131,10 @@ class OfflineSyncService {
       );
     }
     if (pendientes.isEmpty) {
+      // Fase 3: Aunque no existan items legacy, drenar outbox incremental y órdenes POR_SUBIR
+      if (_deltaOutbox != null) {
+        await _deltaOutbox.flushAllPending();
+      }
       return OfflineSyncResult(
         success: true,
         mensaje: 'No hay órdenes pendientes',
@@ -148,6 +155,51 @@ class OfflineSyncService {
           storedPayload,
           expectedOwnerUserId: _db.scopedUserId,
         );
+
+        // ✅ FASE 3: Órdenes encoladas con pipeline armónico v2 se drenan vía DeltaOutboxService
+        // (Carril 2 Media JIT -> Carril 1 Metadata -> POST /finalizar-commit, 0 Base64)
+        if (storedPayload['pipelineVersion'] == 'V2_HARMONIC' &&
+            _deltaOutbox != null) {
+          final ordenLocal = await _db.getOrdenById(orden.idOrdenLocal);
+          final resV2 = await _deltaOutbox.finalizarOrdenArmonico(
+            idOrdenLocal: orden.idOrdenLocal,
+            idOrdenBackend: orden.idOrdenBackend,
+            observaciones:
+                ordenLocal?.observacionesTecnico ??
+                storedPayload['observaciones']?.toString() ??
+                'Servicio completado.',
+            horaEntrada:
+                ordenLocal?.horaEntradaTexto ??
+                storedPayload['horaEntrada']?.toString() ??
+                '08:00',
+            horaSalida:
+                ordenLocal?.horaSalidaTexto ??
+                storedPayload['horaSalida']?.toString() ??
+                '09:00',
+            razonFalla:
+                ordenLocal?.razonFalla ??
+                storedPayload['razonFalla']?.toString(),
+            emailAdicional: storedPayload['emailAdicional']?.toString(),
+            modo: storedPayload['modo']?.toString() ?? 'SOLO_DATOS',
+            esResubida: storedPayload['esResubida'] == true,
+          );
+          if (resV2.success && !resV2.guardadoOffline) {
+            sincronizadas++;
+          } else {
+            await (_db.update(_db.ordenesPendientesSync)
+                  ..where((o) => o.idOrdenLocal.equals(orden.idOrdenLocal)))
+                .write(
+              OrdenesPendientesSyncCompanion(
+                estadoSync: const Value('PENDIENTE'),
+                ultimoError: Value(resV2.error ?? resV2.mensaje),
+                fechaUltimoIntento: Value(DateTime.now()),
+              ),
+            );
+            fallidas++;
+            errores.add('Orden ${orden.idOrdenBackend}: ${resV2.mensaje}');
+          }
+          continue;
+        }
 
         // PASO 0: VERIFICAR SI LA ORDEN YA FUE COMPLETADA EN EL BACKEND
         // Esto previene duplicación cuando el request anterior llegó pero la respuesta se perdió
@@ -719,6 +771,63 @@ class OfflineSyncService {
         storedPayload,
         expectedOwnerUserId: _db.scopedUserId,
       );
+
+      // ✅ FASE 3: Pipeline armónico v2 para reintento individual desde PendingSyncScreen
+      if (storedPayload['pipelineVersion'] == 'V2_HARMONIC' &&
+          _deltaOutbox != null) {
+        _progressNotifier.iniciar(orden.idOrdenBackend);
+        _progressNotifier.avanzar(SyncStep.preparando);
+
+        final ordenLocal = await _db.getOrdenById(orden.idOrdenLocal);
+        final resV2 = await _deltaOutbox.finalizarOrdenArmonico(
+          idOrdenLocal: orden.idOrdenLocal,
+          idOrdenBackend: orden.idOrdenBackend,
+          observaciones:
+              ordenLocal?.observacionesTecnico ??
+              storedPayload['observaciones']?.toString() ??
+              'Servicio completado.',
+          horaEntrada:
+              ordenLocal?.horaEntradaTexto ??
+              storedPayload['horaEntrada']?.toString() ??
+              '08:00',
+          horaSalida:
+              ordenLocal?.horaSalidaTexto ??
+              storedPayload['horaSalida']?.toString() ??
+              '09:00',
+          razonFalla:
+              ordenLocal?.razonFalla ??
+              storedPayload['razonFalla']?.toString(),
+          emailAdicional: storedPayload['emailAdicional']?.toString(),
+          modo: storedPayload['modo']?.toString() ?? 'SOLO_DATOS',
+          esResubida: storedPayload['esResubida'] == true,
+          onProgress: (etapa, mensaje, porcentaje) {
+            final step = syncStepFromBackend(etapa) ?? SyncStep.validando;
+            _progressNotifier.avanzar(
+              step,
+              mensaje: mensaje,
+              progreso: porcentaje,
+            );
+          },
+        );
+
+        if (resV2.success && !resV2.guardadoOffline) {
+          _progressNotifier.completar();
+          return true;
+        }
+
+        // Volver a PENDIENTE para mantenerla editable y reintentable en POR_SUBIR
+        await (_db.update(_db.ordenesPendientesSync)
+              ..where((o) => o.idOrdenLocal.equals(orden.idOrdenLocal)))
+            .write(
+          OrdenesPendientesSyncCompanion(
+            estadoSync: const Value('PENDIENTE'),
+            ultimoError: Value(resV2.error ?? resV2.mensaje),
+            fechaUltimoIntento: Value(DateTime.now()),
+          ),
+        );
+        _progressNotifier.error(resV2.mensaje);
+        return false;
+      }
 
       // ✅ PROGRESO: Iniciando
       _progressNotifier.iniciar(orden.idOrdenBackend);
@@ -1326,7 +1435,14 @@ final offlineSyncServiceProvider = Provider<OfflineSyncService>((ref) {
   final apiClient = ref.watch(apiClientProvider);
   final connectivity = ref.watch(connectivityServiceProvider);
   final progressNotifier = ref.watch(syncProgressProvider.notifier);
-  return OfflineSyncService(db, apiClient.dio, connectivity, progressNotifier);
+  final deltaOutbox = ref.watch(deltaOutboxServiceProvider);
+  return OfflineSyncService(
+    db,
+    apiClient.dio,
+    connectivity,
+    progressNotifier,
+    deltaOutbox: deltaOutbox,
+  );
 });
 
 /// Provider del conteo de órdenes pendientes (reactivo para badge)

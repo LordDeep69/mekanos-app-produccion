@@ -10,6 +10,7 @@ import '../database/app_database.dart';
 import '../database/database_service.dart';
 import '../errors/user_friendly_error.dart';
 import 'connectivity_service.dart';
+import 'delta_outbox_service.dart';
 import 'media_payload_codec.dart';
 import 'offline_sync_service.dart';
 import 'sse/sse_event_reader.dart';
@@ -39,12 +40,14 @@ final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
   final connectivity = ref.watch(connectivityServiceProvider);
   final offlineSync = ref.watch(offlineSyncServiceProvider);
   final progressNotifier = ref.watch(syncProgressProvider.notifier);
+  final deltaOutbox = ref.watch(deltaOutboxServiceProvider);
   return SyncUploadService(
     db,
     apiClient.dio,
     connectivity,
     offlineSync,
     progressNotifier,
+    deltaOutbox: deltaOutbox,
   );
 });
 
@@ -84,14 +87,16 @@ class SyncUploadService {
   final ConnectivityService _connectivity;
   final OfflineSyncService _offlineSync;
   final SyncProgressNotifier _progressNotifier;
+  final DeltaOutboxService? _deltaOutbox;
 
   SyncUploadService(
     this._db,
     this._apiClient,
     this._connectivity,
     this._offlineSync,
-    this._progressNotifier,
-  );
+    this._progressNotifier, {
+    DeltaOutboxService? deltaOutbox,
+  }) : _deltaOutbox = deltaOutbox;
 
   /// Finaliza y sincroniza una orden completa al backend
   ///
@@ -131,8 +136,57 @@ class SyncUploadService {
       _progressNotifier.iniciar(idOrdenBackend);
       _progressNotifier.avanzar(SyncStep.preparando);
 
+      // ✅ FASE 3 · CIERRE FINAL ARMÓNICO (v2):
+      // Drena únicamente deltas faltantes (Carril 2 Media JIT -> Carril 1 Metadata)
+      // y dispara POST /ordenes/:id/finalizar-commit con manifiesto de clientUuids.
+      // Si no hay conexión, transiciona limpiamente a POR_SUBIR (editable, NUNCA COMPLETADA).
+      if (_deltaOutbox != null) {
+        final v2Result = await _deltaOutbox.finalizarOrdenArmonico(
+          idOrdenLocal: idOrdenLocal,
+          idOrdenBackend: idOrdenBackend,
+          observaciones: observaciones,
+          horaEntrada: horaEntrada,
+          horaSalida: horaSalida,
+          razonFalla: razonFalla,
+          emailAdicional: emailAdicional,
+          modo: modo,
+          esResubida: modoResubida,
+          onProgress: (etapa, mensaje, porcentaje) {
+            final step = syncStepFromBackend(etapa) ?? SyncStep.validando;
+            _progressNotifier.avanzar(
+              step,
+              mensaje: mensaje,
+              progreso: porcentaje,
+            );
+          },
+        );
+
+        if (!v2Result.fallbackLegacyRequired) {
+          if (v2Result.success) {
+            _progressNotifier.completar();
+            return SyncUploadResult(
+              success: true,
+              mensaje: v2Result.mensaje,
+              datos: v2Result.datos,
+              guardadoOffline: v2Result.guardadoOffline,
+            );
+          }
+          _progressNotifier.error(v2Result.mensaje);
+          return SyncUploadResult(
+            success: false,
+            mensaje: v2Result.mensaje,
+            error: v2Result.error,
+            guardadoOffline: false,
+          );
+        }
+
+        debugPrint(
+          '⚠️ [SYNC] Backend antiguo sin /finalizar-commit -> usando fallback legacy SSE',
+        );
+      }
+
       // ✅ 24-OCT-2026: fallar rápido sin conexión ANTES de leer/comprimir
-      // fotos. Antes se construía todo el payload Base64 para luego abortar.
+      // fotos (solo alcanzable en fallback legacy).
       final isOnlineInicial = await _connectivity.checkConnection();
       if (!isOnlineInicial) {
         _progressNotifier.error('Sin conexión a internet');
@@ -579,10 +633,8 @@ class SyncUploadService {
         );
       }
 
-      // 8. CON CONEXIÓN - Guardar el trabajo local antes de sincronizar.
-      // En una resubida NO se cambia el estado (ya es COMPLETADA) ni se
-      // sobrescribe la fecha de fin original.
-      await _guardarEstadoLocalCompletada(
+      // 8. CON CONEXIÓN (fallback legacy) - Guardar estado local POR_SUBIR (editable, NUNCA COMPLETADA prematura).
+      await _guardarEstadoLocalPorSubir(
         idOrdenLocal,
         observaciones,
         horaEntrada,
@@ -910,48 +962,24 @@ class SyncUploadService {
         );
       }
 
-      // ✅ FIX 09-FEB-2026: Intentar guardar en cola como último recurso
-      // Si el payload ya se construyó, no perder el trabajo del técnico
-      debugPrint('❌ [SYNC] Guardando en cola como último recurso');
-      try {
-        await _offlineSync.guardarEnCola(
-          idOrdenLocal: idOrdenLocal,
-          idOrdenBackend: idOrdenBackend,
-          payload: {
-            'idOrden': idOrdenBackend,
-            'observaciones': observaciones,
-            'horaEntrada': horaEntrada,
-            'horaSalida': horaSalida,
-            'usuarioId': usuarioId,
-            '_ownerUserId': _db.scopedUserId ?? usuarioId,
-            if (razonFalla != null) 'razonFalla': razonFalla,
-            'modo': 'SOLO_DATOS',
-          },
-        );
-        return SyncUploadResult(
-          success: false,
-          mensaje:
-              'No se pudo confirmar la sincronización:\n\n'
-              '$mensaje\n\n'
-              'Se reintentará automáticamente en segundo plano.',
-          error: mensaje,
-          guardadoOffline: true,
-        );
-      } catch (_) {
-        return SyncUploadResult(
-          success: false,
-          mensaje:
-              'No se pudo sincronizar ni guardar en la cola.\n\n'
-              'Tus cambios siguen en el dispositivo; intenta de nuevo.',
-          error: mensaje,
-        );
-      }
+      // ✅ FASE 3 ZERO-TRUST: Eliminado el payload truncado corrupto del catch anterior
+      // (que omitía actividades, mediciones, evidencias, firmas y pendientes).
+      // Todos los registros siguen intactos en Drift SQLite y la orden se mantiene editable en POR_SUBIR.
+      return SyncUploadResult(
+        success: false,
+        mensaje:
+            'No se pudo confirmar la sincronización en este momento:\n\n'
+            '$mensaje\n\n'
+            'Todos tus registros permanecen resguardados en el dispositivo. Intenta nuevamente.',
+        error: mensaje,
+        guardadoOffline: false,
+      );
     }
   }
 
-  /// Guarda el estado local de la orden como COMPLETADA (antes de intentar sync)
-  /// Garantiza integridad: aunque falle el sync, el trabajo no se pierde
-  Future<void> _guardarEstadoLocalCompletada(
+  /// Guarda el estado local de la orden como `POR_SUBIR` (`idEstado = -1`, editable) antes del envío legacy.
+  /// NUNCA marca `COMPLETADA` hasta confirmación HTTP 200 del servidor.
+  Future<void> _guardarEstadoLocalPorSubir(
     int idOrdenLocal,
     String observaciones,
     String horaEntrada,
@@ -959,30 +987,28 @@ class SyncUploadService {
     String? razonFalla,
     bool esResubida = false,
   }) async {
-    // Obtener el ID del estado COMPLETADA
-    final estadoCompletada = await (_db.select(
-      _db.estadosOrden,
-    )..where((e) => e.codigo.equals('COMPLETADA'))).getSingleOrNull();
+    if (!esResubida) {
+      await _db.asegurarEstadoLocal(
+        id: -1,
+        codigo: 'POR_SUBIR',
+        nombre: 'Por Subir',
+        esEstadoFinal: false,
+      );
+    }
 
     await (_db.update(
       _db.ordenes,
     )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
       OrdenesCompanion(
-        // En resubida la orden ya está COMPLETADA: no se toca el estado.
-        idEstado: esResubida
-            ? const Value.absent()
-            : (estadoCompletada != null
-                  ? Value(estadoCompletada.id)
-                  : const Value.absent()),
+        // En resubida la orden ya está COMPLETADA; en cierre normal pasa a POR_SUBIR (-1, editable).
+        idEstado: esResubida ? const Value.absent() : const Value(-1),
         observacionesTecnico: Value(observaciones),
         horaEntradaTexto: Value(horaEntrada),
         horaSalidaTexto: Value(horaSalida),
         razonFalla: razonFalla != null && razonFalla.isNotEmpty
             ? Value(razonFalla)
             : const Value.absent(),
-        // ✅ 19-OCT-2026: preservar la fecha de fin original en resubidas.
-        fechaFin: esResubida ? const Value.absent() : Value(DateTime.now()),
-        isDirty: const Value(true), // Marcado para sync
+        isDirty: const Value(true),
         updatedAt: Value(DateTime.now()),
       ),
     );

@@ -11,6 +11,7 @@ import '../../../core/sync/background_sync_worker.dart';
 import '../../../core/sync/connectivity_service.dart';
 import '../../../core/sync/offline_sync_service.dart';
 import '../../../core/sync/sync_progress.dart';
+import '../../orders/presentation/orden_detalle_screen.dart';
 
 /// Pantalla de órdenes pendientes de sincronización
 ///
@@ -211,9 +212,18 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
         'horaEntrada': payload['horaEntrada'] ?? '',
         'horaSalida': payload['horaSalida'] ?? '',
         'esMultiEquipo': payload['esMultiEquipo'] ?? false,
-        'totalActividades': (payload['actividades'] as List?)?.length ?? 0,
-        'totalMediciones': (payload['mediciones'] as List?)?.length ?? 0,
-        'totalEvidencias': evList?.length ?? 0,
+        'totalActividades':
+            (payload['totalActividades'] as num?)?.toInt() ??
+            (payload['actividades'] as List?)?.length ??
+            0,
+        'totalMediciones':
+            (payload['totalMediciones'] as num?)?.toInt() ??
+            (payload['mediciones'] as List?)?.length ??
+            0,
+        'totalEvidencias':
+            (payload['totalEvidencias'] as num?)?.toInt() ??
+            evList?.length ??
+            0,
       };
     } catch (e) {
       return {};
@@ -434,45 +444,85 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                       ),
                     ),
 
-                    // Botón de acción
+                    // Botones de acción (Fase 3: editar en POR_SUBIR + subir al servidor)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: ElevatedButton.icon(
-                        onPressed:
-                            (isOnline &&
-                                !isConflicto &&
-                                !isSyncingThis &&
-                                !isEnProceso &&
-                                _syncingOrders.isEmpty &&
-                                !_isSyncingAll)
-                            ? () => _subirOrdenIndividual(orden.idOrdenLocal)
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green.shade600,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        icon: isSyncingThis
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
+                      child: Row(
+                        children: [
+                          if (!isConflicto && !isSyncingThis && !isEnProceso) ...[
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OrdenDetalleScreen(
+                                      idOrdenLocal: orden.idOrdenLocal,
+                                    ),
+                                  ),
+                                );
+                                if (mounted) {
+                                  ref.invalidate(pendingSyncListProvider);
+                                }
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.deepOrange.shade700,
+                                side: BorderSide(color: Colors.deepOrange.shade300),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
                                 ),
-                              )
-                            : const Icon(Icons.cloud_upload_rounded, size: 20),
-                        label: Text(
-                          isSyncingThis ? 'SUBIENDO...' : 'SUBIR AL SERVIDOR',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(Icons.edit_outlined, size: 18),
+                              label: const Text(
+                                'EDITAR',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed:
+                                  (isOnline &&
+                                      !isConflicto &&
+                                      !isSyncingThis &&
+                                      !isEnProceso &&
+                                      _syncingOrders.isEmpty &&
+                                      !_isSyncingAll)
+                                  ? () => _subirOrdenIndividual(orden.idOrdenLocal)
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade600,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: isSyncingThis
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.cloud_upload_rounded, size: 20),
+                              label: Text(
+                                isSyncingThis ? 'SUBIENDO...' : 'SUBIR AL SERVIDOR',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ],

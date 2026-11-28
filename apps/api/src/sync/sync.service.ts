@@ -736,20 +736,25 @@ export class SyncService {
             '[Sync Delta] includeCatalogs=true → enviando catálogos completos sin órdenes',
           );
 
-          const [parametros, actividadesDownload, estados, tiposServicioDownload, catalogoSistemas] =
-            await Promise.all([
-              this.prisma.parametros_medicion.findMany({
-                where: { activo: true },
-                orderBy: { categoria: 'asc' },
-              }),
-              this.obtenerActividadesCatalogo(),
-              this.prisma.estados_orden.findMany({
-                where: { activo: true },
-                orderBy: { orden_visualizacion: 'asc' },
-              }),
-              this.obtenerTiposServicioCatalogo(),
-              this.obtenerSistemasCatalogo(),
-            ]);
+          const [
+            parametros,
+            actividadesDownload,
+            estados,
+            tiposServicioDownload,
+            catalogoSistemas,
+          ] = await Promise.all([
+            this.prisma.parametros_medicion.findMany({
+              where: { activo: true },
+              orderBy: { categoria: 'asc' },
+            }),
+            this.obtenerActividadesCatalogo(),
+            this.prisma.estados_orden.findMany({
+              where: { activo: true },
+              orderBy: { orden_visualizacion: 'asc' },
+            }),
+            this.obtenerTiposServicioCatalogo(),
+            this.obtenerSistemasCatalogo(),
+          ]);
 
           return {
             serverTimestamp: new Date().toISOString(),
@@ -1587,7 +1592,9 @@ export class SyncService {
             .filter(
               (s) =>
                 s.aplicaA.length === 0 ||
-                s.aplicaA.some((a) => a.toUpperCase() === codigoTipo || a.toUpperCase() === 'TODOS'),
+                s.aplicaA.some(
+                  (a) => a.toUpperCase() === codigoTipo || a.toUpperCase() === 'TODOS',
+                ),
             )
             .map((s) => ({
               idSistema: s.idSistema,
@@ -1684,45 +1691,95 @@ export class SyncService {
     }
 
     // =========================================================================
-    // ESTADÍSTICAS: Calcular contadores igual que en downloadForTecnico
+    // ESTADÍSTICAS + HIDRATACIÓN COMPLETA MULTI-DISPOSITIVO (FASE 3)
     // =========================================================================
-
-    // Contar actividades por estado
-    const actividadesStats = await this.prisma.actividades_ejecutadas.groupBy({
-      by: ['estado'],
-      where: { id_orden_servicio: ordenId },
-      _count: { id_actividad_ejecutada: true },
-    });
+    const [
+      actividadesRows,
+      mediciones,
+      evidenciasRows,
+      pendientesRows,
+      firmaTecnicoRow,
+      firmaClienteRow,
+      documentoPdf,
+    ] = await Promise.all([
+      this.prisma.actividades_ejecutadas.findMany({
+        where: { id_orden_servicio: ordenId, deleted_at: null },
+        include: { catalogo_actividades: true },
+        orderBy: [{ orden_secuencia: 'asc' }, { id_actividad_ejecutada: 'asc' }],
+      }),
+      this.prisma.mediciones_servicio.findMany({
+        where: { id_orden_servicio: ordenId, deleted_at: null },
+        include: { parametros_medicion: true },
+        orderBy: { id_medicion: 'asc' },
+      }),
+      this.prisma.evidencias_fotograficas.findMany({
+        where: { id_orden_servicio: ordenId, deleted_at: null },
+        include: {
+          actividades_ejecutadas: {
+            select: { id_actividad_ejecutada: true, client_uuid: true },
+          },
+        },
+        orderBy: { id_evidencia: 'asc' },
+      }),
+      this.prisma.ordenes_pendientes.findMany({
+        where: { id_orden_servicio: ordenId, deleted_at: null },
+        orderBy: { id_orden_pendiente: 'asc' },
+      }),
+      orden.id_firma_tecnico
+        ? this.prisma.firmas_digitales.findUnique({
+            where: { id_firma_digital: orden.id_firma_tecnico },
+            select: {
+              id_firma_digital: true,
+              tipo_firma: true,
+              hash_firma: true,
+              fecha_captura: true,
+              observaciones: true,
+            },
+          })
+        : Promise.resolve(null),
+      orden.id_firma_cliente
+        ? this.prisma.firmas_digitales.findUnique({
+            where: { id_firma_digital: orden.id_firma_cliente },
+            select: {
+              id_firma_digital: true,
+              tipo_firma: true,
+              hash_firma: true,
+              fecha_captura: true,
+              observaciones: true,
+            },
+          })
+        : Promise.resolve(null),
+      this.prisma.documentos_generados.findFirst({
+        where: {
+          id_referencia: ordenId,
+          tipo_documento: 'INFORME_SERVICIO',
+        },
+        select: { ruta_archivo: true },
+        orderBy: { fecha_generacion: 'desc' },
+      }),
+    ]);
 
     let actividadesBuenas = 0,
       actividadesMalas = 0,
       actividadesCorregidas = 0,
       actividadesNA = 0;
-    let totalActividades = 0;
-    for (const stat of actividadesStats) {
-      const count = stat._count.id_actividad_ejecutada;
-      totalActividades += count;
-      switch (stat.estado) {
+    const totalActividades = actividadesRows.length;
+    for (const a of actividadesRows) {
+      switch (a.estado) {
         case 'B':
-          actividadesBuenas = count;
+          actividadesBuenas++;
           break;
         case 'M':
-          actividadesMalas = count;
+          actividadesMalas++;
           break;
         case 'C':
-          actividadesCorregidas = count;
+          actividadesCorregidas++;
           break;
         case 'NA':
-          actividadesNA = count;
+          actividadesNA++;
           break;
       }
     }
-
-    // Contar mediciones y clasificar por estado
-    const mediciones = await this.prisma.mediciones_servicio.findMany({
-      where: { id_orden_servicio: ordenId },
-      include: { parametros_medicion: true },
-    });
 
     let medicionesNormales = 0,
       medicionesAdvertencia = 0,
@@ -1746,42 +1803,40 @@ export class SyncService {
       else medicionesCriticas++;
     }
 
-    // Contar evidencias
-    const totalEvidencias = await this.prisma.evidencias_fotograficas.count({
-      where: { id_orden_servicio: ordenId },
-    });
+    const totalEvidencias = evidenciasRows.length;
 
-    // Contar firmas (igual que en downloadForTecnico)
-    // La orden tiene id_firma_cliente y nombre_quien_recibe
     let totalFirmas = 0;
+    if (orden.id_firma_tecnico) totalFirmas++;
     if (orden.id_firma_cliente) totalFirmas++;
-    if (orden.nombre_quien_recibe) totalFirmas++;
+    if (totalFirmas === 0 && orden.nombre_quien_recibe) totalFirmas++;
 
-    // URL del PDF - buscar directamente en documentos_generados por id_referencia
-    // (el documento se guarda con id_referencia = idOrden en finalizacion-orden.service.ts)
-    const documentoPdf = await this.prisma.documentos_generados.findFirst({
-      where: {
-        id_referencia: ordenId,
-        tipo_documento: 'INFORME_SERVICIO',
-      },
-      select: { ruta_archivo: true },
-      orderBy: { fecha_generacion: 'desc' },
-    });
     const urlPdf = documentoPdf?.ruta_archivo;
+    const metadataOrden =
+      orden.metadata && typeof orden.metadata === 'object' && !Array.isArray(orden.metadata)
+        ? (orden.metadata as Record<string, unknown>)
+        : {};
 
-    this.logger.log(`[Sync Inteligente] Orden ${ordenId} - urlPdf: ${urlPdf || 'NULL'}`);
+    this.logger.log(
+      `[Sync Inteligente] Orden ${ordenId} hidratada · acts=${actividadesRows.length}, meds=${mediciones.length}, evs=${evidenciasRows.length}, pends=${pendientesRows.length}, urlPdf=${urlPdf || 'NULL'}`,
+    );
 
     const [zonaHoraria, sistemasCatalogo] = await Promise.all([
       this.resolverZonaHoraria(),
       this.obtenerSistemasCatalogo(),
     ]);
-    const horaEntrada = this.formatHoraEnZonaHoraria(orden.fecha_inicio_real, zonaHoraria);
-    const horaSalida = this.formatHoraEnZonaHoraria(orden.fecha_fin_real, zonaHoraria);
+    const horaEntrada =
+      (metadataOrden.hora_entrada as string | undefined) ||
+      this.formatHoraEnZonaHoraria(orden.fecha_inicio_real, zonaHoraria);
+    const horaSalida =
+      (metadataOrden.hora_salida as string | undefined) ||
+      this.formatHoraEnZonaHoraria(orden.fecha_fin_real, zonaHoraria);
 
     return {
       idOrdenServicio: orden.id_orden_servicio,
       numeroOrden: orden.numero_orden,
       version: orden.fecha_modificacion?.getTime() || 1,
+      executionSyncVersion: orden.execution_sync_version ?? 0,
+      serverTimestamp: new Date().toISOString(),
       idEstadoActual: orden.id_estado_actual,
       codigoEstado: orden.estados_orden?.codigo_estado || 'DESCONOCIDO',
       nombreEstado: orden.estados_orden?.nombre_estado || 'Desconocido',
@@ -1819,6 +1874,7 @@ export class SyncService {
       trabajoRealizado: orden.trabajo_realizado ?? undefined,
       observacionesTecnico: orden.observaciones_tecnico ?? undefined,
       observacionesCierre: orden.observaciones_cierre ?? undefined,
+      razonFalla: (metadataOrden.razon_falla as string | undefined) ?? undefined,
       horaEntrada: horaEntrada,
       horaSalida: horaSalida,
       fechaInicioReal: orden.fecha_inicio_real?.toISOString(),
@@ -1838,6 +1894,97 @@ export class SyncService {
       medicionesCriticas: medicionesCriticas,
       fechaCreacion: orden.fecha_creacion?.toISOString() || new Date().toISOString(),
       fechaModificacion: orden.fecha_modificacion?.toISOString(),
+      // ✅ FASE 3: Hidratación completa multi-dispositivo (actividades, mediciones, evidencias, pendientes, firmas)
+      actividadesEjecutadas: actividadesRows.map((a) => ({
+        idActividadEjecutada: a.id_actividad_ejecutada,
+        clientUuid: a.client_uuid ?? undefined,
+        syncVersion: a.sync_version ?? 1,
+        payloadHash: a.payload_hash ?? undefined,
+        idOrdenEquipo: a.id_orden_equipo ?? undefined,
+        idActividadCatalogo: a.id_actividad_catalogo ?? undefined,
+        descripcion:
+          a.descripcion_manual || a.catalogo_actividades?.descripcion_actividad || 'Actividad',
+        sistema: a.sistema || 'GENERAL',
+        ordenSecuencia: a.orden_secuencia ?? a.catalogo_actividades?.orden_ejecucion ?? 0,
+        estado: a.estado ?? undefined,
+        observaciones: a.observaciones ?? undefined,
+        respuestaJson: a.respuesta_json ?? undefined,
+        ejecutada: a.ejecutada ?? false,
+        fechaEjecucion: a.fecha_ejecucion?.toISOString(),
+      })),
+      mediciones: mediciones.map((m) => ({
+        idMedicion: m.id_medicion,
+        clientUuid: m.client_uuid ?? undefined,
+        syncVersion: m.sync_version ?? 1,
+        payloadHash: m.payload_hash ?? undefined,
+        idOrdenEquipo: m.id_orden_equipo ?? undefined,
+        idParametroMedicion: m.id_parametro_medicion,
+        nombreParametro: m.parametros_medicion?.nombre_parametro || 'Parámetro',
+        unidadMedida: m.unidad_medida || m.parametros_medicion?.unidad_medida || '',
+        valorNumerico: m.valor_numerico != null ? Number(m.valor_numerico) : undefined,
+        valorTexto: m.valor_texto ?? undefined,
+        nivelAlerta: m.nivel_alerta ?? 'OK',
+        fueraDeRango: m.fuera_de_rango ?? false,
+        observaciones: m.observaciones ?? undefined,
+        fechaMedicion: m.fecha_medicion?.toISOString(),
+      })),
+      evidencias: evidenciasRows.map((ev) => ({
+        idEvidencia: ev.id_evidencia,
+        clientUuid: ev.client_uuid ?? undefined,
+        syncVersion: ev.sync_version ?? 1,
+        payloadHash: ev.payload_hash ?? undefined,
+        idOrdenEquipo: ev.id_orden_equipo ?? undefined,
+        idActividadEjecutada: ev.id_actividad_ejecutada ?? undefined,
+        actividadClientUuid: ev.actividades_ejecutadas?.client_uuid ?? undefined,
+        tipoEvidencia: ev.tipo_evidencia,
+        descripcion: ev.descripcion ?? undefined,
+        nombreArchivo: ev.nombre_archivo,
+        publicUrl: ev.ruta_archivo,
+        rutaArchivo: ev.ruta_archivo,
+        hashSha256: ev.hash_sha256,
+        storageProvider: ev.storage_provider ?? 'CLOUDINARY',
+        storageKey: ev.storage_key ?? undefined,
+        tamanoBytes: ev.tama_o_bytes != null ? Number(ev.tama_o_bytes) : undefined,
+        mimeType: ev.mime_type ?? 'image/jpeg',
+        fechaCaptura: ev.fecha_captura?.toISOString(),
+      })),
+      pendientes: pendientesRows.map((p) => ({
+        idOrdenPendiente: p.id_orden_pendiente,
+        clientUuid: p.client_uuid ?? undefined,
+        syncVersion: p.sync_version ?? 1,
+        payloadHash: p.payload_hash ?? undefined,
+        idOrdenEquipo: p.id_orden_equipo ?? undefined,
+        idEquipo: p.id_equipo ?? undefined,
+        idPendienteCatalogo: p.id_pendiente_catalogo ?? undefined,
+        descripcion: p.descripcion,
+        origen: p.origen,
+        prioridad: p.prioridad,
+        estado: p.estado,
+        observaciones: p.observaciones ?? undefined,
+        fechaCreacion: p.fecha_creacion?.toISOString(),
+      })),
+      firmas: {
+        tecnico: firmaTecnicoRow
+          ? {
+              idFirmaDigital: firmaTecnicoRow.id_firma_digital,
+              tipoFirma: 'TECNICO',
+              hashSha256: firmaTecnicoRow.hash_firma,
+              fechaCaptura: firmaTecnicoRow.fecha_captura?.toISOString(),
+              observaciones: firmaTecnicoRow.observaciones ?? undefined,
+            }
+          : null,
+        cliente: firmaClienteRow
+          ? {
+              idFirmaDigital: firmaClienteRow.id_firma_digital,
+              tipoFirma: 'CLIENTE',
+              hashSha256: firmaClienteRow.hash_firma,
+              nombreFirmante: orden.nombre_quien_recibe ?? undefined,
+              cargoFirmante: orden.cargo_quien_recibe ?? undefined,
+              fechaCaptura: firmaClienteRow.fecha_captura?.toISOString(),
+              observaciones: firmaClienteRow.observaciones ?? undefined,
+            }
+          : null,
+      },
       // ✅ NUEVO: Plan de actividades asignadas a la orden
       actividadesPlan:
         (orden as any).ordenes_actividades_plan?.map((p: any) => ({
